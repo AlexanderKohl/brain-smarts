@@ -418,9 +418,10 @@ others. Numbers run through both groups so a reply stays short.
 >
 > **Suggested reply:** `2`
 
-Owner-board note: its scripts (`cards.py`, `build-status.py`, `reconcile.py` and the directory
-builders) are not yet shipped in the mechanics repository. If chosen, record it in
-`active_skills`, mark its `## Setup` row `blocked` with that reason, and move on.
+Owner-board note: nothing to install or register. Its scripts ship in
+`/shared/skills/owner-board/scripts/`; the first board is made when the owner first asks for
+work to be tracked (step G.2), so the `## Setup` row is `done` once the skill is listed in
+`active_skills`.
 
 Record the choice in `active_skills` (alphabetical; add `manage-credentials` whenever a
 credentialed skill is chosen), add one `## Setup` row per chosen skill, and continue to D.
@@ -942,9 +943,19 @@ schtasks /Create /TN "Brain\SessionLogListener" /SC ONLOGON /RL LIMITED `
 
 ### G.2 Owner board
 
-Blocked until the board scripts ship in the mechanics repository (see step C). When they do: a
-board per project node at `/memory/projects/<node>/status/status.html` and the directory at
-`/memory/boards/index.html`, which the owner bookmarks once (`/shared/skills/owner-board/`).
+When `owner-board` is in `active_skills`: a board per project node at
+`/memory/projects/<node>/status/status.html` and the directory at `/memory/boards/index.html`,
+which the owner bookmarks once. The agent makes a board by following **Making a board** in
+`/shared/skills/owner-board/SKILL.md`: `board.md` and `cards/` in the node, one entry in
+`/memory/skills/owner-board/config/boards.json`, then
+
+```powershell
+cd C:\dev\brain
+python shared/skills/owner-board/scripts/build_status.py --board <id>
+```
+
+**Done when:** that command prints `wrote ...status.html` and `wrote ...index.html`, and the
+owner has opened and bookmarked `/memory/boards/index.html`.
 
 ### G.3 Scheduled tasks
 

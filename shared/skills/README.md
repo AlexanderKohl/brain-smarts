@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 node_type: skill_library
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T14:00:00+10:00
 ---
 
 # Shared Skills
@@ -58,7 +58,7 @@ Contains the canonical shared passphrase-encrypted vault skill for hidden input,
 
 ##### `owner-board/`
 
-Contains the owner board: one permanent link showing the owner every request they have made and what needs them. Cards are Markdown records under `<node>/status/cards/`, the page is generated from them, and `reconcile.py` compares it against Git on every regeneration. The owner's verdict comes back as a saved file, and a card is closed only by the owner.
+Contains the owner board: one permanent link showing the owner every request they have made and what needs them. Cards are Markdown records under `<node>/status/cards/`, the page is generated from them by the one shared implementation in `scripts/` (configured per owner in `/memory/skills/owner-board/config/boards.json`), and `reconcile.py` compares it against Git on every regeneration. The owner's verdict comes back as a saved file, and a card is closed only by the owner.
 
 ##### `problem-recovery/`
 
@@ -79,6 +79,10 @@ Contains the canonical shared executable skill for preserving raw files under `/
 ##### `repository-preflight/`
 
 Contains the canonical validator for metadata, identifiers, references, task state, README folder coverage, contract versioning and accepted governance-change evidence. It validates the mechanics repository and, when present, the memory checkout at `/memory/`, and may update only the generated repository manifests when explicitly requested. Protected governance (CONTRACT §13.2).
+
+##### `skill-exchange/`
+
+Proposed, not active (`PROPOSAL-skill-exchange`). How agents notice a reusable capability and suggest promoting it to a shared skill, offer it upstream as a pull request, tell the owner about new or changed upstream skills, and install a skill from another brain with its provenance recorded. `scripts/skill_exchange.py` does the read-only parts: the upstream comparison, the provenance record and the promotion check.
 
 ##### `ui-implementation/`
 
