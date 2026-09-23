@@ -12,7 +12,6 @@ metadata:
   project_ref: /memory/projects/credential-management
   created: 2026-08-04T16:11:53+10:00
   updated: 2026-09-23T12:00:00+10:00
-  accepted_proposal: RULE-2026-0012
 ---
 
 # Credential Management

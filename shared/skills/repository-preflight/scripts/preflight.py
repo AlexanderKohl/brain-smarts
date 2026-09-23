@@ -54,13 +54,10 @@ MEMORY_PREFIX = "/" + MEMORY_DIR + "/"
 GENERIC_OWNER = "brain-owner"
 MANIFEST_NAME = "repository-manifest.json"
 VALIDATOR_PATH = "/shared/skills/repository-preflight/scripts/preflight.py"
-# Where accepted proposals may live, relative to the brain root (CONTRACT §13.2). The last
-# entry is the single-repository location, kept so this validator also runs on a brain that
-# has not been split.
+# Where accepted proposals may live, relative to the brain root (CONTRACT §13.2).
 PROPOSAL_ROOTS = (
     ("governance", "proposals"),
     (MEMORY_DIR, "governance", "proposals"),
-    ("projects", "brain-development", "proposals"),
 )
 # Task stores: /memory/tasks/ in the three-layer layout, /tasks/ in a single-repository brain.
 TASK_ROOTS = ((MEMORY_DIR, "tasks"), ("tasks",))
@@ -478,8 +475,8 @@ def changed_paths(root: Path) -> tuple[set[str], list[str]]:
 def is_protected(path: str) -> bool:
     """Protected governance under CONTRACT §13.2, by brain-root-relative path."""
     # Proposal areas sit outside the inherited rule path: the whole governance/ folder of each
-    # repository, and the single-repository proposal folder.
-    proposal_areas = ("governance/", f"{MEMORY_DIR}/governance/", "projects/brain-development/proposals/")
+    # repository.
+    proposal_areas = ("governance/", f"{MEMORY_DIR}/governance/")
     if path.startswith(proposal_areas):
         return False
     return (

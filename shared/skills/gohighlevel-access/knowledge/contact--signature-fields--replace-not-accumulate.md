@@ -14,7 +14,7 @@ refuted_by: null
 discovered: '2026-08-22'
 verified: '2026-08-25'
 created: '2026-08-24T21:30:00+10:00'
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 evidence:
 - /memory/skills/gohighlevel-access/knowledge/contact--signature-fields--replace-not-accumulate.md
 ---
@@ -69,7 +69,7 @@ path, and its own type declaration explicitly documents this as
 fields must continue to merge, not replace.
 
 **Opportunity is now confirmed, and it does NOT need this replace guard**
-(intentionally, per owner decision) – see
+(a deliberate design choice) – see
 `opportunity--signature-fields--accumulates-no-platform-cap.md`.
 Opportunity signature fields go through the ordinary file-field write path
 (`opportunity-adapter.ts`) with no `isSignature` meta shape and no

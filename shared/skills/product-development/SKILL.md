@@ -10,7 +10,7 @@ status: active
 scope: shared
 owner: brain-owner
 created: 2026-09-03T14:05:35+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 source_refs:
   - /memory/sources/source-71ae7cca6b7a-product-development-process.md
 ---
@@ -67,44 +67,44 @@ None. This skill is a process. It uses the project's own tooling and the shared 
 8. Keep the process record current rather than generating disconnected planning documents. A low-risk light change may use a compact entry in an existing canonical plan, feature specification or task instead of creating a dedicated lifecycle document. Read [the project record specification](references/project-record.md) when creating or updating it.
 9. Use independent model reviews at the stages and depth defined in [the multi-model review protocol](references/multi-model-review.md). Different prompts to one model are useful lenses but are not represented as independent-model review.
 10. Preserve authorization boundaries. Research and recommendations do not authorise external writes, purchases, deployments, publication or production access.
-11. **Hand over a decided specification, never an open one.** A research or design increment settles every outstanding decision with the owner before the work passes to whoever builds it, and records the answers in the canonical specification with the date. Say which answers changed the design rather than confirming it, correct the spec's own prose where they did, and flag any decision the owner deliberately left open with who decides it and when. The task record carries the signal: `ready` with `waiting_on: null` means dispatchable. Procedure in `/shared/skills/delegate-work/SKILL.md`, *Research and design threads: clarify, then hand back*. Rule adopted 16 September 2026.
+11. **Hand over a decided specification, never an open one.** A research or design increment settles every outstanding decision with the owner before the work passes to whoever builds it, and records the answers in the canonical specification with the date. Say which answers changed the design rather than confirming it, correct the spec's own prose where they did, and flag any decision the owner deliberately left open with who decides it and when. The task record carries the signal: `ready` with `waiting_on: null` means dispatchable. Procedure in `/shared/skills/delegate-work/SKILL.md`, *Research and design threads: clarify, then hand back*.
 
-## What a day of shipping taught, 17 September 2026
+## Rules about checks, evidence and reporting
 
-Eleven versions and nine defects in one session of a browser-extension product. Four rules came out of it
-that are not about that product. Each names the incident, because a rule without its reason is
-optimised away by the next reader.
+Four rules about the work itself rather than any one product. Each carries a short rationale,
+because a rule without its reason is optimised away by the next reader.
 
 12. **An instrument that cannot fail is not an instrument, and one that fails silently is worse than
-    none.** In one session: a graph builder that dropped a finding's references without a word when
-    it could not resolve a node; a probe printed at a console level Chrome hides by default; a
-    harness assertion that read a CSS default and matched the code **by coincidence**, so it would
-    have passed whatever the code said; and a mark written to a custom property nothing read, which
-    logged *marked* while painting nothing. So: **before trusting a new check, make it fail on
-    purpose once** - change the value it asserts and watch it go red. **Anything a check declines to
-    do, it says out loud**: a silent drop, a skipped item, an unresolved reference. A defect can only
-    be found in the place the product admits to it.
+    none.** **Before trusting a new check, make it fail on purpose once** - change the value it
+    asserts and watch it go red. **Anything a check declines to do, it says out loud**: a silent
+    drop, a skipped item, an unresolved reference. A defect can only be found in the place the
+    product admits to it.
+    Rationale: typical silent instruments are a graph builder that drops references it cannot
+    resolve without a word, a probe logged at a console level the browser hides by default, a
+    harness assertion that reads a CSS default and matches the code **by coincidence**, so it passes
+    whatever the code says, and a mark written to a custom property nothing reads, which logs
+    *marked* while painting nothing.
 
 13. **A symptom that survives one fix forbids a second theory.** Get evidence before changing
-    anything. Two plausible causes were built and shipped against one symptom before anybody looked
-    at the actual DOM; the third attempt printed what it saw instead, and the answer was neither.
-    **A refuted hypothesis is a result** - a worker that proves the conductor wrong and stops has
-    done the job, and building the fix anyway would have hidden the cause under a change that looked
-    like progress.
+    anything. **A refuted hypothesis is a result** - a worker that proves the conductor wrong and
+    stops has done the job.
+    Rationale: when plausible causes are built and shipped one after another against one symptom,
+    the answer often turns out to be neither, and only printing what the system actually does finds
+    it; building a fix anyway hides the cause under a change that looks like progress.
 
 14. **A real account is evidence; a fixture is coverage.** A capture from the customer's own system
-    tells you what is true there and nothing else: on 16 September a whole asset kind was missing from
-    a page for weeks, and the reference account **could not have shown it**, because that account
-    holds none of that kind. Report numbers from the real account - they are what the owner
-    recognises - and cover the space with a fixture that reaches everything the code can emit.
-    Neither substitutes for the other.
+    tells you what is true there and nothing else. Report numbers from the real account - they are
+    what the owner recognises - and cover the space with a fixture that reaches everything the code
+    can emit. Neither substitutes for the other.
+    Rationale: a reference account that holds none of some kind of item **cannot show** that the
+    item is missing from a page, so a gap of that kind can go unseen for weeks.
 
-15. **The second copy is the defect.** Five faults in one week had one shape: two things that had to
-    agree with nothing keeping them in step - two view lists, an exception list and the dialogs built
-    after it, one id built two ways, an export table copied by hand into a harness, and two stores
-    over one storage key, which erased a person's work. **When a second copy of anything is
-    introduced - a list, an id, a table, a store - the test that compares the two ships in the same
-    commit.** A comment asking the next person to remember is what the first four had.
+15. **The second copy is the defect.** **When a second copy of anything is introduced - a list, an
+    id, a table, a store - the test that compares the two ships in the same commit.**
+    Rationale: many faults share one shape, two things that must agree with nothing keeping them in
+    step - two view lists, an exception list and the dialogs built after it, one id built two ways,
+    an export table copied by hand into a harness, two stores over one storage key (which erases a
+    person's work). A comment asking the next person to remember does not keep them in step.
 
 **And one about reporting, which is the owner's interest rather than the work's.** Say the number
 that contradicts the hope: *the width you asked for did not shorten the page, and here is why*;

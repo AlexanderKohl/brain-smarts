@@ -507,8 +507,7 @@ def validate_one(root: Path, run: Path, short: str, warnings: list[str] | None =
             continue
         # A worktree packet works in another repository, so its paths are that
         # repository's and cannot be resolved here. Reporting them as missing files
-        # said seventeen real files did not exist (16 September 2026) and taught a
-        # conductor to read past the validator, which is worse than the noise.
+        # teaches a conductor to read past the validator, which is worse than the noise.
         if packet.get("writes") == "worktree":
             warnings.append(f"{display}: changed path is not in this repository, which a worktree packet expects: {changed}")
         else:

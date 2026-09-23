@@ -348,7 +348,6 @@ class ProtectedPathTests(unittest.TestCase):
             "memory/governance/proposals/RULE-2026-0098-example.md": False,
             "memory/projects/example-project/RULES.md": True,
             "memory/tasks/open/TASK-2026-0001.md": False,
-            "projects/brain-development/proposals/RULE-2026-0097-example.md": False,
             "shared/skills/example-skill/SKILL.md": False,
             "shared/skills/repository-preflight/scripts/preflight.py": True,
             "shared/templates/memory-skeleton/RULES.md": True,

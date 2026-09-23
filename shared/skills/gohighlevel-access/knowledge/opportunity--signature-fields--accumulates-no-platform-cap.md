@@ -15,7 +15,7 @@ discovered: 2026-08-24
 verified: 2026-08-25
 source_refs: []
 created: 2026-08-25T09:15:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 evidence:
 - /memory/skills/gohighlevel-access/knowledge/opportunity--signature-fields--accumulates-no-platform-cap.md
 - Production Railway logs, 2026-08-24T20:24-20:26+00:00 (two real submissions two minutes apart, on the same Opportunity/field)
@@ -42,11 +42,10 @@ multi-file behaviour (`opportunity--file-fields--multi-file-full-array-deleted-f
 exactly, because that's genuinely the same write path.
 
 This had a real downstream bug: the Form Submitted trigger's signature-URL
-lookup (`firstOpportunitySignatureUrl`, `src/lib/marketplace/triggers.ts`)
-read array index `[0]` – the oldest surviving entry – instead of the most
+lookup read array index `[0]` – the oldest surviving entry – instead of the most
 recently added one, so it returned the *first-ever* signature on every
 submission regardless of how many newer ones had since been added. Fixed
-in commit `1f94ba1` to read the last entry instead (kept entries are
+by reading the last entry instead (kept entries are
 always written before newly-added ones – `fileWriteEntries([...kept,
 ...added])` – so the last array element is reliably the newest, as long as
 this write pattern holds).

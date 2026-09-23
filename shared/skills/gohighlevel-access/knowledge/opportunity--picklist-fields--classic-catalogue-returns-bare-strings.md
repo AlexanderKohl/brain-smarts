@@ -16,7 +16,7 @@ verified: null
 source_refs:
   - /memory/skills/gohighlevel-access/knowledge/opportunity--picklist-fields--classic-catalogue-returns-bare-strings.md
 created: 2026-09-21T09:13:02+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 ---
 
 # Classic picklist options are bare strings; only the objects surface splits key from label
@@ -72,7 +72,7 @@ the key, the other's have none.
 ## Evidence
 
 Live read-only probe against `Example Co (Staging)` (`loc_EXAMPLE_01`) on 2026-09-21
-while auditing the example-bill-api scheduler's field dependencies. The classic catalogue
+while auditing a scheduling integration's field dependencies. The classic catalogue
 returned 225 opportunity fields; every `RADIO` / `SINGLE_OPTIONS` / `CHECKBOX` among them
 carried `picklistOptions` as a bare string list (`["Yes", "No", "N/A"]` on
 `opportunity.ac_isolation_switch`). The same probe read `custom_objects.installers` through

@@ -16,7 +16,7 @@ verified: 2026-08-30
 source_refs:
   - /memory/skills/gohighlevel-access/knowledge/general--email-templates--requires-version-v3-header.md
 created: 2026-08-28T14:30:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 ---
 
 # Email template CRUD needs an explicit Version: v3 header
@@ -169,8 +169,8 @@ templates` (the documented list endpoint, `include=all`) was also confirmed to r
 the one active record via `total: 1`, with the two accidental shells and the superseded record
 correctly excluded (only appearing under `?archived=true`).
 
-2026-08-30: after the owner reported the API-authored template rendered as one unbroken line in
-the UI, fetched the owner's own UI-hand-edited version of the same template and found it stored
+2026-08-30: after a report that the API-authored template rendered as one unbroken line in
+the UI, fetched a UI-hand-edited version of the same template and found it stored
 as full HTML (`<p>`, `<br>`, `<ol><li><p>`), not plain text with `\n`. Reproduced that exact
 markup shape via `PATCH` (single request, all content fields together) with a numbered list and
 a bulleted list, then independently re-fetched via `GET` and confirmed the stored

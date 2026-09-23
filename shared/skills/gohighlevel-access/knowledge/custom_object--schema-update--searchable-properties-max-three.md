@@ -16,7 +16,7 @@ verified: 2026-09-15
 source_refs:
   - /memory/skills/gohighlevel-access/knowledge/custom_object--schema-update--searchable-properties-max-three.md
 created: 2026-09-15T14:30:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 ---
 # At most three searchable properties
 
@@ -34,9 +34,9 @@ maximum; the minimum of one is enforced by the DTO, the maximum only by the serv
 
 ## Evidence
 
-Live, 15 September 2026, from the extension's storage test on Example Test
+Live, 15 September 2026, from a browser-extension storage test on Example Test
 (`loc_EXAMPLE_04`) through the page-session token.
 
 ## Also confirmed 15 September 2026, 17:20
 
-`PUT /objects/{key}` from a page-session token also accepts `description` (under 100 characters) alongside `searchableProperties`; ExampleDocs uses it to name its Index record (`ExampleDocs index <recordId>`), which is how records are discovered without search.
+`PUT /objects/{key}` from a page-session token also accepts `description` (under 100 characters) alongside `searchableProperties`; a client can use it to name an index record (for example `Example index <recordId>`), which keeps records discoverable without search.

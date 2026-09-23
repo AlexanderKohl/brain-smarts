@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 node_type: system
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 owner: brain-owner
 ---
 
@@ -20,9 +20,6 @@ Read `/CONTRACT.md` before using this repository.
 This repository is the **mechanics** layer of a portable, file-based brain for AI systems and people: the contract, generic rules, bootstrap and onboarding files, shared skills, templates, schemas, the raw-file system node and governance proposals. It holds no personal data and can be adopted by any owner unchanged.
 
 Everything specific to one owner – tasks, projects, contacts, raw files, sources, state and history – lives in that owner's **memory**, a separate private repository checked out at `/memory/`. Large bodies of work live in their own **project repositories** beside the brain. See `/CONTRACT.md` §3.4 to §3.6 and §16.
-
-> The three-layer layout is a candidate under proposal `RULE-2026-0046`
-> (`/governance/proposals/RULE-2026-0046-three-layer-brain.md`) and is not yet active.
 
 ## Navigation
 
@@ -44,7 +41,7 @@ Entries are in reading order.
 
 ##### `governance/`
 
-Contains canonical governance proposals for the mechanics layer (`governance/proposals/`): changes to `/CONTRACT.md`, `/RULES.md`, shared governance schemas and templates, bootstrap files and the preflight validator. Proposals are not active governance; only the implemented content of the target file is. Moved here from `/projects/brain-development/proposals/` under `RULE-2026-0046`. Owner-layer proposals live in `/memory/governance/proposals/`.
+Describes how a change to the mechanics layer is proposed (`governance/proposals/`): changes to `/CONTRACT.md`, `/RULES.md`, shared governance schemas and templates, bootstrap files and the preflight validator. Proposals are not active governance; only the implemented content of the target file is. Owner-layer proposals, and an owner's record of mechanics decisions, live in `/memory/governance/proposals/`.
 
 ##### `memory/`
 

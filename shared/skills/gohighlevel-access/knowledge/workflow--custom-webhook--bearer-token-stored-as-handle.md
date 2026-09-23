@@ -16,7 +16,7 @@ verified: null
 source_refs:
   - /memory/skills/gohighlevel-access/knowledge/workflow--custom-webhook--bearer-token-stored-as-handle.md
 created: 2026-09-14T16:10:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 ---
 
 # A custom-webhook step's bearer token is captured as a `WFSM_` handle, not the token
@@ -40,8 +40,8 @@ and nowhere else in a 437-endpoint sweep of the location.
 ## Why it's non-obvious
 
 The key is `token` and the value is twenty-nine characters, so any scan that judges
-the key reports a pasted credential. ExampleDocs did exactly that on 14 September 2026 and
-raised `security.literal_secret` against a draft workflow that was, in fact,
+the key reports a pasted credential. An audit did exactly that on 14 September 2026 and
+raised a literal-secret finding against a draft workflow that was, in fact,
 following the recommended pattern.
 
 The step's `headers[]` array is the place where a pasted credential would sit
@@ -66,7 +66,7 @@ internal `GET /workflow/{locationId}/{workflowId}`. Not checked for other
 authorization types (basic, API key) or for the public API, which does not expose
 step configuration at all.
 
-Consequence for ExampleDocs: a value in any identifier shape HighLevel issues – UUID,
+Consequence for a secret scanner: a value in any identifier shape HighLevel issues – UUID,
 24-hex ObjectId, a prefixed ObjectId handle like this one, or a twenty-character
 short id – is treated as a reference and never as a credential, whatever key it sits
-under. See the consuming project's warnings standard.
+under.

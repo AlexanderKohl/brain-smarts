@@ -14,7 +14,7 @@ refuted_by: null
 discovered: '2026-08-20'
 verified: '2026-08-20'
 created: '2026-08-24T21:30:00+10:00'
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 evidence:
 - /memory/skills/gohighlevel-access/knowledge/opportunity--pipeline-stage--separate-scope-and-direct-write-keys.md
 ---
@@ -52,10 +52,8 @@ at request time until the feature is actually exercised.
 
 ## Evidence
 
-Documented in the app's own maintained API/scope reference
-(`GHL_API_NOTES.md`/`GHL_SCOPES.md`, last verified 2026-08-15), itself
-built from confirmed live behaviour when Pipeline/Stage targeting shipped
-(2026-08-20).
+Documented in a maintained API/scope reference (last verified
+2026-08-15), itself built from confirmed live behaviour (2026-08-20).
 
 ## Applies to
 

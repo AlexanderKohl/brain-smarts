@@ -15,7 +15,7 @@ Read `/CONTRACT.md` first.
 
 Copy these templates when creating a node or source record. Replace placeholders and remove metadata fields that are not useful.
 
-Use `governance-proposal.template.md` for any proposed semantic change to protected governance. Store completed proposals under `/governance/proposals/` (mechanics governance) or `/memory/governance/proposals/` (owner-layer governance), never in the active inherited rule path (CONTRACT §13.2).
+Use `governance-proposal.template.md` for any proposed semantic change to protected governance. Store a mechanics proposal under `/governance/proposals/` while it is under review, and every accepted record, and every owner-layer proposal, under `/memory/governance/proposals/`, never in the active inherited rule path (CONTRACT §13.2).
 
 Use `project-pointer-README.template.md` for the pointer node memory keeps for a project that lives in its own repository (CONTRACT §16.1). The project's own node files inside its repository's `brain/` folder use the `node-*.template.md` files.
 

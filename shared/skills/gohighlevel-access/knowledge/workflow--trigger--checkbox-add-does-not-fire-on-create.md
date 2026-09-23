@@ -16,7 +16,7 @@ verified: null
 source_refs:
   - /memory/skills/gohighlevel-access/knowledge/workflow--trigger--checkbox-add-does-not-fire-on-create.md
 created: 2026-09-15T12:50:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 ---
 # Checkbox "added" triggers ignore creation; select equality triggers do not
 
@@ -25,7 +25,7 @@ updated: 2026-09-23T12:00:00+10:00
 On Example Co (Staging), creating an opportunity by `POST /opportunities/` with a checkbox
 custom field already holding `Deposit Paid` did not start `4.4` (stage and site-visit status
 untouched), while creating one with the single-option field Enquiry Type set to `Support` did
-start `5.0`. Observed once each during run `SA-20260915-04`. Working reading: an
+start `5.0`. Observed once each during a staging test run. Working reading: an
 "option added" trigger on a checkbox field needs a change event, and creation with the value
 in place produces none, whereas an equality condition evaluates on the create event.
 
@@ -36,4 +36,4 @@ in when they evaluate.
 
 ## Evidence
 
-The R-setup and H01 rows of a local run folder, 15 September 2026.
+Rows of a local test-run folder, 15 September 2026.

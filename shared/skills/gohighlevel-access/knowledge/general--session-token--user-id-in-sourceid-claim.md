@@ -16,14 +16,14 @@ verified: 2026-09-15
 source_refs:
   - /memory/skills/gohighlevel-access/knowledge/general--session-token--user-id-in-sourceid-claim.md
 created: 2026-09-15T12:10:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 ---
 # The session token's claims
 
 ## Behaviour
 
-The bearer token the HighLevel web app attaches to its own API requests (the one
-`isGhlBackendToken` in the extension recognises by `authClass`) carries exactly these
+The bearer token the HighLevel web app attaches to its own API requests (the one a
+client can recognise by its `authClass` claim) carries exactly these
 claims, read live from a logged-in session on 15 September 2026:
 
 ```text
@@ -45,5 +45,4 @@ user actually is.
 
 ## Evidence
 
-Claim names as reported by the extension's storage test, 15 September 2026 (project
-`LOG.md`). Values not recorded; the token never leaves the page realm.
+Claim names as reported by a browser-extension storage test, 15 September 2026. Values not recorded; the token never leaves the page realm.

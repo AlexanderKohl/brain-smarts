@@ -16,7 +16,7 @@ verified: 2026-09-09
 source_refs:
   - /memory/skills/gohighlevel-access/knowledge/custom_object--records-write--locationid-body-on-create-query-on-update.md
 created: 2026-09-09T18:40:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 ---
 
 # locationId placement is inverted between custom object create and update
@@ -90,17 +90,15 @@ Live probe 2026-09-09 against `custom_objects.site_visits` in the
 version header `2021-07-28`. Successful writes were read back to confirm
 the properties persisted rather than being silently dropped.
 
-Originally surfaced as a real recipient-facing failure on
-`forms.example.com`: a Site Visit form submission 422'd, reaching the
-recipient as "The form could not be saved. Please try again."
-(Railway production deploy logs, `ghl_api_error`, traceIds
-`a11e5579-…`, `a494c3a5-…`, `b2333b74-…`). `status: confirmed`.
+Originally surfaced as a real recipient-facing failure: a form
+submission that creates a record 422'd and reached the recipient as a
+generic "could not be saved" message (production deploy logs,
+`ghl_api_error`). `status: confirmed`.
 
-This supersedes the assumption recorded in `ExampleFormsApp`
-commit `85940dc` (2026-08-16), which moved `locationId` out of the write
-body for *both* verbs on the strength of a single 422. That was correct
-for PUT and is what broke POST. Fixed in `465724a`, which changes only
-`createRecord`.
+Rationale: an earlier change moved `locationId` out of the write body
+for *both* verbs on the strength of a single 422 on update. That was
+correct for PUT and is what broke POST; the fix changed only the create
+call.
 
 ## Applies to
 

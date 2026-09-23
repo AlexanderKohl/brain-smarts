@@ -2,26 +2,17 @@
 id: brain-contract
 title: Portable AI Brain Contract
 type: contract
-status: candidate
-candidate_for: RULE-2026-0046
+status: active
 schema_version: 0.2
 contract_version: 1.0.0
-previous_contract_version: 0.9.0
 contract: /CONTRACT.md
 canonical: true
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 owner: brain-owner
 ---
 
 # Portable AI Brain Contract
-
-> **Candidate – not yet active.** This is contract version `1.0.0`, a breaking layout change
-> proposed by `RULE-2026-0046 – Three-layer brain`
-> (`/governance/proposals/RULE-2026-0046-three-layer-brain.md`). It becomes the active
-> contract only when the owner accepts that proposal and the cutover it describes is done.
-> Until then the single-repository brain and its contract `0.9.0` remain live, and nothing in
-> this file may be cited as current policy there.
 
 ## 1. Authority and bootstrap
 
@@ -156,7 +147,7 @@ One working tree holds two repositories:
 
 - A repository-root path such as `/CONTRACT.md`, `/RULES.md` or `/shared/...` names a file in the mechanics repository.
 - Everything owned by memory is addressed as `/memory/...`: for example `/memory/tasks/open/`, `/memory/projects/<node>/`, `/memory/raw/YYYY/MM/<source-id>/`, `/memory/sources/<source-id>.md`, `/memory/outbox/`, `/memory/boards/`, `/memory/STATE.md`.
-- **Path rule:** an item that sat at `/X` in a single-repository brain and belongs to memory is at `/memory/X`. Migrations apply this rule mechanically and do not rename the rest of the path.
+- **Path rule:** an item that belongs to memory keeps the path it would have in a single tree, prefixed with `/memory/`: `/X` becomes `/memory/X`. Moving content into memory applies this rule mechanically and does not rename the rest of the path.
 - Owner-specific configuration, data and notes for a shared skill `/shared/skills/<skill>/` live at `/memory/skills/<skill>/`, using the same inner layout as the skill (`config/`, `data/`, `knowledge/` and so on). A shared script finds them by locating the brain root (moving upwards to `CONTRACT.md`) and joining `memory/skills/<skill>/`, or by a path the owner profile names. It never hard-codes a machine path.
 - `/temp/` is local scratch in the brain root working tree, ignored by both repositories. Nothing durable belongs there.
 - The mechanics repository never commits anything under `/memory/`, and the memory repository never carries a copy of a mechanics file. A file that must change in both layers is changed in each repository and committed in each.
@@ -805,11 +796,11 @@ Ask one direct acceptance question. Silence, lack of objection, approval of adja
 
 An agent may create or revise a proposal without activating it. Store proposals outside the inherited rule path, in the layer whose governance they change:
 
-- a change to the contract, `/RULES.md`, shared governance schemas or templates, bootstrap files or the preflight validator: `/governance/proposals/` in the mechanics repository
+- a change to the contract, `/RULES.md`, shared governance schemas or templates, bootstrap files or the preflight validator: `/governance/proposals/` in the mechanics repository while it is under review, offered upstream as a pull request when it should reach everyone who uses the mechanics. The mechanics repository keeps no decision history: the owner's record of accepting and applying the change is kept in `/memory/governance/proposals/`
 - a change to `/memory/RULES.md` or a node `RULES.md` in memory: `/memory/governance/proposals/`
 - a change to a node `RULES.md` inside a project repository: that repository's `brain/proposals/`
 
-Mechanics proposals were kept under `/projects/brain-development/proposals/` in the single-repository brain; they moved to `/governance/proposals/` with `RULE-2026-0046`. A proposal that changes several layers is stored once, in the highest layer it touches, and lists every target in `target_files`.
+A proposal that changes several layers is stored once, in the highest layer it touches, and lists every target in `target_files`.
 
 When the change is a small additive or clarifying amendment to an existing numbered rule, keep that rule's ID. Revise the original proposal record (or add an amendment section to it) and present that same ID for acceptance. Mint a new `RULE-YYYY-NNNN` only for a distinct new rule. Do not supersede a live rule with a new number merely because the wording grew by a sentence or a tighter constraint.
 

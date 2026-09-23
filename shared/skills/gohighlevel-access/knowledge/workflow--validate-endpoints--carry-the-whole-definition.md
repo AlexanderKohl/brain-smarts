@@ -16,7 +16,7 @@ verified: 2026-09-16
 source_refs:
   - /memory/skills/gohighlevel-access/knowledge/workflow--validate-endpoints--carry-the-whole-definition.md
 created: 2026-09-16T09:48:08+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 ---
 
 # The validate calls are where the live definition is
@@ -113,10 +113,9 @@ usable marker of what is persisted.
 
 ## Why it's non-obvious
 
-Both read as helper calls. They answer `200` and change nothing, which is exactly why the
-extension's save detector suppresses them by name (`HELPER_CALL` in
-`src/highlevel/save-detect.ts`): reporting them as saves would put four entries in the
-blind-spot banner for every workflow opened. The suppression is right about what they are and
+Both read as helper calls. They answer `200` and change nothing, which is exactly why a
+save detector tends to suppress them by name: reporting them as saves would report four
+spurious saves for every workflow opened. The suppression is right about what they are and
 hides what they carry.
 
 `validate-assets` also carries no workflow id - only the location - so the workflow it
@@ -137,9 +136,9 @@ sourced set of findings and should not be made to look like HighLevel's.
 
 ## Evidence
 
-Four `full`-mode traffic recordings from the extension's traffic recorder: 14 September 2026
-19:28 (extension 0.3.0), 15 September 2026 12:33 and 12:39 (0.4.1), and 16 September 2026
-10:05 (0.45.0), against two live sub-accounts. Every non-GET `/workflow/` request was parsed
+Four `full`-mode traffic recordings from a browser extension's traffic recorder: 14 September 2026
+19:28, 15 September 2026 12:33 and 12:39, and 16 September 2026
+10:05, against two live sub-accounts. Every non-GET `/workflow/` request was parsed
 and its `templates` hashed; the tables above are counts of distinct hashes per endpoint.
 Recordings hold live account data and are not committed.
 

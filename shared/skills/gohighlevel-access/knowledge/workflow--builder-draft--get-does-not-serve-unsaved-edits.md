@@ -16,7 +16,7 @@ verified: 2026-09-16
 source_refs:
   - /memory/skills/gohighlevel-access/knowledge/workflow--builder-draft--get-does-not-serve-unsaved-edits.md
 created: 2026-09-16T09:48:08+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 ---
 
 # An edited workflow is not readable until it is saved
@@ -69,7 +69,7 @@ draft editor's own persistence, and its absence after publishing is a rule, not 
 
 ## Why it's non-obvious
 
-Every other HighLevel surface this product reads is readable the moment it changes, which is
+Every other HighLevel surface a capture tool reads is readable the moment it changes, which is
 the premise the whole refresh-after-save path rests on: observe the write, re-read the item,
 never reconstruct it from the payload. A workflow under edit breaks that premise, and it
 breaks it silently - the read succeeds, answers 200, and returns a coherent workflow that is
@@ -93,12 +93,12 @@ a capture as though it were persisted configuration.
 ## Evidence
 
 Four `full`-mode traffic recordings made with a browser extension's
-traffic recorder: 14 September 2026 (extension 0.3.0), two on 15 September (0.4.1) in which one
-workflow was created and edited from empty to three actions, and 16 September 10:05 (0.45.0).
+traffic recorder: 14 September 2026, two on 15 September in which one
+workflow was created and edited from empty to three actions, and 16 September 10:05.
 Request and response bodies of every `/workflow/` call were compared by step count and by a
 hash of `templates`. The recordings hold live account data and are not committed.
 
-The 16 September recording is a **scripted** session, made by the owner to test this behaviour:
+The 16 September recording is a **scripted** session, made to test this behaviour:
 add an action and edit it while the workflow is a draft, publish, then add an action and save
 the action alone, edit it and save the action alone again, and only then save the workflow. The
 draft/published table above is that session, and it is what turns this entry from "a read can be

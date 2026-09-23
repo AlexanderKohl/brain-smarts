@@ -6,7 +6,7 @@ Run from inside the active credential-aware PowerShell session (see
     python shared/skills/gohighlevel-access/scripts/ghl_phone_numbers.py
 
 Uses the reusable, cached ``location_catalog`` on the stored agency token
-rather than refreshing subaccounts, per the owner-requested catalogue-refresh
+rather than refreshing subaccounts, per the skill's catalogue-refresh
 policy. Pass --refresh-catalog to force a subaccount rediscovery first.
 """
 

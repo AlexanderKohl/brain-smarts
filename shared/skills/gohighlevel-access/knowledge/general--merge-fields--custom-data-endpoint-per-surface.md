@@ -16,7 +16,7 @@ verified: 2026-09-12
 source_refs:
   - /memory/skills/gohighlevel-access/knowledge/general--merge-fields--custom-data-endpoint-per-surface.md
 created: 2026-09-12T16:40:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 ---
 
 # The merge-field picker has an endpoint, one per surface
@@ -84,8 +84,8 @@ Namespaces visible through it that a contact/opportunity-centric model will not 
 
 Observed against `Example Co` (`loc_EXAMPLE_01`) on 2026-09-12 during a walk of every
 menu-accessible page, captured by a browser extension's traffic
-recorder. Ten distinct surface responses; the full vocabulary is extracted to
-an owner project data file (memory layer).
+recorder. Ten distinct surface responses; the full vocabulary can be extracted
+from those responses.
 
 ## Applies to
 

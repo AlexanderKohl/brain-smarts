@@ -16,7 +16,7 @@ verified: 2026-09-12
 source_refs:
   - /memory/skills/gohighlevel-access/knowledge/contact--full-address--system-merge-field-absent-from-custom-fields.md
 created: 2026-09-12T18:40:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 ---
 
 # `contact.full_address` is a system merge field absent from every field list
@@ -44,8 +44,8 @@ on it forever unless standard fields are excluded from that rule.
 
 ## Evidence
 
-The owner confirmed on 12 September 2026 while reviewing ExampleDocs findings against the Example
-Co location: the field is in use and correct, and ExampleDocs was wrong to flag it. The account's
+Confirmed on 12 September 2026 while reviewing an audit tool's findings against the Example
+Co location: the field is in use and correct, and the audit tool was wrong to flag it. The account's
 own hand-maintained field-usage catalogue classifies fields it cannot match to a custom-field id
 as `Kind: standard`, which covers most such fields but not this one – `contact.full_address` is
 absent from that catalogue too.

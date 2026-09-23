@@ -4,9 +4,9 @@ title: Claude Code User-Level Brain Pointer
 type: template
 schema_version: 0.2
 contract: /CONTRACT.md
-status: candidate
+status: active
 created: 2026-09-23T13:00:00+10:00
-updated: 2026-09-23T13:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 owner: brain-owner
 install_to: ~/.claude/CLAUDE.md
 ---

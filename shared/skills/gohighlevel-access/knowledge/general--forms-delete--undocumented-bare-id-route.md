@@ -17,7 +17,7 @@ source_refs:
   - /memory/skills/gohighlevel-access/knowledge/general--forms-delete--undocumented-bare-id-route.md
   - /shared/skills/gohighlevel-access/knowledge/general--forms-list--type-param-folder-records-and-invalid-value.md
 created: 2026-09-15T15:30:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 ---
 
 # Form hard delete: bare id, no location anywhere
@@ -57,7 +57,7 @@ wrong one here.
 ## Evidence
 
 Confirmed live 2026-09-15 in `Example Co Master` (`loc_EXAMPLE_02`). A candidate ladder
-was probed against one owner-designated target form, `DELETE 007. Status Update (Sales Meeting)
+was probed against one designated target form, `DELETE Example Form
 V2` (`id_EXAMPLE_01`); the first candidate, the bare-id route, returned the 200 body
 above. A re-list confirmed the location went from 24 forms to 23, the target absent, its
 non-prefixed twin and all four folders untouched.

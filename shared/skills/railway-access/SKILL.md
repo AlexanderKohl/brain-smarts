@@ -17,7 +17,7 @@ metadata:
   project_refs:
     - /memory/projects/credential-management
   created: 2026-08-22T09:47:41+10:00
-  updated: 2026-09-23T12:00:00+10:00
+  updated: 2026-09-23T18:00:00+10:00
 ---
 
 # Railway Access
@@ -156,9 +156,9 @@ IDs: in the Railway dashboard press `Ctrl+K` and copy Project / Service / Enviro
 
 This skill fetches **historical / point-in-time** logs over HTTP. Live WebSocket streaming is out of scope for the first cut.
 
-**`--kind http` currently returns nothing.** As of 2026-09-12 a correctly formed, authorised
-`httpLogs` query returned an empty list for every service on the owner's account, including a live
-production site – no error, just `count: 0`. Do not read that emptiness as "the service received
+**`--kind http` currently returns nothing.** When last probed (the knowledge entry records the date), a correctly
+formed, authorised `httpLogs` query returned an empty list for every service on the account tested,
+including a live production site – no error, just `count: 0`. Do not read that emptiness as "the service received
 no requests"; use `--kind deploy` to reason about traffic. See
 `knowledge/general--http-logs--empty-for-account.md` for the probes and the open question.
 
@@ -166,7 +166,7 @@ no requests"; use `--kind deploy` to reason about traffic. See
 
 Each row is `{ timestamp, message, severity, attributes }`. `attributes` is Railway's structured
 log metadata as `[{ key, value }]` – for an app that logs structured events (e.g. a request/
-response line where `message` is just the event name, like `ghl_api_response`), the actual
+response line where `message` is just the event name, like `api_response`), the actual
 payload lives in `attributes`, not `message`. Confirmed live: a consuming app's own JSON payload
 can itself be **double-JSON-encoded** inside one attribute's `value` (a JSON string containing
 another JSON string) – `json.loads()` it twice, not once, before reading further. Without

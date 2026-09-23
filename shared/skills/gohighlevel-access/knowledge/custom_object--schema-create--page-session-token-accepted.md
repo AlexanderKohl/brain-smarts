@@ -16,7 +16,7 @@ verified: 2026-09-15
 source_refs:
   - /memory/skills/gohighlevel-access/knowledge/custom_object--schema-create--page-session-token-accepted.md
 created: 2026-09-15T09:40:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 ---
 # The app's session token creates schemas and fields with the public-API bodies
 
@@ -48,10 +48,9 @@ also creates the fields folder – it does, so `POST /custom-fields/folder` was 
 
 ## Evidence
 
-Live run by the owner, 15 September 2026, from the `example-docs-extension`
-extension's storage test (commit `b3dd4a9`) on sub-account `Example Test`
-(`loc_EXAMPLE_04`): fifteen requests, every one 2xx, all twelve fields read back.
-Report in that project's `LOG.md` under the same date.
+Live run, 15 September 2026, from a browser-extension storage test on sub-account
+`Example Test` (`loc_EXAMPLE_04`): fifteen requests, every one 2xx, all twelve fields read
+back.
 
 ## Applies to
 

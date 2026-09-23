@@ -4,10 +4,9 @@ title: Seed Prompt for a New Brain
 type: guide
 schema_version: 0.2
 contract: /CONTRACT.md
-status: candidate
-candidate_for: RULE-2026-0046
+status: active
 created: 2026-09-23T13:00:00+10:00
-updated: 2026-09-23T13:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 owner: brain-owner
 ---
 

@@ -20,7 +20,7 @@ owner: brain-owner
 
 Validate Portable AI Brain repository invariants reproducibly before a substantive update is reported complete.
 
-The validator runs from the brain root, the mechanics repository. When the owner's memory repository is checked out at `/memory/` (CONTRACT §3.5), it validates that too, in the same pass: repository-root paths beginning `/memory/` resolve into the memory checkout, and Git change state is read from each repository separately. A missing memory checkout is a warning, not an error, so the mechanics can be validated on their own. A brain that has not been split (tasks at `/tasks/`, proposals under `/projects/brain-development/proposals/`) still validates.
+The validator runs from the brain root, the mechanics repository. When the owner's memory repository is checked out at `/memory/` (CONTRACT §3.5), it validates that too, in the same pass: repository-root paths beginning `/memory/` resolve into the memory checkout, and Git change state is read from each repository separately. A missing memory checkout is a warning, not an error, so the mechanics can be validated on their own. A brain kept in one repository, without a separate memory (tasks at `/tasks/`, raw files at `/raw/`), also validates.
 
 ## Allowed operations
 
@@ -41,8 +41,8 @@ The skill must not modify any other repository file.
 
 - `/CONTRACT.md`
 - Markdown YAML front matter in both repositories
-- proposals under `/governance/proposals/` and `/memory/governance/proposals/` (and `/projects/brain-development/proposals/` in an unsplit brain)
-- `/memory/tasks/` (or `/tasks/` in an unsplit brain)
+- proposals under `/governance/proposals/` and `/memory/governance/proposals/`
+- `/memory/tasks/` (or `/tasks/` in a brain without a separate memory)
 - Git tracked and untracked change state of each repository when Git is available
 - current directory structure of both repositories
 
@@ -74,7 +74,7 @@ The script uses only the Python standard library.
 ## Failure behaviour
 
 - fail if the contract is missing or malformed
-- skip immutable `/memory/raw/` (and unsplit `/raw/`) Markdown evidence (companion source records remain validated)
+- skip immutable `/memory/raw/` (and `/raw/` in a brain without a separate memory) Markdown evidence (companion source records remain validated)
 - fail on missing required Markdown metadata, duplicate IDs, invalid task states, an open task missing from its store's `STATE.md` (`/memory/tasks/STATE.md`) or listed there without its status word (`RULE-2026-0038`), broken declared references (a `#fragment` after the path must match the start of a Markdown heading in the referenced file), a `/memory/` reference that does not resolve while memory is present, contract-version mismatch in either manifest, or an uncovered protected-governance change in either repository
 - warn about undocumented immediate folders, unavailable Git state, an absent memory checkout, a memory folder that is not its own repository, `/memory/` references left unchecked because memory is absent, a missing memory manifest, and a mechanics file whose `owner` is not `brain-owner` (a tripwire for CONTRACT §3.4, not a personal-data scan)
 - never repair content silently
