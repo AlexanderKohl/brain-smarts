@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-23T19:35:27+10:00
-updated: 2026-09-23T20:15:32+10:00
+updated: 2026-09-23T20:58:00+10:00
 ---
 
 # Contact and Persona Schema
@@ -40,6 +40,8 @@ emails: []
 phones: []
 organisations: []
 social_accounts: []
+birthday: null
+dates: []
 google_contact_refs: []
 related_task_refs: []
 related_project_refs: []
@@ -54,7 +56,9 @@ updated: YYYY-MM-DDTHH:mm:ss+HH:MM
 |---|---|---|
 | `contact_kind` | `person` (default) \| `organisation` \| `newsletter` \| `system` | What kind of party this is |
 | `emails`, `phones`, `organisations`, `social_accounts` | lists | Identifiers used for lookup and deduplication |
-| `google_contact_refs` | list of `alias:resourceName` strings | Google Contacts resource names per account alias, for example `personal:people/cEXAMPLE0001`; another directory adds its own `<system>_contact_refs` list when first needed |
+| `birthday` | `YYYY-MM-DD`, `--MM-DD` or `null` | Date of birth; `--MM-DD` when the year is unknown (a directory may hold only the day); `null` or absent means unknown |
+| `dates` | list of `<label>: YYYY-MM-DD` strings | Other dates in the party's life the owner may act on: `anniversary: 2010-03-02`, `started at Example Co: 2024-07-01`, `left Example Co: 2026-01-31`; the label says what the date is, in the domain's own words |
+| `google_contact_refs` | list of `alias:resourceName` strings | Google Contacts resource names per account alias, for example `personal:people/cEXAMPLE0001`; another directory adds its own `<system>_contact_refs` list when first needed, for example `xero_contact_refs` with `<tenant id>:Employees/<employee id>` |
 | `receiving_personas` | list of `persona_key` | Owner identities this party writes to (the To or delivery address); may accumulate |
 | `preferred_reply_persona` | `persona_key` or `null` | Identity to reply as; `null` means ask. Always `null` for newsletters and systems unless the owner sets one |
 | `newsletter` | `true` \| `false` | Apply newsletter handling |
