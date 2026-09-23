@@ -26,10 +26,10 @@ skill_refs:
 
 # Skill exchange – agents suggest, offer and receive shared skills
 
-**Draft.** No `RULE-` number is claimed: the upstream maintainer assigns one on acceptance, and
-every `RULE-YYYY-NNNN` below is written as `RULE-SKILL-EXCHANGE` until then. Depends on
-`RULE-2026-0046` (three layers, `upstream` remote, `active_skills`); it cannot be accepted
-before that proposal is.
+**Draft.** No rule number is claimed: the next free `SMART-RULE` number is assigned on
+acceptance (CONTRACT §13.2, *Rule identifiers*), and the rule is written as
+`PROPOSAL-skill-exchange` below until then. Depends on `SMART-RULE-0029` (three layers,
+`upstream` remote, `active_skills`).
 
 ## Summary
 
@@ -48,7 +48,7 @@ action:
 4. A skill installed from someone else's brain has its source repository and commit recorded
    in `/memory/skills/installed.json`, and a local edit to it is detectable.
 
-Suggestions follow `RULE-2026-0018` and `RULE-2026-0043`: batched at checkpoints, numbered with
+Suggestions follow `SMART-RULE-0010` and `SMART-RULE-0028`: batched at checkpoints, numbered with
 a recommendation, never repeated without new evidence, never mid-task.
 
 ## Current problem
@@ -59,11 +59,11 @@ actively suggests skills that might be useful. They do not:
 - `/SETUP.md` step H mentions `git fetch upstream; git merge upstream/main` and that
   improvements "can be offered back … as a pull request", but nothing says when an agent
   checks, what it tells the owner, or what a contribution must contain.
-- `RULE-2026-0043` captures learnings, and CONTRACT §3.4 says a mechanism learnt from an owner
+- `SMART-RULE-0028` captures learnings, and CONTRACT §3.4 says a mechanism learnt from an owner
   incident goes to the mechanics layer in generalised form – but no rule or skill tells an
   agent to *notice* that a node-local capability has become reusable, and nothing checks for
   personal data before it moves.
-- `active_skills` (proposed with `RULE-2026-0046`) says which optional skills an owner uses,
+- `active_skills` (proposed with `SMART-RULE-0029`) says which optional skills an owner uses,
   but nothing uses it to decide which upstream changes matter.
 - Nothing records where an installed skill came from, so an owner cannot later tell whose code
   they are running or whether it was changed locally.
@@ -77,7 +77,7 @@ None. `/RULES.md` has no rule on skill exchange; `/ONBOARDING_AGENT.md` has no s
 ### 1. `/RULES.md` – a new rule, inserted in number order when the number is assigned
 
 ```markdown
-## RULE-SKILL-EXCHANGE – Skill exchange
+## PROPOSAL-skill-exchange – Skill exchange
 
 - **Notice and suggest.** When a node-local capability is used or copied by a second node,
   holds no owner data once its configuration is moved out, or wraps a system other owners use,
@@ -105,7 +105,7 @@ None. `/RULES.md` has no rule on skill exchange; `/ONBOARDING_AGENT.md` has no s
 ### 2. `/ONBOARDING_AGENT.md` – one new numbered item after item 16
 
 ```markdown
-17. **Skill exchange (`RULE-SKILL-EXCHANGE`):** at session start run
+17. **Skill exchange (`PROPOSAL-skill-exchange`):** at session start run
     `python shared/skills/skill-exchange/scripts/skill_exchange.py due`; when it exits 0, run
     `upstream` and keep its digest for the first natural checkpoint. Record reusable
     capabilities with `candidate add` as you notice them. Procedure and etiquette:
@@ -133,8 +133,8 @@ that phrase.
 - The three-layer split makes skills portable between owners; without a defined exchange,
   improvements stay in whichever brain made them and upstream fixes are found by accident.
 - Suggestions that are not bounded become noise. Stating the cadence, the cap and the
-  no-repeat rule makes "actively suggest" compatible with `RULE-2026-0018` and the
-  *Interrupt only when needed* clause of `RULE-2026-0043`.
+  no-repeat rule makes "actively suggest" compatible with `SMART-RULE-0010` and the
+  *Interrupt only when needed* clause of `SMART-RULE-0028`.
 - The scrub check turns CONTRACT §3.4 from a promise into a command with an exit code.
 - Provenance answers "whose code is this and did we change it" without trusting memory.
 
@@ -165,7 +165,7 @@ that phrase.
 - **Upstream governance arriving by merge.** A merge can change `/RULES.md` or
   `/CONTRACT.md`; the digest flags these and routes them through CONTRACT §13.2.
 - **Numbering.** This proposal claims no `RULE-` number, so it cannot collide with another
-  proposal's reservation (the failure recorded in `RULE-2026-0044`).
+  proposal's reservation (the failure recorded in `PROPOSAL-rules-file-shape`).
 
 ## Migration
 

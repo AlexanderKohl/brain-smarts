@@ -18,7 +18,7 @@ Read `/CONTRACT.md` first.
 
 This file enumerates every record under `/memory/tasks/open/`: one row per task with the status
 word from its front matter. A row changes when the record changes and leaves when the record
-moves to `/memory/tasks/completed/` (`RULE-2026-0038`).
+moves to `/memory/tasks/completed/` (`SMART-RULE-0025`).
 
 ## Open tasks (0, ordered by task number ascending)
 

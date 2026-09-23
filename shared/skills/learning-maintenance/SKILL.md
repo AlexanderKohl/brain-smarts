@@ -13,7 +13,7 @@ scope: shared
 
 # Learning Maintenance
 
-Portable procedure for rule `RULE-2026-0043` and amendment A3 of rule `RULE-2026-0032` in `/RULES.md`. The rules define authority.
+Portable procedure for rule `SMART-RULE-0028` and amendment A3 of rule `SMART-RULE-0019` in `/RULES.md`. The rules define authority.
 
 ## Purpose
 
@@ -62,7 +62,7 @@ Each integration batch, inside that window:
    artifact id.
 3. Update task disposition, regenerate the derived views, validate and commit.
 
-Stage only your own paths. `RULE-2026-0017` requires it and the pre-commit hook enforces it; it is
+Stage only your own paths. `SMART-RULE-0009` requires it and the pre-commit hook enforces it; it is
 what actually stops one session disturbing another, and it matters more here than any lock. Treat a
 Git conflict as the signal to reconcile, never to overwrite. If interrupted, inspect the actual Git
 diff and artifact ids before continuing; never infer success from a status label. Retain pending
@@ -70,11 +70,11 @@ evidence until integration is verified.
 
 ## Canonical record and review
 
-Keep the record with its subject: API entries retain RULE-2026-0022 conventions; other provisional learning lives in that node's `data/learnings/`. Established KNOWLEDGE may link to it rather than duplicate it. Existing unstructured lessons can be indexed by heading without mass migration. New standalone records carry a stable ID, category, subject scope, evidence status, review status, origin session/model and evidence links. Categories: decisions/constraints; goals/preferences; observed behaviour; recovery methods; working methods. Body contains the capture fields, next action, feedback, usage and dated changes. Preserve one canonical identity when status changes.
+Keep the record with its subject: API entries retain SMART-RULE-0013 conventions; other provisional learning lives in that node's `data/learnings/`. Established KNOWLEDGE may link to it rather than duplicate it. Existing unstructured lessons can be indexed by heading without mass migration. New standalone records carry a stable ID, category, subject scope, evidence status, review status, origin session/model and evidence links. Categories: decisions/constraints; goals/preferences; observed behaviour; recovery methods; working methods. Body contains the capture fields, next action, feedback, usage and dated changes. Preserve one canonical identity when status changes.
 
 Review pending records in a later session. Record exact reviewed revision, reviewer session/model, evidence, counterexamples, changed assumptions and disposition. Independence is `independent` only when both underlying models are known and different, otherwise `same_model` or `unknown`. Useful reviews need not be independent. Empirical confirmation requires evidence such as a live probe or observed subsequent use; model agreement alone is insufficient and independent review is not a prerequisite to recording an observed fact. Unknown models do not strand records. Investigate disagreement; escalate only under the rule's four conditions.
 
-Run at most one background worker per thread, at most three records per run, depth one within RULE-2026-0037. Name a concrete effort/time limit in its packet and stop when it is reached, returning partial findings and remaining work. Log observed cost/time when available and unknown otherwise. Optional Six Hats can examine facts, feelings, benefits, risks, alternatives and next actions for an important or disputed question; do not represent these lenses as different models.
+Run at most one background worker per thread, at most three records per run, depth one within SMART-RULE-0024. Name a concrete effort/time limit in its packet and stop when it is reached, returning partial findings and remaining work. Log observed cost/time when available and unknown otherwise. Optional Six Hats can examine facts, feelings, benefits, risks, alternatives and next actions for an important or disputed question; do not represent these lenses as different models.
 
 ## Maintenance, feedback and forgetting
 
@@ -86,7 +86,7 @@ Owner preferences govern usefulness within their scope; decisions remain protect
 
 Whichever session integrates regenerates index.md and board.md from canonical record pointers and task state; they are derived, not a second knowledge store. Include stable IDs, canonical links, category, current status and next action, ordered by category then latest substantive change. Preserve withdrawn entries in the changed-since-last-delivery digest even when excluded from routine retrieval. Missing or stale views are repaired in background by whichever session notices; foreground work continues with targeted subject search.
 
-The first digest is due seven days after activation. **Any session may prepare and present it.** Presenting is a read of canonical records plus a message to the owner; it writes no learning. Rationale: restricting presentation to one designated session would make `RULE-2026-0043`'s weekly review unreachable, because that session is usually not the one active when the digest falls due. A skill may implement a rule's duties and must not narrow one into something that cannot happen.
+The first digest is due seven days after activation. **Any session may prepare and present it.** Presenting is a read of canonical records plus a message to the owner; it writes no learning. Rationale: restricting presentation to one designated session would make `SMART-RULE-0028`'s weekly review unreachable, because that session is usually not the one active when the digest falls due. A skill may implement a rule's duties and must not narrow one into something that cannot happen.
 
 When due in an active session, that session prepares a snapshot of all new learning and substantive changes since the last delivered snapshot, including retirements, uncertainty and owner questions. Record snapshot ID and status prepared, then presenting before showing it, and delivered only after actually displaying it. Record next due seven days after delivery. If delivery is uncertain, retain the snapshot and label the next presentation a possible repeat. Two sessions reaching the due date together are safe: the states are at-least-once by design, and a repeat is labelled rather than hidden. A digest may be offered in the normal response without a separate interruption. No scheduler or real-time guarantee is implied. Presentation never accepts governance.
 
@@ -102,7 +102,7 @@ Canonical learning or linked evidence, pending tasks/artifacts, review receipts 
 
 ## Failure behaviour
 
-When workers are unavailable, preserve pending work; when exclusion cannot be taken or the evidence is uncertain, defer integration and retry later. Continue independent foreground work. Investigate failures/disagreement rather than automatically asking the owner. Apply the four escalation conditions in RULE-2026-0043. No silent deletion, invented model identity, assumed delivery or claimed future execution.
+When workers are unavailable, preserve pending work; when exclusion cannot be taken or the evidence is uncertain, defer integration and retry later. Continue independent foreground work. Investigate failures/disagreement rather than automatically asking the owner. Apply the four escalation conditions in SMART-RULE-0028. No silent deletion, invented model identity, assumed delivery or claimed future execution.
 
 ## Logging and state, knowledge and task updates
 

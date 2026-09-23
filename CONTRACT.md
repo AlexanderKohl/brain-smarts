@@ -4,11 +4,11 @@ title: Portable AI Brain Contract
 type: contract
 status: active
 schema_version: 0.2
-contract_version: 1.0.0
+contract_version: 1.1.0
 contract: /CONTRACT.md
 canonical: true
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-23T18:00:00+10:00
+updated: 2026-09-23T20:00:00+10:00
 owner: brain-owner
 ---
 
@@ -802,7 +802,19 @@ An agent may create or revise a proposal without activating it. Store proposals 
 
 A proposal that changes several layers is stored once, in the highest layer it touches, and lists every target in `target_files`.
 
-When the change is a small additive or clarifying amendment to an existing numbered rule, keep that rule's ID. Revise the original proposal record (or add an amendment section to it) and present that same ID for acceptance. Mint a new `RULE-YYYY-NNNN` only for a distinct new rule. Do not supersede a live rule with a new number merely because the wording grew by a sentence or a tighter constraint.
+When the change is a small additive or clarifying amendment to an existing numbered rule, keep that rule's identifier. Revise the original proposal record (or add an amendment section to it) and present that same identifier for acceptance. Give a new identifier only to a distinct new rule. Do not supersede a live rule with a new number merely because the wording grew by a sentence or a tighter constraint.
+
+#### Rule identifiers
+
+Every accepted rule has one identifier that names its layer and its number within that layer:
+
+- `SMART-RULE-NNNN`: a rule whose canonical home is in the mechanics repository – this contract, `/RULES.md`, or a shared skill or template under `/shared/`. `/RULES.md` indexes every `SMART-RULE` identifier, including those whose wording lives elsewhere.
+- `MEMORY-RULE-NNNN`: a rule in the owner layer, `/memory/RULES.md`.
+- `<PROJECT>-RULE-NNNN`: a rule in a node's `RULES.md`, where `<PROJECT>` is the node's folder name in upper case (for example `EXAMPLE-PROJECT-RULE-0001` for `/memory/projects/example-project/RULES.md`). A rule inherited by several nodes keeps the prefix of the node that defines it.
+
+Numbers have four digits, start at `0001` in each layer and are never reused, not even after a rule is retired. A newly accepted rule takes the next number in its layer: one more than the highest identifier already used in that layer's rule file (for the mechanics, the index in `/RULES.md`).
+
+A proposal carries no rule number. Until the owner accepts it, it is named `PROPOSAL-<slug>`, its file is `<slug>.md` in the proposals folder of its layer, and that is its `id`. The number is assigned at acceptance and recorded in the proposal's `rule_id` field; the proposal keeps its own `id` and file name. Historical records – logs, proposal files, completed tasks, notes – keep the identifiers they were written with and are not rewritten.
 
 After acceptance:
 

@@ -23,7 +23,7 @@ Use `project-pointer-README.template.md` for the pointer node memory keeps for a
 
 ##### `host-pointers/`
 
-Contains the pointer files that make every host session start from `/CONTRACT.md` (user-level Claude Code and Codex pointers, memory and project-repository pointers, a Cursor rule) and the permission-settings templates for uninterrupted work. Canonical templates used by `/SETUP.md`; pointers only, never behavioural rules (`RULE-2026-0015`).
+Contains the pointer files that make every host session start from `/CONTRACT.md` (user-level Claude Code and Codex pointers, memory and project-repository pointers, a Cursor rule) and the permission-settings templates for uninterrupted work. Canonical templates used by `/SETUP.md`; pointers only, never behavioural rules (`SMART-RULE-0007`).
 
 ##### `memory-skeleton/`
 

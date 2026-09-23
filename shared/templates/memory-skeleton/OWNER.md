@@ -28,7 +28,7 @@ of repeating them.
 
 | Field | Used for |
 |---|---|
-| `brain_root` | The `cd` in owner-facing shell commands (`RULE-2026-0013`); `/` in repository-root paths |
+| `brain_root` | The `cd` in owner-facing shell commands (`SMART-RULE-0006`); `/` in repository-root paths |
 | `default_host` | The host and tool the owner usually works in |
 | `github_account` | Owner of the brain and project repositories |
 | `owner_name` | Formal attribution |

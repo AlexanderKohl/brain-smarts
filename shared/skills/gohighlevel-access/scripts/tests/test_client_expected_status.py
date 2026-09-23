@@ -6,7 +6,7 @@ urllib raises on every 4xx and 5xx, so before this was fixed a caller that passe
 in a staging sub-account crashed its `check`, `list` and `import` alike.
 
 Nothing here reaches HighLevel: every request is answered by a fake opener.
-Every name and id is invented (RULE-2026-0016).
+Every name and id is invented (SMART-RULE-0008).
 """
 
 import io

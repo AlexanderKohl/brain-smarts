@@ -30,5 +30,6 @@ facility unless the running version demonstrably offers one.
 
 - Sequential execution in one context forfeits the isolation benefit: later packets see earlier
   results. Note this under Assumed or unverified in each result when it could have mattered.
-- The session-log listener filters Codex sessions to this repository per file; sequential
-  packet work is captured as ordinary session traffic.
+- Codex does not store transcripts per project; if a transcript logger is in use, it must
+  filter Codex sessions to this repository per file. Sequential packet work is ordinary session
+  traffic.

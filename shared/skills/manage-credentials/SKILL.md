@@ -162,7 +162,7 @@ Equivalent: `vault_credentials.py run` (also prefers the agent; interactive pass
 
 ## Deprecated session command
 
-`vault_credentials.py session` is emergency compatibility only (`RULE-2026-0012`). It opens a mapped-field shell with `-NoProfile` on Windows and does **not** export `PORTABLE_VAULT_PASSPHRASE`. OAuth refresh requires the Vault Agent.
+`vault_credentials.py session` is emergency compatibility only. It opens a mapped-field shell with `-NoProfile` on Windows and does **not** export `PORTABLE_VAULT_PASSPHRASE`. OAuth refresh requires the Vault Agent.
 
 ## Use rotating JSON storage
 

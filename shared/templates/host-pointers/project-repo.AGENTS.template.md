@@ -22,4 +22,4 @@ This repository is part of a brain whose contract lives outside it (CONTRACT §1
 - **Without the brain** (for example a collaborator): read `brain/README.md` and
   `brain/RULES.md` in this repository; they are the project's own rules.
 
-This file is a pointer only (`RULE-2026-0015`).
+This file is a pointer only (`SMART-RULE-0007`).

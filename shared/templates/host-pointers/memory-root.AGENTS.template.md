@@ -18,5 +18,5 @@ Start from the contract one level up: read [`../CONTRACT.md`](../CONTRACT.md) an
 bootstrap it defines (see also [`../BOOTSTRAP.md`](../BOOTSTRAP.md) and
 [`../AGENTS.md`](../AGENTS.md)).
 
-This file is a pointer only (`RULE-2026-0015`). It exists because some hosts stop looking for
+This file is a pointer only (`SMART-RULE-0007`). It exists because some hosts stop looking for
 entry files at the repository root, and this repository's root is not the brain root.

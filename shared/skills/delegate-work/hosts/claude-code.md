@@ -43,9 +43,9 @@ Verified with a trial run of several read-only workers launched in one turn.
 - The subagent's model name is not always visible to the worker. The result may say `unknown`;
   the conductor records the model the host reported in the completion notification.
 - A worker cannot ask the owner anything. A `blocked` result is the only escalation path.
-- The session-log listener reads `<session>/subagents/agent-*.jsonl` from the
-  first line and attributes each record to its agent (`/shared/skills/ai-session-log/`). The
-  Agent tool's completion notifications, which report tokens, tool uses and duration per worker,
+- Claude Code writes each subagent's transcript to `<session>/subagents/agent-*.jsonl`; if a
+  transcript logger is in use, it should read those files from the first line and attribute
+  each record to its agent. The Agent tool's completion notifications, which report tokens, tool uses and duration per worker,
   remain the quickest cross-check of a run's cost.
 - Workers name the model inconsistently (a model id in one result, a display name in another). Both are honest;
   the conductor normalises when logging.

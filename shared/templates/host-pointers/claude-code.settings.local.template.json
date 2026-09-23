@@ -16,7 +16,6 @@
       "Bash(ls *)",
       "Bash(python -m pytest *)",
       "Bash(python -m unittest *)",
-      "Bash(python shared/skills/ai-session-log/scripts/session_log.py *)",
       "Bash(python shared/skills/delegate-work/scripts/delegation.py *)",
       "Bash(python shared/skills/manage-credentials/scripts/vaultctl.py status)",
       "Bash(python shared/skills/repository-preflight/scripts/preflight.py *)",

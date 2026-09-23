@@ -15,7 +15,7 @@ scope: shared
 
 ## Purpose
 
-Implement RULE-2026-0043: find relevant knowledge, recover proportionately and capture evidence without making every failure an owner interruption.
+Implement SMART-RULE-0028: find relevant knowledge, recover proportionately and capture evidence without making every failure an owner interruption.
 
 ## Invocation and required inputs
 
@@ -23,7 +23,7 @@ Use on unexpected outcomes, repeated failure, conflicting evidence or blocked pr
 
 ## Data sources
 
-Relevant API `knowledge/` and its `_CONVENTION.md`, the learning index, owning node KNOWLEDGE and focused evidence/history. Follow RULE-2026-0010 internal-first lookup and RULE-2026-0022 for API quirks. Scope/version matter: a matching keyword is not proof applicability.
+Relevant API `knowledge/` and its `_CONVENTION.md`, the learning index, owning node KNOWLEDGE and focused evidence/history. Follow SMART-RULE-0005 internal-first lookup and SMART-RULE-0013 for API quirks. Scope/version matter: a matching keyword is not proof applicability.
 
 ## Allowed operations and permissions
 
@@ -36,7 +36,7 @@ Targeted read-only lookup, public research, bounded recovery within existing tas
 3. Define a reversible attempt, success criterion and stop condition. Bound effort for the whole problem; a practical default is at most three materially different attempts, with a concrete time/effort ceiling chosen for the task. Stop sooner when further attempts have no evidence basis.
 4. After meaningful investigation or implementation, research public authoritative experience proportionately, including successful approaches worth learning from. Do not send private context to search engines. Record source provenance separately from local results.
 5. A failed attempt can lead to research, a materially different hypothesis, or a pending investigation. At the effort limit, preserve what was tried and the next useful action in an artifact/canonical task, and continue independent work. Do not silently abandon the requested outcome: explain a material blocker in the normal task report.
-6. Contact the owner only when authority, consequential judgement, goal clarification or material impact on current work meets RULE-2026-0043. Failure/disagreement alone does not qualify.
+6. Contact the owner only when authority, consequential judgement, goal clarification or material impact on current work meets SMART-RULE-0028. Failure/disagreement alone does not qualify.
 
 ## Scripts or commands
 

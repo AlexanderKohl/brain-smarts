@@ -63,4 +63,4 @@ way in, and it also proves which sub-account the object belongs to.
 - Recorded in `shapes` mode, so string values in the listing are elided. The URL, the method,
   the status and the response keys are exact.
 - Destructive and not reversible. Run it only with the owner's explicit permission for that
-  object in that confirmed sub-account (see `SKILL.md` and rule `RULE-2026-0031` in `/RULES.md`).
+  object in that confirmed sub-account (see `SKILL.md` and the owning node's `RULES.md`).

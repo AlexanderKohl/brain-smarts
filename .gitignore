@@ -27,13 +27,7 @@ venv/
 temp/
 *.bak
 
-# Temporary AI session instrumentation (not governance LOG.md)
-temp/ai-session/*.jsonl
-temp/ai-session/*.state.json
-temp/ai-session/ai-call-log.state.json
-temp/ai-session/listener.state.json
-temp/ai-session/_listener_self_test_transcripts/
-# Non-portable host temp paths (canonical AI session log is /temp/ai-session/)
+# Non-portable host temp paths
 .cursor/temp/
 
 # External-system traffic recordings anywhere in the tree: diagnostic dumps of a live account

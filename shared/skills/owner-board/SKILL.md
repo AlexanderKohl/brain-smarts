@@ -26,7 +26,7 @@ skill_refs:
 
 # Owner Board
 
-Read `/CONTRACT.md` first. This skill sits under `RULE-2026-0037` (delegated parallel work)
+Read `/CONTRACT.md` first. This skill sits under `SMART-RULE-0024` (delegated parallel work)
 and carries the operating detail for the one thing that rule does not cover: **how the owner
 sees what is in play, and how the owner's decision gets back into the files.**
 
@@ -47,7 +47,7 @@ keep by hand is a board that can be quietly wrong, which is worse than a list.
 ## Where things live
 
 There is **one implementation**, in this skill's `scripts/` folder, and it serves every board
-(`RULE-2026-0030`). Boards hold data only.
+(`SMART-RULE-0018`). Boards hold data only.
 
     /shared/skills/owner-board/scripts/          the scripts (this skill)
     /memory/skills/owner-board/config/boards.json the owner's registry and per-board settings
@@ -227,7 +227,7 @@ not the owner.
 If there is ready work, up to four workers run without waiting to be asked. **Reporting is not a
 stopping point**: the moment a worker finishes, the next piece of ready work starts.
 
-Four is `RULE-2026-0037`'s ceiling, not a number to seek permission for. So the queued column
+Four is `SMART-RULE-0024`'s ceiling, not a number to seek permission for. So the queued column
 is a **queue to pull from**, not a list awaiting approval – and keeping it stocked is part of
 the job, because an empty queue is what turns a finished worker into an idle conductor.
 

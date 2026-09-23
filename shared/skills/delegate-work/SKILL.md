@@ -17,7 +17,7 @@ project_refs:
 
 # Delegate Work
 
-Read `/CONTRACT.md` first. The behavioural rule for delegation is `RULE-2026-0037` in root
+Read `/CONTRACT.md` first. The behavioural rule for delegation is `SMART-RULE-0024` in root
 `/RULES.md`. This skill supplies the operating detail and may not
 weaken that rule.
 
@@ -48,7 +48,7 @@ Delegate only when all four hold, and write the reason in one line in `--why-par
 2. executable without talking to sibling workers
 3. consumable by the conductor as a summary plus artifacts, not a transcript
 4. parallel execution buys latency or quality that justifies the extra tokens
-   (`RULE-2026-0004`)
+   (`SMART-RULE-0003`)
 
 Good candidates: independent research branches, alternative approaches, large-document
 analysis split by section, codebase exploration by area, independent reviews. Keep with one
@@ -80,8 +80,8 @@ and artifacts inside the run folder unless a packet explicitly widens `writes`.
 
 - `/CONTRACT.md` section 1 (bootstrap tiers), 5 and 6 (routing), 9 (tasks), 10.4 and 10.5
   (external data and target confirmation)
-- root `/RULES.md`: `RULE-2026-0004`, `RULE-2026-0010`, `RULE-2026-0023`, `RULE-2026-0028`,
-  `RULE-2026-0032`, `RULE-2026-0034`
+- root `/RULES.md`: `SMART-RULE-0003`, `SMART-RULE-0005`, `SMART-RULE-0014`, `SMART-RULE-0016`,
+  `SMART-RULE-0019`, `SMART-RULE-0021`
 - the templates in `templates/`
 - the host notes in `hosts/`
 
@@ -176,7 +176,7 @@ packet that allows writes tells the worker to complete the full bootstrap first.
    `KNOWLEDGE.md`, state to `STATE.md`, outstanding work to `/memory/tasks/`.
 4. Write one `LOG.md` entry in the owning node naming the run, the host, whether the packets ran
    in parallel, which results were accepted or rejected, and where outcomes were routed.
-5. Commit under `RULE-2026-0023` and `RULE-2026-0017`. Workers never commit.
+5. Commit under `SMART-RULE-0014` and `SMART-RULE-0009`. Workers never commit.
 6. **Update the parent task's status word, on the same pass.** A packet's parent task is named
    at `new-run --parent`. If that record still says `ready` after a packet against it has landed,
    the word is a lie and the next reader believes it. Set it to `in_progress`, write on the record
@@ -261,15 +261,15 @@ fix is one more theory, and the symptom can survive all of them.
   worker may list either form; absolute paths resolve and read plainly in a report.
 - A worker that needs an owner decision stops with `status: blocked` and the question. The
   conductor asks the owner; workers never guess at targets, tenants or permissions
-  (`RULE-2026-0034`).
+  (`SMART-RULE-0021`).
 - On a host with no parallel subagent facility, the conductor runs packets in sequence in its
   own session and records `parallel: no`. It never claims parallel execution that did not happen.
 
 ## Logging behaviour
 
 The script does not edit activity logs. The conductor records the run in the owning node's
-`LOG.md` as described above. Worker transcripts are captured by the host and, where the
-session-log listener covers them, by `/shared/skills/ai-session-log/`.
+`LOG.md` as described above. Worker transcripts are captured by the host and, if a transcript logger is in use, by that
+logger.
 
 ## State, knowledge and task update behaviour
 
@@ -322,9 +322,8 @@ handing work over, not only before committing.
   finding will exceed an 800-word soft budget. Raise `--max-output-words` when the acceptance
   criteria require quotation, or ask for an artifact file plus a short result.
 - **Workers cannot see the model name reliably.** Record the host's completion report.
-- **Measure from the host's completion report** where the session-log listener does not yet
-  attribute subagent turns for that host (`/shared/skills/ai-session-log/` does for Claude
-  Code).
+- **Measure from the host's completion report** unless a transcript logger is in use that
+  attributes subagent turns for that host.
 
 ## Lessons for the conductor role
 
@@ -374,7 +373,7 @@ owner ends up answering the same question twice, to two agents, from two framing
 a decision drifts without anybody noticing.
 
 **Asking.** Put the decisions as one numbered set, each with a concrete recommendation, so the
-owner can answer with numbers (`RULE-2026-0018`). Ask them all at once, at the end, rather than
+owner can answer with numbers (`SMART-RULE-0010`). Ask them all at once, at the end, rather than
 one at a time through the design: a decision made early against a half-drawn design is often
 re-opened by the finished one.
 
@@ -442,5 +441,5 @@ Recorded so the next reader does not re-propose them without new evidence: a dur
 leases and claims, a model and worker registry with cost and health, a scheduler, cost-based
 routing, recursion beyond depth one, write-enabled workers outside isolated worktrees, and any
 alignment with external agent-to-agent protocols. Each needs a runtime the brain does not have
-or a measured trial that has not yet been run. The governing rule is `RULE-2026-0037` in
+or a measured trial that has not yet been run. The governing rule is `SMART-RULE-0024` in
 `/RULES.md`.

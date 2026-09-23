@@ -57,7 +57,7 @@ Contains canonical persistent operating-system nodes without a natural completio
 
 ##### `temp/`
 
-Local, ephemeral, regenerable runtime artefacts (the AI session log, delegation run folders, probe output). Ignored by Git in both repositories and absent from a fresh clone. Safe to delete; never store credentials or durable knowledge here.
+Local, ephemeral, regenerable runtime artefacts (delegation run folders, probe output). Ignored by Git in both repositories and absent from a fresh clone. Safe to delete; never store credentials or durable knowledge here.
 
 ## Setting up a memory
 
