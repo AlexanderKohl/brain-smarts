@@ -74,7 +74,9 @@ checkout in the configuration.
 
 `/memory/skills/owner-board/config/boards.json`. The memory skeleton ships it with the
 directory and personal-board defaults and an empty `boards` list, so the personal board and the
-directory are generated from the first task, before any project board exists. A full example:
+directory are generated from the first task, before any project board exists. `pages` lists other
+generated pages the directory links to, after the personal board – a contact register's page, for
+example; each names its file relative to the directory folder. A full example:
 
 ```json
 {
@@ -85,6 +87,9 @@ directory are generated from the first task, before any project board exists. A 
     "completed_days": 14,
     "personal": {"id": "personal", "label": "Personal tasks", "page": "personal.html"}
   },
+  "pages": [
+    {"label": "Contacts", "page": "contacts.html", "blurb": "Every contact, searchable, with their to-dos"}
+  ],
   "boards": [
     {
       "id": "garden",

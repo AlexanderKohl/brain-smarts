@@ -167,11 +167,17 @@ def build(config: board_config.Config, known: dict | None = None, now: str | Non
     task_board.write_pages(config, routed, stamp)
     tallies = {key: task_board.counts(b) for key, b in routed.items()}
     # Order: the personal board first (the owner's own list, and where anything unrouted
-    # lands), then the registered boards in registry order, then automatic boards by label.
+    # lands), then other pages, then the registered boards in registry order, then automatic
+    # boards by label.
     blocks = []
     personal = routed.get(config.personal["id"])
     if personal:
         blocks.append(task_block(config, personal, tallies[personal["key"]]))
+    # Then the other pages (a contact register's page, for example), in registry order.
+    for extra in config.pages:
+        blocks.append('<div class="b"><h2><a href="' + html.escape(extra["page"]) + '">' + html.escape(extra["label"])
+                      + "</a></h2>" + ('<p class="blurb">' + html.escape(extra.get("blurb", "")) + "</p>" if extra.get("blurb") else "")
+                      + "</div>")
     for board in config.boards:
         try:
             data = known.get(board["id"]) or read_board(board)

@@ -168,6 +168,9 @@ class Config:
             if board["id"] in seen:
                 raise ConfigError("board id " + board["id"] + " is registered twice")
             seen.add(board["id"])
+        # Other generated pages the directory links to, such as a contact register's page:
+        # each {"label", "page", "blurb"}, `page` relative to the directory folder.
+        self.pages = [dict(entry) for entry in raw.get("pages") or [] if entry.get("label") and entry.get("page")]
         tasks = dict(raw.get("tasks") or {})
         self.personal = dict(PERSONAL_DEFAULTS, **(tasks.pop("personal", None) or {}))
         self.tasks = dict(TASKS_DEFAULTS, **tasks)

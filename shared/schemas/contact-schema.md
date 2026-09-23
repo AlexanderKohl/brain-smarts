@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-23T19:35:27+10:00
-updated: 2026-09-23T19:35:27+10:00
+updated: 2026-09-23T20:15:32+10:00
 ---
 
 # Contact and Persona Schema
@@ -67,7 +67,7 @@ A contact merged into another becomes a pointer: `status: merged` and `merged_in
 with its identifiers and notes moved to the kept record. Readers skip pointers.
 
 Body sections, in order: Overview, Identifiers, Relationship, Reply guidance, Newsletter handling
-(newsletters only), Notes (dated), Open loops.
+(newsletters only), Notes (dated), To do.
 
 There is no separate organisation record. An organisation the owner deals with as a party is a
 contact with `contact_kind: organisation`; a person's employer is a string in that person's

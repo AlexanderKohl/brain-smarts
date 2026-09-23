@@ -326,6 +326,19 @@ class PageTests(unittest.TestCase):
         self.assertIn('href="../projects/example-pond/status/status.html"', text)
         self.assertEqual(text.count('<span class="n you"><b>1</b>Needs you</span>'), 2)
 
+    def test_directory_links_other_pages_after_the_personal_board(self):
+        path = self.brain.memory / "skills" / "owner-board" / "config" / "boards.json"
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        raw["pages"] = [{"label": "Contacts", "page": "contacts.html", "blurb": "Everyone, searchable."},
+                        {"label": "No page"}]
+        path.write_text(json.dumps(raw), encoding="utf-8")
+        config = self.brain.config()
+        self.assertEqual([p["label"] for p in config.pages], ["Contacts"])   # an entry without a page is left out
+        quiet(build_boards.build, config, None, "2026-01-05 09:00")
+        text = (self.brain.memory / "boards" / "index.html").read_text(encoding="utf-8")
+        self.assertIn('<h2><a href="contacts.html">Contacts</a></h2><p class="blurb">Everyone, searchable.</p>', text)
+        self.assertLess(text.index("contacts.html"), text.index("example-garden/status/status.html"))
+
 
 class VerdictTests(unittest.TestCase):
     def setUp(self):
