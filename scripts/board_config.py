@@ -13,10 +13,14 @@ A value such as `{project_repos_root}/example-product` is filled from `/memory/O
 
 from __future__ import annotations
 
+import base64
+import html
 import json
+import mimetypes
 import os
 import re
 import sys
+import urllib.parse
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +34,7 @@ BOARD_DEFAULTS: dict[str, Any] = {
     "built_version": None,
     "committed_version": None,
     "copy_only_prefixes": ["about:", "chrome-extension://", "chrome://", "moz-extension://"],
+    "favicon": None,
     "fetch": True,
     "grace_minutes": 15,
     "main": "main",
@@ -40,7 +45,38 @@ BOARD_DEFAULTS: dict[str, Any] = {
     "where_view_href": None,
 }
 
-DIRECTORY_DEFAULTS: dict[str, Any] = {"folder": "boards", "title": "Boards"}
+DIRECTORY_DEFAULTS: dict[str, Any] = {"favicon": None, "folder": "boards", "title": "Boards"}
+
+# The tab icon of every generated page when the owner names none: a board of three columns on a
+# mid-green tile, which reads on a light and on a dark tab strip. Inline, so a page opened from
+# file:// needs no second file.
+DEFAULT_FAVICON = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">'
+    '<rect width="32" height="32" rx="7" fill="#1f7a5a"/>'
+    '<rect x="6" y="7" width="5.5" height="18" rx="1.5" fill="#fff"/>'
+    '<rect x="13.25" y="7" width="5.5" height="12" rx="1.5" fill="#fff" opacity=".85"/>'
+    '<rect x="20.5" y="7" width="5.5" height="8" rx="1.5" fill="#fff" opacity=".7"/>'
+    "</svg>"
+)
+
+# How task records reach the boards (`task_board.py`). Alphabetical. `auto_boards` off means a
+# task whose projects have no registered board is shown on the personal board; on, such a
+# project gets a generated task-only board of its own under `<directory>/<auto_folder>/`.
+TASKS_DEFAULTS: dict[str, Any] = {
+    "auto_boards": False,
+    "auto_folder": "projects",
+    "auto_roots": ["/memory/projects/"],
+    "completed_days": 14,
+    "enabled": True,
+    "store": "tasks",
+}
+
+PERSONAL_DEFAULTS: dict[str, Any] = {
+    "blurb": "Every task no project board holds",
+    "id": "personal",
+    "label": "Personal tasks",
+    "page": "personal.html",
+}
 
 
 class ConfigError(Exception):
@@ -118,6 +154,13 @@ class Config:
             if board["id"] in seen:
                 raise ConfigError("board id " + board["id"] + " is registered twice")
             seen.add(board["id"])
+        tasks = dict(raw.get("tasks") or {})
+        self.personal = dict(PERSONAL_DEFAULTS, **(tasks.pop("personal", None) or {}))
+        self.tasks = dict(TASKS_DEFAULTS, **tasks)
+        self.task_store = self.memory / str(self.tasks["store"]).replace("/", os.sep)
+        if self.personal["id"] in seen:
+            raise ConfigError("the personal board id " + self.personal["id"]
+                              + " is also a registered board id")
 
     def _board(self, entry: dict) -> dict:
         for key in ("id", "label", "status"):
@@ -158,6 +201,33 @@ class Config:
             return self.boards[0]
         raise ConfigError("name a board with --board; registered: "
                           + ", ".join(b["id"] for b in self.boards))
+
+
+def favicon_href(config: "Config", board: dict | None = None) -> str:
+    """The tab icon as a data URI: the board's `favicon`, else the directory's, else the default.
+
+    A value is an SVG string, a `data:` URI, or a file path relative to the directory folder
+    (`/memory/boards/` by default). A named file that does not exist is a configuration error,
+    not a silent fallback.
+    """
+    value = (board or {}).get("favicon") or config.directory.get("favicon") or DEFAULT_FAVICON
+    value = str(value).strip()
+    if value.startswith("data:"):
+        return value
+    if not value.startswith("<"):
+        path = config.directory_folder / value.replace("/", os.sep)
+        if not path.is_file():
+            raise ConfigError("favicon " + value + " not found at " + str(path))
+        if path.suffix.lower() != ".svg":
+            mime = mimetypes.guess_type(str(path))[0] or "image/png"
+            return "data:" + mime + ";base64," + base64.b64encode(path.read_bytes()).decode("ascii")
+        value = path.read_text(encoding="utf-8").strip()
+    return "data:image/svg+xml," + urllib.parse.quote(value, safe="=:/")
+
+
+def favicon_link(config: "Config", board: dict | None = None) -> str:
+    """The `<link rel="icon">` tag every generated page carries in its head."""
+    return '<link rel="icon" href="' + html.escape(favicon_href(config, board)) + '">'
 
 
 def add_common_arguments(parser) -> None:

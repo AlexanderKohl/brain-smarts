@@ -14,14 +14,16 @@ script_paths:
   - /shared/skills/owner-board/scripts/card.py
   - /shared/skills/owner-board/scripts/cards.py
   - /shared/skills/owner-board/scripts/reconcile.py
+  - /shared/skills/owner-board/scripts/task_board.py
   - /shared/skills/owner-board/scripts/verdicts.py
 created: 2026-09-18T11:05:00+10:00
-updated: 2026-09-23T14:00:00+10:00
+updated: 2026-09-23T15:00:00+10:00
 owner: brain-owner
 project_refs:
   - /memory/projects/brain-development
 skill_refs:
   - /shared/skills/delegate-work
+  - /shared/skills/tasks
 ---
 
 # Owner Board
@@ -38,7 +40,9 @@ are in `/memory/skills/owner-board/`.
 
 Give the owner **one link that never changes**, showing every request they have made, what
 state it is in, and what they have to look at – and let their verdict travel back as data
-rather than as text they copy into a message and a conductor retypes.
+rather than as text they copy into a message and a conductor retypes. The same boards show the
+owner's **tasks**: every open task record appears on exactly one board – its project's, or the
+personal board – read from `/memory/tasks/` each time, never copied into a card.
 
 The board is not a status report the conductor writes. **It is generated from the records**,
 and a check runs on every regeneration comparing it against git. A board a conductor could
@@ -53,7 +57,9 @@ There is **one implementation**, in this skill's `scripts/` folder, and it serve
     /memory/skills/owner-board/config/boards.json the owner's registry and per-board settings
     /memory/<node>/status/                        one board per node: cards, board.md, page
     /memory/boards/index.html                     the directory above every board (generated)
-    /memory/tasks/                                the task records a board reconciles against
+    /memory/boards/personal.html                  the personal task board (generated)
+    /memory/boards/projects/<slug>.html           automatic task boards, when switched on (generated)
+    /memory/tasks/                                the task records boards show and reconcile against
 
 The scripts find the brain root by moving upwards to `CONTRACT.md` from the current folder (or
 from their own folder), then read `memory/skills/owner-board/config/boards.json` beneath it
@@ -71,7 +77,12 @@ checkout in the configuration.
 ```json
 {
   "owner_name": "optional – defaults to owner_short_name in /memory/OWNER.md",
-  "directory": {"folder": "boards", "title": "Boards"},
+  "directory": {"folder": "boards", "title": "Boards", "favicon": "optional - see below"},
+  "tasks": {
+    "auto_boards": false,
+    "completed_days": 14,
+    "personal": {"id": "personal", "label": "Personal tasks", "page": "personal.html"}
+  },
   "boards": [
     {
       "id": "garden",
@@ -95,6 +106,7 @@ Board keys, alphabetical. Only `id`, `label` and `status` are required.
 | `built_version` | none | `{file, key}` or `{file, regex}` in the product checkout; check 3 compares it with `committed_version`. |
 | `committed_version` | none | `{file, key}` or `{file, regex}` read from the main branch with `git show`; drives checks 3, 4 and 9. |
 | `copy_only_prefixes` | browser-internal schemes | Addresses a `file://` page may not open, so the card copies them instead of linking. |
+| `favicon` | the directory's | This board's tab icon; the same forms as the directory's `favicon`. |
 | `fetch` | `true` | Fetch the product remote before reconciling; `--no-fetch` turns it off for one run. |
 | `grace_minutes` | `15` | How long a new card may name a branch that does not exist yet. |
 | `id` | required | Short slug; also names verdict files and browser storage by default. |
@@ -111,6 +123,24 @@ Board keys, alphabetical. Only `id`, `label` and `status` are required.
 | `verdict_prefix` | `<id>-verdicts-` | Saved verdict file names. |
 | `verdict_schema` | `owner-board/verdicts/v1` | The `schema` value inside a verdict file. |
 | `where_view_href` | none | Builds a card's link from its `where_view`. `{view}` is the card's value; any other `{name}` is a top-level field of `board.md`'s JSON; a part in `[...]` is dropped when a field it uses is empty. |
+
+`directory` keys, alphabetical: `favicon` (the tab icon of every generated page – an SVG string,
+a `data:` URI, or a file path relative to the directory folder; default a neutral three-column
+board glyph, inlined so a `file://` page needs no second file; a named file that is missing
+stops the build), `folder` (default `boards`, under the memory root) and `title` (default
+`Boards`).
+
+`tasks` keys, alphabetical, all optional (see **Tasks on the boards**):
+
+| Key | Default | Meaning |
+|---|---|---|
+| `auto_boards` | `false` | Off: a task whose projects have no registered board goes to the personal board. On: its first project under `auto_roots` gets a generated task-only board. |
+| `auto_folder` | `projects` | Where automatic boards are written, under the directory folder. |
+| `auto_roots` | `["/memory/projects/"]` | Which references may get an automatic board. |
+| `completed_days` | `14` | How long a completed or cancelled task stays in *Completed recently*. |
+| `enabled` | `true` | `false` draws no tasks anywhere. |
+| `personal` | see the example | The personal board: `id` (must not be a registered board id), `label`, `page` (relative to the directory folder), `blurb`. |
+| `store` | `tasks` | The task store, relative to the memory root. |
 
 ## Invocation and required inputs
 
@@ -216,6 +246,57 @@ and remembers the folder. The owner then sends one short message, and the conduc
 
 `verdicts.py --board <id> [file]` applies one file to one board.
 
+### Tasks on the boards
+
+The task record in `/memory/tasks/` stays the only record of a task (CONTRACT sections 3.3 and
+9). `task_board.py` reads the records at every regeneration and draws them; nothing is copied
+into `cards/`, so there is no second list to fall out of step.
+
+**Routing** – one rule, in one function, used by every page:
+
+1. Walk the task's `project_refs` in order. The first reference that is a registered board's
+   `node`, or a folder beneath it, decides (the deepest matching node wins).
+2. With `auto_boards` on, a first reference under `auto_roots` with no registered board gets an
+   automatic task-only board at `/memory/boards/projects/<slug>.html`.
+3. Otherwise – no references, or only projects without a board – the **personal board**,
+   `/memory/boards/personal.html`.
+
+`auto_boards` is off by default, and that is the recommendation: a board is something the owner
+opens, and a directory full of one-task boards is one they stop reading. The personal board tags
+each task with its project, so nothing is lost by sharing it. When a project's tasks deserve a
+page of their own, **make it a board** (Making a board) – its tasks move there at the next
+regeneration. An automatic page whose tasks have all gone is kept, drawn empty, because it may
+be bookmarked.
+
+**Where they are drawn.** A registered board shows its tasks in a *Tasks* section below the
+cards on its own `status.html` – still one link. The personal and automatic boards are pages of
+their own beside the directory, rewritten by `build_boards.py` on every regeneration of any
+board. The directory lists the personal board first, then the registered boards (each with an
+open-task count), then automatic boards by label; tasks past due or due for review are counted
+in the warning colour.
+
+**Columns and order.** Inbox, Ready, In progress, Waiting, Scheduled, Blocked, Completed
+recently – the way a task travels. In the action columns (inbox, ready, in progress, blocked)
+the order is priority, then the nearest real deadline, then task number: what to do next is at
+the top. Waiting and scheduled run by `next_review`, nearest first, because that is when they
+come back; each shows `waiting_on` and the review date. Completed runs newest first. A status no
+column draws is shown first, in the warning colour, rather than vanishing.
+
+**No verdicts on tasks.** A task card has no accept or send-back control: the owner changes a
+task by changing its record, and the title links to the file. Verdicts on request cards work
+exactly as before.
+
+**A new task appears at once.** `tasks.py new` (the tasks skill) creates the record and runs
+`task_board.py build --for <task>`, which rebuilds the one board the task lands on and the
+directory. After editing a task record by hand, run
+
+    python shared/skills/owner-board/scripts/task_board.py --no-fetch build
+
+and, to prove what the owner sees, read the pages back:
+
+    python shared/skills/owner-board/scripts/task_board.py route   # which board each task is on
+    python shared/skills/owner-board/scripts/task_board.py check   # each open task once, on its board
+
 ### Then act on it
 
 A card in `rework` with no branch is work nobody is doing. Dispatch it (see
@@ -254,6 +335,7 @@ Run from the brain root. Alphabetical.
 | `card.py` | Create, change, show, list or drop one card, then rebuild and reconcile. |
 | `cards.py` | Read and write card records; owns the signature. Imported by the others. |
 | `reconcile.py` | Compare a board with git and the task records. Called by every build. |
+| `task_board.py` | Route task records to boards and draw them: `route`, `build [--for <task>]`, `check`. |
 | `verdicts.py` | Apply one saved verdicts file to one board. |
 
 Common options: `--root`, `--config`, `--no-fetch`, and `--board` where a command acts on one
@@ -281,8 +363,9 @@ Numbered as in `reconcile.py`; checks 1 to 9 need `repo`.
 ## Outputs
 
 `status.html`, regenerated in place at the permanent path; card records under `cards/`;
-`closed` entries in `board.md`; applied verdict files under `verdicts-applied/`; and
-`/memory/boards/index.html`, refreshed on every regeneration.
+`closed` entries in `board.md`; applied verdict files under `verdicts-applied/`;
+`/memory/boards/index.html`, `/memory/boards/personal.html` and any automatic task boards,
+refreshed on every regeneration.
 
 ## Failure behaviour
 
