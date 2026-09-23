@@ -394,6 +394,7 @@ others. Numbers run through both groups so a reply stays short.
 | product-development | Evidence-and-decision process for software work (`RULE-2026-0028`) |
 | raw-file-ingestion | Keeps every uploaded file unchanged under `/memory/raw/` with a readable Markdown copy |
 | repository-preflight | Validates both repositories before every commit |
+| tasks | Keeps your task list under `/memory/tasks/` and reviews what has come due |
 | ui-implementation | Rules a live screen must keep while data changes underneath it |
 | ui-mockup | Builds a preview of a screen for you to refine before anything is built |
 
@@ -403,17 +404,18 @@ others. Numbers run through both groups so a reply stays short.
 |---|---|---|---|
 | 1 | abr-access | Looks up Australian Business Numbers and company names on the Australian Business Register | Free ABR web-services GUID (emailed after registration); the vault |
 | 2 | ai-session-log | Keeps a local, temporary log of every AI call and a viewer at `127.0.0.1:8768` | Nothing external |
-| 3 | gohighlevel-access | Reads and, with your confirmation, writes HighLevel CRM data across sub-accounts | A HighLevel **agency** account; a Marketplace app you register; the vault |
-| 4 | google-drive-access | Legacy Drive access through a host's own connector | A host Google connector – **not recommended**; use 5 |
-| 5 | google-workspace-access | Gmail (draft-first), Calendar, Tasks, Drive and Contacts for one or more Google accounts | A Google account; a Google Cloud project and OAuth client you register; the vault; a Personal CRM node (the agent creates it) |
-| 6 | manage-credentials | The encrypted vault every credentialed skill uses | A passphrase you choose; chosen automatically with 1, 3, 5, 8 or 9 |
-| 7 | owner-board | One permanent page showing every request you have made and what needs you | Nothing external – **see the note below** |
-| 8 | railway-access | Reads Railway projects, deployments and logs | A Railway account token you create; the vault |
-| 9 | xero-access | Reads Xero accounting data and, with your approval, creates planned accounts or draft invoices | A Xero organisation; a Xero developer app you register; the vault |
+| 3 | crm | Remembers the people and organisations you deal with, and which of your identities to reply as | Nothing external; chosen automatically with 6 |
+| 4 | gohighlevel-access | Reads and, with your confirmation, writes HighLevel CRM data across sub-accounts | A HighLevel **agency** account; a Marketplace app you register; the vault |
+| 5 | google-drive-access | Legacy Drive access through a host's own connector | A host Google connector – **not recommended**; use 6 |
+| 6 | google-workspace-access | Gmail (draft-first), Calendar, Tasks, Drive and Contacts for one or more Google accounts | A Google account; a Google Cloud project and OAuth client you register; the vault; the contact register (3) |
+| 7 | manage-credentials | The encrypted vault every credentialed skill uses | A passphrase you choose; chosen automatically with 1, 4, 6, 9 or 10 |
+| 8 | owner-board | One permanent page showing every request you have made and what needs you | Nothing external – **see the note below** |
+| 9 | railway-access | Reads Railway projects, deployments and logs | A Railway account token you create; the vault |
+| 10 | xero-access | Reads Xero accounting data and, with your approval, creates planned accounts or draft invoices | A Xero organisation; a Xero developer app you register; the vault |
 
-> **Ask:** Which of 1 to 9 do you want? You can add more later by asking me to resume setup.
+> **Ask:** Which of 1 to 10 do you want? You can add more later by asking me to resume setup.
 > 1. `2` only – start local, add accounts later (recommended for a first session)
-> 2. A list you give, for example `2, 5, 9`
+> 2. A list you give, for example `2, 3, 6, 10`
 > 3. None for now
 >
 > **Suggested reply:** `2`
@@ -423,7 +425,8 @@ builders) are not yet shipped in the mechanics repository. If chosen, record it 
 `active_skills`, mark its `## Setup` row `blocked` with that reason, and move on.
 
 Record the choice in `active_skills` (alphabetical; add `manage-credentials` whenever a
-credentialed skill is chosen), add one `## Setup` row per chosen skill, and continue to D.
+credentialed skill is chosen, and `crm` whenever `google-workspace-access` is), add one
+`## Setup` row per chosen skill, and continue to D.
 
 ## 6. Step D – Set up each chosen skill
 
@@ -562,7 +565,47 @@ python shared/skills/ai-session-log/scripts/session_log.py listen --once
 **Agent verifies:** `self-test` passes and `session_log.py path` prints a file under
 `/temp/ai-session/`. Keeping the listener running and the viewer are in step G.
 
-### D.4 gohighlevel-access
+### D.4 crm
+
+**Agent does** (no credentials, no external account):
+
+1. Checks that the starter contact register exists at `/memory/projects/contacts/` (the
+   skeleton ships it in B4). For a memory created without it, copies
+   `/shared/templates/memory-skeleton/projects/contacts/` there, applies B4 step 3 to the copied
+   files, and lists the folder in `/memory/projects/README.md`.
+2. Asks for the owner's identities:
+
+   > **Ask:** In which capacities do you write to people?
+   > 1. Only as yourself – one persona, `personal` (recommended to start)
+   > 2. As yourself and for one or more companies – name each company
+   >
+   > **Suggested reply:** `1`
+
+3. Creates `personas/persona-<key>.md` from `personas/_TEMPLATE.md` for each answer and adds
+   the rows to the persona catalogue in `KNOWLEDGE.md`. `google_account_alias` stays `null`
+   until a mail account is connected (D.6).
+4. Asks about the optional tax-registration check in the node's `RULES.md`:
+
+   > **Ask:** When you process an invoice, should I check the other party's tax registration?
+   > 1. Not now – leave it disabled (recommended)
+   > 2. Yes, with `abr-access` (Australian Business Numbers and GST)
+   >
+   > **Suggested reply:** `1`
+
+   Enabling it changes the owner's own rules: record the owner's acceptance in the node's
+   `LOG.md` (CONTRACT §13.2).
+
+**Agent verifies:**
+
+```powershell
+cd C:\dev\brain
+python shared/skills/crm/scripts/crm_check.py --node /memory/projects/contacts validate
+```
+
+`done` when it reports `PASS`. When `crm` is not chosen, the starter node stays in memory and its
+rules do not apply.
+
+### D.5 gohighlevel-access
 
 Needs a HighLevel **agency** login with admin rights.
 
@@ -606,14 +649,14 @@ python shared/skills/gohighlevel-access/scripts/ghl_subaccounts.py
 `done` when it prints the agency name and the approved sub-accounts. Every later write still
 needs the target sub-account confirmed for that operation (CONTRACT §10.5).
 
-### D.5 google-workspace-access
+### D.6 google-workspace-access
 
 **Agent does first:**
 
 1. Installs the dependencies:
    `python -m pip install -r shared/skills/google-workspace-access/requirements.txt`.
-2. Creates a Personal CRM node at `/memory/projects/contacts/` (five core files, and
-   `data/`, `personas/`, `contacts/`), and `/memory/skills/google-workspace-access/config/crm.json`:
+2. Makes sure the contact register from D.4 is in place (`crm` is chosen with this skill),
+   adds its `data/` folder, and writes `/memory/skills/google-workspace-access/config/crm.json`:
 
    ```json
    { "crm_root": "/memory/projects/contacts" }
@@ -697,10 +740,10 @@ python shared/skills/manage-credentials/scripts/vault_credentials.py run `
 ```
 
 `done` when the status succeeds; then set the account's `status` to `connected` in
-`google-accounts.json`. Email stays draft-first: nothing is sent without the owner approving a
+`google-accounts.json`, and `google_account_alias` on each persona that sends through it. Email stays draft-first: nothing is sent without the owner approving a
 specific draft.
 
-### D.6 railway-access
+### D.7 railway-access
 
 **You do:**
 
@@ -727,7 +770,7 @@ python shared/skills/manage-credentials/scripts/vault_credentials.py run `
   -- python shared/skills/railway-access/scripts/railway_projects.py --list-workspaces
 ```
 
-### D.7 xero-access
+### D.8 xero-access
 
 **You do** (portal labels move – `verify against current host docs`):
 

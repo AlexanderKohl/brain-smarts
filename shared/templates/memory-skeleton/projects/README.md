@@ -25,3 +25,9 @@ that live in their own repositories. Decide which with CONTRACT §7.1; create a 
 
 Contains the node for the owner's work on the brain itself: the active conductor and
 `## Handover` (`RULE-2026-0032`), delegation trials (`RULE-2026-0037`) and measurements.
+
+##### `contacts/`
+
+Contains the owner's contact register: one file per person, organisation, newsletter sender or
+system, and one file per identity the owner communicates as. Its rules apply while `crm` is in
+`active_skills` (`/shared/skills/crm/`).
