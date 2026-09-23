@@ -32,6 +32,10 @@ Contains the ABR ABN Lookup JSON web-services skill (vault-stored authentication
 
 Contains the portable temporary AI session JSONL helper (`session_log.py` CLI + importable helpers). Canonical log path is `/temp/ai-session/ai-call-log.jsonl` with kinds `model_call` / `model_response` / `thinking` / `tool_result` / `python_run` (ephemeral; not governance `LOG.md`). The transcript listener auto-detects Cursor, Claude Code, and Codex transcripts with no flags – Codex sessions are filtered per file to this brain since Codex does not store transcripts per project. Local HTML viewer: `session_log.py view` on `127.0.0.1:8768`. Cursor option-2 hooks via `.cursor/hooks.json`.
 
+##### `crm/`
+
+Contains the contact register (CRM) skill: the contact and persona model, procedures for creating a contact on first encounter, deduplication, newsletter handling, persona-to-account binding and directory merges, the templates for a CRM node, and `scripts/crm_check.py` (read-only find, validate and duplicate checks). The register itself and its rules live in the owner's memory; the skeleton ships a starter node at `projects/contacts/`.
+
 ##### `delegate-work/`
 
 Contains the delegated-work protocol: a conductor agent writes bounded packets that reference canonical files, workers return compressed result records, and `scripts/delegation.py` creates, dispatches, validates and summarises a run under `/temp/delegation/runs/`. Workers are isolated, read-only and credential-free by default; at most four per run, depth one. Host dispatch notes in `hosts/`. Not a queue or task system.
@@ -83,6 +87,10 @@ Contains the canonical validator for metadata, identifiers, references, task sta
 ##### `skill-exchange/`
 
 Proposed, not active (`PROPOSAL-skill-exchange`). How agents notice a reusable capability and suggest promoting it to a shared skill, offer it upstream as a pull request, tell the owner about new or changed upstream skills, and install a skill from another brain with its provenance recorded. `scripts/skill_exchange.py` does the read-only parts: the upstream comparison, the provenance record and the promotion check.
+
+##### `tasks/`
+
+Contains the task operating procedure and the task-review skill named in CONTRACT §9.1: capture, inbox processing, review, update and close for `/memory/tasks/`, with `scripts/tasks.py` (read-only review, record check and next task number).
 
 ##### `ui-implementation/`
 

@@ -45,6 +45,7 @@ Rows are alphabetical by skill name.
 |---|---|---|
 | abr-access | `/shared/skills/abr-access/` | ABR ABN Lookup JSON web services (GUID in vault); ABN/ACN lookup and name search |
 | ai-session-log | `/shared/skills/ai-session-log/` | Portable temporary AI JSONL at `/temp/ai-session/`; **listener** + Cursor **option 2 hooks** + local **HTML viewer** (`session_log.py view`, port 8768) |
+| crm | `/shared/skills/crm/` | Contact register in memory: one file per person, organisation, newsletter or system; owner personas bound to sending accounts; create on first encounter, deduplicate, merge directories; node rules ship as a template; `crm_check.py` find, validate, duplicates |
 | delegate-work | `/shared/skills/delegate-work/` | Conductor-to-worker packets and results for parallel subagent work; isolated, read-only, no credentials by default; max four workers, depth one; run folders under `/temp/delegation/runs/`; governed by root `RULE-2026-0037`. Also holds the two handover procedures: conductor to conductor, and **a research or design thread back to the conductor**, which settles every open decision with the owner before it hands over |
 | gohighlevel-access | `/shared/skills/gohighlevel-access/` | HighLevel agency OAuth (port 8766), subaccounts, CRM APIs; pipeline migration review UI (port 8769) |
 | google-drive-access | `/shared/skills/google-drive-access/` | Legacy connector-managed Drive path; prefer google-workspace-access for portable work |
@@ -57,6 +58,7 @@ Rows are alphabetical by skill name.
 | railway-access | `/shared/skills/railway-access/` | Railway GraphQL: projects, current deployment ID, timeframe/filtered deploy/build/HTTP logs (account/workspace token in vault) |
 | raw-file-ingestion | `/shared/skills/raw-file-ingestion/` | Immutable `/memory/raw/` preservation and Markdown source records under `/memory/sources/` |
 | repository-preflight | `/shared/skills/repository-preflight/` | Metadata, refs, task and README validation for the mechanics repository and, when present, `/memory/` |
+| tasks | `/shared/skills/tasks/` | Task procedure and the CONTRACT §9.1 task review for `/memory/tasks/`: `tasks.py review` (inbox, reviews due, deadlines, blocked), `check`, `next-id` |
 | ui-implementation | `/shared/skills/ui-implementation/` | What a live screen must never do to the person using it: remove only what you made, keep their choices through a refresh, hold a repaint while work is unsaved, put the rule where it cannot be forgotten |
 | ui-mockup | `/shared/skills/ui-mockup/` | UI previews built from the product's own stylesheets and measured in the browser; **owner refines the mockup before any of it is implemented or pushed** |
 | xero-access | `/shared/skills/xero-access/` | Xero OAuth (port 8765), org selection, downloads, approved writes |
