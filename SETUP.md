@@ -389,7 +389,7 @@ others. Numbers run through both groups so a reply stays short.
 | product-development | Evidence-and-decision process for software work (`SMART-RULE-0016`) |
 | raw-file-ingestion | Keeps every uploaded file unchanged under `/memory/raw/` with a readable Markdown copy |
 | repository-preflight | Validates both repositories before every commit |
-| tasks | Keeps your task list under `/memory/tasks/` and reviews what has come due |
+| tasks | Keeps your task list under `/memory/tasks/`, reviews what has come due, and puts each new task on its board |
 | ui-implementation | Rules a live screen must keep while data changes underneath it |
 | ui-mockup | Builds a preview of a screen for you to refine before anything is built |
 
@@ -403,7 +403,7 @@ others. Numbers run through both groups so a reply stays short.
 | 4 | google-drive-access | Legacy Drive access through a host's own connector | A host Google connector – **not recommended**; use 5 |
 | 5 | google-workspace-access | Gmail (draft-first), Calendar, Tasks, Drive and Contacts for one or more Google accounts | A Google account; a Google Cloud project and OAuth client you register; the vault; the contact register (2) |
 | 6 | manage-credentials | The encrypted vault every credentialed skill uses | A passphrase you choose; chosen automatically with 1, 3, 5, 8 or 9 |
-| 7 | owner-board | One permanent page showing every request you have made and what needs you | Nothing external – **see the note below** |
+| 7 | owner-board | One permanent page showing every request you have made and what needs you, plus a board for your tasks – each project's on its own board, the rest on your personal board | Nothing external – **see the note below** |
 | 8 | railway-access | Reads Railway projects, deployments and logs | A Railway account token you create; the vault |
 | 9 | xero-access | Reads Xero accounting data and, with your approval, creates planned accounts or draft invoices | A Xero organisation; a Xero developer app you register; the vault |
 
@@ -416,7 +416,9 @@ others. Numbers run through both groups so a reply stays short.
 Owner-board note: nothing to install or register. Its scripts ship in
 `/shared/skills/owner-board/scripts/`; the first board is made when the owner first asks for
 work to be tracked (step G.1), so the `## Setup` row is `done` once the skill is listed in
-`active_skills`.
+`active_skills`. The personal task board needs no step: it appears at
+`/memory/boards/personal.html` the first time any board or task is generated. The personal task board needs no step: it appears at
+`/memory/boards/personal.html` the first time any board or task is generated.
 
 Record the choice in `active_skills` (alphabetical; add `manage-credentials` whenever a
 credentialed skill is chosen, and `crm` whenever `google-workspace-access` is), add one
@@ -976,8 +978,9 @@ Offer each; each is `skipped` unless the person says yes.
 ### G.1 Owner board
 
 When `owner-board` is in `active_skills`: a board per project node at
-`/memory/projects/<node>/status/status.html` and the directory at `/memory/boards/index.html`,
-which the owner bookmarks once. The agent makes a board by following **Making a board** in
+`/memory/projects/<node>/status/status.html`, the personal task board at
+`/memory/boards/personal.html` (every task no project board holds), and the directory at
+`/memory/boards/index.html`, which the owner bookmarks once. The agent makes a board by following **Making a board** in
 `/shared/skills/owner-board/SKILL.md`: `board.md` and `cards/` in the node, one entry in
 `/memory/skills/owner-board/config/boards.json`, then
 

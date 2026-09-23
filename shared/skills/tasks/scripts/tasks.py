@@ -4,9 +4,13 @@ Commands:
     review   tasks that need attention today: inbox items, reviews due, deadlines near, blocked
     check    required fields, folder placement, identifier and date formats
     next-id  the next free TASK-YYYY-NNNN number
+    new      create a task record from the store's template with the next number, add its
+             STATE.md row, and refresh the owner board that shows it
 
 The store is `--tasks` (a repository-root path such as /memory/tasks, or an absolute path),
-default /memory/tasks. Standard library only. Nothing is written.
+default /memory/tasks. Standard library only. Only `new` writes: one record, one STATE.md row,
+and (through /shared/skills/owner-board/scripts/task_board.py, when the owner board is set up)
+the generated board pages.
 
 Status validity per record, `next_review` on waiting and scheduled tasks, and the
 /memory/tasks/STATE.md listing are also enforced by /shared/skills/repository-preflight/.
@@ -17,9 +21,10 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 import sys
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -222,6 +227,192 @@ def next_id(store: Path, year: int) -> str:
     return f"TASK-{year}-{highest + 1:04d}"
 
 
+# ---------------------------------------------------------------- new
+
+NEW_STATUSES = ("inbox", "ready", "in_progress", "waiting", "scheduled", "blocked")
+TEMPLATE = Path("templates") / "TASK_TEMPLATE.md"
+BOARD_SCRIPT = Path(__file__).resolve().parents[2] / "owner-board" / "scripts" / "task_board.py"
+PLACEHOLDER_OWNERS = {"", "OWNER_SHORT_NAME", "null"}
+
+
+def slugify(title: str, limit: int = 60) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
+    if len(slug) > limit:
+        slug = slug[:limit].rsplit("-", 1)[0]
+    return slug or "task"
+
+
+def _yaml_scalar(value: str) -> str:
+    """A value that would change meaning as plain YAML is written quoted."""
+    if re.search(r":\s|\s#|^[\[\]{}>|*&!%@`'\"-]", value) or value in ("null", "true", "false", ""):
+        return json.dumps(value, ensure_ascii=False)
+    return value
+
+
+def _owner_default(store: Path, template_owner: str | None) -> str:
+    if template_owner and template_owner not in PLACEHOLDER_OWNERS:
+        return template_owner
+    profile = store.parent / "OWNER.md"
+    if profile.is_file():
+        meta = parse_front_matter(profile.read_text(encoding="utf-8")) or {}
+        if meta.get("owner_short_name"):
+            return str(meta["owner_short_name"])
+    return "brain-owner"
+
+
+def render_new(template: str, fields: dict[str, Any]) -> str:
+    """Fill the template's front matter and body. Keys the template lacks are added at the end."""
+    match = FRONT_MATTER_RE.match(template)
+    if not match:
+        raise ValueError("the task template has no front matter")
+    out: list[str] = []
+    skipping = False
+    done: set[str] = set()
+    for raw in match.group(1).splitlines():
+        key = raw.split(":", 1)[0].strip() if raw and not raw[0].isspace() and ":" in raw else None
+        if key is None and skipping and raw.lstrip().startswith("- "):
+            continue
+        skipping = False
+        if key in fields:
+            value = fields[key]
+            done.add(key)
+            if isinstance(value, list):
+                out.append(f"{key}:" + ("".join(f"\n  - {v}" for v in value) if value else " []"))
+                skipping = True
+            else:
+                out.append(f"{key}: {'null' if value is None else _yaml_scalar(str(value))}")
+            continue
+        out.append(raw)
+    for key, value in fields.items():
+        if key not in done and not key.startswith("_") and not isinstance(value, list):
+            out.append(f"{key}: {'null' if value is None else _yaml_scalar(str(value))}")
+    body = template[match.end():]
+    body = re.sub(r"^# .*$", lambda _: f"# {fields['title']}", body, count=1, flags=re.M)
+    for heading, text in (("Outcome", fields.get("_outcome")), ("Next action", fields.get("_next_action"))):
+        if not text:
+            continue
+        if re.search(rf"^## {heading}[ \t]*$", body, flags=re.M):
+            body = re.sub(rf"^## {heading}[ \t]*\r?\n", lambda m: f"{m.group(0)}\n{text}\n", body, count=1, flags=re.M)
+        elif re.search(r"^## History[ \t]*$", body, flags=re.M):
+            body = re.sub(r"^## History", lambda m: f"## {heading}\n\n{text}\n\n{m.group(0)}", body, count=1, flags=re.M)
+        else:
+            body = body.rstrip("\n") + f"\n\n## {heading}\n\n{text}\n"
+    history = f"- {fields['created']} – captured with `tasks.py new` ({fields['status']})."
+    if re.search(r"^## History[ \t]*$", body, flags=re.M):
+        body = re.sub(r"^## History[ \t]*\r?\n?", lambda m: f"## History\n\n{history}\n", body, count=1, flags=re.M)
+    else:
+        body = body.rstrip("\n") + f"\n\n## History\n\n{history}\n"
+    front = "\n".join(line for line in out)
+    return f"---\n{front}\n---\n{body}"
+
+
+def state_row(state_text: str, fields: dict[str, Any]) -> tuple[str, bool]:
+    """Add the open task's row to the first table in STATE.md headed `| Task | Status |`.
+
+    Cells follow that table's own header: Task, Status, Priority, a review or waiting column,
+    Title; anything else gets `-`. The row goes at the end of the table: a new task has the
+    highest number, and the table is ordered by number.
+    """
+    lines = state_text.split("\n")
+    for i, line in enumerate(lines):
+        cells = [c.strip().lower() for c in line.strip().strip("|").split("|")]
+        if len(cells) < 2 or cells[0] != "task" or cells[1] != "status":
+            continue
+        end = i + 1
+        while end < len(lines) and lines[end].lstrip().startswith("|"):
+            end += 1
+        review = []
+        if fields.get("next_review"):
+            review.append(f"review {fields['next_review']}")
+        if fields.get("waiting_on"):
+            review.append(f"waiting on {fields['waiting_on']}")
+        row = []
+        for name in cells:
+            if name == "task":
+                row.append(f"`{fields['id']}`")
+            elif name == "status":
+                row.append(f"**{fields['status']}**")
+            elif name == "priority":
+                row.append(str(fields.get("priority") or "-"))
+            elif "review" in name or "waiting" in name:
+                row.append("; ".join(review) or "-")
+            elif name == "title":
+                row.append(str(fields["title"]))
+            else:
+                row.append("-")
+        lines.insert(end, "| " + " | ".join(cell.replace("|", "/") for cell in row) + " |")
+        return "\n".join(lines), True
+    return state_text, False
+
+
+def create(store: Path, title: str, status: str = "inbox", priority: str = "normal",
+           projects: list[str] | None = None, skills: list[str] | None = None,
+           due: str | None = None, next_review: str | None = None, waiting_on: str | None = None,
+           owner: str | None = None, slug: str | None = None, outcome: str | None = None,
+           next_action: str | None = None, now: str | None = None, year: int | None = None,
+           update_state: bool = True) -> tuple[Path, list[str]]:
+    """Write one new task record and its STATE.md row. Returns the path and what was said."""
+    if status not in NEW_STATUSES:
+        raise ValueError(f"status {status} is not one of {', '.join(NEW_STATUSES)}")
+    for key, value in (("due", due), ("next_review", next_review)):
+        if value and not DATE_RE.match(value):
+            raise ValueError(f"{key} {value} is not a date")
+    if status in ("waiting", "scheduled") and not next_review:
+        raise ValueError(f"a {status} task needs --next-review (CONTRACT §9.3)")
+    if status == "waiting" and not waiting_on:
+        raise ValueError("a waiting task needs --waiting-on")
+    template_path = store / TEMPLATE
+    if not template_path.is_file():
+        raise ValueError(f"no task template at {template_path}")
+    template = template_path.read_text(encoding="utf-8")
+    stamp = now or datetime.now().astimezone().replace(microsecond=0).isoformat()
+    tid = next_id(store, year or int(stamp[:4]))
+    template_meta = parse_front_matter(template) or {}
+    fields: dict[str, Any] = {
+        "id": tid, "title": title, "status": status,
+        "owner": owner or _owner_default(store, template_meta.get("owner")),
+        "priority": priority, "created": stamp, "updated": stamp,
+        "due": due, "next_review": next_review, "waiting_on": waiting_on,
+        "project_refs": list(projects or []), "skill_refs": list(skills or []),
+    }
+    folder = "inbox" if status == "inbox" else "open"
+    path = store / folder / f"{tid}-{slug or slugify(title)}.md"
+    text = render_new(template, dict(fields, _outcome=outcome, _next_action=next_action))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8", newline="\n")
+    said = [f"created {tid}: {path}"]
+    if folder == "open" and update_state:
+        state = store / "STATE.md"
+        if state.is_file():
+            updated, added = state_row(state.read_text(encoding="utf-8"), fields)
+            if added:
+                state.write_text(updated, encoding="utf-8", newline="\n")
+                said.append(f"STATE.md: row added for {tid}")
+            else:
+                said.append(f"STATE.md: no `| Task | Status |` table found; add the {tid} row yourself")
+        else:
+            said.append(f"STATE.md: not found; add the {tid} row when the file exists")
+    return path, said
+
+
+def refresh_board(path: Path, store: Path) -> list[str]:
+    """Regenerate the owner board that shows the new task, when the owner board is set up.
+
+    Runs the owner-board skill's own script, so the routing lives in one place. Without that
+    skill, or without its configuration, the task is still created and this says what to run.
+    """
+    root = brain_root(store)
+    if not BOARD_SCRIPT.is_file() or root is None:
+        return ["board: the owner-board skill is not installed; nothing to refresh"]
+    command = [sys.executable, str(BOARD_SCRIPT), "--root", str(root), "--no-fetch", "build", "--for", str(path)]
+    done = subprocess.run(command, capture_output=True, text=True, encoding="utf-8")
+    lines = [line for line in (done.stdout + done.stderr).splitlines() if line.strip()]
+    if done.returncode == 0:
+        return ["board: " + line for line in lines]
+    return ["board: not refreshed (" + ("; ".join(lines) or f"exit {done.returncode}") + ")",
+            f"board: after fixing it, run python {BOARD_SCRIPT.as_posix()} build --for {path.name}"]
+
+
 # ---------------------------------------------------------------- CLI
 
 
@@ -236,6 +427,24 @@ def main(argv: list[str] | None = None, cwd: Path | None = None) -> int:
     sub.add_parser("check", help="validate task records")
     n = sub.add_parser("next-id", help="next free task number")
     n.add_argument("--year", type=int, help="default the current year")
+    c = sub.add_parser("new", help="create a task record and show it on its board")
+    c.add_argument("--title", required=True, help="the outcome or next action, in the owner's words")
+    c.add_argument("--status", default="inbox", choices=NEW_STATUSES,
+                   help="default inbox (captured, not yet processed)")
+    c.add_argument("--priority", default="normal", help="default normal")
+    c.add_argument("--project", action="append", default=[], metavar="NODE",
+                   help="a project_refs entry, repeatable; the first one with a board decides the board")
+    c.add_argument("--skill", action="append", default=[], metavar="SKILL", help="a skill_refs entry, repeatable")
+    c.add_argument("--due", help="YYYY-MM-DD, only for a real deadline")
+    c.add_argument("--next-review", help="YYYY-MM-DD; required for waiting and scheduled")
+    c.add_argument("--waiting-on", help="who or what is expected to move it; required for waiting")
+    c.add_argument("--owner", help="default the template's owner, else owner_short_name in /memory/OWNER.md")
+    c.add_argument("--slug", help="file name after the id; default from the title")
+    c.add_argument("--outcome", help="text for the Outcome section")
+    c.add_argument("--next-action", help="text for the Next action section")
+    c.add_argument("--now", help="the creation timestamp, ISO 8601 with offset; default now")
+    c.add_argument("--no-state", action="store_true", help="do not add the STATE.md row")
+    c.add_argument("--no-board", action="store_true", help="do not refresh the owner board")
     args = parser.parse_args(argv)
 
     store = resolve_store(args.tasks, cwd or Path.cwd())
@@ -257,6 +466,25 @@ def main(argv: list[str] | None = None, cwd: Path | None = None) -> int:
                      row["waiting_on"] or "-", row["title"]]
             print("| " + " | ".join(cell.replace("|", "/") for cell in cells) + " |")
         print(f"\n{len(rows)} task(s) need attention")
+        return 0
+
+    if args.command == "new":
+        try:
+            path, said = create(store, args.title, status=args.status, priority=args.priority,
+                                projects=args.project, skills=args.skill, due=args.due,
+                                next_review=args.next_review, waiting_on=args.waiting_on,
+                                owner=args.owner, slug=args.slug, outcome=args.outcome,
+                                next_action=args.next_action, now=args.now,
+                                update_state=not args.no_state)
+        except ValueError as err:
+            print(f"ERROR: {err}")
+            return 1
+        if not args.no_board:
+            said += refresh_board(path, store)
+        if args.json:
+            print(json.dumps({"path": path.as_posix(), "notes": said}, indent=2))
+        else:
+            print("\n".join(said))
         return 0
 
     if args.command == "check":

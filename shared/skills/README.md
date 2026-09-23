@@ -58,7 +58,7 @@ Contains the canonical shared passphrase-encrypted vault skill for hidden input,
 
 ##### `owner-board/`
 
-Contains the owner board: one permanent link showing the owner every request they have made and what needs them. Cards are Markdown records under `<node>/status/cards/`, the page is generated from them by the one shared implementation in `scripts/` (configured per owner in `/memory/skills/owner-board/config/boards.json`), and `reconcile.py` compares it against Git on every regeneration. The owner's verdict comes back as a saved file, and a card is closed only by the owner.
+Contains the owner board: one permanent link showing the owner every request they have made and what needs them. Cards are Markdown records under `<node>/status/cards/`, the page is generated from them by the one shared implementation in `scripts/` (configured per owner in `/memory/skills/owner-board/config/boards.json`), and `reconcile.py` compares it against Git on every regeneration. The owner's verdict comes back as a saved file, and a card is closed only by the owner. The same boards show the owner's tasks, drawn from `/memory/tasks/` by `task_board.py`: each open task on its first project's board, otherwise on the personal board. The same boards show the owner's tasks, drawn from `/memory/tasks/` by `task_board.py`: each open task on its first project's board, otherwise on the personal board.
 
 ##### `problem-recovery/`
 
@@ -86,7 +86,7 @@ Proposed, not active (`PROPOSAL-skill-exchange`). How agents notice a reusable c
 
 ##### `tasks/`
 
-Contains the task operating procedure and the task-review skill named in CONTRACT §9.1: capture, inbox processing, review, update and close for `/memory/tasks/`, with `scripts/tasks.py` (read-only review, record check and next task number).
+Contains the task operating procedure and the task-review skill named in CONTRACT §9.1: capture, inbox processing, review, update and close for `/memory/tasks/`, with `scripts/tasks.py` (review, record check, next task number, and `new`, which creates a record from the template and puts it on its board at once).
 
 ##### `ui-implementation/`
 
