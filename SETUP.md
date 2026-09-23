@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-23T13:00:00+10:00
-updated: 2026-09-23T20:30:00+10:00
+updated: 2026-09-23T15:30:00+10:00
 owner: brain-owner
 skill_refs:
   - /shared/skills/manage-credentials
@@ -129,7 +129,7 @@ Rows are in install order: the later tools depend on the earlier ones.
 | Git | any 2.x | `git --version` |
 | Python | 3.11 | `python --version` (Windows: also `py -3 --version`) |
 | GitHub CLI | any 2.x | `gh --version` |
-| The AI host | current | Claude Code: `claude --version`; Codex: `codex --version`; Cursor: `cursor --version` or the app's About box |
+| The AI host | current | Claude Code CLI: `claude --version`; Claude Code desktop: present if this session runs in it (the desktop app ships no `claude` command, so a failing `claude --version` there is not a gap); Codex: `codex --version`; Cursor: `cursor --version` or the app's About box |
 
 ### A.1 Windows (first)
 
@@ -250,9 +250,10 @@ at the person's own repository and `upstream` at the original, and
 > **Suggested reply:** `1`
 
 **Agent does**, for option 1 after confirming the GitHub account (Windows shown; on macOS and
-Linux use `~/dev` and forward slashes):
+Linux use `mkdir -p ~/dev && cd ~/dev` and forward slashes):
 
 ```powershell
+New-Item -ItemType Directory -Force C:\dev | Out-Null
 cd C:\dev
 git clone <SMARTS_REPO_URL> brain
 cd C:\dev\brain
@@ -281,21 +282,26 @@ front matter, and `<brain_root>/memory/` is its own Git repository with an `orig
 
 **Agent does:**
 
-1. Copy the skeleton:
+1. Copy the skeleton, only if `memory/` does not exist yet (a resumed setup must not copy the
+   skeleton into an existing memory):
 
    ```powershell
    cd C:\dev\brain
-   Copy-Item -Recurse shared\templates\memory-skeleton memory
+   if (-not (Test-Path memory)) { Copy-Item -Recurse shared\templates\memory-skeleton memory }
    ```
 
-   macOS and Linux: `cd ~/dev/brain && cp -R shared/templates/memory-skeleton memory`.
+   macOS and Linux: `cd ~/dev/brain && [ -e memory ] || cp -R shared/templates/memory-skeleton memory`.
 2. Run the owner-profile interview (B5) and write the answers into `memory/OWNER.md`.
-3. In every file under `memory/`: replace `OWNER_SHORT_NAME`, remove the `template-` prefix from
-   each `id`, and set `created`, `updated` and the first `LOG.md` heading to the current time in
-   the owner's timezone (CONTRACT §8.2).
+3. In every file under `memory/`: replace `OWNER_SHORT_NAME` and remove the `template-` prefix
+   from each `id`. Outside `memory/tasks/templates/`, also set `created`, `updated` and the first
+   `LOG.md` heading to the current time in the owner's timezone (CONTRACT §8.2). Leave the
+   `YYYY-...` timestamps in `memory/tasks/templates/` as they are: the task template is filled
+   each time a task is made. In `memory/tasks/STATE.md`, replace the year in the next free number
+   (`TASK-YYYY-0001` becomes, for example, `TASK-2026-0001`).
 4. Add the `## Setup` section to `memory/STATE.md` (section 2.1) with every step detected so far.
 5. Copy `/shared/templates/host-pointers/memory-root.AGENTS.template.md` to
-   `memory/AGENTS.md`, drop the `template-` prefix from its `id`, and list it in
+   `memory/AGENTS.md`; in the copy, drop the `template-` prefix from its `id`, delete the
+   `install_to` line, and set `created` and `updated` to the current time. List it in
    `memory/README.md` Navigation (step E explains why).
 6. Run the validator from the brain root and fix every error:
 
@@ -330,9 +336,20 @@ once, showing all detected values together; the person corrects any line.
 | `owner_name` | `gh api user --jq .name` | the detected name |
 | `owner_short_name` | first word of `owner_name` | that word |
 | `project_repos_root` | parent folder of `brain_root` | for example `C:\dev` |
-| `timezone` | Windows: `tzutil /g` (map the Windows zone to IANA); macOS and Linux: `readlink /etc/localtime` | IANA zone with its offset, for example `Australia/Brisbane (+10:00)` |
+| `timezone` | Windows: see below; macOS and Linux: `readlink /etc/localtime` | IANA zone with its offset, and the summer offset where the zone has one, for example `Australia/Brisbane (+10:00)` or `Europe/London (+00:00, +01:00 in summer)` |
 
 Rows are alphabetical by field.
+
+Windows timezone detection, in one PowerShell call (it prints the Windows zone and its IANA
+name):
+
+```powershell
+pwsh -NoProfile -c '$w = (Get-TimeZone).Id; $i = $null; [void][TimeZoneInfo]::TryConvertWindowsIdToIanaId($w, [ref]$i); "$w -> $i"'
+```
+
+Use `powershell` instead of `pwsh` when PowerShell 7 is not installed; the conversion needs .NET 6
+or later, so on Windows PowerShell 5.1 map the printed Windows zone by hand. Do not run
+`tzutil /g` from Git Bash: its output arrives mangled there.
 
 > **Ask:** Here is your profile as I detected it. Is it right?
 > 1. Yes, write it (recommended)
@@ -417,8 +434,12 @@ Owner-board note: nothing to install or register. Its scripts ship in
 `/shared/skills/owner-board/scripts/`; the first board is made when the owner first asks for
 work to be tracked (step G.1), so the `## Setup` row is `done` once the skill is listed in
 `active_skills`. The personal task board needs no step: it appears at
-`/memory/boards/personal.html` the first time any board or task is generated. The personal task board needs no step: it appears at
 `/memory/boards/personal.html` the first time any board or task is generated.
+
+Not on the menu: `skill-exchange` (sharing skills with other brains and pulling new ones from
+`upstream`) is proposed but not yet active (`PROPOSAL-skill-exchange`), so it is not offered
+here. Mention it only if the person asks; it is added to this menu once the owner of the
+original mechanics accepts the proposal.
 
 Record the choice in `active_skills` (alphabetical; add `manage-credentials` whenever a
 credentialed skill is chosen, and `crm` whenever `google-workspace-access` is), add one
@@ -433,40 +454,56 @@ that command succeeds.
 Every command below runs from the brain root. Commands that read the vault need the **Vault
 Agent unlocked** (tray icon red, or `vaultctl.py status` reports unlocked).
 
-### D.0 Credential management node (agent only)
+**Shells.** The command blocks in this step are **PowerShell** (a backtick continues a line,
+`$env:NAME = "value"` sets a variable). In bash (macOS, Linux, or Git Bash on Windows) end a
+continued line with `\` instead, and set a variable for one command with `NAME=value python ...`.
+Git Bash rewrites any argument that starts with `/` into a Windows path, so `/memory/...`
+arguments break there; prefix those commands with `MSYS_NO_PATHCONV=1` (the bash variants below
+show it). It is harmless on macOS and Linux.
 
-When any credentialed skill is chosen, the agent creates `/memory/projects/credential-management/`
-(the vault scripts look there by default): the five core files from
-`/shared/templates/node-*.template.md`, an empty `data/` folder, and a non-secret registry at
-`data/credential-registry.json` naming each vault entry and its fields. The registry is for
-people and agents; no script reads it. Proposed shape (fictional values):
+### D.0 Credential registry (agent only)
+
+The memory skeleton already ships `/memory/projects/credential-management/` (created in B4), and
+the vault scripts look there by default; do not create the node again. For a memory made before
+the skeleton had it, copy `/shared/templates/memory-skeleton/projects/credential-management/`
+there, apply B4 step 3 to the copied files, and list the folder in `/memory/projects/README.md`.
+
+The agent's only job here is to keep the non-secret registry
+`data/credential-registry.json` current: one item under `credential_sets` per vault entry, named
+by the entry, with its fields, provider and consumers – never a value. The registry is for people
+and agents; no script reads it. Shape of one item (fictional values):
 
 ```json
-{
-  "entries": [
-    {
-      "entry": "xero-oauth",
-      "fields": ["client_id", "client_secret", "oauth_token_json"],
-      "skill": "/shared/skills/xero-access",
-      "system": "Xero",
-      "status": "planned"
-    }
-  ]
+"xero-oauth": {
+  "status": "planned",
+  "provider": "portable-vault",
+  "entry": "xero-oauth",
+  "fields": {
+    "client_id": "client_id",
+    "client_secret": "client_secret",
+    "oauth_token_json": "oauth_token_json"
+  },
+  "consumers": ["/shared/skills/xero-access"]
 }
 ```
 
-Update `/memory/projects/README.md` to list the new folder (CONTRACT §4).
+Set the file's `updated` value whenever an item changes.
 
 ### D.1 manage-credentials – the vault
 
-**Agent does:**
+**Agent does**, after a yes (it installs three Python packages, `cryptography`, `pystray` and
+`Pillow`, into the Python on `PATH` or the chosen virtual environment; section 1.3):
 
 ```powershell
 cd C:\dev\brain
 python -m pip install -r shared/skills/manage-credentials/requirements.txt
 ```
 
-Then, after a yes (it creates a Windows scheduled task that starts the tray at every sign-in):
+Then, after a second yes, the Windows sign-in start-up. The installer first creates a shortcut in
+the person's Startup folder (no administrator rights needed), then tries to also register a
+logon scheduled task; if Windows refuses the task, it says so and the shortcut alone starts the
+tray at every sign-in. It looks up `python` on `PATH` to find `pythonw.exe`, so run it only when
+`python --version` works in the same terminal (not only `py -3`):
 
 ```powershell
 cd C:\dev\brain
@@ -585,6 +622,9 @@ cd C:\dev\brain
 python shared/skills/crm/scripts/crm_check.py --node /memory/projects/contacts validate
 ```
 
+Git Bash:
+`MSYS_NO_PATHCONV=1 python shared/skills/crm/scripts/crm_check.py --node /memory/projects/contacts validate`.
+
 `done` when it reports `PASS`. When `crm` is not chosen, the starter node stays in memory and its
 rules do not apply.
 
@@ -636,7 +676,7 @@ needs the target sub-account confirmed for that operation (CONTRACT §10.5).
 
 **Agent does first:**
 
-1. Installs the dependencies:
+1. Installs the dependencies after a yes:
    `python -m pip install -r shared/skills/google-workspace-access/requirements.txt`.
 2. Makes sure the contact register from D.3 is in place (`crm` is chosen with this skill),
    adds its `data/` folder, and writes `/memory/skills/google-workspace-access/config/crm.json`:
@@ -741,8 +781,8 @@ specific draft.
      --entry railway-api --secret api_token
    ```
 
-**Agent does:** `python -m pip install -r shared/skills/railway-access/requirements.txt`, and the
-registry entry.
+**Agent does:** `python -m pip install -r shared/skills/railway-access/requirements.txt` after a
+yes, and the registry entry.
 
 **Agent verifies:**
 
@@ -796,6 +836,17 @@ python shared/skills/manage-credentials/scripts/vault_credentials.py run `
      --output temp/xero-access/organisation.json --requesting-node /memory/projects/credential-management
 ```
 
+The same in bash (Git Bash, macOS, Linux):
+
+```bash
+cd ~/dev/brain   # Git Bash: cd /c/dev/brain
+MSYS_NO_PATHCONV=1 XERO_TOKEN_STORE=vault XERO_VAULT_ENTRY=xero-oauth XERO_VAULT_FIELD=oauth_token_json \
+  python shared/skills/manage-credentials/scripts/vault_credentials.py run \
+  --entry xero-oauth --map XERO_CLIENT_ID=client_id --map XERO_CLIENT_SECRET=client_secret \
+  -- python shared/skills/xero-access/scripts/xero_download.py --resource Organisation \
+     --output temp/xero-access/organisation.json --requesting-node /memory/projects/credential-management
+```
+
 Record the organisation names and tenant IDs in `/memory/skills/xero-access/NOTES.md`, never in
 the mechanics. Every write still needs the organisation confirmed for that operation.
 
@@ -805,7 +856,7 @@ the mechanics. Every write still needs the organisation confirmed for that opera
 
 `SMART-RULE-0007` allows host entry files to **point** at the portable bootstrap and nothing
 more: no behavioural rule may live in them. Every template in `/shared/templates/host-pointers/`
-is such a pointer. Copy the body, fill `<BRAIN_ROOT>`, and change nothing else.
+is such a pointer. Copy the body, fill its placeholders, and change nothing else.
 
 Rows are grouped by host, then in the order a session looks for them.
 
@@ -836,21 +887,37 @@ Two kinds of file, two owners:
 1. Read the file if it exists (read-only) and show the person what is there. If it carries
    behavioural rules, point out that `SMART-RULE-0007` wants them in `/memory/RULES.md` and offer
    to draft that proposal.
-2. Fill the template with this machine's paths and save the result to a scratch file, for
-   example `<brain_root>/temp/setup/host-pointer.md`.
-3. Give the person the exact commands: a backup of the existing file first, then the copy or the
-   append. One block for PowerShell, one for macOS and Linux. Example for Windows:
+2. Fill **each** template separately with this machine's paths (templates can change
+   independently, so never reuse one host's filled file for another) and save each result to its own scratch file, for example
+   `<brain_root>/temp/setup/claude-CLAUDE.md` and `<brain_root>/temp/setup/codex-AGENTS.md`. Take
+   only the text below the template's front matter. Write every filled path with forward slashes
+   (`C:/dev/brain`, then `C:/dev/brain/CONTRACT.md`), so a path joined from `<BRAIN_ROOT>` never
+   mixes `\` and `/`; Windows and every host accept forward slashes.
+3. Give the person the exact commands: create the host folder if it is missing, back up an
+   existing file, then copy. Example for Windows (PowerShell):
 
    ```powershell
-   Copy-Item "$HOME\.codex\AGENTS.md" "$HOME\.codex\AGENTS.md.bak-<date>" -ErrorAction SilentlyContinue
-   Copy-Item "<brain_root>\temp\setup\host-pointer.md" "$HOME\.codex\AGENTS.md"
-   Copy-Item "<brain_root>\temp\setup\host-pointer.md" "$HOME\.claude\CLAUDE.md"
-   Add-Content "$HOME\.codex\config.toml" "`n[projects.'<brain_root>']`ntrust_level = `"trusted`""
+   New-Item -ItemType Directory -Force "$HOME\.claude", "$HOME\.codex" | Out-Null
+   if (Test-Path "$HOME\.claude\CLAUDE.md") { Copy-Item "$HOME\.claude\CLAUDE.md" "$HOME\.claude\CLAUDE.md.bak-<date>" }
+   if (Test-Path "$HOME\.codex\AGENTS.md") { Copy-Item "$HOME\.codex\AGENTS.md" "$HOME\.codex\AGENTS.md.bak-<date>" }
+   Copy-Item "<brain_root>\temp\setup\claude-CLAUDE.md" "$HOME\.claude\CLAUDE.md"
+   Copy-Item "<brain_root>\temp\setup\codex-AGENTS.md" "$HOME\.codex\AGENTS.md"
    ```
 
-4. After the person says done, verify read-only: each file matches the scratch file, the backup
-   exists, and `config.toml` still parses (`python -c "import tomllib; tomllib.load(open(r'<path>','rb'))"`).
-   Record the result under `## Setup`.
+   The same for macOS, Linux and Git Bash:
+
+   ```bash
+   mkdir -p ~/.claude ~/.codex
+   [ -e ~/.claude/CLAUDE.md ] && cp ~/.claude/CLAUDE.md ~/.claude/CLAUDE.md.bak-<date>
+   [ -e ~/.codex/AGENTS.md ] && cp ~/.codex/AGENTS.md ~/.codex/AGENTS.md.bak-<date>
+   cp <brain_root>/temp/setup/claude-CLAUDE.md ~/.claude/CLAUDE.md
+   cp <brain_root>/temp/setup/codex-AGENTS.md ~/.codex/AGENTS.md
+   ```
+
+   Give only the lines for the hosts the person uses. The Codex trust entry belongs to the
+   settings, step F.3.
+4. After the person says done, verify read-only: each installed file matches its scratch file,
+   and, only where a file existed before, its backup exists. Record the result under `## Setup`.
 
 **You do:**
 
@@ -905,7 +972,26 @@ another way (a script, a different shell), so treat the lists as guard rails, no
 >
 > **Suggested reply:** `1`
 
-**Who installs these files:** the same split as Step E. The agent fills each template into a scratch file under `<brain_root>/temp/setup/` and gives the person backup-then-copy (or merge) commands; **the person runs them**, because hosts refuse to let an agent change its own permission settings. The agent then verifies read-only (the file parses and holds the chosen lists) and records the result under `## Setup`.
+**Who installs these files:** the same split as Step E. The agent fills each template into a
+scratch file under `<brain_root>/temp/setup/`, prepares the merged result there too, and gives
+the person backup-then-copy commands; **the person runs them**, because hosts refuse to let an
+agent change its own permission settings. The agent then verifies read-only (the file parses and
+holds the chosen lists) and records the result under `## Setup`.
+
+**Merging a JSON settings file** (Claude Code, Cursor CLI). The agent runs this in the brain
+root. It reads the person's existing file (or starts empty when there is none), adds every
+template entry to the `permissions` lists without duplicates, keeps any value the person already
+set (for example their own `defaultMode`), and writes the result to a scratch file; it never
+touches the host's own file:
+
+```powershell
+cd C:\dev\brain
+python -c "import json,os,sys; e,t,o=sys.argv[1:]; a=json.load(open(e)) if os.path.exists(e) else {}; b=json.load(open(t)); p=a.setdefault('permissions',{}); [p.__setitem__(k,sorted(set(p.get(k,[]))|set(v))) if isinstance(v,list) else p.setdefault(k,v) for k,v in b.get('permissions',{}).items()]; [a.setdefault(k,v) for k,v in b.items() if k!='permissions']; json.dump(a,open(o,'w'),indent=2)" "$HOME\.claude\settings.json" temp\setup\claude-user-settings.json temp\setup\claude-user-settings.merged.json
+```
+
+The three arguments are the existing file, the filled template and the output. In bash use
+`~/.claude/settings.json` and forward slashes; the command is otherwise the same. Show the
+person the merged file, then give them the step E backup-then-copy commands for it.
 
 ### F.2 Claude Code
 
@@ -936,7 +1022,37 @@ the person uses it, the deny list still applies (`verify`).
 
 ### F.3 Codex
 
-Merge `codex.config.template.toml` into `~/.codex/config.toml`. Confirmed from a working file:
+Merge `codex.config.template.toml` into `~/.codex/config.toml`. TOML has no merge command: a
+top-level key (`approval_policy = ...`, `sandbox_mode = ...`) must sit **above the first
+`[table]` line** of the file, or TOML reads it as part of that table; a `[table]` section goes at
+the end. When the file already sets a key or table, change its value there instead of adding it
+a second time (TOML refuses duplicates). The agent writes the merged file to
+`<brain_root>/temp/setup/codex-config.toml` and gives the person the step E backup-then-copy
+commands for it.
+
+The brain root's trust entry is the one line most often added on its own. The person adds it
+only once; the check makes a second run harmless:
+
+```powershell
+New-Item -ItemType Directory -Force "$HOME\.codex" | Out-Null
+$f = "$HOME\.codex\config.toml"
+if (-not ((Test-Path $f) -and (Select-String -Quiet -SimpleMatch "[projects.'<brain_root>']" $f))) {
+  Add-Content $f "`n[projects.'<brain_root>']`ntrust_level = `"trusted`""
+}
+```
+
+```bash
+mkdir -p ~/.codex
+grep -qF "[projects.'<brain_root>']" ~/.codex/config.toml 2>/dev/null || \
+  printf "\n[projects.'%s']\ntrust_level = \"trusted\"\n" '<brain_root>' >> ~/.codex/config.toml
+```
+
+Write `<brain_root>` in the form Codex itself records (on Windows the backslash path, for
+example `C:\dev\brain`; single quotes keep the backslashes literal). **Agent verifies** that the
+file still parses:
+`python -c "import tomllib; tomllib.load(open(r'<path>','rb'))"`.
+
+Confirmed from a working file:
 `[projects.'<path>'] trust_level = "trusted"` and `[windows] sandbox = "unelevated"`. From the
 host's documentation, not re-checked offline (`verify against current host docs`):
 `approval_policy` (`untrusted`, `on-failure`, `on-request`, `never`), `sandbox_mode`
@@ -973,7 +1089,9 @@ Offer each; each is `skipped` unless the person says yes.
 > 2. A scheduled task (see G.2)
 > 3. None now
 >
-> **Suggested reply:** `1`
+> **Suggested reply:** `1` when `owner-board` is in `active_skills`, otherwise `3`
+
+Show the person only the suggestion that applies to them.
 
 ### G.1 Owner board
 
@@ -1009,12 +1127,14 @@ Record each configured schedule in `/memory/STATE.md` so the next session knows 
 
 ## 10. Step H – Final validation and tour
 
-**Done when:** preflight passes on both repositories, both have a pushed commit, and the tour is
-given.
+**Done when:** preflight passes on both repositories, the memory has a pushed commit, the smarts
+working tree is clean, and the tour is given.
 
 **Agent does:**
 
-1. Validate both repositories in one pass and write the manifests:
+1. Set every `## Setup` row to its final status and append one `LOG.md` entry naming the
+   chosen skills, the host wiring and the settings level.
+2. Validate both repositories in one pass and write the manifests:
 
    ```powershell
    cd C:\dev\brain
@@ -1022,27 +1142,35 @@ given.
    python shared/skills/repository-preflight/scripts/preflight.py --root . --write-manifest
    ```
 
-2. Commit each repository separately, staging named paths only, with the host and model in the
-   message (`SMART-RULE-0009`):
+3. Commit the memory, staging named paths only, with the host and model in the message
+   (`SMART-RULE-0009`), and leave the smarts clean:
 
-   List what setup changed with `git status --short`, check that no secret or vault file is
-   among it, and stage those paths by name (example below):
+   **Memory.** List what setup changed, check that no secret or vault file is among it, then
+   stage exactly the paths that list shows – no path from an example, because `git add` stops
+   with "pathspec did not match" on a path that does not exist or did not change:
 
    ```powershell
    cd C:\dev\brain\memory
    git status --short
-   git add -- OWNER.md STATE.md LOG.md repository-manifest.json projects/README.md projects/credential-management skills
+   git add -- <each path git status listed, for example OWNER.md STATE.md LOG.md>
    git commit -m "<host> <model>: setup complete"
-   git push
-   cd C:\dev\brain
-   git commit -m "<host> <model>: manifest after setup" -- repository-manifest.json
    git push
    ```
 
-   The smarts commit exists only if the manifest changed; nothing about the person goes there.
-3. Set every `## Setup` row to its final status and append one `LOG.md` entry naming the
-   chosen skills, the host wiring and the settings level.
-4. Report the commit hash and push status for each repository (`SMART-RULE-0014`).
+   **Smarts.** Setup makes no smarts commit. Nothing about the person goes there, and the only
+   change the validator leaves in the smarts is its own `repository-manifest.json` (new
+   timestamps), which would conflict with the next update from `upstream`. Put it back:
+
+   ```powershell
+   cd C:\dev\brain
+   git restore repository-manifest.json
+   git status --short
+   ```
+
+   `git status --short` in the brain root should now print nothing; if it lists anything else,
+   show it to the person before going on.
+4. Report the memory commit hash and its push status, and that the smarts is clean
+   (`SMART-RULE-0014`).
 
 **Tour** – five minutes, in this order (the order the owner will meet them):
 
@@ -1053,8 +1181,12 @@ given.
    `/memory/sources/`.
 4. "From now on…" – a standing preference becomes a proposal you accept before it applies.
 5. Getting improvements: `cd <brain_root>; git fetch upstream; git merge upstream/main`, then
-   preflight. Improvements you make to the mechanics can be offered back to the original as a
-   pull request, provided they carry no personal data.
+   regenerate the manifest with
+   `python shared/skills/repository-preflight/scripts/preflight.py --root . --write-manifest`
+   (if the merge stopped on a conflict in `repository-manifest.json`, the regenerated file
+   resolves it), stage `repository-manifest.json`, commit and push to `origin`. Improvements you
+   make to the mechanics can be offered back to the original as a pull request, provided they
+   carry no personal data.
 6. Adding a skill later: "resume setup" – the agent reads this guide and your `## Setup` table.
 
 ## 11. Items to verify against current host and provider documentation
