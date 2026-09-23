@@ -31,6 +31,15 @@ Entries are in reading order.
 
 #### Folders
 
+Listed alphabetically.
+
+##### `boards/`
+
+Contains the generated owner-board pages: `index.html`, the directory of every board, and
+`personal.html`, the personal task board. Written by `/shared/skills/owner-board/scripts/` from
+the first task on and never edited by hand; the registry is
+`/memory/skills/owner-board/config/boards.json`.
+
 ##### `governance/`
 
 Contains proposals for changes to owner-layer governance (`/memory/RULES.md` and node `RULES.md` files in memory) under `governance/proposals/`. Proposals are not active until accepted and implemented (CONTRACT §13.2).

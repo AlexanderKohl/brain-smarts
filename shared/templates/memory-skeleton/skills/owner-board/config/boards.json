@@ -1,0 +1,17 @@
+{
+  "directory": {
+    "folder": "boards",
+    "title": "Boards"
+  },
+  "tasks": {
+    "auto_boards": false,
+    "completed_days": 14,
+    "personal": {
+      "id": "personal",
+      "label": "Personal tasks",
+      "page": "personal.html",
+      "blurb": "Every task that no project board holds, grouped by column and tagged with its project."
+    }
+  },
+  "boards": []
+}

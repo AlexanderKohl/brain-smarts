@@ -17,7 +17,7 @@ script_paths:
   - /shared/skills/owner-board/scripts/task_board.py
   - /shared/skills/owner-board/scripts/verdicts.py
 created: 2026-09-18T11:05:00+10:00
-updated: 2026-09-23T15:00:00+10:00
+updated: 2026-09-23T15:38:35+10:00
 owner: brain-owner
 project_refs:
   - /memory/projects/brain-development
@@ -72,7 +72,9 @@ checkout in the configuration.
 
 ## Configuration
 
-`/memory/skills/owner-board/config/boards.json`:
+`/memory/skills/owner-board/config/boards.json`. The memory skeleton ships it with the
+directory and personal-board defaults and an empty `boards` list, so the personal board and the
+directory are generated from the first task, before any project board exists. A full example:
 
 ```json
 {
@@ -169,7 +171,8 @@ and `git fetch`.
 
 ### Making a board
 
-1. Create `<node>/status/board.md` with its JSON block and an empty `cards/` folder, and add
+1. Copy `/shared/skills/owner-board/templates/board.template.md` to `<node>/status/board.md`,
+   fill it as its first paragraph says, create an empty `cards/` folder beside it, and add
    `status/` to the node's `README.md` (CONTRACT section 4).
 2. **Register it** in `boards.json`. Creating a board is not finished until it is registered:
    a board missing from the directory is one the owner never opens, which is the same as not
@@ -359,6 +362,12 @@ Numbered as in `reconcile.py`; checks 1 to 9 need `repo`.
 9. `mainVersion` in `board.md` disagrees with the repository.
 10. A track's task has no record, is missing from `/memory/tasks/STATE.md`, or still says
     `ready` while the track has landed work or a card in flight.
+
+## Templates
+
+| Template | Copied to |
+|---|---|
+| `templates/board.template.md` | `<node>/status/board.md`, when a board is made |
 
 ## Outputs
 

@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 node_type: skill_library
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-23T14:38:51+10:00
+updated: 2026-09-23T15:38:35+10:00
 ---
 
 # Shared Skills
@@ -58,7 +58,7 @@ Contains the canonical shared passphrase-encrypted vault skill for hidden input,
 
 ##### `owner-board/`
 
-Contains the owner board: one permanent link showing the owner every request they have made and what needs them. Cards are Markdown records under `<node>/status/cards/`, the page is generated from them by the one shared implementation in `scripts/` (configured per owner in `/memory/skills/owner-board/config/boards.json`), and `reconcile.py` compares it against Git on every regeneration. The owner's verdict comes back as a saved file, and a card is closed only by the owner. The same boards show the owner's tasks, drawn from `/memory/tasks/` by `task_board.py`: each open task on its first project's board, otherwise on the personal board. The same boards show the owner's tasks, drawn from `/memory/tasks/` by `task_board.py`: each open task on its first project's board, otherwise on the personal board.
+Contains the owner board: one permanent link showing the owner every request they have made and what needs them. Cards are Markdown records under `<node>/status/cards/`, the page is generated from them by the one shared implementation in `scripts/` (configured per owner in `/memory/skills/owner-board/config/boards.json`), and `reconcile.py` compares it against Git on every regeneration. The owner's verdict comes back as a saved file, and a card is closed only by the owner. The same boards show the owner's tasks, drawn from `/memory/tasks/` by `task_board.py`: each open task on its first project's board, otherwise on the personal board.
 
 ##### `problem-recovery/`
 

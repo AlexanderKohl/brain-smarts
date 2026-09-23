@@ -447,7 +447,7 @@ def _find(records: list[task_store.Task], which: str) -> task_store.Task:
     for task in records:
         if which in (task.tid, str(task.path), task.path.name) or Path(which).resolve() == task.path.resolve():
             return task
-    raise board_config.ConfigError("no task record " + which + " in the task store")
+    raise board_config.ConfigError("no task record " + which + " in the task store" + board_config._hint(which))
 
 
 def main(argv=None) -> int:

@@ -25,4 +25,5 @@ moves to `/memory/tasks/completed/` (`SMART-RULE-0025`).
 | Task | Status | Priority | Review / waiting on | Title |
 |---|---|---|---|---|
 
-Next free number: `TASK-YYYY-0001`.
+`tasks.py new` adds a row here and keeps the count in the heading; for the next free number run
+`tasks.py next-id`, which reads it from the records (`/shared/skills/tasks/SKILL.md`).

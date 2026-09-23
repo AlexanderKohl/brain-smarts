@@ -190,6 +190,49 @@ class TasksTest(unittest.TestCase):
         self.assertIn("board: ", out)
         self.assertIn("STATE.md: not found", out)
 
+    def test_new_keeps_the_heading_count_and_an_older_next_free_line(self) -> None:
+        (self.store / "STATE.md").write_text(
+            "# State\n\n## Open tasks (0, ordered by task number ascending)\n\n"
+            "| Task | Status | Priority | Review / waiting on | Title |\n|---|---|---|---|---|\n\n"
+            "Next free number: `TASK-2026-0008`.\n", encoding="utf-8")
+        for title in ("Order the tiles", "Measure the hallway"):
+            code, out = run("new", "--title", title, "--status", "ready",
+                            "--now", "2026-03-10T09:00:00+10:00", "--no-board", cwd=self.root)
+            self.assertEqual(code, 0, out)
+        state = self.state()
+        self.assertIn("## Open tasks (2, ordered by task number ascending)", state)
+        self.assertIn("Next free number: `TASK-2026-0010`.", state)
+        self.assertEqual(tasks.next_id(self.store, 2026), "TASK-2026-0010")
+
+    def test_new_refuses_a_project_path_rewritten_by_git_bash(self) -> None:
+        mangled = "C:/Program Files/Git/memory/projects/example-move"
+        code, out = run("new", "--title", "Book the van", "--status", "ready", "--project", mangled,
+                        "--no-board", cwd=self.root)
+        self.assertEqual(code, 1)
+        self.assertIn("not a repository-root path starting with /memory/", out)
+        self.assertIn("MSYS_NO_PATHCONV=1", out)
+        self.assertEqual(list((self.store / "open").glob("TASK-2026-0008-*")), [])
+        code, out = run("new", "--title", "Book the van", "--status", "ready", "--project", "projects/x",
+                        "--no-board", cwd=self.root)
+        self.assertEqual(code, 1)
+        (self.root / "systems" / "example-system").mkdir(parents=True)
+        code, out = run("new", "--title", "Tidy the system node", "--status", "ready",
+                        "--project", "/systems/example-system", "--no-board", cwd=self.root)
+        self.assertEqual(code, 0, out)
+
+    def test_new_stamps_the_owner_timezone_or_says_why_not(self) -> None:
+        profile = self.root / "memory" / "OWNER.md"
+        profile.write_text("---\nid: owner\ntimezone: UTC (+00:00)\n---\n", encoding="utf-8")
+        stamp, note = tasks.owner_now(self.store)
+        self.assertTrue(stamp.endswith("+00:00"), stamp)
+        self.assertIsNone(note)
+        profile.write_text("---\nid: owner\ntimezone: Example/Nowhere (+13:45)\n---\n", encoding="utf-8")
+        stamp, note = tasks.owner_now(self.store)
+        machine = tasks.datetime.now().astimezone().isoformat()[-6:]
+        self.assertEqual(stamp[-6:], machine)
+        if machine != "+13:45":
+            self.assertIn("Example/Nowhere from OWNER.md cannot be resolved", note)
+
     def test_missing_store_exits_2(self) -> None:
         code, out = run("--tasks", "/memory/nowhere", "check", cwd=self.root)
         self.assertEqual(code, 2)
