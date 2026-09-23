@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-23T13:00:00+10:00
-updated: 2026-09-23T19:34:24+10:00
+updated: 2026-09-24T09:06:26+10:00
 owner: brain-owner
 skill_refs:
   - /shared/skills/manage-credentials
@@ -126,7 +126,8 @@ settings are per machine, while the repositories and skill choices are per owner
 2. If `/memory/STATE.md` has a `## Setup` section, continue from the first row that is not
    `done` or `skipped` on this machine. For a new machine, re-run the per-machine steps (A, D
    vault and connections, E, F, G) and skip the per-owner ones already `done`.
-3. If memory does not exist yet, detect progress with each step's **Done when** check below,
+3. If memory does not exist yet, ask B1a first: on another computer of an existing brain the
+   memory is cloned, not made. Otherwise detect progress with each step's **Done when** check below,
    then continue from the first step that fails its check. Record the detected results as soon
    as step B4 creates `/memory/STATE.md`.
 4. Tell the person in one line where you are resuming, then carry on.
@@ -228,6 +229,65 @@ If more than one account is signed in, ask which one owns the brain:
 > 2. `<other detected account>`
 >
 > **Suggested reply:** `1`
+
+### B1a. A new brain, or this brain on another computer?
+
+**Done when:** the person has answered, and for another computer all three of their repositories
+are checked out: the smarts at the brain root, the library at `library/`, the memory at `memory/`.
+
+**Agent does:** looks for an existing brain under the account (read-only):
+
+```powershell
+gh repo view <github_account>/brain-memory --json name
+gh repo view <github_account>/brain-smarts --json name
+gh repo view <github_account>/brain-skills --json name
+```
+
+None found: a new brain – continue with B2. `brain-memory` found: ask –
+
+> **Ask:** Your account already has a brain (`brain-smarts`, `brain-skills`, `brain-memory`). Is
+> this another computer for that same brain?
+> 1. Yes – check out all three here (recommended)
+> 2. No – set up a new, separate brain (its repositories need other names; say which)
+>
+> **Suggested reply:** `1`
+
+For option 1 (Windows shown; on macOS and Linux use `~/dev/brain` and forward slashes). When the
+brain root was already cloned by the seed prompt, keep it and point it at the person's own copy
+instead of cloning it again:
+
+```powershell
+New-Item -ItemType Directory -Force C:\dev | Out-Null
+cd C:\dev
+if (Test-Path brain\CONTRACT.md) {
+  cd C:\dev\brain
+  git remote set-url origin https://github.com/<github_account>/brain-smarts.git
+  git fetch origin
+  git checkout -B main origin/main
+} else {
+  git clone https://github.com/<github_account>/brain-smarts.git brain
+  cd C:\dev\brain
+}
+git config core.hooksPath .githooks
+git clone https://github.com/<github_account>/brain-skills.git library
+git clone https://github.com/<github_account>/brain-memory.git memory
+```
+
+`git checkout -B main origin/main` discards nothing of the person's: a fresh seed-prompt clone has
+no work of its own. Then:
+
+1. **Upstream remotes.** When `/memory/skills/skill-exchange/config/settings.json` names
+   `upstreams` (written in B4), add each as `upstream` with push disabled – in the brain root for
+   `smarts`, in `library/` for `library`:
+   `git remote add upstream <address>` then `git remote set-url --push upstream DISABLED`. A brain
+   whose owner maintains the originals has none; skip it.
+2. **The vault is not in Git.** `credentials.vault` stays on the computer where it was made.
+   Copy it from there to `/memory/projects/credential-management/data/` by USB stick or a private
+   folder you control, only while no process is using it on either computer; or skip it and add
+   the accounts again in D. Never commit it, and never merge two vault files – pick the complete one.
+3. **Resume** with section 2.2: the per-owner steps are already `done` in `/memory/STATE.md`; run
+   the per-machine steps (A, D vault and connections, E, F, G) on this computer and add a
+   `## Setup` row for each with this computer's name.
 
 ### B2. Git identity
 
@@ -363,7 +423,12 @@ front matter, and `<brain_root>/memory/` is its own Git repository with an `orig
    python shared/skills/repository-preflight/scripts/preflight.py --root .
    ```
 
-7. After confirming the GitHub account, create the repository and the first commit:
+7. Record where the originals are, so another computer of this brain can find them (B1a):
+   write `/memory/skills/skill-exchange/config/settings.json` as
+   `{"upstreams": {"library": "<library upstream address>", "smarts": "<smarts upstream address>"}}`
+   from `git remote get-url upstream` in the brain root and in `library/`; leave out any that has
+   no `upstream`.
+8. After confirming the GitHub account, create the repository and the first commit:
 
    ```powershell
    cd C:\dev\brain\memory

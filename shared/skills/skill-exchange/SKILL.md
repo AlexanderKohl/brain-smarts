@@ -9,7 +9,7 @@ scope: shared
 script_paths:
   - /shared/skills/skill-exchange/scripts/skill_exchange.py
 created: 2026-09-23T14:00:00+10:00
-updated: 2026-09-23T17:45:03+10:00
+updated: 2026-09-24T09:06:46+10:00
 owner: brain-owner
 skill_refs:
   - /shared/skills/learning-maintenance
@@ -61,9 +61,14 @@ Everything about this owner's exchange lives in memory:
   "check_every_days": 7,
   "max_items_per_digest": 5,
   "remote": "upstream",
-  "suggestions": "checkpoint"
+  "suggestions": "checkpoint",
+  "upstreams": {"library": "https://example.com/original/brain-skills.git", "smarts": "https://example.com/original/brain-smarts.git"}
 }
 ```
+
+`upstreams` records where the originals are, written by SETUP step B4, so that another computer
+of the same brain can add its `upstream` remotes (SETUP step B1a); leave it out when the owner
+maintains the originals.
 
 `suggestions` is `checkpoint` (default: at natural checkpoints, batched), `weekly` (only in
 the weekly review of `SMART-RULE-0028`) or `off` (only when the owner asks).
