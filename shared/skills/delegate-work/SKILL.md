@@ -292,8 +292,8 @@ These are not four mistakes; they are one habit. **Dispatching is vivid and clos
 the record gets written at the moment attention is highest and never again. A rule saying
 *remember to update it* would be the same habit with a sentence attached.
 
-**So it is checked mechanically, not remembered.** A `reconcile.py` beside a board's generator
-(see `/shared/skills/owner-board/`) reads every board track's parent task and says so when a track has landed work or a card in
+**So it is checked mechanically, not remembered.** The owner board's
+`/shared/skills/owner-board/scripts/reconcile.py` (check 10) reads every board track's parent task and says so when a track has landed work or a card in
 flight while its record still says `ready`, or when a track's task is missing from the index. It
 runs on every board regeneration, so the conductor cannot choose not to run it.
 
