@@ -1,0 +1,19 @@
+{
+  "approvalMode": "allowlist",
+  "permissions": {
+    "allow": [
+      "Shell(git add)",
+      "Shell(git commit)",
+      "Shell(git diff)",
+      "Shell(git log)",
+      "Shell(git status)",
+      "Shell(ls)"
+    ],
+    "deny": [
+      "Read(**/*.vault)",
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Shell(rm)"
+    ]
+  }
+}

@@ -1,0 +1,19 @@
+# Merge into ~/.codex/config.toml; do not replace the file.
+# Template from /shared/templates/host-pointers/ – see its README.md and /SETUP.md step F.3.
+# Keys marked "verify" come from the host documentation and were not re-checked offline.
+
+# Ask only to leave the sandbox; work inside it without asking. (verify)
+approval_policy = "on-request"
+# Write inside the workspace and writable_roots; read anywhere. (verify)
+sandbox_mode = "workspace-write"
+
+# (verify)
+[sandbox_workspace_write]
+# Sibling project repositories. Use single quotes so Windows backslashes stay literal.
+writable_roots = ['<PROJECT_REPOS_ROOT>']
+# Credentialed skills need the network; they ask to leave the sandbox instead.
+network_access = false
+
+# Confirmed on a working install.
+[projects.'<BRAIN_ROOT>']
+trust_level = "trusted"

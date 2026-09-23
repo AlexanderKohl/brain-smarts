@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add *)",
+      "Bash(git branch*)",
+      "Bash(git commit *)",
+      "Bash(git diff*)",
+      "Bash(git fetch*)",
+      "Bash(git log*)",
+      "Bash(git push)",
+      "Bash(git push origin *)",
+      "Bash(git remote -v)",
+      "Bash(git restore --staged *)",
+      "Bash(git show*)",
+      "Bash(git status*)",
+      "Bash(ls *)",
+      "Bash(python -m pytest *)",
+      "Bash(python -m unittest *)",
+      "Bash(python shared/skills/ai-session-log/scripts/session_log.py *)",
+      "Bash(python shared/skills/delegate-work/scripts/delegation.py *)",
+      "Bash(python shared/skills/manage-credentials/scripts/vaultctl.py status)",
+      "Bash(python shared/skills/repository-preflight/scripts/preflight.py *)",
+      "PowerShell(git add *)",
+      "PowerShell(git commit *)",
+      "PowerShell(git diff*)",
+      "PowerShell(git log*)",
+      "PowerShell(git push)",
+      "PowerShell(git push origin *)",
+      "PowerShell(git status*)",
+      "PowerShell(python shared/skills/repository-preflight/scripts/preflight.py *)"
+    ],
+    "additionalDirectories": [
+      "<PROJECT_REPOS_ROOT>"
+    ]
+  }
+}

@@ -29,6 +29,10 @@ target_files:
   - /shared/templates/memory-skeleton/tasks/RULES.md
   - /governance/README.md
   - /memory/RULES.md
+  - /SETUP.md
+  - /SEED_PROMPT.md
+  - /shared/templates/host-pointers/
+  - /shared/templates/memory-skeleton/OWNER.md
 ---
 
 # RULE-2026-0046 – Three-layer brain
@@ -247,3 +251,7 @@ general agreement as acceptance.
 ## Implementation record
 
 None. The candidate repositories are built but not active.
+
+## Amendment A1 – guided setup (2026-09-23T14:10:00+10:00)
+
+Adds `/SETUP.md` (resumable guided setup for a new owner), `/SEED_PROMPT.md`, the host pointer and permission-settings templates under `/shared/templates/host-pointers/`, and the `active_skills:` field in the skeleton `OWNER.md`. They determine how agents locate the contract and which skills an owner switches on, so they are included in this proposal's target files. Settings keys not confirmed offline are marked `verify against current host docs` in `/SETUP.md` §11. Status unchanged: draft, pending owner acceptance.

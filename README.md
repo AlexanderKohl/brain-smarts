@@ -28,6 +28,8 @@ Everything specific to one owner – tasks, projects, contacts, raw files, sourc
 
 Entries are in reading order.
 
+- `/SEED_PROMPT.md`: the short prompt a new person pastes into their agent to start a brain
+- `/SETUP.md`: the resumable guided setup the agent follows (prerequisites, repositories, skill activation, credentials, host wiring, permissions)
 - `/CONTRACT.md`: canonical operating contract (read this first)
 - `/BOOTSTRAP.md`: portable entry and contract-discovery instructions
 - `/AGENTS.md`: cross-tool agent entry pointer to the contract

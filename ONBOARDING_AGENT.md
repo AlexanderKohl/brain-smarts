@@ -45,7 +45,6 @@ Rows are alphabetical by skill name.
 |---|---|---|
 | abr-access | `/shared/skills/abr-access/` | ABR ABN Lookup JSON web services (GUID in vault); ABN/ACN lookup and name search |
 | ai-session-log | `/shared/skills/ai-session-log/` | Portable temporary AI JSONL at `/temp/ai-session/`; **listener** + Cursor **option 2 hooks** + local **HTML viewer** (`session_log.py view`, port 8768) |
-| atlas-test-runner | `/shared/skills/atlas-test-runner/` | Runs a derived workflow test plan against a HighLevel sub-account through the public API with fictional fixtures; each requesting node keeps its own target and defaults; a live run needs the owner's confirmed target |
 | delegate-work | `/shared/skills/delegate-work/` | Conductor-to-worker packets and results for parallel subagent work; isolated, read-only, no credentials by default; max four workers, depth one; run folders under `/temp/delegation/runs/`; governed by root `RULE-2026-0037`. Also holds the two handover procedures: conductor to conductor, and **a research or design thread back to the conductor**, which settles every open decision with the owner before it hands over |
 | gohighlevel-access | `/shared/skills/gohighlevel-access/` | HighLevel agency OAuth (port 8766), subaccounts, CRM APIs; pipeline migration review UI (port 8769) |
 | google-drive-access | `/shared/skills/google-drive-access/` | Legacy connector-managed Drive path; prefer google-workspace-access for portable work |

@@ -32,10 +32,6 @@ Contains the ABR ABN Lookup JSON web-services skill (vault-stored authentication
 
 Contains the portable temporary AI session JSONL helper (`session_log.py` CLI + importable helpers). Canonical log path is `/temp/ai-session/ai-call-log.jsonl` with kinds `model_call` / `model_response` / `thinking` / `tool_result` / `python_run` (ephemeral; not governance `LOG.md`). The transcript listener auto-detects Cursor, Claude Code, and Codex transcripts with no flags – Codex sessions are filtered per file to this brain since Codex does not store transcripts per project. Local HTML viewer: `session_log.py view` on `127.0.0.1:8768`. Cursor option-2 hooks via `.cursor/hooks.json`.
 
-##### `atlas-test-runner/`
-
-Contains a runner for a workflow test plan derived from a HighLevel account's automation graph: a Python package that reads the plan download, creates fictional fixtures, performs each check's trigger event through the HighLevel public API, observes the assertions with bounded deadlines, walks journeys and writes test-result records through `gohighlevel-access`. Shared capability; each requesting node keeps its own configuration (target, fixture patterns, defaults). Dry run needs no credentials; a live run needs the owner's confirmed target (CONTRACT §10.5).
-
 ##### `delegate-work/`
 
 Contains the delegated-work protocol: a conductor agent writes bounded packets that reference canonical files, workers return compressed result records, and `scripts/delegation.py` creates, dispatches, validates and summarises a run under `/temp/delegation/runs/`. Workers are isolated, read-only and credential-free by default; at most four per run, depth one. Host dispatch notes in `hosts/`. Not a queue or task system.

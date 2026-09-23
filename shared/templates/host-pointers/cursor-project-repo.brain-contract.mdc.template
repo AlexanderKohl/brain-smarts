@@ -1,0 +1,12 @@
+---
+description: Start every agent session from the brain contract
+alwaysApply: true
+---
+
+This repository is part of a brain whose contract lives outside it. With the brain checked
+out, read `CONTRACT.md` in the brain root first (on the usual layout
+`../<BRAIN_FOLDER>/CONTRACT.md`) and follow its bootstrap, then read `brain/README.md` and
+`brain/STATE.md` here. Without the brain, read `brain/README.md` and `brain/RULES.md`.
+
+This rule is a pointer only. Do not add behaviour here; it belongs in the brain's `RULES.md`
+files.

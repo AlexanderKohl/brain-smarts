@@ -21,6 +21,10 @@ Use `project-pointer-README.template.md` for the pointer node memory keeps for a
 
 #### Folders
 
+##### `host-pointers/`
+
+Contains the pointer files that make every host session start from `/CONTRACT.md` (user-level Claude Code and Codex pointers, memory and project-repository pointers, a Cursor rule) and the permission-settings templates for uninterrupted work. Canonical templates used by `/SETUP.md`; pointers only, never behavioural rules (`RULE-2026-0015`).
+
 ##### `memory-skeleton/`
 
 Contains the minimal memory a new owner starts from: owner profile, owner-layer rules, brain-wide state, log and knowledge, owner onboarding, the task system with its rules and templates, and empty `governance/`, `projects/`, `raw/`, `skills/`, `sources/` and `systems/` areas. Copy the whole folder to `<brain_root>/memory/` and follow `/README.md` § Setting up a memory. Canonical template; every `id` carries a `template-` prefix so the skeleton never collides with a live memory.
