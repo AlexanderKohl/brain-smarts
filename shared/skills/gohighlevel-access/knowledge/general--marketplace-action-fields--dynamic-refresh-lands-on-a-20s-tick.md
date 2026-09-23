@@ -14,7 +14,7 @@ refuted_by: null
 discovered: '2026-09-14'
 verified: '2026-09-14'
 created: '2026-09-14T14:20:00+10:00'
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 evidence:
 - Railway staging deploy logs, deployment <uuid-01>, 2026-09-14T03:52:53Z-03:55:24Z
 ---
@@ -41,7 +41,7 @@ fires a request immediately, outside the cadence.
 
 The practical consequence: an author changes the control, sees nothing happen, and concludes
 it is broken. Roughly twenty seconds is well past the point where a person assumes a UI did
-not respond. The owner's first report of this feature was exactly that - "it only switches if
+not respond. The first report of this feature was exactly that - "it only switches if
 I save the workflow action" - and saving does work, because reopening the panel forces an
 immediate fetch. Waiting also works.
 

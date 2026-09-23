@@ -16,7 +16,7 @@ verified: 2026-09-10
 source_refs:
   - /memory/skills/gohighlevel-access/knowledge/general--workflows--no-enrolment-read-surface.md
 created: 2026-09-10T07:35:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 ---
 
 # No workflow-enrolment read surface on the public API
@@ -81,7 +81,7 @@ record a silent inbox as proof of removal when nothing was scheduled to send any
 ## Evidence
 
 Live raw-API probes against `Example Co (Staging)` (`loc_EXAMPLE_01`) on
-2026-09-10 with a valid agency-derived Location token, during the Example Co
-staging workflow test run `SA-20260910-01`. All eight request forms above were
+2026-09-10 with a valid agency-derived Location token, during an Example Co
+staging workflow test run. All eight request forms above were
 issued in one pass; status codes and bodies are quoted verbatim. Confirmed, not
 hypothesised.

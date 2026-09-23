@@ -1,10 +1,10 @@
 #!/bin/sh
 # A tripwire for the one staging mistake a brain repository actually suffers: a sweep.
 #
-# In the single-repository brain a `git add -A` once swept another session's in-progress
-# governance proposal into a commit about unrelated project work. Nothing was lost, but the
-# change was recorded under a sentence that had nothing to do with it. `/RULES.md` already says
-# to stage only agent-owned files; the rule was not the problem, the command was.
+# Rationale: a broad `git add -A` can sweep another session's in-progress governance proposal
+# into a commit about unrelated work. Nothing is lost, but the change is recorded under a
+# sentence that has nothing to do with it. `/RULES.md` already says to stage only agent-owned
+# files; the rule is not the problem, the command is.
 #
 # **This hook is the weaker half of the fix and knows it.** It cannot tell whose file is
 # whose. What it can see is a commit reaching across two territories that in this mechanics

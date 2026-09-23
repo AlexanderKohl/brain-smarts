@@ -7,10 +7,8 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 owner: brain-owner
-accepted_proposal: RULE-2026-0043
-status_note: candidate wording under RULE-2026-0046; not active until that proposal is accepted
 ---
 
 # Brain Root Rules

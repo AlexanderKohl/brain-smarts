@@ -12,7 +12,7 @@ script_paths:
   - /shared/skills/ai-session-log/scripts/cursor_hook_writer.py
   - /shared/skills/ai-session-log/scripts/view_log.py
 created: 2026-08-06T11:10:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 owner: brain-owner
 ---
 
@@ -63,13 +63,9 @@ Path choice:
 Before append, `clip()` runs `compact_heavy_payloads()` then secret redaction and length caps:
 
 - Oversized `data:image/...;base64,...` URLs, JSON image `data` fields (`/9j/…`, `iVBORw0…`), and other long base64 runs are replaced with `[… omitted sha256=… bytes=…]`
-- This keeps `/temp/ai-session/ai-call-log.jsonl` reviewable (2026-08-12 baseline: image payloads were ~36% of response characters)
+- This keeps `/temp/ai-session/ai-call-log.jsonl` reviewable (image payloads can otherwise dominate response characters)
 
-Efficiency baseline / remeasure (brain-development, not this skill’s runtime path):
-
-- Baseline: `/memory/projects/brain-development/data/ai-communication-efficiency-baseline-2026-08-12.json`
-- Script: `/memory/projects/brain-development/scripts/measure_ai_communication_efficiency.py`
-- Compare: `python memory/projects/brain-development/scripts/measure_ai_communication_efficiency.py --compare-baseline`
+Efficiency baseline / remeasure (brain-development, not this skill’s runtime path): an owner may keep a baseline measurement under `/memory/projects/brain-development/data/` and a measuring script under `/memory/projects/brain-development/scripts/`, and compare later logs against it.
 
 ## Schema
 
@@ -261,9 +257,9 @@ Hooks are Cursor-specific. Other hosts keep using the transcript listener (or th
 
 Inspected local `agent-transcripts`: roles are only `user` / `assistant` / `turn_ended`; content blocks are only `text` and `tool_use`. Therefore transcripts alone miss thinking, tool **results**, and shell stdout – **option 2 hooks** supply those.
 
-### Observed Claude Code subagent transcripts (2026-09-15)
+### Observed Claude Code subagent transcripts
 
-Claude Code writes each Agent-tool subagent to `~/.claude/projects/<slug>/<session-uuid>/subagents/agent-<hex>.jsonl` with a sibling `.meta.json` (`agentType`, `description`, `spawnDepth`, `toolUseId`). Every line carries `isSidechain: true`, `agentId` and `sessionId`; the parent session file holds only the Agent tool use and the returned report. The listener finds these files through its recursive walk. Since 2026-09-15 it reads a subagent file from its first line instead of from end-of-file, and every record from a sidechain line carries `sidechain`, `agent_id` and `session_id`, so a delegation run's worker turns can be grouped and costed. `tool-results/*.txt` spill files and `.meta.json` are ignored. `session_log.py self-test` proves both behaviours with a fixture under `/temp/ai-session/_listener_self_test_subagents/`.
+Claude Code writes each Agent-tool subagent to `~/.claude/projects/<slug>/<session-uuid>/subagents/agent-<hex>.jsonl` with a sibling `.meta.json` (`agentType`, `description`, `spawnDepth`, `toolUseId`). Every line carries `isSidechain: true`, `agentId` and `sessionId`; the parent session file holds only the Agent tool use and the returned report. The listener finds these files through its recursive walk. It reads a subagent file from its first line instead of from end-of-file, and every record from a sidechain line carries `sidechain`, `agent_id` and `session_id`, so a delegation run's worker turns can be grouped and costed. `tool-results/*.txt` spill files and `.meta.json` are ignored. `session_log.py self-test` proves both behaviours with a fixture under `/temp/ai-session/_listener_self_test_subagents/`.
 
 ## Manual fallbacks (optional)
 

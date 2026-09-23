@@ -13,7 +13,7 @@ metadata:
   canonical_source: /shared/skills/ui-mockup
   skill_refs: []
   created: 2026-09-02T22:10:00+10:00
-  updated: 2026-09-23T12:00:00+10:00
+  updated: 2026-09-23T18:00:00+10:00
 ---
 
 # UI Mockup
@@ -122,16 +122,15 @@ than as a dozen flags on a command line nobody will retype.
 
 ### An accepted mockup is the only record of what the owner approved
 
-This skill used to end *deleted once the owner has accepted the mockup*, and on
-18 September 2026 that cost a day. Three packets built a comparison page from spec prose -
-*three columns always*, *one table, labels once* - because the mockup was in `temp/`, which
-is gitignored and disposable, and no packet could safely name a path that might not exist.
-The owner opened the page and said it looked nothing like the design, and nothing in the
-repository could have told anyone sooner.
+Rationale: a mockup deleted on acceptance, or left in `temp/`, which is gitignored and
+disposable, cannot be named by the people who build the screen, because no one can safely point
+at a path that might not exist. They build from spec prose instead - *three columns always*,
+*one table, labels once* - and the result can look nothing like the design the owner approved,
+with nothing in the repository able to say so sooner.
 
 **A description of a screen is lossy in a way a description of a rule is not.** *One table,
-labels once* is true of a dozen layouts, and the owner approved exactly one of them after
-seven rounds. Deleting the mockup keeps the lossy copy and throws away the original.
+labels once* is true of a dozen layouts, and the owner approved exactly one of them, often after
+several rounds. Deleting the mockup keeps the lossy copy and throws away the original.
 
 So, when the owner accepts a mockup:
 
@@ -165,8 +164,8 @@ uppercase pill that turned a step name into a shout, `.rail` had `height:100vh`,
 white space under a list.
 
 Run `scripts/class_check.py`, or the same set intersection inside your generator, **on every page it
-writes**. Not once at the end, by hand: in the session that produced this note, `.mk` was caught by
-the check and `.jspine` slipped through because the check had stopped being run. Prefix every class
+writes**. Not once at the end, by hand: a check that stops being run lets the next collision
+through – `.mk` is caught while it runs, and `.jspine` slips past once it stops. Prefix every class
 you invent, and pass `--borrow` for the handful you are reusing from the product on purpose.
 
 **3. Generate the page from a data table, do not hand-write the markup.** Put the rows in a list and

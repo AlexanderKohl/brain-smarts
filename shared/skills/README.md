@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 node_type: skill_library
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 ---
 
 # Shared Skills
@@ -85,7 +85,7 @@ Contains the canonical validator for metadata, identifiers, references, task sta
 Contains the rules a live screen must hold once data is arriving underneath it: a renderer removes
 only what it made, a refresh changes what a person sees and never what they chose, work in
 progress outranks freshness, and the rule goes where the next author cannot fail to inherit it.
-Every rule names the incident that paid for it. No scripts; it governs work in a product
+Every rule carries a short rationale. No scripts; it governs work in a product
 repository and is the implementation half of `ui-mockup/`.
 
 ##### `ui-mockup/`

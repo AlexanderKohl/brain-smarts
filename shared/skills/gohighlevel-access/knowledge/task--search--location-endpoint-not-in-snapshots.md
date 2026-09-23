@@ -16,7 +16,7 @@ verified: 2026-09-03
 source_refs:
   - /memory/skills/gohighlevel-access/knowledge/task--search--location-endpoint-not-in-snapshots.md
 created: 2026-09-03T11:15:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 ---
 
 # Tasks are searchable location-wide, but only at the `/locations/` path
@@ -95,9 +95,8 @@ missing record, which reads like a data problem rather than a wrong path.
 
 Live probes against Example Plumbing Pty Ltd (`loc_EXAMPLE_03`,
 company `comp_EXAMPLE_01`) on 2026-09-03, retrieving the 909 tasks
-assigned to user `id_EXAMPLE_01`; logged at
-the owner's project log (memory layer).
-Endpoint supplied by the owner from
+assigned to user `id_EXAMPLE_01`.
+Endpoint found in
 `marketplace.gohighlevel.com/docs/ghl/locations/task-search/` after the
 contact-iteration fallback had already been run.
 

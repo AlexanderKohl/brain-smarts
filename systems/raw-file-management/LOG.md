@@ -5,7 +5,7 @@ type: log
 schema_version: 0.2
 contract: /CONTRACT.md
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 ---
 
 # Activity Log
@@ -19,6 +19,5 @@ updated: 2026-09-23T12:00:00+10:00
 
 ## 2026-09-23T12:00:00+10:00
 
-- Candidate three-layer split (`RULE-2026-0046`): this node keeps the mechanism. Per-file
-  ingestion entries, which name the owner's files, moved to
-  `/memory/systems/raw-file-management/LOG.md`, and the ingestion skill writes new ones there.
+- This node keeps the mechanism. Per-file ingestion entries name the owner's files, so the
+  ingestion skill writes them to `/memory/systems/raw-file-management/LOG.md`.

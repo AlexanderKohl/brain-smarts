@@ -14,7 +14,7 @@ metadata:
   skill_refs:
     - /shared/skills/ui-mockup
   created: 2026-09-16T13:35:00+10:00
-  updated: 2026-09-23T12:00:00+10:00
+  updated: 2026-09-23T18:00:00+10:00
 ---
 
 # UI Implementation
@@ -27,9 +27,9 @@ rules that prevent it in places where the next author cannot fail to inherit the
 `ui-mockup` settles what a screen should look like before it is built. This skill governs what the
 screen must never do once it is real and data is arriving underneath it.
 
-Every rule below was paid for. The incidents are named (the project they came from is recorded in
-`/memory/skills/ui-implementation/NOTES.md`), because a rule whose reason is missing gets
-optimised away by the next person who reads it.
+Every rule below carries its reason, because a rule whose reason is missing gets optimised away by
+the next person who reads it. Owner-specific accounts of what taught a rule belong in
+`/memory/skills/ui-implementation/NOTES.md`, not here.
 
 ## The rules
 
@@ -39,10 +39,9 @@ Name what you remove, never what you spare. An exception list - *remove everythi
 one* - is a list the next dialog cannot know it needs to be on, so every surface built afterwards
 inherits the exact bug the exception was added to fix.
 
-> **Paid for twice, 16 September 2026.** A description editor lost everything the owner had typed
-> because a task renderer cleared every backdrop on the page. The fix spared the editor by name.
-> Weeks later the same renderer closed an answer dialog mid-sentence, because the answer dialog was
-> built after the list and nobody thought to add it.
+> **Rationale.** A renderer that clears every backdrop on the page destroys whatever a person has
+> typed into a dialog. Sparing that dialog by name fixes it once; the next dialog, built after the
+> exception list, is closed mid-sentence the same way, because nobody thought to add it.
 
 Mark what you create, remove only what carries your mark, and leave the rest alone.
 
@@ -86,10 +85,10 @@ when it comes back empty.
 A control labelled for the wrong relationship is indistinguishable, to a reader, from a control
 that is not there.
 
-> *Fix in <workflow>* is right when the link goes somewhere else. Pointed at the very workflow the
-> finding names, it reads as fixing a thing inside itself, and the owner asked for a link that was
-> already on the screen (16 September 2026). It now says *Open*, which is the word used everywhere
-> else for going into a place.
+> **Rationale.** *Fix in <workflow>* is right when the link goes somewhere else. Pointed at the very
+> workflow the finding names, it reads as fixing a thing inside itself, and a reader asks for a link
+> that is already on the screen. *Open*, the word used everywhere else for going into a place, is
+> the right label there.
 
 One word for one thing, across the interface, the code, the stored data and the conversation.
 
@@ -127,10 +126,12 @@ same commit and say why in the message.
 
 ### 11. Count the meanings each visual device carries, in a render
 
-One weight, one colour, one shape: one meaning. The rail carried four meanings in one number style;
-a finding design grew amber carrying three; the rail then used its backlog colour to mean *you are
-here*. **Three times in one week, on three surfaces, each found only by rendering the screen and
-looking at it** - never by reading the code, because each device was locally reasonable.
+One weight, one colour, one shape: one meaning.
+
+> **Rationale.** A navigation rail can end up with four meanings in one number style, an accent
+> colour with three, and a backlog colour reused to mean *you are here*. Collisions like these are
+> found only by rendering the screen and looking at it - never by reading the code, because each
+> device is locally reasonable.
 
 So it is a check rather than a rule about a particular colour. On a rendered screen, list every
 device that carries meaning - fill, weight, border, badge, dash, icon - and for each, name every
@@ -158,7 +159,7 @@ fact.
 
 - The product repository: components, stylesheets, view-state carrier, harness scripts.
 - The node's `spec/` for the screen's own contract, and its `LOG.md` for what a rule cost.
-- This skill's rules, which are the general form of those incidents.
+- This skill's rules, which are the general form of those lessons.
 
 ## Scripts or commands
 
@@ -191,8 +192,9 @@ records, nothing else. Pushing and merging follow the node's own rules.
 
 A change governed by this skill writes one `LOG.md` entry in its node naming: what broke or what
 was at risk, which rule above it belongs to, and the version it shipped in. An incident that
-teaches a **new** rule is added to this file with its date, in the owner's words where they gave
-them.
+teaches a **new** rule is added to this file as a neutral rule with a short rationale; the dated
+account, in the owner's words where they gave them, goes to
+`/memory/skills/ui-implementation/NOTES.md`.
 
 ## State, knowledge and task update behaviour
 

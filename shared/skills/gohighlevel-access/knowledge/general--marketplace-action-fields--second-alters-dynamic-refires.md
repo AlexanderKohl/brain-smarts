@@ -14,7 +14,7 @@ refuted_by: null
 discovered: '2026-09-14'
 verified: '2026-09-14'
 created: '2026-09-14T12:20:00+10:00'
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 evidence:
 - Railway staging deploy logs, deployment <uuid-01>, 2026-09-14T02:16:01Z–02:17:10Z
 - /memory/skills/gohighlevel-access/knowledge/general--marketplace-action-fields--second-alters-dynamic-refires.md
@@ -92,7 +92,7 @@ refutation was half right and half wrong, and the half that was wrong mattered m
   reopened. It changes without a save. The proof is the widget's own state in consecutive
   requests - see Evidence below.
 
-The lesson worth keeping: an owner reporting "it only works if I save" and a measurement
+The lesson worth keeping: a user reporting "it only works if I save" and a measurement
 showing "these requests are 20s apart" are both true and do not add up to "a save is
 required". A slow refresh looks exactly like no refresh to someone who does not wait.
 

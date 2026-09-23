@@ -16,15 +16,15 @@ verified: 2026-09-15
 source_refs:
   - /memory/skills/gohighlevel-access/knowledge/custom_object--schema-delete--by-object-id-on-services-host.md
 created: 2026-09-15T21:30:47+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 ---
 
 # Deleting a custom object: by id, on the services host
 
 ## Behaviour
 
-Deleting the `ExampleDocs Records` object from the HighLevel interface, captured by the extension's
-own traffic recorder on 15 September 2026:
+Deleting the `ExampleDocs Records` object from the HighLevel interface, captured by a browser extension's
+traffic recorder on 15 September 2026:
 
 ```text
 DELETE https://services.leadconnectorhq.com/objects/000000000000000000000001?locationId=loc_EXAMPLE_04
@@ -62,6 +62,5 @@ way in, and it also proves which sub-account the object belongs to.
   unverified: the first OAuth run should be treated as a probe.
 - Recorded in `shapes` mode, so string values in the listing are elided. The URL, the method,
   the status and the response keys are exact.
-- Destructive and not reversible. In this repository it is reachable only through
-  an owner-project delete script (memory layer), whose `--execute` form needs a permission widening the
-  owner has not yet given (`RULE-2026-0031`).
+- Destructive and not reversible. Run it only with the owner's explicit permission for that
+  object in that confirmed sub-account (see `SKILL.md` and rule `RULE-2026-0031` in `/RULES.md`).

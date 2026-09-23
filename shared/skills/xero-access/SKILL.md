@@ -14,7 +14,7 @@ metadata:
   skill_refs:
     - /shared/skills/manage-credentials
   created: 2026-08-04T03:31:56+10:00
-  updated: 2026-09-23T12:00:00+10:00
+  updated: 2026-09-23T18:00:00+10:00
 ---
 
 # Xero Access
@@ -34,7 +34,7 @@ Connect the Portable AI Brain to any Xero organisation authorised by the user, s
 
 - Xero Accounting API for the authorised organisation and granted scopes.
 - The owner's Xero organisation registry (tenant ids and persona links), located by `/memory/skills/xero-access/NOTES.md`, and `/memory/projects/credential-management/data/credential-registry.json`.
-- Vault entry `xero-oauth`; capability snapshots under `/memory/projects/brain-development/data/`.
+- Vault entry `xero-oauth`; any capability snapshots the owner keeps, located by `/memory/skills/xero-access/NOTES.md`.
 
 ## Permissions
 

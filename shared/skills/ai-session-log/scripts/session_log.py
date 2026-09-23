@@ -131,8 +131,8 @@ def _blob_stub(label: str, blob: str) -> str:
 def compact_heavy_payloads(text: str) -> str:
     """Replace oversized base64 / data-URL blobs with hash stubs before clip().
 
-    Keeps the session log reviewable: image tool results previously dominated
-    character volume (~36% of response chars in the 2026-08-12 baseline).
+    Keeps the session log reviewable: image tool results can otherwise dominate
+    character volume.
     """
 
     def _data_url(match: re.Match[str]) -> str:

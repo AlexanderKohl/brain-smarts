@@ -16,7 +16,7 @@ verified: 2026-09-15
 source_refs:
   - /memory/skills/gohighlevel-access/knowledge/custom_object--large-text--limit-between-8k-and-32k.md
 created: 2026-09-15T11:20:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 ---
 # LARGE_TEXT: 12,000 characters, exactly
 
@@ -40,7 +40,7 @@ September; the message states the exact figure.
 JSON survives the round trip unchanged at the sizes that are accepted: quotes, braces,
 newlines inside strings, none of it is altered by the API. Pasting the same JSON into the
 record editor in the HighLevel UI reportedly does not work; that is the editor, not the
-field (the owner's observation, undiagnosed).
+field (reported from use, undiagnosed).
 
 ## Why it's non-obvious
 
@@ -51,8 +51,8 @@ the reason off the end of any log line that shows the message's head.
 ## Evidence
 
 Two storage test runs of 15 September 2026 on Example Test through the page-session
-token; reports in the project `LOG.md`. Consequence for ExampleDocs: one record per item, and a
-system with many calls split across records when its JSON passes 12,000 characters.
+token. Consequence for a client storing JSON there: one record per item, split across records
+once the JSON passes a safe margin below the limit (12,000 characters, say).
 
 ## Applies to
 

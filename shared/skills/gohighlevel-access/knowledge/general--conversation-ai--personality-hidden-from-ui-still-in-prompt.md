@@ -16,7 +16,7 @@ verified: null
 source_refs:
   - /memory/skills/gohighlevel-access/knowledge/general--conversation-ai--personality-hidden-from-ui-still-in-prompt.md
 created: 2026-09-15T11:30:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 ---
 
 # A conversation AI agent's personality is no longer shown in the UI but stays in the record and the prompt
@@ -40,10 +40,10 @@ that is itself marked for deletion.
 
 ## Evidence
 
-Owner observation of the HighLevel UI against the 14 September 2026 sweep of Example
+Observation of the HighLevel UI against the 14 September 2026 sweep of Example
 Co, 15 September. `personality` populated on `Appointment Assistant`, `Chat Current
 Project Assistant` and `Triage Email Assistant`; `fullPrompt` on each begins with that
-text. **Pending**: the claim that no UI surface shows the field rests on the owner's
+text. **Pending**: the claim that no UI surface shows the field rests on a manual
 inspection, not on a recorded route or an API answer, and HighLevel could restore or
 move the page.
 
@@ -55,6 +55,5 @@ same way is not established; on this account there is no such field to orphan.
 ## Applies to
 
 Conversation AI agents (`ai-employees`) read through the internal per-agent endpoint.
-ExampleDocs raises `ai_agent.hidden_configuration` on a live agent whose `personality` is
-populated and shows every populated field in full, so the owner can decide whether to
-recreate the agent or keep it.
+An audit should flag a live agent whose `personality` is populated and show every populated
+field in full, so the account owner can decide whether to recreate the agent or keep it.

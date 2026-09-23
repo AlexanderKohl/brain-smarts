@@ -5,7 +5,7 @@ type: api_knowledge_convention
 schema_version: 0.2
 contract: /CONTRACT.md
 created: 2026-08-24T21:30:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 ---
 
 # Knowledge base convention
@@ -39,17 +39,14 @@ No hand-maintained index – use `Glob`/`Grep` directly against this folder:
 - By endpoint: `Grep "endpoint: .*businesses/:id"`
 - By status: `Grep "status: refuted"`
 
-## Sources for this backfill (2026-08-24)
+## Sources
 
-Entries created 2026-08-24 were backfilled from three sources on a real,
-production form-to-record integration, not derived speculatively:
-
-- that integration's project `LOG.md` and `STATE.md`.
-- its git commit history (an external repository) – commit messages
-  there are detailed root-cause narratives.
-- its own maintained API and scope reference notes (last verified
-  2026-08-15 – some entries here postdate it with more specific
-  field-level findings).
+Entries are learnt from live use of the API, not derived speculatively:
+live probes, production or staging logs, traffic recordings of the
+HighLevel interface, and root-cause investigations of real failures.
+Each entry's Evidence section names its own source; project logs,
+commit references and other owner-specific provenance belong in the
+memory layer (see below), not here.
 
 ## Owner provenance
 

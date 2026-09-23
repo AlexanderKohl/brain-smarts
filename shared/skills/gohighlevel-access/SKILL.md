@@ -13,7 +13,7 @@ metadata:
   skill_refs:
     - /shared/skills/manage-credentials
   created: 2026-08-04T03:31:56+10:00
-  updated: 2026-09-23T12:00:00+10:00
+  updated: 2026-09-23T18:00:00+10:00
 ---
 
 # GoHighLevel Access
@@ -116,7 +116,7 @@ outside the restricted sandbox. Verify `vaultctl.py status` there if needed. The
 HighLevel command remains correct; do not wrap it in a second credential session merely to work
 around sandbox access.
 
-Verified example (owner's machine): a sandboxed `ghl_subaccounts.py` invocation reported the agent unavailable while
+Verified example: a sandboxed `ghl_subaccounts.py` invocation reported the agent unavailable while
 the discovery file existed but was unreadable; the identical command in the Windows user context
 immediately reused the already-unlocked tray broker and loaded the cached agency/subaccount
 catalogue without another unlock.

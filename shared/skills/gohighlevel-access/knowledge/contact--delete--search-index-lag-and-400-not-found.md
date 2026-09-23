@@ -16,7 +16,7 @@ verified: 2026-09-01
 source_refs:
   - /memory/skills/gohighlevel-access/knowledge/contact--delete--search-index-lag-and-400-not-found.md
 created: 2026-09-01T08:27:41+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 ---
 
 # Contact deletion: stale search index, and 400 for a missing contact
@@ -50,7 +50,7 @@ A delete that returns 200 followed by a search that still finds the record reads
 exactly like a failed delete. Any procedure whose gate is "delete, then re-run
 the search and require zero matches" will report a false failure and can drive
 an agent into re-deleting, escalating, or wrongly reporting that cleanup did not
-work. The Example Co test runner's mandated pre-test cleanup gate is precisely
+work. A test runner's pre-test cleanup gate is commonly
 this shape.
 
 The 400-not-404 half compounds it: code that treats only 404 as "absent" will

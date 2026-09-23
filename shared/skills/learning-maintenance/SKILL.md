@@ -5,7 +5,7 @@ type: skill
 schema_version: 0.2
 contract: /CONTRACT.md
 created: 2026-09-17T17:14:19+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 status: active
 owner: brain-owner
 scope: shared
@@ -13,7 +13,7 @@ scope: shared
 
 # Learning Maintenance
 
-Portable procedure for RULE-2026-0043 and RULE-2026-0032 amendment A3. The rules define authority. Prototype code and the RULE-2026-0044 restructure are not active dependencies.
+Portable procedure for rule `RULE-2026-0043` and amendment A3 of rule `RULE-2026-0032` in `/RULES.md`. The rules define authority.
 
 ## Purpose
 
@@ -47,9 +47,8 @@ on a session that has ended.
 Take an exclusive OS lock for the duration of the write: `msvcrt.locking` on Windows,
 `fcntl.flock` on POSIX, on a lock file beside the records. The kernel releases it if the holder dies,
 which is the property that matters and the reason no lease, expiry, heartbeat or fencing token is
-needed. Measured on the owner's host and recorded in
-`/memory/projects/brain-development/data/learnings/filesystem-primitives-on-this-host.md`, which also states
-where it does not hold.
+needed. Verify this on your own host before relying on it; an owner may record that measurement, including
+where it does not hold, under `/memory/projects/brain-development/data/learnings/`.
 
 **It does not hold across separate synced checkouts.** Two clones joined by OneDrive, Dropbox, SMB or
 Git share no kernel, so no lock serialises them. There Git is the backstop: a concurrent write is a
@@ -87,7 +86,7 @@ Owner preferences govern usefulness within their scope; decisions remain protect
 
 Whichever session integrates regenerates index.md and board.md from canonical record pointers and task state; they are derived, not a second knowledge store. Include stable IDs, canonical links, category, current status and next action, ordered by category then latest substantive change. Preserve withdrawn entries in the changed-since-last-delivery digest even when excluded from routine retrieval. Missing or stale views are repaired in background by whichever session notices; foreground work continues with targeted subject search.
 
-The first digest is due seven days after activation. **Any session may prepare and present it.** Presenting is a read of canonical records plus a message to the owner; it writes no learning. An earlier version of this skill restricted it to a designated writer, which made `RULE-2026-0043`'s weekly review unreachable: the designated session would usually not be the one active when the digest fell due. The designation is gone, and the general lesson is kept: a skill may implement the rule's duties and must not narrow one into something that cannot happen.
+The first digest is due seven days after activation. **Any session may prepare and present it.** Presenting is a read of canonical records plus a message to the owner; it writes no learning. Rationale: restricting presentation to one designated session would make `RULE-2026-0043`'s weekly review unreachable, because that session is usually not the one active when the digest falls due. A skill may implement a rule's duties and must not narrow one into something that cannot happen.
 
 When due in an active session, that session prepares a snapshot of all new learning and substantive changes since the last delivered snapshot, including retirements, uncertainty and owner questions. Record snapshot ID and status prepared, then presenting before showing it, and delivered only after actually displaying it. Record next due seven days after delivery. If delivery is uncertain, retain the snapshot and label the next presentation a possible repeat. Two sessions reaching the due date together are safe: the states are at-least-once by design, and a repeat is labelled rather than hidden. A digest may be offered in the normal response without a separate interruption. No scheduler or real-time guarantee is implied. Presentation never accepts governance.
 
@@ -95,7 +94,7 @@ A weekly review the owner sees twice costs little; one they never see costs the 
 
 ## Scripts or commands
 
-None required. This is an agent-executed portable procedure. Use repository preflight for structural validation; keep the isolated concurrency prototype inactive.
+None required. This is an agent-executed portable procedure. Use repository preflight for structural validation.
 
 ## Outputs
 

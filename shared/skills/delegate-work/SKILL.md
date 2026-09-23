@@ -9,7 +9,7 @@ scope: shared
 script_paths:
   - /shared/skills/delegate-work/scripts/delegation.py
 created: 2026-09-15T07:45:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 owner: brain-owner
 project_refs:
   - /memory/projects/brain-development
@@ -18,7 +18,7 @@ project_refs:
 # Delegate Work
 
 Read `/CONTRACT.md` first. The behavioural rule for delegation is `RULE-2026-0037` in root
-`/RULES.md`, active since 2026-09-15. This skill supplies the operating detail and may not
+`/RULES.md`. This skill supplies the operating detail and may not
 weaken that rule.
 
 ## Purpose
@@ -98,20 +98,20 @@ python shared/skills/delegate-work/scripts/delegation.py new-run \
 
 # 2. one packet per worker; defaults are isolated, read-only, no external access
 python shared/skills/delegate-work/scripts/delegation.py new-packet \
-  --run RUN-20260915-074500 --title "Audit SKILL.md sections" \
+  --run RUN-20990101-090000 --title "Audit SKILL.md sections" \
   --objective "Check every /shared/skills/*/SKILL.md for the CONTRACT section 10.2 headings." \
   --context /CONTRACT.md --context /shared/skills/README.md \
   --acceptance "one row per skill naming each missing section"
 
 # 3. hand each packet to the host's subagent facility (see hosts/)
 python shared/skills/delegate-work/scripts/delegation.py dispatch-prompt \
-  --run RUN-20260915-074500 --packet W01
+  --run RUN-20990101-090000 --packet W01
 
 # 4. after the workers report
-python shared/skills/delegate-work/scripts/delegation.py validate-result --run RUN-20260915-074500
-python shared/skills/delegate-work/scripts/delegation.py summarise --run RUN-20260915-074500
+python shared/skills/delegate-work/scripts/delegation.py validate-result --run RUN-20990101-090000
+python shared/skills/delegate-work/scripts/delegation.py summarise --run RUN-20990101-090000
 python shared/skills/delegate-work/scripts/delegation.py close-run \
-  --run RUN-20260915-074500 --status synthesised --host "Claude Code" --parallel yes
+  --run RUN-20990101-090000 --status synthesised --host "Claude Code" --parallel yes
 
 # tests
 python -m unittest discover -s shared/skills/delegate-work/scripts/tests
@@ -133,7 +133,7 @@ The script uses only the Python standard library.
 
 ### Choosing a worker's model
 
-Decision, 15 September 2026: **`inherit` is the default and stays the default**. Name a smaller model only for a packet whose objective
+**`inherit` is the default and stays the default**. Name a smaller model only for a packet whose objective
 leaves no judgement, and decide that packet by packet, never as a standing rule for a class of
 work.
 
@@ -187,19 +187,16 @@ packet that allows writes tells the worker to complete the full bootstrap first.
 
 ## A packet that builds a screen names the artefact, never a description of it
 
-Added 18 September 2026, after a built page turned out to look nothing like its approved
-design. The cause was in the packets, not the code. The incident record is in
-`/memory/skills/delegate-work/NOTES.md`.
+Rationale: a page built from packets that describe the approved design in prose, instead of
+naming it, is each worker's inference from sentences, and it can look nothing like the
+design. The cause is in the packets, not the code.
 
-**Three packets built that page and not one of them named the mockup.** They gave spec
-section numbers and prose - *three columns always*, *one table, labels once* - and each
-worker inferred a layout from sentences. What shipped was three people's reading of a
-description of a picture, and the first person to notice was the owner.
-
-The failure is not that the workers were careless. **A description of a screen is lossy in
+The failure is not that the workers are careless. **A description of a screen is lossy in
 a way a description of a rule is not.** *One table, labels once* is true of a dozen layouts
-and the owner approved exactly one of them, over seven rounds. Handing a worker the
-sentence and not the file is handing over the lossy copy and keeping the original.
+and the owner approved exactly one of them. Handing a worker the sentence and not the file
+is handing over the lossy copy and keeping the original. When several packets build one
+page that way, what ships is several people's reading of a description of a picture, and
+the first person to notice is the owner.
 
 **So, for any packet whose output is something a person looks at:**
 
@@ -215,11 +212,10 @@ sentence and not the file is handing over the lossy copy and keeping the origina
    cannot produce from prose.
 4. **Require the check that would have caught it.** See below.
 
-**The reason it went unseen for a whole day is separate and worse.** Twelve harnesses
-existed - one per page - and **none for that page**. Every other page had something that
-opened it in a real browser and measured what it drew; that one had never been looked at by
-anything. So a packet that builds or changes a screen **states which harness will measure
-it**, and when none exists, writing it is part of the packet rather than a follow-up.
+**A page with no harness goes unseen.** When every other page has something that opens it
+in a real browser and measures what it drew, the one page without it is the one whose
+defects survive. So a packet that builds or changes a screen **states which harness will
+measure it**, and when none exists, writing it is part of the packet rather than a follow-up.
 A page with no harness is a page whose only check is the owner.
 
 ## Permissions
@@ -230,16 +226,16 @@ A page with no harness is a page whose only check is the owner.
 
 ## What a packet must ask for, when a fix has already failed once
 
-From a session of 16 and 17 September 2026, where two fixes shipped against one symptom
-before anybody had looked at the evidence.
+Rationale: when fixes ship against a symptom before anybody has looked at the evidence, each
+fix is one more theory, and the symptom can survive all of them.
 
 - **Forbid the third theory.** When a symptom has survived a fix, the packet says so and requires
   **evidence before a change**: what the code saw, in the words it will print, in the place the owner
   can read it. A worker that refutes the conductor's diagnosis and stops has finished the job; say
   that in the packet, so refuting is not read as failing.
 - **Require the cost, measured.** *A walk that cannot state its own cost is not finished.* Ask for
-  the number on the customer's own capture - press-to-gone in milliseconds, routes by depth, frame
-  cost while panning - and the packet says which capture. A design settled on a guess about scale is
+  the number on the user's own data or capture - latency in milliseconds, items processed, frame
+  cost under load - and the packet says which capture. A design settled on a guess about scale is
   settled twice.
 - **Name what the packet does not cover.** The worker reports what the change still cannot do, and
   whether anybody has seen it work on the real system. *Nobody has seen this on a real user's data* is a
@@ -260,8 +256,8 @@ before anybody had looked at the evidence.
   any secret-shaped content.
 - A `writes: worktree` packet almost always works in **another repository**, so its changed
   paths belong to that repository and cannot be resolved here. The validator says so as a
-  warning rather than an error: on 16 September 2026 it called seventeen real files missing and
-  the conductor had to read past it, which is worse than the noise it was trying to prevent. A
+  warning rather than an error: reporting real files as missing teaches the conductor to read
+  past the validator, which is worse than the noise it was trying to prevent. A
   worker may list either form; absolute paths resolve and read plainly in a report.
 - A worker that needs an owner decision stops with `status: blocked` and the question. The
   conductor asks the owner; workers never guess at targets, tenants or permissions
@@ -283,16 +279,14 @@ outstanding work under CONTRACT section 9.3.
 
 ### A status word is written when work starts and never when it finishes
 
-Found by an audit on 17 September 2026, after work kept reading as lost. Four records were
-stale at once, and **one word caused a second thread to report a track as never picked up when
-ten of its eleven increments had shipped**:
+Rationale: records go stale in bulk, and **one stale word can make a second thread report a
+track as never picked up when nearly all of its increments have shipped**. What an audit of
+stale records typically finds:
 
-- one task said `ready` after ten increments had landed across five versions
-- one said `ready` after its first two items had shipped
-- one said `ready` with two increments landed and a packet in flight
-- two open tasks existed and were in no index, so nobody reading the index could see them
-
-The task identifiers are in `/memory/skills/delegate-work/NOTES.md`.
+- a task says `ready` after many increments have landed across several versions
+- a task says `ready` after its first items have shipped
+- a task says `ready` with increments landed and a packet in flight
+- open tasks exist that are in no index, so nobody reading the index can see them
 
 These are not four mistakes; they are one habit. **Dispatching is vivid and closing is not**, so
 the record gets written at the moment attention is highest and never again. A rule saying
@@ -301,8 +295,7 @@ the record gets written at the moment attention is highest and never again. A ru
 **So it is checked mechanically, not remembered.** A `reconcile.py` beside a board's generator
 (see `/shared/skills/owner-board/`) reads every board track's parent task and says so when a track has landed work or a card in
 flight while its record still says `ready`, or when a track's task is missing from the index. It
-runs on every board regeneration, so the conductor cannot choose not to run it. It caught one on
-the first run it ever made.
+runs on every board regeneration, so the conductor cannot choose not to run it.
 
 **The general form, for any node:** where work is tracked in two places – a task record and
 whatever shows progress – something must compare them on a schedule nobody sets. It is the
@@ -311,33 +304,32 @@ reliable defects any codebase produces.
 
 ### What the audit also fixed, and what it says about handovers
 
-Both records written by a design thread that day – a specification file and a task record –
-carried no contract front matter and failed `preflight.py`. The same break had been repaired on
-two other records that morning. **A thread that writes records and never runs the
+A design thread that writes records – a specification, a task record – without contract front
+matter leaves them failing `preflight.py`, and the same break tends to recur on other records
+it touches. **A thread that writes records and never runs the
 validator hands its errors to whoever runs it next.** Run `preflight.py --write-manifest` before
 handing work over, not only before committing.
 
-## Lessons from the trial run (2026-09-15)
+## Lessons from trial runs
 
 - **Git Bash rewrites leading-slash arguments** (`/CONTRACT.md` becomes a path under the Git
   installation). Prefix the command with `MSYS_NO_PATHCONV=1` or run the script from
   PowerShell.
-- **Do not put counts in acceptance criteria unless verified at packet time.** Two packets
-  said "twelve expected" and "nineteen expected"; both were stale. Workers handled it, but a
-  stale number invites a worker to force the data to fit.
+- **Do not put counts in acceptance criteria unless verified at packet time.** An expected
+  count typed from memory is often stale. Workers can handle it, but a stale number invites a
+  worker to force the data to fit.
 - **Acceptance criteria drive result size.** A packet that demands quoted evidence for every
   finding will exceed an 800-word soft budget. Raise `--max-output-words` when the acceptance
   criteria require quotation, or ask for an artifact file plus a short result.
 - **Workers cannot see the model name reliably.** Record the host's completion report.
 - **Measure from the host's completion report** where the session-log listener does not yet
-  attribute subagent turns for that host (`/shared/skills/ai-session-log/` does for Claude Code
-  since 2026-09-15).
+  attribute subagent turns for that host (`/shared/skills/ai-session-log/` does for Claude
+  Code).
 
-## Lessons from the second run (2026-09-15, conductor role)
+## Lessons for the conductor role
 
 - **Facts are computed, not remembered.** Use `--fact` for every count or identifier the
-  objective relies on. Two stale numbers in the first run were the conductor's error, not the
-  workers'.
+  objective relies on. A stale number in a packet is the conductor's error, not the worker's.
 - **The word budget is advice.** `validate-result` warns when a body exceeds it and never
   fails on it; acceptance criteria that demand evidence per item decide the size.
 - **Prefer a script file over inline shell arguments.** Long objectives with apostrophes and
@@ -349,28 +341,28 @@ handing work over, not only before committing.
 - **Resolve a `package.json` conflict by merging the `scripts` object, never by taking a
   side.** The conflict is almost always the one `version` line, and every way of taking a
   whole side - `--ours`, `--theirs`, a regex that keeps one half - takes the whole file with
-  it. **That has now silently deleted a worker's script entry on three separate days**, and
-  each time it was found by someone running a command that no longer existed. After
+  it. **Taking a side silently deletes a worker's script entry**, and it is found only when
+  someone runs a command that no longer exists. After
   resolving, assert that every script every parent of the merge had is still present.
 - **Merge a worker branch into the trunk with `--no-ff`, always.** A worker merges the
   trunk before pushing, so its tip is often a merge commit; merging that fast-forward makes
   **the branch's line the trunk's first-parent line**, and every version the trunk carried
-  between the branch point and now falls off it. That silently rewrote what `main` was
-  recorded as having shipped on 21 September - two real builds
-  became versions `main` had never carried, and the guard that checks cited versions then
-  forced a worker to reword comments that had been **true**. A check reading a corrupted
+  between the branch point and now falls off it. That silently rewrites what the trunk is
+  recorded as having shipped: real builds become versions the trunk never carried, and a
+  guard that checks cited versions then forces a worker to reword comments that were
+  **true**. A check reading a corrupted
   history is worse than no check, because it argues. `--no-ff` costs one commit and keeps
   the trunk's line the trunk's.
 - **Name the build a live run depends on.** A worker cannot see what the owner loaded; the
   packet for a live run states the `dist` path and commit the owner is to load.
-- **Never remove a worktree that holds a junction with `--force`.** A junction to the main checkout's `node_modules` is followed by the removal and empties the main checkout (happened 15 September; restored with `npm ci`). Delete the junction first, then remove the worktree; better, have workers use `npm ci` in their worktree instead of a junction.
+- **Never remove a worktree that holds a junction with `--force`.** A junction to the main checkout's `node_modules` is followed by the removal and empties the main checkout (recoverable only by reinstalling, for example with `npm ci`). Delete the junction first, then remove the worktree; better, have workers use `npm ci` in their worktree instead of a junction.
 - **Code can go to a worker in an isolated worktree** (`writes: worktree`). The conductor
   stays responsive when it dispatches and merges rather than implements; keep its own turns
   short.
 
 ## Research and design threads: clarify, then hand back
 
-Rule adopted 16 September 2026. A thread that researches or designs something is **not** a
+A thread that researches or designs something is **not** a
 conductor and does not dispatch. Its job ends with a **decided** specification, and it hands
 that to the conductor. Whether it then also builds the thing is a separate instruction the
 owner gives; what it must never do is hand over an undecided one.
@@ -450,5 +442,5 @@ Recorded so the next reader does not re-propose them without new evidence: a dur
 leases and claims, a model and worker registry with cost and health, a scheduler, cost-based
 routing, recursion beyond depth one, write-enabled workers outside isolated worktrees, and any
 alignment with external agent-to-agent protocols. Each needs a runtime the brain does not have
-or a measured trial that has not yet been run. The reasoning is in the proposal record for
-`RULE-2026-0037`.
+or a measured trial that has not yet been run. The governing rule is `RULE-2026-0037` in
+`/RULES.md`.

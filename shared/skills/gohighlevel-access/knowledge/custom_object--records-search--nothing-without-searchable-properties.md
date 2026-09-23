@@ -16,7 +16,7 @@ verified: null
 source_refs:
   - /memory/skills/gohighlevel-access/knowledge/custom_object--records-search--nothing-without-searchable-properties.md
 created: 2026-09-15T11:20:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 ---
 # Record search: nothing at all until the schema declares searchable properties
 
@@ -41,9 +41,8 @@ HighLevel UI carry `searchableProperties` from the start – `business` declares
 `business.name` and `business.email` – which is why the 9 September search on
 `custom_objects.site_visits` worked.
 
-The extension's storage test now reads the schema, declares
-`custom_objects.example_docs.{title, subject_key, subject, kind}` when they are missing, and then
-runs its four lookups; the next live run confirms or refutes this.
+The storage test was then changed to read the schema and declare searchable properties when
+they are missing before running its lookups; see the refutation below.
 
 ## Why it's non-obvious
 
@@ -53,12 +52,12 @@ and nothing in the search's answer says the object is unindexed – it is a clea
 
 ## Evidence
 
-Storage test runs of 15 September 2026 on Example Test; reports in the project `LOG.md`.
+Storage test runs of 15 September 2026 on Example Test.
 
 ## Refuted 15 September 2026, 12:35
 
 With `title`, `subject` and `kind` declared searchable (confirmed by `GET /objects/custom_objects.example_docs`),
-the extension's page-session listing still answered 201 with no records while eight records
+a browser extension's page-session listing still answered 201 with no records while eight records
 existed, and a bare listing through the brain's OAuth location token listed all eight
 (`total: 8`). The searchable-properties declaration was not the cause; the transport is. See
 `custom_object--records-search--page-session-empty-oauth-lists.md`.

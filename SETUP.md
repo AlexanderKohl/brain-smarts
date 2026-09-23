@@ -4,10 +4,9 @@ title: Guided Setup for a New Brain
 type: guide
 schema_version: 0.2
 contract: /CONTRACT.md
-status: candidate
-candidate_for: RULE-2026-0046
+status: active
 created: 2026-09-23T13:00:00+10:00
-updated: 2026-09-23T13:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 owner: brain-owner
 skill_refs:
   - /shared/skills/manage-credentials
@@ -18,10 +17,6 @@ template_refs:
 ---
 
 # Guided setup for a new brain
-
-> **Candidate – not yet active.** This guide belongs to the three-layer layout proposed by
-> `RULE-2026-0046 – Three-layer brain`. It becomes usable as current guidance when that
-> proposal is accepted.
 
 Read `/CONTRACT.md` first. This file is written for the **AI agent** that sets a person up. The
 agent follows it as a resumable interview: it runs every check it can itself, asks the person

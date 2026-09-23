@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-15T07:45:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T18:00:00+10:00
 owner: brain-owner
 ---
 
@@ -15,7 +15,7 @@ owner: brain-owner
 Read `/CONTRACT.md` first and `/shared/skills/delegate-work/SKILL.md` for the protocol.
 
 Claude Code exposes a subagent facility (the `Agent` tool) that can run several workers at once.
-Verified on 2026-09-15 with a trial run (details in `/memory/skills/delegate-work/NOTES.md`).
+Verified with a trial run of several read-only workers launched in one turn.
 
 ## Mapping packet fields to the Agent tool
 
@@ -43,12 +43,12 @@ Verified on 2026-09-15 with a trial run (details in `/memory/skills/delegate-wor
 - The subagent's model name is not always visible to the worker. The result may say `unknown`;
   the conductor records the model the host reported in the completion notification.
 - A worker cannot ask the owner anything. A `blocked` result is the only escalation path.
-- Since 2026-09-15 the session-log listener reads `<session>/subagents/agent-*.jsonl` from the
+- The session-log listener reads `<session>/subagents/agent-*.jsonl` from the
   first line and attributes each record to its agent (`/shared/skills/ai-session-log/`). The
   Agent tool's completion notifications, which report tokens, tool uses and duration per worker,
   remain the quickest cross-check of a run's cost.
-- Workers name the model inconsistently (`claude-fable-5-1`, `Fable 5.1`). Both are honest;
+- Workers name the model inconsistently (a model id in one result, a display name in another). Both are honest;
   the conductor normalises when logging.
-- Trial `RUN-20260915-075224` (2026-09-15): three read-only workers in parallel, all
-  `completed` and valid on first validation; wall clock about three and a half minutes against
-  roughly eight minutes if run in sequence; 289,837 subagent tokens in total.
+- In a trial of three read-only workers in parallel, all returned `completed` and passed
+  validation first time, and the wall clock was well under half that of running them in
+  sequence. Read each worker's token cost from its completion notification.
