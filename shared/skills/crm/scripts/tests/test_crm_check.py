@@ -188,6 +188,28 @@ class CrmCheckTest(unittest.TestCase):
         for group in groups:
             self.assertEqual(group["contacts"], ["contact-ada-example", "contact-ada-example-2"])
 
+    def test_a_merged_record_is_neither_a_duplicate_nor_a_match(self) -> None:
+        self.write(
+            "contacts/contact-ada-example-2.md",
+            contact("contact-ada-example-2", "Ada Example", status="merged",
+                    merged_into="contact-ada-example", emails="[ada@example.com]"),
+        )
+        code, out = run("--json", "duplicates", cwd=self.root)
+        self.assertEqual((code, json.loads(out)), (0, []))
+        _, out = run("find", "--name", "ada", cwd=self.root)
+        self.assertIn("1 match(es)", out)
+        code, out = run("validate", cwd=self.root)
+        self.assertEqual(code, 0, out)
+
+    def test_a_merged_record_must_point_at_a_contact(self) -> None:
+        self.write(
+            "contacts/contact-ada-example-2.md",
+            contact("contact-ada-example-2", "Ada Example", status="merged", merged_into="contact-nobody"),
+        )
+        code, out = run("validate", cwd=self.root)
+        self.assertEqual(code, 1)
+        self.assertIn("merged_into names no contact (contact-nobody)", out)
+
     def test_missing_node_exits_2(self) -> None:
         code, out = run("--node", "/memory/projects/nowhere", "validate", cwd=self.root)
         self.assertEqual(code, 2)

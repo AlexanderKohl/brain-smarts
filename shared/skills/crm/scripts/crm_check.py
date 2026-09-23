@@ -128,6 +128,11 @@ def records(folder: Path, prefix: str) -> list[Record]:
     return [load(p) for p in sorted(folder.glob(f"{prefix}*.md")) if not p.name.startswith("_")]
 
 
+def live_contacts(node: Path) -> list[Record]:
+    """Contacts that stand for a party. A merged record only points to the one it was merged into."""
+    return [c for c in records(node / "contacts", "contact-") if c.meta.get("status") != "merged"]
+
+
 # ---------------------------------------------------------------- node discovery
 
 
@@ -199,6 +204,11 @@ def validate(node: Path) -> Report:
     for contact in records(contacts_dir, "contact-"):
         name = contact.path.name
         meta = contact.meta
+        if meta.get("status") == "merged":
+            target = str(meta.get("merged_into") or "")
+            if not (contacts_dir / f"{target}.md").is_file():
+                report.errors.append(f"contacts/{name}: merged_into names no contact ({target or 'missing'})")
+            continue
         _required(contact, "contact", report)
         kind = meta.get("contact_kind") or "person"
         if kind not in CONTACT_KINDS:
@@ -260,7 +270,7 @@ def contact_keys(record: Record) -> dict[str, set[str]]:
 
 def duplicates(node: Path) -> list[dict[str, Any]]:
     index: dict[tuple[str, str], list[str]] = {}
-    for contact in records(node / "contacts", "contact-"):
+    for contact in live_contacts(node):
         for kind, values in contact_keys(contact).items():
             if kind == "handle":
                 continue
@@ -289,7 +299,7 @@ def find(
     if not (email_l or phone_d or handle_l or name_n):
         return []
     found: list[Record] = []
-    for contact in records(node / "contacts", "contact-"):
+    for contact in live_contacts(node):
         keys = contact_keys(contact)
         body = contact.body.lower()
         checks = []

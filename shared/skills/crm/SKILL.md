@@ -17,7 +17,7 @@ metadata:
     - /shared/skills/abr-access
     - /shared/skills/google-workspace-access
   created: 2026-09-23T13:10:00+10:00
-  updated: 2026-09-23T13:10:00+10:00
+  updated: 2026-09-23T17:25:00+10:00
 ---
 
 # Contact Register (CRM)
@@ -180,8 +180,24 @@ jurisdiction, and update the contact when an identifier or status is missing or 
 ### 7. Keeping the register healthy
 
 Run `crm_check.py validate` after a batch of changes and `crm_check.py duplicates` after a
-directory sync or bulk creation. Merge confirmed duplicates by hand: keep the older file, fold
-the other's identifiers and dated notes into it, and leave the removed id in a note.
+directory sync or bulk creation.
+
+- **Merge confirmed duplicates.** Keep the record with the most substance (the older one when
+  equal). Fold the other's identifiers, receiving personas, directory references, dated notes
+  and open loops into it, and add a dated note naming the merged id and why. Replace the merged
+  file with a pointer: its `id`, `title`, `created`, a new `updated`, `status: merged`,
+  `merged_into: <kept id>` and one line linking to the kept record. `find` and `duplicates`
+  skip pointers; `validate` checks that `merged_into` names an existing contact.
+- **Drop identifiers that are not the party's own** while merging: a platform's sending address
+  (an invoicing, ticketing or mailing service writing on someone's behalf) or another person's
+  address picked up from a copy line.
+- **The owner's own addresses and numbers are never a contact's identifiers.** The address a
+  message was sent *to* goes in `receiving_personas`, not `emails`; a number from the owner's own
+  signature is not the sender's. Left in place, they make every correspondent look like a
+  duplicate of every other.
+- **Colleagues share landlines.** Two different people with the same office or switchboard
+  number are not duplicates; `duplicates` still lists them, so read a phone-only group before
+  merging it.
 
 ## Scripts or commands
 
