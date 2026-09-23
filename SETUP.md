@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-23T13:00:00+10:00
-updated: 2026-09-23T18:00:00+10:00
+updated: 2026-09-23T20:30:00+10:00
 owner: brain-owner
 skill_refs:
   - /shared/skills/manage-credentials
@@ -818,19 +818,50 @@ Rows are grouped by host, then in the order a session looks for them.
 | Codex, Cursor and others | `<project repo>/AGENTS.md` | `project-repo.AGENTS.template.md` | A project repository's own pointer |
 | Cursor | `<brain_root>/AGENTS.md` | already in the smarts | Cursor reads `AGENTS.md` |
 | Cursor | `<project repo>/.cursor/rules/brain-contract.mdc` | `cursor-project-repo.brain-contract.mdc.template` | Only when the project's Cursor does not pick up `AGENTS.md` (`verify`) |
+| Cursor | Settings → Rules → User Rules | the pointer text | Every Cursor project, including ones opened on their own |
 
-**Agent does:** for a user-level file that already exists, show the person the current content
-and offer:
+Two kinds of file, two owners:
 
-> **Ask:** `~/.codex/AGENTS.md` already has content. What should I do?
-> 1. Keep it and add the pointer at the top (recommended)
-> 2. Replace it with the pointer (the old file is saved beside it as `.bak`)
-> 3. Leave it alone
->
-> **Suggested reply:** `1`
+- **In the brain and in project repositories** (`CLAUDE.md`, `AGENTS.md`, `memory/AGENTS.md`, a
+  project's `.cursor/rules/`): ordinary repository files. **Agent does:** writes them and commits
+  them like any other change.
+- **In the host's own configuration** (`~/.claude/`, `~/.codex/`, Cursor's settings and its saved
+  workspaces, any other host's app settings): **You do.** Hosts rightly refuse to let an agent edit
+  its own startup or permission files, even with the person's go-ahead, so the agent never tries.
 
-If the existing content carries behavioural rules, point out that `SMART-RULE-0007` wants them in
-`/memory/RULES.md` instead, and offer to draft that proposal.
+**Agent does**, for each host-configuration file:
+
+1. Read the file if it exists (read-only) and show the person what is there. If it carries
+   behavioural rules, point out that `SMART-RULE-0007` wants them in `/memory/RULES.md` and offer
+   to draft that proposal.
+2. Fill the template with this machine's paths and save the result to a scratch file, for
+   example `<brain_root>/temp/setup/host-pointer.md`.
+3. Give the person the exact commands: a backup of the existing file first, then the copy or the
+   append. One block for PowerShell, one for macOS and Linux. Example for Windows:
+
+   ```powershell
+   Copy-Item "$HOME\.codex\AGENTS.md" "$HOME\.codex\AGENTS.md.bak-<date>" -ErrorAction SilentlyContinue
+   Copy-Item "<brain_root>\temp\setup\host-pointer.md" "$HOME\.codex\AGENTS.md"
+   Copy-Item "<brain_root>\temp\setup\host-pointer.md" "$HOME\.claude\CLAUDE.md"
+   Add-Content "$HOME\.codex\config.toml" "`n[projects.'<brain_root>']`ntrust_level = `"trusted`""
+   ```
+
+4. After the person says done, verify read-only: each file matches the scratch file, the backup
+   exists, and `config.toml` still parses (`python -c "import tomllib; tomllib.load(open(r'<path>','rb'))"`).
+   Record the result under `## Setup`.
+
+**You do:**
+
+1. Run the commands. If a file already exists and you want to keep its other content, paste the
+   pointer at the top instead of replacing the file.
+2. **Cursor:** open Settings → Rules → User Rules and paste the pointer text. Cursor keeps user
+   rules in its own database, not a file, so this is the only way to reach projects opened on
+   their own. If you saved multi-folder workspaces that include a brain folder (they live in
+   Cursor's application data, `glassMultiRootWorkspaces` on Windows), re-add the brain there
+   after any move.
+3. **Other hosts** (for example a desktop agent app that runs commands on this computer): if the
+   app has a custom-instructions field, paste the pointer text there; otherwise start each task
+   with "Work in `<brain_root>`; read `<brain_root>/CONTRACT.md` first".
 
 Project repository pointers name the brain by its usual sibling location and never name a
 `/memory/` path, because a collaborator cannot resolve it (CONTRACT §16.2).
@@ -871,6 +902,8 @@ another way (a script, a different shell), so treat the lists as guard rails, no
 > 3. Keep the host defaults
 >
 > **Suggested reply:** `1`
+
+**Who installs these files:** the same split as Step E. The agent fills each template into a scratch file under `<brain_root>/temp/setup/` and gives the person backup-then-copy (or merge) commands; **the person runs them**, because hosts refuse to let an agent change its own permission settings. The agent then verifies read-only (the file parses and holds the chosen lists) and records the result under `## Setup`.
 
 ### F.2 Claude Code
 

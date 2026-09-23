@@ -7,19 +7,139 @@ contract: /CONTRACT.md
 node_type: system
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-23T18:00:00+10:00
+updated: 2026-09-23T20:00:00+10:00
 owner: brain-owner
 ---
 
 # Portable AI Brain
 
-Read `/CONTRACT.md` before using this repository.
+**A file-based working memory and rulebook that any AI coding agent can read, so your work keeps its context from one session, and one model, to the next.**
 
-## Purpose
+Most AI sessions start from nothing: you explain your projects, your preferences and your accounts again, and whatever the agent learnt disappears when the chat closes. The Portable AI Brain is a pair of ordinary Git repositories that the agent reads at the start of every session. They hold an operating contract, rules, your tasks and projects, what has been decided and why, and reusable skills for the systems you work with. The agent reads them, does the work, and writes back what changed – so the next session, in any host, starts where the last one stopped.
 
-This repository is the **mechanics** layer of a portable, file-based brain for AI systems and people: the contract, generic rules, bootstrap and onboarding files, shared skills, templates, schemas, the raw-file system node and governance proposals. It holds no personal data and can be adopted by any owner unchanged.
+Agents: read [`/CONTRACT.md`](CONTRACT.md) before using this repository.
 
-Everything specific to one owner – tasks, projects, contacts, raw files, sources, state and history – lives in that owner's **memory**, a separate private repository checked out at `/memory/`. Large bodies of work live in their own **project repositories** beside the brain. See `/CONTRACT.md` §3.4 to §3.6 and §16.
+## Why use it
+
+<!-- Order: most general benefit first, then the ones that build on it. -->
+
+### Works with any AI host
+
+The brain is Markdown, YAML, JSON and small Python scripts. Nothing depends on one vendor's memory feature or plugin format. Claude Code, Codex and Cursor each find the contract through a one-line pointer file (`CLAUDE.md`, `AGENTS.md`), and any other agent that can read files and run commands can follow it too. You can switch hosts or models mid-project without losing anything.
+
+### You own it
+
+Everything lives in private GitHub repositories under your own account and in folders on your own computer. There is no service to sign up for and no export step: the files are the brain. If you stop using it, you keep a readable archive of your work.
+
+### Knowledge accumulates instead of evaporating
+
+Each project keeps its own `STATE.md` (where things stand), `LOG.md` (what happened, with times), `KNOWLEDGE.md` (what is known and why) and `RULES.md` (standing constraints). A decision made in one session is still there next month, for a different model, with its reasoning. Uploaded files are kept unchanged, with a readable Markdown copy beside them and a record of where they came from.
+
+### One canonical home for everything
+
+Every fact, task, rule and source file has exactly one home; other places link to it rather than copying it. The contract says where each kind of input goes – a passing instruction, durable knowledge, a change of state, a task, a new standing rule – so notes do not drift apart in three places, and a validator checks the structure before each commit.
+
+### Guardrails that hold across sessions
+
+<!-- Order: the order an agent meets them in a typical session. -->
+
+- **Secrets stay in an encrypted vault.** Tokens and client secrets are typed only into a hidden prompt, stored with authenticated encryption outside Git, and injected into a single command when needed. They never appear in chat, files or command lines.
+- **External writes are confirmed.** Before anything is sent, created or changed in an outside system, the agent names the exact target account and asks. Email is drafted first, never sent on its own.
+- **Governance changes need your acceptance.** The contract, rules, templates and validator are protected: an agent can propose a change, with a summary, the exact diff, risks and a rollback, but it takes effect only when you accept that specific proposal.
+- **Checkpoint commits mean nothing is lost.** Work is committed at each logical step, staging named files only, with the host and model in the message. Force pushes, hard resets and skipped hooks are ruled out.
+
+### Reusable skills for common systems
+
+Skills are instructions plus tested scripts for a job or an outside system. They carry no personal data; your own configuration for each lives in your memory. Current shared skills, alphabetical:
+
+- `abr-access` – Australian Business Register lookups (ABN, ACN, name search)
+- `crm` – a contact register: people, organisations and which of your identities to reply as
+- `delegate-work` – hands bounded pieces of work to parallel worker agents
+- `gohighlevel-access` – HighLevel CRM access across sub-accounts, with rotating tokens in the vault
+- `google-drive-access` – legacy Drive access through a host connector
+- `google-workspace-access` – Gmail (draft-first), Calendar, Tasks, Drive and Contacts for several accounts
+- `learning-maintenance` – captures, reviews and integrates what the brain learns from use
+- `manage-credentials` – the encrypted vault every credentialed skill uses
+- `owner-board` – one permanent page showing every request you have made and what needs you
+- `problem-recovery` – searches the brain's own knowledge before re-investigating a failure
+- `product-development` – the evidence-and-decision process for software work
+- `railway-access` – Railway projects, deployments and logs
+- `raw-file-ingestion` – keeps uploaded files unchanged with a traceable Markdown copy
+- `repository-preflight` – the validator run before every commit
+- `skill-exchange` – proposed, not yet active: promoting, sharing and installing skills between brains
+- `tasks` – capture, review and close tasks, and surface what has come due
+- `ui-implementation` – rules a live screen must keep while data changes underneath it
+- `ui-mockup` – builds a measured preview of a screen for you to refine before anything is built
+- `xero-access` – Xero organisation selection and read-only downloads
+
+You switch on only the optional skills you want; the full list with what each needs is in [`/SETUP.md`](SETUP.md) and [`/shared/skills/README.md`](shared/skills/README.md).
+
+### Parallel work with bounded delegation
+
+A conductor agent can hand independent pieces of a job to up to four worker agents at once. Each worker gets a written packet that points at the canonical files, works isolated, read-only and without credentials by default, and returns a short result record. Workers do not start workers of their own, so the work stays traceable.
+
+### Discipline for software work
+
+New software, internal tools and feature changes follow an investment-proportionate process: the agent gathers evidence and prepares decisions for you at defined gates, considers building versus buying, and has an independent model review the plan and the release. Screens are mocked up and refined with you before they are implemented. The rules also ask for security by design, tests that demonstrate behaviour, and one implementation per side effect.
+
+### Shareable by design
+
+The mechanics – contract, generic rules, skills, templates – live in this repository and contain no personal data, so anyone can adopt them unchanged. Everything about you lives in a separate private memory repository. Large projects live in their own repositories, where collaborators get the project's own brain files without seeing your memory.
+
+## How it fits together
+
+The brain is three layers, each its own repository. One working tree holds the first two; project repositories sit beside it.
+
+```text
+C:\dev\                        project repositories root (your choice)
+├── brain\                     brain-smarts – this repository; the brain root "/"
+│   ├── CONTRACT.md            the operating contract every agent reads first
+│   ├── RULES.md               generic rules any owner could adopt
+│   ├── shared\skills\         reusable skills (no personal data)
+│   └── memory\                brain-memory – your private repository, ignored by this one
+│       ├── OWNER.md           who the brain works for
+│       ├── RULES.md           your own standing preferences
+│       ├── tasks\  projects\  raw\  sources\  ...
+└── example-project\           a project repository, with its own brain\ folder
+```
+
+1. **Smarts** (this repository) – how the brain works. Identical for every owner.
+2. **Memory** (`/memory/`) – what the brain knows about you: profile, rules, tasks, projects, contacts, files, state and history.
+3. **Project repositories** – bodies of work with their own lifecycle; memory keeps a small pointer to each.
+
+Rules inherit downwards – contract, generic rules, your rules, then each project's rules – and a lower level may add constraints but never override a higher one. See [`/CONTRACT.md`](CONTRACT.md) §3.4 to §3.6 and §16.
+
+## Getting started
+
+Prerequisites, in install order:
+
+- **Git** – any 2.x
+- **Python** – 3.11 or later
+- **GitHub CLI** (`gh`) – any 2.x, signed in to the account that will own your repositories
+- **An AI host** – Claude Code, Codex or Cursor
+
+Then paste the prompt from [`/SEED_PROMPT.md`](SEED_PROMPT.md) into your AI host, with this repository's address filled in. The agent clones the smarts, reads the contract and follows [`/SETUP.md`](SETUP.md): it checks the prerequisites, makes your private copy of the smarts and a new private memory from the skeleton, interviews you for your profile, lets you choose skills, sets up the vault and any accounts, wires your host to the contract and validates everything. It asks only what it cannot detect, always with a suggested answer, and hands you the steps that must stay yours – choosing the vault passphrase, pasting secrets into a hidden prompt, registering apps and approving sign-ins. Progress is recorded as it goes, so the same prompt resumes an unfinished setup.
+
+## Staying up to date and contributing
+
+Your smarts repository is your own private copy (or a GitHub fork) with this repository kept as the `upstream` remote, push disabled. To take in improvements:
+
+```bash
+cd <brain_root>
+git fetch upstream
+git merge upstream/main
+python shared/skills/repository-preflight/scripts/preflight.py --root .
+```
+
+To contribute, open a pull request against upstream with a proposal under `/governance/proposals/` describing the change, its reason, risks and rollback. It must carry no personal data. Protected governance changes are accepted or declined by the upstream maintainer. On your own machine you still decide: a new optional skill does nothing for you until you list it in `active_skills` in your `/memory/OWNER.md`.
+
+## What it is not
+
+<!-- Order: the misconceptions newcomers raise most often, first. -->
+
+- **Not a hosted service.** There is no server, account or subscription. The brain is files on your computer and in your GitHub account.
+- **Not a runtime or framework.** It does not run agents, schedule them or wrap an API. Your AI host does the work; the brain tells it how and remembers the results.
+- **No telemetry.** Nothing in the brain reports usage anywhere. Its scripts talk only to the outside systems you connect and confirm. (Your AI host's own data handling is between you and its provider.)
 
 ## Navigation
 
@@ -45,7 +165,7 @@ Describes how a change to the mechanics layer is proposed (`governance/proposals
 
 ##### `memory/`
 
-The owner's memory: a **separate repository**, checked out here and listed in this repository's `.gitignore`. Never commit anything under it to this repository. It holds the owner profile, owner-layer rules, tasks, projects, contacts, raw files, sources, outbox, boards and the brain-wide state, log and knowledge. When absent, agents work on the mechanics only (see § Setting up a memory).
+The owner's memory: a **separate repository**, checked out here and listed in this repository's `.gitignore`. Never commit anything under it to this repository. It holds the owner profile, owner-layer rules, tasks, projects, contacts, raw files, sources, outbox, boards and the brain-wide state, log and knowledge. When absent, agents work on the mechanics only (see [`/SETUP.md`](SETUP.md) step B4 to create one).
 
 ##### `shared/`
 
@@ -58,31 +178,3 @@ Contains canonical persistent operating-system nodes without a natural completio
 ##### `temp/`
 
 Local, ephemeral, regenerable runtime artefacts (delegation run folders, probe output). Ignored by Git in both repositories and absent from a fresh clone. Safe to delete; never store credentials or durable knowledge here.
-
-## Setting up a memory
-
-For an owner whose memory repository already exists, clone it into the brain root:
-
-```bash
-cd <brain_root>
-git clone <memory-repository-url> memory
-python shared/skills/repository-preflight/scripts/preflight.py --root .
-```
-
-For a new owner:
-
-1. Create an empty private repository for the memory.
-2. Copy `/shared/templates/memory-skeleton/` to `<brain_root>/memory/`.
-3. Fill in `memory/OWNER.md` (every upper-case placeholder in its front matter), replace `OWNER_SHORT_NAME` in every file, remove the `template-` prefix from each `id`, and set `created`, `updated` and the first `LOG.md` heading to the current time.
-4. Run the preflight validator from the brain root until it passes.
-5. Initialise `memory/` as its own Git repository, commit, and push to the private remote.
-
-## Bootstrap
-
-1. If given a directory, locate `CONTRACT.md` inside it; if given a nested file, move upward until `CONTRACT.md` is found.
-2. Read the discovered `/CONTRACT.md`.
-3. Read this file, `/RULES.md`, `/memory/OWNER.md` and `/memory/RULES.md`.
-4. Identify the active node.
-5. Read its inherited rules, state and relevant declared dependencies.
-6. Stop and report ambiguity if different location hints resolve to different contracts.
-7. Process input according to the contract.
