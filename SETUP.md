@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-23T13:00:00+10:00
-updated: 2026-09-23T15:38:35+10:00
+updated: 2026-09-23T16:29:43+10:00
 owner: brain-owner
 skill_refs:
   - /shared/skills/manage-credentials
@@ -905,7 +905,7 @@ Rows are grouped by host, then in the order a session looks for them.
 | Codex, Cursor and others | `<project repo>/AGENTS.md` | `project-repo.AGENTS.template.md` | A project repository's own pointer |
 | Cursor | `<brain_root>/AGENTS.md` | already in the smarts | Cursor reads `AGENTS.md` |
 | Cursor | `<project repo>/.cursor/rules/brain-contract.mdc` | `cursor-project-repo.brain-contract.mdc.template` | Only when the project's Cursor does not pick up `AGENTS.md` (`verify`) |
-| Cursor | Settings → Rules → User Rules | the pointer text | Every Cursor project, including ones opened on their own |
+| Cursor | Cursor Settings (Ctrl+Shift+J, not the editor settings) → Rules → User Rules | the pointer text | Every Cursor project, including ones opened on their own |
 
 Two kinds of file, two owners:
 
@@ -958,11 +958,15 @@ Two kinds of file, two owners:
 
 1. Run the commands. If a file already exists and you want to keep its other content, paste the
    pointer at the top instead of replacing the file.
-2. **Cursor:** open Settings → Rules → User Rules and paste the pointer text. Cursor keeps user
-   rules in its own database, not a file, so this is the only way to reach projects opened on
-   their own. If you saved multi-folder workspaces that include a brain folder (they live in
-   Cursor's application data, `glassMultiRootWorkspaces` on Windows), re-add the brain there
-   after any move.
+2. **Cursor:** open **Cursor Settings** (Ctrl+Shift+J or the gear at the top right; `Ctrl+,`
+   opens the editor settings, which have no rules) → **Rules** → **User Rules**. Older versions
+   call it **General → Rules for AI**. If User Rules already hold text, show it to the agent
+   first: replace anything that names an old brain location or restates brain rules (for example
+   commit policy with a rule number) with the pointer text, because a restated rule goes stale when
+   the brain's rules change (`SMART-RULE-0007`). Cursor keeps user rules in its own database, not
+   a file, so this is the only way to reach projects opened on their own. If you saved
+   multi-folder workspaces that include a brain folder (they live in Cursor's application data,
+   `glassMultiRootWorkspaces` on Windows), re-add the brain there after any move.
 3. **Other hosts** (for example a desktop agent app that runs commands on this computer): if the
    app has a custom-instructions field, paste the pointer text there; otherwise start each task
    with "Work in `<brain_root>`; read `<brain_root>/CONTRACT.md` first".
