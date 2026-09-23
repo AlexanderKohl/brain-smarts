@@ -1,0 +1,56 @@
+#!/bin/sh
+# A tripwire for the one staging mistake a brain repository actually suffers: a sweep.
+#
+# In the single-repository brain a `git add -A` once swept another session's in-progress
+# governance proposal into a commit about unrelated project work. Nothing was lost, but the
+# change was recorded under a sentence that had nothing to do with it. `/RULES.md` already says
+# to stage only agent-owned files; the rule was not the problem, the command was.
+#
+# **This hook is the weaker half of the fix and knows it.** It cannot tell whose file is
+# whose. What it can see is a commit reaching across two territories that in this mechanics
+# repository belong to different kinds of work by construction - governance (`CONTRACT.md`,
+# root `RULES.md`, `governance/`, the preflight validator) and everything else (skills,
+# templates, systems). A commit touching both is nearly always a sweep.
+#
+# It also refuses any path under `memory/`: the owner's memory is a separate repository and
+# must never be committed here (CONTRACT §3.5). `.gitignore` already excludes it; this catches
+# a forced add.
+#
+# **The stronger half is the command**, and it needs no hook: `git commit -- <paths>`
+# commits exactly the paths named and ignores the index entirely, so a careless `add`
+# cannot leak into it. Use that and this hook never fires.
+#
+# Install: git config core.hooksPath .githooks
+
+staged=$(git diff --cached --name-only)
+[ -z "$staged" ] && exit 0
+
+leaked=$(printf '%s\n' "$staged" | grep '^memory/' || true)
+if [ -n "$leaked" ]; then
+  echo "pre-commit: these paths belong to the separate memory repository and must not be committed here:"
+  printf '    %s\n' $leaked
+  echo
+  echo "Unstage them: git restore --staged -- memory/"
+  exit 1
+fi
+
+governance_re='^(CONTRACT\.md|RULES\.md|BOOTSTRAP\.md|governance/|shared/skills/repository-preflight/)'
+gov=$(printf '%s\n' "$staged" | grep -E "$governance_re" || true)
+other=$(printf '%s\n' "$staged" | grep -vE "$governance_re" | grep -v '^repository-manifest\.json$' || true)
+
+if [ -n "$gov" ] && [ -n "$other" ]; then
+  echo "pre-commit: this commit reaches across two territories, which is what a sweep looks like."
+  echo
+  echo "  governance:"
+  printf '    %s\n' $gov
+  echo "  elsewhere:"
+  printf '    %s\n' $other
+  echo
+  echo "If both genuinely belong in one commit, say so and use --no-verify."
+  echo "Otherwise commit the paths you mean, and the index cannot leak:"
+  echo
+  echo "    git commit -m \"...\" -- <path> <path>"
+  echo
+  exit 1
+fi
+exit 0

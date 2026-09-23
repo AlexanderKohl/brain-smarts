@@ -1,0 +1,4 @@
+interface:
+  display_name: "Credential Management"
+  short_description: "Store and inject portable credentials safely"
+  default_prompt: "Use $manage-credentials with the per-login Vault Agent (serve + unlock) to store credentials in the passphrase-encrypted portable vault and inject mapped fields into an authorised process without exporting the master passphrase."

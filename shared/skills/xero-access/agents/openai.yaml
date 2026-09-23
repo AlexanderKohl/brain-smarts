@@ -1,0 +1,4 @@
+interface:
+  display_name: "Xero Access"
+  short_description: "Connect to Xero and download authorised data"
+  default_prompt: "Use $xero-access to connect to the intended Xero organisation and download the requested accounting data."

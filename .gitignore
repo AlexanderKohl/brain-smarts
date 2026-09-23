@@ -1,0 +1,55 @@
+# The owner's memory repository is checked out here as a separate repository (CONTRACT §3.5).
+# It must never be committed to this mechanics repository.
+memory/
+
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+*.vault
+*.vault.lock
+*.pem
+*.key
+*.pfx
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Temporary files
+*.tmp
+*.temp
+# Scratch working directory: probe scripts, API dumps, downloaded tooling.
+# Nothing durable belongs here - route findings to a node or a skill's knowledge folder.
+temp/
+*.bak
+
+# Temporary AI session instrumentation (not governance LOG.md)
+temp/ai-session/*.jsonl
+temp/ai-session/*.state.json
+temp/ai-session/ai-call-log.state.json
+temp/ai-session/listener.state.json
+temp/ai-session/_listener_self_test_transcripts/
+# Non-portable host temp paths (canonical AI session log is /temp/ai-session/)
+.cursor/temp/
+
+# External-system traffic recordings anywhere in the tree: diagnostic dumps of a live account
+# can hold contact records, message bodies and live secrets. They belong in /memory/, never here.
+**/traffic-recordings/
+
+# Operating systems
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Claude Code local tool state (worktrees, local settings) - not shared
+.claude/
+
+# Scratch extraction output
+extracted_text.txt
+
+# Generated deliverables belong in /memory/outbox/, never in the mechanics repository
+outbox/

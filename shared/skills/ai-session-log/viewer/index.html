@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI session log</title>
+  <style>
+    :root {
+      --bg: #f6f7f9;
+      --surface: #ffffff;
+      --text: #1a1d23;
+      --muted: #5c6570;
+      --border: #d8dde3;
+      --call: #1f6feb;
+      --response: #1a7f37;
+      --thinking: #8250df;
+      --tool: #9a6700;
+      --python: #cf222e;
+      --other: #59636e;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 14px/1.45 "Segoe UI", system-ui, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+    }
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0.75rem 1rem;
+      display: grid;
+      gap: 0.65rem;
+    }
+    h1 {
+      margin: 0;
+      font-size: 1.05rem;
+      font-weight: 650;
+    }
+    .meta {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem 0.75rem;
+      align-items: center;
+    }
+    .controls label {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      color: var(--muted);
+      font-size: 12px;
+      user-select: none;
+    }
+    input[type="search"], select, button {
+      font: inherit;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--text);
+      padding: 0.35rem 0.55rem;
+    }
+    input[type="search"] { min-width: 14rem; }
+    button {
+      cursor: pointer;
+      background: #eef1f4;
+    }
+    button:hover { background: #e4e8ec; }
+    button.primary {
+      background: var(--call);
+      border-color: var(--call);
+      color: #fff;
+    }
+    main {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 1rem;
+      display: grid;
+      gap: 0.65rem;
+    }
+    .entry {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .entry-head {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem 0.65rem;
+      align-items: center;
+      padding: 0.55rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+      background: #fafbfc;
+    }
+    .kind {
+      font-size: 11px;
+      font-weight: 650;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      color: #fff;
+    }
+    .kind-model_call { background: var(--call); }
+    .kind-model_response { background: var(--response); }
+    .kind-thinking { background: var(--thinking); }
+    .kind-tool_result { background: var(--tool); }
+    .kind-python_run { background: var(--python); }
+    .kind-other { background: var(--other); }
+    .ts, .model, .tool {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .body {
+      padding: 0.75rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+      font-size: 12.5px;
+      max-height: 18rem;
+      overflow: auto;
+    }
+    .body.expanded { max-height: none; }
+    .entry-foot {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.5rem;
+      padding: 0.35rem 0.75rem 0.55rem;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .entry-foot button {
+      font-size: 12px;
+      padding: 0.2rem 0.45rem;
+    }
+    .empty, .error {
+      padding: 2rem 1rem;
+      text-align: center;
+      color: var(--muted);
+    }
+    .error { color: var(--python); }
+    .stat {
+      display: inline-block;
+      min-width: 1.5rem;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>AI session log</h1>
+      <div class="meta" id="meta">Loading…</div>
+    </div>
+    <div class="controls">
+      <input id="search" type="search" placeholder="Search text…" autocomplete="off">
+      <label>Limit
+        <select id="limit">
+          <option value="50">50</option>
+          <option value="100" selected>100</option>
+          <option value="250">250</option>
+          <option value="500">500</option>
+          <option value="1000">1000</option>
+        </select>
+      </label>
+      <label><input type="checkbox" data-kind="model_call" checked> call</label>
+      <label><input type="checkbox" data-kind="model_response" checked> response</label>
+      <label><input type="checkbox" data-kind="thinking" checked> thinking</label>
+      <label><input type="checkbox" data-kind="tool_result" checked> tool</label>
+      <label><input type="checkbox" data-kind="python_run" checked> python</label>
+      <label><input type="checkbox" id="autoRefresh" checked> auto-refresh</label>
+      <button type="button" id="refresh">Refresh</button>
+      <button type="button" class="primary" id="jumpLatest">Latest</button>
+    </div>
+  </header>
+  <main id="feed"></main>
+
+  <script>
+    const feed = document.getElementById("feed");
+    const meta = document.getElementById("meta");
+    const search = document.getElementById("search");
+    const limitEl = document.getElementById("limit");
+    const autoRefresh = document.getElementById("autoRefresh");
+    let timer = null;
+    let lastFingerprint = "";
+
+    function selectedKinds() {
+      return [...document.querySelectorAll("input[data-kind]:checked")]
+        .map((el) => el.dataset.kind);
+    }
+
+    function textOf(rec) {
+      return (
+        rec.call_text ||
+        rec.response_text ||
+        rec.thinking_text ||
+        rec.content ||
+        rec.output ||
+        rec.note ||
+        JSON.stringify(rec, null, 2)
+      );
+    }
+
+    function tsOf(rec) {
+      return rec.ts || rec.ts_end || rec.ts_start || "";
+    }
+
+    function escapeHtml(s) {
+      return String(s)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
+
+    function render(records, info) {
+      const q = search.value.trim().toLowerCase();
+      const filtered = records.filter((rec) => {
+        if (!q) return true;
+        const hay = [
+          textOf(rec),
+          rec.model || "",
+          rec.tool_name || "",
+          rec.script_name || "",
+          rec.kind || "",
+          rec.event || "",
+        ].join("\n").toLowerCase();
+        return hay.includes(q);
+      });
+
+      meta.textContent =
+        `${info.shown} of ${info.total} records` +
+        (info.path ? ` · ${info.path}` : "") +
+        (info.bytes != null ? ` · ${(info.bytes / 1024).toFixed(0)} KB` : "") +
+        (info.mtime ? ` · updated ${info.mtime}` : "");
+
+      if (!filtered.length) {
+        feed.innerHTML = `<div class="empty">No matching records.</div>`;
+        return;
+      }
+
+      feed.innerHTML = filtered.map((rec, idx) => {
+        const kind = rec.kind || (rec.event ? rec.event : "other");
+        const kindClass = rec.kind ? `kind-${rec.kind}` : "kind-other";
+        const body = escapeHtml(textOf(rec));
+        const long = body.length > 2400;
+        const tool = rec.tool_name
+          ? `<span class="tool">${escapeHtml(rec.tool_name)}</span>`
+          : (rec.script_name
+            ? `<span class="tool">${escapeHtml(rec.script_name)}</span>`
+            : "");
+        const model = rec.model
+          ? `<span class="model">${escapeHtml(rec.model)}</span>`
+          : "";
+        const usage = rec.token_usage
+          ? `<span class="tool">tokens ${escapeHtml(JSON.stringify(rec.token_usage))}</span>`
+          : "";
+        return `
+          <article class="entry" data-idx="${idx}">
+            <div class="entry-head">
+              <span class="kind ${kindClass}">${escapeHtml(kind)}</span>
+              <span class="ts">${escapeHtml(tsOf(rec))}</span>
+              ${model}
+              ${tool}
+              ${usage}
+            </div>
+            <pre class="body${long ? "" : " expanded"}">${body}</pre>
+            ${long ? `<div class="entry-foot"><span>${body.length.toLocaleString()} chars</span>
+              <button type="button" data-expand>Expand</button></div>` : ""}
+          </article>`;
+      }).join("");
+    }
+
+    async function load() {
+      const kinds = selectedKinds().join(",");
+      const limit = limitEl.value;
+      const url = `/api/log?limit=${encodeURIComponent(limit)}&kinds=${encodeURIComponent(kinds)}`;
+      meta.textContent = "Loading…";
+      try {
+        const ctrl = new AbortController();
+        const to = setTimeout(() => ctrl.abort(), 30000);
+        const res = await fetch(url, { cache: "no-store", signal: ctrl.signal });
+        clearTimeout(to);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const fingerprint = `${data.mtime}|${data.total}|${data.bytes}|${limit}|${kinds}|${search.value}`;
+        if (fingerprint === lastFingerprint) {
+          meta.textContent =
+            `${data.shown} of ${data.total} records` +
+            (data.path ? ` · ${data.path}` : "") +
+            (data.bytes != null ? ` · ${(data.bytes / 1024).toFixed(0)} KB` : "") +
+            (data.mtime ? ` · updated ${data.mtime}` : "");
+          return;
+        }
+        lastFingerprint = fingerprint;
+        render(data.records || [], data);
+      } catch (err) {
+        const msg = err.name === "AbortError" ? "timed out (log may be huge)" : err.message;
+        feed.innerHTML = `<div class="error">Failed to load log: ${escapeHtml(msg)}</div>`;
+        meta.textContent = "Load failed";
+      }
+    }
+
+    feed.addEventListener("click", (ev) => {
+      const btn = ev.target.closest("[data-expand]");
+      if (!btn) return;
+      const body = btn.closest(".entry").querySelector(".body");
+      body.classList.toggle("expanded");
+      btn.textContent = body.classList.contains("expanded") ? "Collapse" : "Expand";
+    });
+
+    document.getElementById("refresh").addEventListener("click", () => {
+      lastFingerprint = "";
+      load();
+    });
+    document.getElementById("jumpLatest").addEventListener("click", () => {
+      window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+    });
+    search.addEventListener("input", () => {
+      lastFingerprint = "";
+      load();
+    });
+    limitEl.addEventListener("change", () => {
+      lastFingerprint = "";
+      load();
+    });
+    document.querySelectorAll("input[data-kind]").forEach((el) => {
+      el.addEventListener("change", () => {
+        lastFingerprint = "";
+        load();
+      });
+    });
+
+    function schedule() {
+      if (timer) clearInterval(timer);
+      timer = setInterval(() => {
+        if (autoRefresh.checked) load();
+      }, 2000);
+    }
+    autoRefresh.addEventListener("change", schedule);
+    schedule();
+    load();
+  </script>
+</body>
+</html>

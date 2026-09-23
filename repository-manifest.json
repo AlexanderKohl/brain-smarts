@@ -1,0 +1,16 @@
+{
+  "name": "Portable AI Brain – mechanics",
+  "layer": "mechanics",
+  "created": "2026-08-04T03:31:56+10:00",
+  "updated": "2026-09-23T12:40:25+10:00",
+  "validated_at": "2026-09-23T12:40:25+10:00",
+  "contract_version": "1.0.0",
+  "markdown_files": 235,
+  "unique_ids": 235,
+  "validation_errors": [],
+  "validation_warnings": [
+    "Git change state unavailable; protected-governance coverage not checked: mechanics repository: Command '['git', '-c', 'safe.directory=C:/dev/brain', '-C', 'C:\\\\dev\\\\brain', 'diff', '--name-only', '--diff-filter=ACMRTUXB', 'HEAD']' returned non-zero exit status 128."
+  ],
+  "root_contract": "/CONTRACT.md",
+  "validator": "/shared/skills/repository-preflight/scripts/preflight.py"
+}

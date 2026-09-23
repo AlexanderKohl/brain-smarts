@@ -1,0 +1,27 @@
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+*.vault
+*.vault.lock
+*.pem
+*.key
+*.pfx
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+
+# Operating systems
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Claude Code local tool state
+.claude/
