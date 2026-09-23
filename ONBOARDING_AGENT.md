@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-08-06T09:37:00+10:00
-updated: 2026-09-23T17:36:00+10:00
+updated: 2026-09-23T17:32:00+10:00
 owner: brain-owner
 ---
 
