@@ -41,18 +41,6 @@ SETTINGS_DEFAULTS = {
     "suggestions": "checkpoint",
 }
 
-# Personal-data patterns, alphabetical by name. Values are regular expressions.
-PATTERNS = {
-    "absolute-path": r"(?<![\w/])(?:[A-Za-z]:\\\\?(?:Users|dev)\\\\?[^\s`'\"]+|/(?:home|Users)/[^\s/`'\"]+)",
-    "email": r"[\w.+-]+@(?!example\.(?:com|org|net)\b)[\w-]+\.[\w.-]+",
-    "phone": r"(?<![\w.:-])\+?\d(?:[ ]?\d){8,13}(?![\w:-]|\.\d)",
-    "uuid": r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b",
-}
-PROFILE_FIELDS = ("brain_root", "github_account", "owner_name", "owner_short_name", "project_repos_root")
-TEXT_SUFFIXES = {".cfg", ".css", ".html", ".ini", ".js", ".json", ".md", ".mjs", ".ps1", ".py",
-                 ".sh", ".toml", ".ts", ".txt", ".yaml", ".yml"}
-
-
 # ------------------------------------------------------------------ locations
 
 
@@ -241,35 +229,23 @@ def mark_reported(brain: Brain, changes: dict) -> None:
 # ------------------------------------------------------------------ scrub
 
 
-def denylist(brain: Brain) -> list:
-    """Terms that identify this owner, built from memory and never written anywhere else."""
-    terms: set = set()
-    profile = brain.profile()
-    for field in PROFILE_FIELDS:
-        value = profile.get(field)
-        if isinstance(value, str) and len(value) >= 3:
-            terms.add(value)
-            if field == "owner_name":
-                terms.update(part for part in value.split() if len(part) >= 3)
-    for folder in ("projects", "systems"):
-        base = brain.memory / folder
-        if base.is_dir():
-            terms.update(p.name for p in base.iterdir() if p.is_dir() and len(p.name) >= 4)
-    extra = brain.home / "config" / "denylist.txt"
-    if extra.is_file():
-        terms.update(t.strip() for t in extra.read_text(encoding="utf-8").splitlines()
-                     if t.strip() and not t.startswith("#"))
-    return sorted(terms, key=len, reverse=True)
+def personal_data_module(brain: Brain):
+    """The validator's personal-data check: one implementation (SMART-RULE-0008, SMART-RULE-0018)."""
+    scripts = Path(__file__).resolve().parents[2] / "repository-preflight" / "scripts"  # a core sibling
+    if str(scripts) not in sys.path:
+        sys.path.insert(0, str(scripts))
+    import personal_data
+    return personal_data
 
 
 def scrub(brain: Brain, paths: list) -> list:
-    """Every personal-data hit in the given files or folders, as (file, line, kind, text)."""
+    """Every personal-data hit in the given files or folders, as (file, line, kind, text).
+    Generic exemptions come from the validator; `scrub-allow.txt` in memory may add exact strings
+    for this command only, each justified in the commit."""
+    pd = personal_data_module(brain)
     allow_file = brain.home / "scrub-allow.txt"
-    allow = {t.strip() for t in allow_file.read_text(encoding="utf-8").splitlines() if t.strip()} \
-        if allow_file.is_file() else set()
-    terms = denylist(brain)
-    word = re.compile("|".join(r"(?<![\w@.])" + re.escape(t) + r"(?![\w])" for t in terms), re.I) if terms else None
-    patterns = {k: re.compile(v, re.I) for k, v in PATTERNS.items()}
+    allow = {t.strip() for t in allow_file.read_text(encoding="utf-8").splitlines() if t.strip()}         if allow_file.is_file() else set()
+    _, values, _ = pd.load_exemptions()
     files: list = []
     for raw in paths:
         p = Path(raw)
@@ -277,21 +253,7 @@ def scrub(brain: Brain, paths: list) -> list:
             files += sorted(f for f in p.rglob("*") if f.is_file() and ".git" not in f.parts)
         elif p.is_file():
             files.append(p)
-    hits: list = []
-    for f in files:
-        if f.suffix.lower() not in TEXT_SUFFIXES:
-            continue
-        try:
-            text = f.read_text(encoding="utf-8")
-        except (UnicodeDecodeError, OSError):
-            continue
-        for number, line in enumerate(text.splitlines(), start=1):
-            found = [("owner-term", m.group(0)) for m in word.finditer(line)] if word else []
-            found += [(k, m.group(0)) for k, r in patterns.items() for m in r.finditer(line)]
-            for kind, value in found:
-                if value not in allow:
-                    hits.append((str(f), number, kind, value))
-    return hits
+    return pd.scan(files, pd.owner_terms(brain.root), allowed=values | allow)
 
 
 # ------------------------------------------------------------------ candidates

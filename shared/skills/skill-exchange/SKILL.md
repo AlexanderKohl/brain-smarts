@@ -4,13 +4,12 @@ title: Skill Exchange
 type: skill
 schema_version: 0.2
 contract: /CONTRACT.md
-status: proposed
+status: active
 scope: shared
-proposal: PROPOSAL-skill-exchange
 script_paths:
   - /shared/skills/skill-exchange/scripts/skill_exchange.py
 created: 2026-09-23T14:00:00+10:00
-updated: 2026-09-23T14:00:00+10:00
+updated: 2026-09-23T17:31:00+10:00
 owner: brain-owner
 skill_refs:
   - /shared/skills/learning-maintenance
@@ -21,9 +20,7 @@ skill_refs:
 
 Read `/CONTRACT.md` first.
 
-> **Proposed – not active.** This skill is the operating detail of `PROPOSAL-skill-exchange`
-> (`/governance/proposals/skill-exchange.md`). Until the owner accepts that proposal, agents do
-> not act on it unprompted; they may run its script when the owner asks.
+This skill is the operating detail of `SMART-RULE-0032` in `/RULES.md`.
 
 ## Purpose
 
@@ -51,7 +48,6 @@ exchange lives in memory:
 | `/memory/OWNER.md` `active_skills` | The optional shared skills the owner has switched on; drives relevance. |
 | `/memory/skills/installed.json` | Provenance of every skill installed from another brain. |
 | `/memory/skills/skill-exchange/candidates.json` | Promotion candidates and the owner's answers. |
-| `/memory/skills/skill-exchange/config/denylist.txt` | Optional extra terms the scrub check refuses. |
 | `/memory/skills/skill-exchange/config/settings.json` | Cadence and suggestion settings (below). |
 | `/memory/skills/skill-exchange/scrub-allow.txt` | Exact strings the scrub check may accept, each justified in the commit. |
 | `/memory/skills/skill-exchange/state.json` | When upstream was last checked and what was already reported. |
@@ -129,11 +125,15 @@ python -m unittest discover -s shared/skills/<name>/scripts/tests
 python shared/skills/repository-preflight/scripts/preflight.py
 ```
 
-The scrub check builds its denylist in memory from `/memory/OWNER.md` (names, account, local
-paths), the names of the owner's project and system nodes, and the optional `denylist.txt`,
-and looks for e-mail addresses, phone numbers, UUIDs and absolute user paths. It must report
-`0 hit(s)`; a hit that is genuinely not personal goes in `scrub-allow.txt`. The denylist
-itself is never written outside memory and never quoted in a report.
+`scrub` is the validator's personal-data check (`SMART-RULE-0008`,
+`/shared/skills/repository-preflight/scripts/personal_data.py`) run on any path you name. It
+builds the owner's terms in memory from `/memory/OWNER.md` (names, account, local paths), the
+owner's own project and system node names and the optional
+`/memory/skills/repository-preflight/config/denylist.txt`, and looks for e-mail addresses, phone
+numbers, UUIDs and absolute user paths. It must report `0 hit(s)`. Fix a hit at its source; a
+value that is genuinely public or generic goes in the validator's reasoned exemptions, and
+`scrub-allow.txt` covers only a one-off check of a path outside the shareable repositories. The
+owner's terms are never written outside memory and never quoted in a report.
 
 ### 3. Offer it upstream
 

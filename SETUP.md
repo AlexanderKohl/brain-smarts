@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-23T13:00:00+10:00
-updated: 2026-09-23T16:53:00+10:00
+updated: 2026-09-23T17:36:00+10:00
 owner: brain-owner
 skill_refs:
   - /shared/skills/manage-credentials
@@ -442,7 +442,8 @@ others. Numbers run through both groups so a reply stays short.
 | problem-recovery | Searches the brain's own knowledge before re-investigating a failure |
 | product-development | Evidence-and-decision process for software work (`SMART-RULE-0016`) |
 | raw-file-ingestion | Keeps every uploaded file unchanged under `/memory/raw/` with a readable Markdown copy |
-| repository-preflight | Validates both repositories before every commit |
+| repository-preflight | Validates both repositories before every commit, including the personal-data check (`SMART-RULE-0008`) |
+| skill-exchange | Reports upstream changes about weekly and offers to share what is worth sharing, always asking first (`SMART-RULE-0032`) |
 | tasks | Keeps your task list under `/memory/tasks/`, reviews what has come due, and puts each new task on its board |
 | ui-implementation | Rules a live screen must keep while data changes underneath it |
 | ui-mockup | Builds a preview of a screen for you to refine before anything is built |
@@ -472,11 +473,6 @@ Owner-board note: nothing to install or register. Its scripts ship in
 board needs no step: the first `tasks.py new` writes `/memory/boards/personal.html` and the
 directory `/memory/boards/index.html`. The `## Setup` row is `done` once the skill is listed in
 `active_skills`; project boards are offered in step G.1.
-
-Not on the menu: `skill-exchange` (sharing skills with other brains and pulling new ones from
-`upstream`) is proposed but not yet active (`PROPOSAL-skill-exchange`), so it is not offered
-here. Mention it only if the person asks; it is added to this menu once the owner of the
-original mechanics accepts the proposal.
 
 Record the choice in `active_skills` (alphabetical; add `manage-credentials` whenever a
 credentialed skill is chosen, and `crm` whenever `google-workspace-access` is), add one

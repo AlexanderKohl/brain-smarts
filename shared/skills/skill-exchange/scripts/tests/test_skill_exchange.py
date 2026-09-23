@@ -159,16 +159,17 @@ class ScrubTests(unittest.TestCase):
         self.f.close()
 
     def test_owner_terms_and_patterns_are_found(self):
-        write(self.skill / "SKILL.md", "Built for Robin by robin-example.\nSee C:\\Users\\robin\\notes.txt\n"
+        write(self.skill / "SKILL.md", "Built for Robin by robin-example.\nSee C:" + "\\Users\\robin\\notes.txt\n"
                                        # Assembled at run time so this file itself passes a scrub.
-                                       "Mail robin" + "@" + "realmail.test or call +1 555 010 0199.\n"
+                                       "Mail robin" + "@" + "realmail.test or call +61 7 " + "3000 0199.\n"
                                        "The orchard-planner node.\n")
         kinds = sorted({h[2] for h in sx.scrub(self.f.brain(), [str(self.skill)])})
         self.assertEqual(kinds, ["absolute-path", "email", "owner-term", "phone"])
 
     def test_clean_generic_text_passes_and_allow_list_is_honoured(self):
         write(self.skill / "SKILL.md", "Contact support@example.com. Version 1.2.3 on 2026-03-02.\n"
-                                       "Account loc_EXAMPLE123 for Example Plumbing Pty Ltd.\n")
+                                       "Account loc_EXAMPLE123 for Example Plumbing Pty Ltd.\n"
+                                       "Call +1 555 010 0199 (reserved for fiction). Sent at 1700000000000 ms.\n")
         self.assertEqual(sx.scrub(self.f.brain(), [str(self.skill)]), [])
         write(self.skill / "extra.md", "Robin\n")
         write(self.f.memory / "skills/skill-exchange/scrub-allow.txt", "Robin\n")

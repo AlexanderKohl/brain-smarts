@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 node_type: system
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-23T16:53:00+10:00
+updated: 2026-09-23T17:36:00+10:00
 owner: brain-owner
 ---
 
@@ -65,7 +65,7 @@ Skills are instructions plus tested scripts for a job or an outside system. They
 - `railway-access` – Railway projects, deployments and logs
 - `raw-file-ingestion` – keeps uploaded files unchanged with a traceable Markdown copy
 - `repository-preflight` – the validator run before every commit
-- `skill-exchange` – proposed, not yet active: promoting, sharing and installing skills between brains
+- `skill-exchange` – offers to share what is worth sharing, reports upstream changes, and installs skills from other brains
 - `tasks` – capture, review and close tasks, and surface what has come due
 - `ui-implementation` – rules a live screen must keep while data changes underneath it
 - `ui-mockup` – builds a measured preview of a screen for you to refine before anything is built
@@ -116,7 +116,12 @@ The agent checks for Git, Python and the GitHub CLI and installs whatever is mis
 
 ## Staying up to date and contributing
 
-Your smarts repository is your own private copy (or a GitHub fork) with this repository kept as the `upstream` remote, push disabled. To take in improvements:
+Your AI handles both (`SMART-RULE-0032`, the `skill-exchange` skill), and asks before every step:
+
+- **Improvements from upstream.** Your smarts repository is your own private copy (or a GitHub fork) with this repository kept as the `upstream` remote, push disabled. About once a week, at the start of a session, the agent checks `upstream` and tells you in a short numbered list what changed in the skills you use, in the core skills and in governance. It merges only what you say yes to; a change to protected governance comes to you as a proposal.
+- **Sharing what you built.** When the agent notices that something built for one of your projects would help other people – a skill, a fix, a lesson – it suggests generalising it and offering it back as a pull request with a proposal, the personal-data check's result and passing tests. Nothing leaves your machine until the check reports no personal data and you say yes to that contribution. The upstream maintainer accepts or declines it; on your own machine a new optional skill does nothing until you list it in `active_skills` in your `/memory/OWNER.md`.
+
+To do it by hand instead:
 
 ```bash
 cd <brain_root>
@@ -124,8 +129,6 @@ git fetch upstream
 git merge upstream/main
 python shared/skills/repository-preflight/scripts/preflight.py --root .
 ```
-
-To contribute, open a pull request against upstream with a proposal under `/governance/proposals/` describing the change, its reason, risks and rollback. It must carry no personal data. Protected governance changes are accepted or declined by the upstream maintainer. On your own machine you still decide: a new optional skill does nothing for you until you list it in `active_skills` in your `/memory/OWNER.md`.
 
 ## What it is not
 

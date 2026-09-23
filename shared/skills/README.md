@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 node_type: skill_library
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-23T16:53:00+10:00
+updated: 2026-09-23T17:36:00+10:00
 ---
 
 # Shared Skills
@@ -78,7 +78,7 @@ Contains the canonical validator for metadata, identifiers, references, task sta
 
 ##### `skill-exchange/`
 
-Proposed, not active (`PROPOSAL-skill-exchange`). How agents notice a reusable capability and suggest promoting it to a shared skill, offer it upstream as a pull request, tell the owner about new or changed upstream skills, and install a skill from another brain with its provenance recorded. `scripts/skill_exchange.py` does the read-only parts: the upstream comparison, the provenance record and the promotion check.
+Active (`SMART-RULE-0032`). How agents notice a reusable capability and suggest promoting it to a shared skill, offer it upstream as a pull request, tell the owner about new or changed upstream skills, and install a skill from another brain with its provenance recorded. `scripts/skill_exchange.py` does the read-only parts: the upstream comparison, the provenance record and the promotion check.
 
 ##### `tasks/`
 

@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-23T14:52:47+10:00
+updated: 2026-09-23T17:30:00+10:00
 owner: brain-owner
 ---
 
@@ -30,7 +30,7 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 | `SMART-RULE-0005` | Internal-first then external lookup | this file |
 | `SMART-RULE-0006` | Owner-facing shell includes cd | this file |
 | `SMART-RULE-0007` | Portable behavioural rules only | this file |
-| `SMART-RULE-0008` | No real data in mock or sample data | this file |
+| `SMART-RULE-0008` | No real data in sample data or shareable repositories | this file; `/shared/skills/repository-preflight/` |
 | `SMART-RULE-0009` | Logical checkpoint commits | this file |
 | `SMART-RULE-0010` | Communication efficiency | this file |
 | `SMART-RULE-0011` | Raw evidence files are exempt from front-matter validation | `/CONTRACT.md` §8, §15; `/shared/skills/repository-preflight/` |
@@ -54,6 +54,8 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 | `SMART-RULE-0029` | Three layers: mechanics, memory and project repositories | `/CONTRACT.md` §3.4–§3.6 |
 | `SMART-RULE-0030` | Rule identifiers | `/CONTRACT.md` §13.2 |
 | `SMART-RULE-0031` | Show the text of every new or changed rule | this file |
+| `SMART-RULE-0032` | Skill exchange | this file; `/shared/skills/skill-exchange/` |
+| `SMART-RULE-0033` | A name means one thing, everywhere | this file |
 
 ## SMART-RULE-0010 – Communication efficiency
 
@@ -87,9 +89,12 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 - Read and prompt with only the minimum context relevant to the current task; avoid loading unrelated files, restating unchanged context, or repeating information already available elsewhere.
 - Structure nodes, files and skills so related content can be read independently in small, targeted pieces; split large or mixed-purpose files where that measurably improves token efficiency and response time.
 
-## SMART-RULE-0008 – No real data in mock or sample data
+## SMART-RULE-0008 – No real data in sample data or shareable repositories
 
 - Mock, sample, seed, fixture and placeholder data (in any project, coded or otherwise) must be entirely fictional: invented names, addresses, companies and identifiers only. Never copy or adapt real customer, employee, or business data into mock/sample data - including data merely seen in another file, project or filename while working, even unintentionally. When realistic-looking sample data is needed, invent it fresh and do not reuse strings noticed elsewhere in the same session.
+- **Shareable repositories are written clean, not cleaned.** Everything written into a shareable repository – the mechanics and the skill library: rules, skills, scripts, tests, templates, proposals and commit messages – is free of personal data from its first draft (CONTRACT §3.4). Say "the owner". Read concrete values – names, paths, accounts, identifiers, locations, project and client names – at run time from `/memory/OWNER.md` or `/memory/skills/<skill>/config/`, never inline. Write examples with fictional values: `example.com` addresses, numbers reserved for fiction, invented names.
+- **Split a lesson as you write it.** When a rule or skill comes out of the owner's own incident, write the generalised mechanism in the shareable repository and the incident, with its real identifiers, in memory at the node that owns it, in the same piece of work. Never write one file to be split later.
+- **The check confirms; it does not clean.** The validator runs the personal-data check on every shareable repository before each commit, and a hit fails it. Fix a hit at its source. Exempt a value only when it is genuinely public or generic – a vendor's published documentation, a documented default – and give the reason beside the exemption. When a writing habit or a template invited the hit, record it as a learning (`SMART-RULE-0028`).
 
 ## SMART-RULE-0015 – Reuse project-native UI patterns
 
@@ -397,6 +402,22 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
   to the owner quotes the rule's full text – its heading and every bullet, or the exact
   before-and-after for an amendment – before the file path. A summary may accompany the text but
   never replaces it.
+
+## SMART-RULE-0032 – Skill exchange
+
+- **Notice and suggest.** When a node-local capability is used or copied by a second node, holds no owner data once its configuration is moved out, or wraps a system other owners use, record it as a promotion candidate and suggest promoting it to a library skill at the next natural checkpoint. Procedure: `/shared/skills/skill-exchange/`.
+- **Clean before it leaves memory.** Nothing moves from `/memory/` to a shareable repository (the mechanics or the skill library), or from a shareable repository to any other repository, until the personal-data check reports no hits (`SMART-RULE-0008`, CONTRACT §3.4).
+- **Offer, never push.** A contribution to an upstream repository is a pull request from the owner's own repository, carrying a proposal file without a rule number, the personal-data check's result and passing tests, opened only after the owner says yes to that contribution.
+- **Hear upstream on a cadence.** At session start, when a check is due (default every seven days), fetch `upstream` and tell the owner what changed in their `active_skills`, the core skills, governance and new skills. Merging is the owner's decision; an upstream change to protected governance is presented as a proposal (CONTRACT §13.2).
+- **Record provenance.** A skill installed from another brain or library is read in full before it runs, and its source repository and commit are recorded in `/memory/skills/installed.json`.
+- **Suggest at checkpoints, once.** Suggestions are batched at natural checkpoints (session start, end of a unit of work, the weekly review), numbered with a recommendation, capped, and not repeated after a decline unless new evidence arrives. The owner may set them to weekly or off. A security fix to a skill the owner uses is the one exception and is reported at the next response.
+
+## SMART-RULE-0033 – A name means one thing, everywhere
+
+- One thing has one name, and that name is the same in the interface, the code, the stored data, the specification and the conversation. A field called `Type` on screen is `type` in its key, its constants and its helpers. Where a name must differ, because something outside the brain fixes it, the code says in one line why and where the translation happens.
+- A name says what the thing is, in the domain's own words, at the length that makes it unambiguous. Names in one set are built the same way, so a reader who learns one can guess the rest.
+- A name is corrected while it is cheap. The moment a rename costs only a delete and a rebuild is the moment to do it; once data, integrations or habits carry the old name, the same fix needs a migration. Renaming is not deferred to a tidy-up that never comes.
+- An agent given a name that will not hold – one that means something else in the same system, one that will read as wrong to the next person, one inconsistent with the names around it – says so before building on it, proposes the better name and the reason, and proceeds on the owner's answer. This is not a veto: the owner may keep their word, and the agent then uses it consistently everywhere.
 
 ## Contract restatements
 

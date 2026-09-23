@@ -50,6 +50,7 @@ IGNORED_DIRS = {".git", ".claude", "node_modules", "__pycache__", ".pytest_cache
 
 MEMORY_DIR = "memory"
 MEMORY_PREFIX = "/" + MEMORY_DIR + "/"
+LIBRARY_DIR = "library"
 # The owner value mechanics files may carry (CONTRACT §3.6).
 GENERIC_OWNER = "brain-owner"
 MANIFEST_NAME = "repository-manifest.json"
@@ -564,6 +565,14 @@ def is_own_repository(repo: Path) -> bool:
     return bool(top) and Path(top[0]).resolve() == repo.resolve()
 
 
+def git_failure(exc: Exception) -> str:
+    """Why Git could not answer, without the command line: it carries this machine's paths, and
+    warnings are written into the committed manifest (SMART-RULE-0008)."""
+    if isinstance(exc, subprocess.CalledProcessError):
+        return f"git exited with status {exc.returncode}"
+    return f"git could not run ({type(exc).__name__})"
+
+
 def changed_paths(root: Path) -> tuple[set[str], list[str]]:
     """Changed paths relative to the brain root, across both repositories.
 
@@ -575,7 +584,7 @@ def changed_paths(root: Path) -> tuple[set[str], list[str]]:
     try:
         changed |= repository_changes(root)
     except (OSError, subprocess.CalledProcessError) as exc:
-        problems.append(f"mechanics repository: {exc}")
+        problems.append(f"mechanics repository: {git_failure(exc)}")
     memory = memory_root(root)
     if memory is not None:
         if not is_own_repository(memory):
@@ -588,7 +597,7 @@ def changed_paths(root: Path) -> tuple[set[str], list[str]]:
                     f"{MEMORY_DIR}/{value}" for value in repository_changes(memory)
                 }
             except (OSError, subprocess.CalledProcessError) as exc:
-                problems.append(f"{MEMORY_PREFIX} repository: {exc}")
+                problems.append(f"{MEMORY_PREFIX} repository: {git_failure(exc)}")
     return changed, problems
 
 
@@ -725,6 +734,27 @@ def write_manifests(root: Path, result: Result) -> None:
         temporary.replace(path)
 
 
+def shareable_repositories(root: Path) -> list[Path]:
+    """The repositories that must hold no personal data: the mechanics, and the skill library when
+    it is checked out (CONTRACT §3.4)."""
+    library = root / LIBRARY_DIR
+    return [root] + ([library] if library.is_dir() else [])
+
+
+def validate_personal_data(root: Path, result: Result) -> None:
+    """SMART-RULE-0008: a shareable repository is written clean, and this confirms it. Owner terms
+    come from memory at run time; without memory only the patterns run."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import personal_data
+
+    for repo in shareable_repositories(root):
+        hits, problems = personal_data.check_repository(root, repo)
+        result.errors.extend(f"personal-data exemptions: {problem}" for problem in problems)
+        for file, line, kind, value in hits:
+            display = root_path(Path(file), root)
+            result.errors.append(f"{display}:{line}: personal data ({kind}): {value}")
+
+
 def run(root: Path, writing: bool) -> Result:
     result = Result()
     result.memory_present = memory_root(root) is not None
@@ -740,6 +770,7 @@ def run(root: Path, writing: bool) -> Result:
     validate_mechanics_memory_references(root, records, result)
     validate_tasks(root, records, result)
     validate_governance(root, records, result)
+    validate_personal_data(root, result)
     validate_manifest(root, result, writing)
     if writing:
         write_manifests(root, result)

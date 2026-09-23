@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-08-06T09:37:00+10:00
-updated: 2026-09-23T16:53:00+10:00
+updated: 2026-09-23T17:36:00+10:00
 owner: brain-owner
 ---
 
@@ -35,7 +35,9 @@ Numbered in reading order.
 13. **Version every change (`SMART-RULE-0026`):** one three-number version per project, bumped in the same commit as the change (first: breaking, middle: feature, last: small change; below `1.0.0` a breaking change rides the middle number and names itself breaking in the commit and the log, and `1.0.0` is set when the owner declares the product released); every build stamped with commit, time and branch and shown where a person looks first; a failing check in the project; hand-offs to the owner name the version to expect.
 14. **Portable rules only (`SMART-RULE-0007`):** durable behavioural rules live only in `/CONTRACT.md`, `RULES.md` files (including `/memory/RULES.md`), and skills – not in host-specific rule files.
 15. **Where new work lives (CONTRACT §7.1):** start it in `/memory/projects/` by default; give it its own repository when it has code, collaborators, its own releases, outgrows a few hundred files, has different confidentiality, or has independent value. Memory then keeps a pointer node (CONTRACT §16).
-16. **No personal data in the mechanics (CONTRACT §3.4):** names, clients, contacts, identifiers, emails, phone numbers, machine paths and owner project names go to `/memory/`. A mechanism learnt from an owner incident goes into a skill in generalised form; the original stays in memory.
+16. **No personal data in the mechanics (CONTRACT §3.4, `SMART-RULE-0008`):** names, clients, contacts, identifiers, emails, phone numbers, machine paths and owner project names go to `/memory/`. Write shareable files clean from the first draft, reading owner values from memory at run time; split a lesson from an owner incident as you write it – the generalised mechanism in the shareable repository, the incident in memory. The validator's personal-data check confirms it and fails on any hit.
+17. **Skill exchange (`SMART-RULE-0032`):** at session start run `python shared/skills/skill-exchange/scripts/skill_exchange.py due`; when it exits 0, run `upstream` and keep its digest for the first natural checkpoint. Record reusable capabilities with `candidate add` as you notice them. Procedure and etiquette: `/shared/skills/skill-exchange/SKILL.md`.
+18. **A name means one thing (`SMART-RULE-0033`):** one name per thing across interface, code, data and conversation; raise a name that will not hold before building on it, with a better one.
 
 ## Shared skills (current)
 
@@ -56,6 +58,7 @@ Rows are alphabetical by skill name.
 | railway-access | `/shared/skills/railway-access/` | Railway GraphQL: projects, current deployment ID, timeframe/filtered deploy/build/HTTP logs (account/workspace token in vault) |
 | raw-file-ingestion | `/shared/skills/raw-file-ingestion/` | Immutable `/memory/raw/` preservation and Markdown source records under `/memory/sources/` |
 | repository-preflight | `/shared/skills/repository-preflight/` | Metadata, refs, task and README validation for the mechanics repository and, when present, `/memory/` |
+| skill-exchange | `/shared/skills/skill-exchange/` | Notices reusable capability and suggests promotion; personal-data check before anything leaves memory; offers upstream as a pull request; weekly upstream digest filtered by `active_skills`; provenance of installed skills in `/memory/skills/installed.json` |
 | tasks | `/shared/skills/tasks/` | Task procedure and the CONTRACT §9.1 task review for `/memory/tasks/`: `tasks.py review` (inbox, reviews due, deadlines, blocked), `check`, `next-id` |
 | ui-implementation | `/shared/skills/ui-implementation/` | What a live screen must never do to the person using it: remove only what you made, keep their choices through a refresh, hold a repaint while work is unsaved, put the rule where it cannot be forgotten |
 | ui-mockup | `/shared/skills/ui-mockup/` | UI previews built from the product's own stylesheets and measured in the browser; **owner refines the mockup before any of it is implemented or pushed** |
