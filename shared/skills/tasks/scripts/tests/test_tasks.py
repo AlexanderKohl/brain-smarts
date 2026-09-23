@@ -139,6 +139,57 @@ class TasksTest(unittest.TestCase):
         record = tasks.Task(Path("x.md"), "open", {"next_review": "2026-03-09T08:00:00+10:00"})
         self.assertEqual(record.day("next_review"), date(2026, 3, 9))
 
+    def state(self) -> str:
+        return (self.store / "STATE.md").read_text(encoding="utf-8")
+
+    def test_new_creates_the_record_with_the_next_number_and_its_state_row(self) -> None:
+        (self.store / "STATE.md").write_text(
+            "# State\n\n| Task | Status | Priority | Review / waiting on | Title |\n|---|---|---|---|---|\n"
+            "| `TASK-2026-0001` | **waiting** | normal | review 2026-03-09 | Send a quote |\n\nAfter the table.\n",
+            encoding="utf-8")
+        code, out = run("--tasks", "/memory/tasks", "new", "--title", "Book the van: Tuesday", "--status", "waiting",
+                        "--priority", "high", "--project", "/memory/projects/example-move",
+                        "--next-review", "2026-03-12", "--waiting-on", "Example Vans Pty Ltd",
+                        "--outcome", "The van is booked.", "--now", "2026-03-10T09:00:00+10:00", "--no-board",
+                        cwd=self.root)
+        self.assertEqual(code, 0, out)
+        path = self.store / "open" / "TASK-2026-0008-book-the-van-tuesday.md"
+        self.assertIn(f"created TASK-2026-0008: {path}", out)
+        meta = tasks.parse_front_matter(path.read_text(encoding="utf-8"))
+        self.assertEqual(meta["id"], "TASK-2026-0008")
+        self.assertEqual(meta["title"], "Book the van: Tuesday")
+        self.assertEqual(meta["project_refs"], ["/memory/projects/example-move"])
+        self.assertEqual((meta["status"], meta["next_review"], meta["created"]),
+                         ("waiting", "2026-03-12", "2026-03-10T09:00:00+10:00"))
+        body = path.read_text(encoding="utf-8")
+        self.assertIn("# Book the van: Tuesday", body)
+        self.assertIn("## Outcome\n\nThe van is booked.", body)
+        self.assertNotIn("_outcome", body)
+        self.assertIn("| `TASK-2026-0008` | **waiting** | high | review 2026-03-12; waiting on Example Vans Pty Ltd "
+                      "| Book the van: Tuesday |\n\nAfter the table.", self.state())
+        code, out = run("check", cwd=self.root)
+        self.assertEqual(code, 0, out)
+
+    def test_new_inbox_task_goes_to_inbox_without_a_state_row(self) -> None:
+        (self.store / "STATE.md").write_text("| Task | Status |\n|---|---|\n", encoding="utf-8")
+        code, out = run("new", "--title", "Think about the garden", "--no-board", cwd=self.root)
+        self.assertEqual(code, 0, out)
+        self.assertTrue(next((self.store / "inbox").glob("TASK-2026-0008-*.md"), None))
+        self.assertNotIn("TASK-2026-0008", self.state())
+
+    def test_new_refuses_waiting_without_a_review_date(self) -> None:
+        code, out = run("new", "--title", "Chase the invoice", "--status", "waiting", "--waiting-on", "Example Co",
+                        "--no-board", cwd=self.root)
+        self.assertEqual(code, 1)
+        self.assertIn("needs --next-review", out)
+        self.assertEqual(list((self.store / "open").glob("TASK-2026-0008-*")), [])
+
+    def test_new_says_when_there_is_no_board_to_refresh(self) -> None:
+        code, out = run("new", "--title", "Water the ferns", "--status", "ready", cwd=self.root)
+        self.assertEqual(code, 0, out)
+        self.assertIn("board: ", out)
+        self.assertIn("STATE.md: not found", out)
+
     def test_missing_store_exits_2(self) -> None:
         code, out = run("--tasks", "/memory/nowhere", "check", cwd=self.root)
         self.assertEqual(code, 2)

@@ -29,6 +29,7 @@ import os
 import re
 import sys
 import urllib.parse
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -36,6 +37,7 @@ import board_config  # noqa: E402
 import build_boards  # noqa: E402
 import cards  # noqa: E402
 import reconcile  # noqa: E402
+import task_board  # noqa: E402
 
 PAGE = """<!doctype html>
 <html lang="en">
@@ -43,22 +45,9 @@ PAGE = """<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>__TITLE__</title>
+__FAVICON__
 <style>
-:root {
-  --bg:#f3f5f7; --surface:#fff; --surface-2:#e9edf1; --ink:#16202a; --muted:#5d6b78;
-  --line:#d8dee4; --accent:#0f7060; --warn:#b3261e; --shadow:0 1px 2px rgba(16,32,42,.08);
-  --col:#eceff2;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg:#0f141a; --surface:#1a222b; --surface-2:#243039; --ink:#e7edf2; --muted:#9db0c0;
-    --line:#2f3c48; --accent:#4fd1b5; --warn:#ff8a80; --shadow:none; --col:#161d24;
-  }
-}
-:root[data-theme="dark"] {
-  --bg:#0f141a; --surface:#1a222b; --surface-2:#243039; --ink:#e7edf2; --muted:#9db0c0;
-  --line:#2f3c48; --accent:#4fd1b5; --warn:#ff8a80; --shadow:none; --col:#161d24;
-}
+__TOKENS__
 * { box-sizing:border-box; }
 body {
   margin:0; background:var(--bg); color:var(--ink);
@@ -174,6 +163,7 @@ button {
 button.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
 button:hover { filter:brightness(.97); }
 
+__TASKCSS__
 @media (max-width:900px) {
   .board { display:block; overflow-x:visible; }
   .col { min-width:0; margin-bottom:12px; }
@@ -189,6 +179,7 @@ button:hover { filter:brightness(.97); }
   </header>
   <div class="tracks" id="tracks"></div>
   <div class="board" id="board"></div>
+  __TASKS__
 </div>
 <div class="bar">
   <span id="tally"></span>
@@ -727,8 +718,16 @@ def _json(value) -> str:
 
 
 def build(config: board_config.Config, board: dict, directory: bool = True) -> dict:
-    """Write `status.html` for one board and, unless told not to, the directory page."""
+    """Write `status.html` for one board and, unless told not to, the directory page.
+
+    Below the cards, the page draws the task records routed to this board (`task_board.py`):
+    read from `/memory/tasks/` on every build, never copied into cards.
+    """
     data = cards.load(board)
+    tasks_html = ""
+    if task_board.enabled(config):
+        routed = task_board.route(config)
+        tasks_html = task_board.section(routed[board["id"]], Path(board["folder"]))
     # Run every time, so the conductor cannot choose not to; a reconciliation that cannot run
     # must say so rather than vanish.
     try:
@@ -739,11 +738,15 @@ def build(config: board_config.Config, board: dict, directory: bool = True) -> d
     inlined = inline_images(board, data)
     out = os.path.join(str(board["folder"]), "status.html")
     page = (
-        PAGE.replace("__TITLE__", html.escape(board["title"]))
+        PAGE.replace("__TOKENS__", task_board.TOKENS)
+        .replace("__TASKCSS__", task_board.CSS)
+        .replace("__FAVICON__", board_config.favicon_link(config, board))
+        .replace("__TITLE__", html.escape(board["title"]))
         .replace("__MAIN__", html.escape(board.get("main") or "main"))
         .replace("__VERSION__", html.escape(str(data.get("mainVersion", "?"))))
         .replace("__GENERATED__", html.escape(str(data.get("generated", "?"))[:16].replace("T", " ")))
         .replace("__CONFIG__", _json(page_config(board)))
+        .replace("__TASKS__", tasks_html)
         .replace("__DATA__", _json(data))
     )
     with open(out, "w", encoding="utf-8", newline="\n") as fh:
