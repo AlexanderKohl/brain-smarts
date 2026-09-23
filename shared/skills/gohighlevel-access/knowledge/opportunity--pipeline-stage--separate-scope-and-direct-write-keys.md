@@ -14,7 +14,7 @@ refuted_by: null
 discovered: '2026-08-20'
 verified: '2026-08-20'
 created: '2026-08-24T21:30:00+10:00'
-updated: 2026-09-23T18:00:00+10:00
+updated: 2026-09-23T14:45:16+10:00
 ---
 
 # Opportunity Pipeline/Stage: distinct scope, direct-write keys

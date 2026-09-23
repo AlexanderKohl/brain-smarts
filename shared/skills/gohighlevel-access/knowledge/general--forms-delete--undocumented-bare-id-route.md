@@ -16,7 +16,7 @@ verified: 2026-09-15
 source_refs:
   - /shared/skills/gohighlevel-access/knowledge/general--forms-list--type-param-folder-records-and-invalid-value.md
 created: 2026-09-15T15:30:00+10:00
-updated: 2026-09-23T18:00:00+10:00
+updated: 2026-09-23T14:45:16+10:00
 ---
 
 # Form hard delete: bare id, no location anywhere

@@ -15,7 +15,7 @@ discovered: 2026-09-15
 verified: null
 source_refs: []
 created: 2026-09-15T11:30:00+10:00
-updated: 2026-09-23T18:00:00+10:00
+updated: 2026-09-23T14:45:16+10:00
 ---
 
 # A conversation AI agent's personality is no longer shown in the UI but stays in the record and the prompt

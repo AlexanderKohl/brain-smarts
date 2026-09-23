@@ -15,7 +15,7 @@ discovered: 2026-09-17
 verified: null
 source_refs: []
 created: 2026-09-17T21:10:00+10:00
-updated: 2026-09-23T18:00:00+10:00
+updated: 2026-09-23T14:45:16+10:00
 ---
 
 # The rate limits, and how much can be in flight

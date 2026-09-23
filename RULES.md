@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-23T22:20:00+10:00
+updated: 2026-09-23T14:52:47+10:00
 owner: brain-owner
 ---
 

@@ -5,7 +5,7 @@ type: skill
 schema_version: 0.2
 contract: /CONTRACT.md
 created: 2026-09-17T17:14:19+10:00
-updated: 2026-09-23T18:00:00+10:00
+updated: 2026-09-23T14:12:51+10:00
 status: active
 owner: brain-owner
 scope: shared

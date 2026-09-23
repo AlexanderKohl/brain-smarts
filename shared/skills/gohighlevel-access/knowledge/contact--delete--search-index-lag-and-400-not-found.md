@@ -15,7 +15,7 @@ discovered: 2026-09-01
 verified: 2026-09-01
 source_refs: []
 created: 2026-09-01T08:27:41+10:00
-updated: 2026-09-23T18:00:00+10:00
+updated: 2026-09-23T14:45:16+10:00
 ---
 
 # Contact deletion: stale search index, and 400 for a missing contact

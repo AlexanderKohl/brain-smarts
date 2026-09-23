@@ -15,7 +15,7 @@ discovered: 2026-08-24
 verified: 2026-08-25
 source_refs: []
 created: 2026-08-25T09:15:00+10:00
-updated: 2026-09-23T18:00:00+10:00
+updated: 2026-09-23T14:45:16+10:00
 evidence:
 - Production Railway logs, 2026-08-24T20:24-20:26+00:00 (two real submissions two minutes apart, on the same Opportunity/field)
 ---

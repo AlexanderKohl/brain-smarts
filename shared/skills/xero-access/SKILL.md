@@ -14,7 +14,7 @@ metadata:
   skill_refs:
     - /shared/skills/manage-credentials
   created: 2026-08-04T03:31:56+10:00
-  updated: 2026-09-23T18:00:00+10:00
+  updated: 2026-09-23T13:47:16+10:00
 ---
 
 # Xero Access

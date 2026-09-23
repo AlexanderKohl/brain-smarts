@@ -15,7 +15,7 @@ discovered: 2026-09-14
 verified: null
 source_refs: []
 created: 2026-09-14T16:10:00+10:00
-updated: 2026-09-23T18:00:00+10:00
+updated: 2026-09-23T14:45:16+10:00
 ---
 
 # A custom-webhook step's bearer token is captured as a `WFSM_` handle, not the token

@@ -15,7 +15,7 @@ discovered: 2026-08-25
 verified: 2026-08-25
 source_refs: []
 created: 2026-08-25T09:45:00+10:00
-updated: 2026-09-23T18:00:00+10:00
+updated: 2026-09-23T14:45:16+10:00
 evidence:
 - Live raw authenticated call (gohighlevel-access skill), 2026-08-25, against the "Example Test" sub-account (loc_EXAMPLE_04) -- returned "Australia/Brisbane"
 ---

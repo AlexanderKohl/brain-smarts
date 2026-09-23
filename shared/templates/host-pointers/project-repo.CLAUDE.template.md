@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-23T13:00:00+10:00
-updated: 2026-09-23T15:30:00+10:00
+updated: 2026-09-23T15:02:27+10:00
 owner: brain-owner
 install_to: <project repository root>/CLAUDE.md
 ---

@@ -15,7 +15,7 @@ discovered: 2026-09-09
 verified: 2026-09-09
 source_refs: []
 created: 2026-09-09T18:40:00+10:00
-updated: 2026-09-23T18:00:00+10:00
+updated: 2026-09-23T14:45:16+10:00
 ---
 
 # locationId placement is inverted between custom object create and update

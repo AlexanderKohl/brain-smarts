@@ -14,7 +14,7 @@ metadata:
   skill_refs:
     - /shared/skills/ui-mockup
   created: 2026-09-16T13:35:00+10:00
-  updated: 2026-09-23T18:00:00+10:00
+  updated: 2026-09-23T14:12:51+10:00
 ---
 
 # UI Implementation

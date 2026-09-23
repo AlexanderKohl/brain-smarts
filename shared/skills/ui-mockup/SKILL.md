@@ -13,7 +13,7 @@ metadata:
   canonical_source: /shared/skills/ui-mockup
   skill_refs: []
   created: 2026-09-02T22:10:00+10:00
-  updated: 2026-09-23T18:00:00+10:00
+  updated: 2026-09-23T13:47:16+10:00
 ---
 
 # UI Mockup

@@ -15,7 +15,7 @@ discovered: 2026-09-12
 verified: 2026-09-12
 source_refs: []
 created: 2026-09-12T18:40:00+10:00
-updated: 2026-09-23T18:00:00+10:00
+updated: 2026-09-23T14:45:16+10:00
 ---
 
 # `contact.full_address` is a system merge field absent from every field list

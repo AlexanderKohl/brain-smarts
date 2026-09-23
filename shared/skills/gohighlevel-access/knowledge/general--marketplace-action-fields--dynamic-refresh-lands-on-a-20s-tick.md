@@ -14,7 +14,7 @@ refuted_by: null
 discovered: '2026-09-14'
 verified: '2026-09-14'
 created: '2026-09-14T14:20:00+10:00'
-updated: 2026-09-23T18:00:00+10:00
+updated: 2026-09-23T13:47:16+10:00
 evidence:
 - Railway staging deploy logs, deployment <uuid-01>, 2026-09-14T03:52:53Z-03:55:24Z
 ---

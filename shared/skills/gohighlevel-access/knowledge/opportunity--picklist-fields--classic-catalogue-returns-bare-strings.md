@@ -15,7 +15,7 @@ discovered: 2026-09-21
 verified: null
 source_refs: []
 created: 2026-09-21T09:13:02+10:00
-updated: 2026-09-23T18:00:00+10:00
+updated: 2026-09-23T14:45:16+10:00
 ---
 
 # Classic picklist options are bare strings; only the objects surface splits key from label
