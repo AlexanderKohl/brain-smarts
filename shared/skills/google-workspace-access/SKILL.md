@@ -17,7 +17,7 @@ metadata:
     - /memory/projects/credential-management
   owner_config: /memory/skills/google-workspace-access/config/
   created: 2026-08-06T09:37:00+10:00
-  updated: 2026-09-23T12:00:00+10:00
+  updated: 2026-09-23T16:53:00+10:00
 ---
 
 # Google Workspace Access
@@ -296,7 +296,17 @@ python shared/skills/google-workspace-access/scripts/google_drive.py upload `
   --i-approve-write
 ```
 
-Portable Drive work should use this skill. `/shared/skills/google-drive-access/` remains connector-based until a later migration task.
+Drive files into the brain:
+
+1. Given a URL or file ID, read its metadata directly; otherwise search with short, specific
+   title terms. When several files remain plausible, show them and let the owner choose before
+   treating one as canonical.
+2. Fetch only what the request needs, cite the Drive title and URL, and do not keep a file
+   merely because it was read.
+3. For durable knowledge, keep a reproducible snapshot: record the file ID, URL, MIME type and
+   modification time; export a native Google file to an open format, or download a stored file
+   unchanged; ingest it through `/shared/skills/raw-file-ingestion/`; note any export fidelity
+   limits; add source references, and only then promote verified facts to `KNOWLEDGE.md`.
 
 ## Contacts → Personal CRM
 

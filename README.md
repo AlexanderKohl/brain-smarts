@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 node_type: system
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-23T14:15:39+10:00
+updated: 2026-09-23T16:53:00+10:00
 owner: brain-owner
 ---
 
@@ -56,7 +56,6 @@ Skills are instructions plus tested scripts for a job or an outside system. They
 - `crm` – a contact register: people, organisations and which of your identities to reply as
 - `delegate-work` – hands bounded pieces of work to parallel worker agents
 - `gohighlevel-access` – HighLevel CRM access across sub-accounts, with rotating tokens in the vault
-- `google-drive-access` – legacy Drive access through a host connector
 - `google-workspace-access` – Gmail (draft-first), Calendar, Tasks, Drive and Contacts for several accounts
 - `learning-maintenance` – captures, reviews and integrates what the brain learns from use
 - `manage-credentials` – the encrypted vault every credentialed skill uses
@@ -111,14 +110,9 @@ Rules inherit downwards – contract, generic rules, your rules, then each proje
 
 ## Getting started
 
-Prerequisites, in install order:
+Open an AI host – Claude Code, Codex or Cursor – and paste the prompt from [`/SEED_PROMPT.md`](SEED_PROMPT.md), with this repository's address filled in. Nothing else needs to be installed first.
 
-- **Git** – any 2.x
-- **Python** – 3.11 or later
-- **GitHub CLI** (`gh`) – any 2.x, signed in to the account that will own your repositories
-- **An AI host** – Claude Code, Codex or Cursor
-
-Then paste the prompt from [`/SEED_PROMPT.md`](SEED_PROMPT.md) into your AI host, with this repository's address filled in. The agent clones the smarts, reads the contract and follows [`/SETUP.md`](SETUP.md): it checks the prerequisites, makes your private copy of the smarts and a new private memory from the skeleton, interviews you for your profile, lets you choose skills, sets up the vault and any accounts, wires your host to the contract and validates everything. It asks only what it cannot detect, always with a suggested answer, and hands you the steps that must stay yours – choosing the vault passphrase, pasting secrets into a hidden prompt, registering apps and approving sign-ins. Progress is recorded as it goes, so the same prompt resumes an unfinished setup.
+The agent checks for Git, Python and the GitHub CLI and installs whatever is missing after your yes. Signing in to GitHub stays with you: it tells you the command to run in your own terminal. It then clones the smarts, reads the contract and follows [`/SETUP.md`](SETUP.md). It makes your private copy of the smarts and a new private memory from the skeleton, interviews you for your profile, lets you choose skills, sets up the vault and any accounts, wires your host to the contract and validates everything. It asks only what it cannot detect, always with a suggested answer, and hands you the steps that must stay yours – choosing the vault passphrase, pasting secrets into a hidden prompt, registering apps and approving sign-ins. Progress is recorded as it goes, so the same prompt resumes an unfinished setup.
 
 ## Staying up to date and contributing
 

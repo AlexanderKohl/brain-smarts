@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-23T13:00:00+10:00
-updated: 2026-09-23T16:29:43+10:00
+updated: 2026-09-23T16:53:00+10:00
 owner: brain-owner
 skill_refs:
   - /shared/skills/manage-credentials
@@ -452,18 +452,17 @@ others. Numbers run through both groups so a reply stays short.
 | # | Skill | What it does | Needs |
 |---|---|---|---|
 | 1 | abr-access | Looks up Australian Business Numbers and company names on the Australian Business Register | Free ABR web-services GUID (emailed after registration); the vault |
-| 2 | crm | Remembers the people and organisations you deal with, and which of your identities to reply as | Nothing external; chosen automatically with 5 |
+| 2 | crm | Remembers the people and organisations you deal with, and which of your identities to reply as | Nothing external; chosen automatically with 4 |
 | 3 | gohighlevel-access | Reads and, with your confirmation, writes HighLevel CRM data across sub-accounts | A HighLevel **agency** account; a Marketplace app you register; the vault |
-| 4 | google-drive-access | Legacy Drive access through a host's own connector | A host Google connector – **not recommended**; use 5 |
-| 5 | google-workspace-access | Gmail (draft-first), Calendar, Tasks, Drive and Contacts for one or more Google accounts | A Google account; a Google Cloud project and OAuth client you register; the vault; the contact register (2) |
-| 6 | manage-credentials | The encrypted vault every credentialed skill uses | A passphrase you choose; chosen automatically with 1, 3, 5, 8 or 9 |
-| 7 | owner-board | One permanent page showing every request you have made and what needs you, plus a board for your tasks – each project's on its own board, the rest on your personal board | Nothing external – **see the note below** |
-| 8 | railway-access | Reads Railway projects, deployments and logs | A Railway account token you create; the vault |
-| 9 | xero-access | Reads Xero accounting data and, with your approval, creates planned accounts or draft invoices | A Xero organisation; a Xero developer app you register; the vault |
+| 4 | google-workspace-access | Gmail (draft-first), Calendar, Tasks, Drive and Contacts for one or more Google accounts | A Google account; a Google Cloud project and OAuth client you register; the vault; the contact register (2) |
+| 5 | manage-credentials | The encrypted vault every credentialed skill uses | A passphrase you choose; chosen automatically with 1, 3, 4, 7 or 8 |
+| 6 | owner-board | One permanent page showing every request you have made and what needs you, plus a board for your tasks – each project's on its own board, the rest on your personal board | Nothing external – **see the note below** |
+| 7 | railway-access | Reads Railway projects, deployments and logs | A Railway account token you create; the vault |
+| 8 | xero-access | Reads Xero accounting data and, with your approval, creates planned accounts or draft invoices | A Xero organisation; a Xero developer app you register; the vault |
 
-> **Ask:** Which of 1 to 9 do you want? You can add more later by asking me to resume setup.
+> **Ask:** Which of 1 to 8 do you want? You can add more later by asking me to resume setup.
 > 1. None for now – start local, add accounts later (recommended for a first session)
-> 2. A list you give, for example `2, 5, 9`
+> 2. A list you give, for example `2, 4, 8`
 >
 > **Suggested reply:** `1`
 

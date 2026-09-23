@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 node_type: skill_library
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-23T15:38:35+10:00
+updated: 2026-09-23T16:53:00+10:00
 ---
 
 # Shared Skills
@@ -39,10 +39,6 @@ Contains the delegated-work protocol: a conductor agent writes bounded packets t
 ##### `gohighlevel-access/`
 
 Contains the canonical executable HighLevel agency OAuth manager and reusable API client. It stores rotating Company tokens only in the encrypted portable vault, derives Location tokens in memory, and keeps project permissions and results local to the requesting node. Downloaded HighLevel Marketplace OpenAPI snapshots used to ground request shapes live under `gohighlevel-access/openapi/` (public vendor documentation, not live sub-account data).
-
-##### `google-drive-access/`
-
-Contains the connector-managed Google Drive discovery, retrieval and source-routing skill. Prefer `google-workspace-access/` for portable vault-backed Drive work.
 
 ##### `google-workspace-access/`
 

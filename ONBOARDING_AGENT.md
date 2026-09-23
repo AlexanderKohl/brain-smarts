@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-08-06T09:37:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T16:53:00+10:00
 owner: brain-owner
 ---
 
@@ -47,7 +47,6 @@ Rows are alphabetical by skill name.
 | crm | `/shared/skills/crm/` | Contact register in memory: one file per person, organisation, newsletter or system; owner personas bound to sending accounts; create on first encounter, deduplicate, merge directories; node rules ship as a template; `crm_check.py` find, validate, duplicates |
 | delegate-work | `/shared/skills/delegate-work/` | Conductor-to-worker packets and results for parallel subagent work; isolated, read-only, no credentials by default; max four workers, depth one; run folders under `/temp/delegation/runs/`; governed by root `SMART-RULE-0024`. Also holds the two handover procedures: conductor to conductor, and **a research or design thread back to the conductor**, which settles every open decision with the owner before it hands over |
 | gohighlevel-access | `/shared/skills/gohighlevel-access/` | HighLevel agency OAuth (port 8766), subaccounts, CRM APIs; pipeline migration review UI (port 8769) |
-| google-drive-access | `/shared/skills/google-drive-access/` | Legacy connector-managed Drive path; prefer google-workspace-access for portable work |
 | google-workspace-access | `/shared/skills/google-workspace-access/` | Multi-account Google OAuth (port 8767); Gmail/Calendar/Tasks/Drive/Contacts; contact-register integration; draft-first email; optional local SQLite Gmail/Tasks sync (`google_sync_ctl.py` / `google_local_email.py` / `google_local_tasks.py`) |
 | learning-maintenance | `/shared/skills/learning-maintenance/` | Evidence-driven learning, single-writer integration and weekly digest under SMART-RULE-0028 |
 | manage-credentials | `/shared/skills/manage-credentials/` | Passphrase vault + per-login Vault Agent broker; inject mapped secrets only; store rotating OAuth JSON |
