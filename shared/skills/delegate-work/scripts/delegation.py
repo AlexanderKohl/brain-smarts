@@ -271,7 +271,7 @@ def cmd_new_run(args) -> int:
     run_id = args.run_id or ("RUN-" + stamp[:19].replace("-", "").replace(":", "").replace("T", "-"))
     max_workers = args.max_workers or DEFAULT_MAX_WORKERS
     if max_workers > HARD_MAX_WORKERS:
-        raise SystemExit(f"error: max workers is {HARD_MAX_WORKERS} per run (RULE-2026-0037 budget)")
+        raise SystemExit(f"error: max workers is {HARD_MAX_WORKERS} per run (SMART-RULE-0024 budget)")
     path = root / RUNS_SUBDIR / run_id
     if path.exists():
         raise SystemExit(f"error: run {run_id} already exists")
@@ -322,9 +322,9 @@ def worker_instructions(fields: dict, result_ref: str) -> str:
         f"1. Bootstrap: read `/CONTRACT.md` section 1. {bootstrap}",
         f"2. {write_rule}",
         ("3. Commit on your own branch at each logical checkpoint and push that branch; never merge "
-         "into main and never touch the shared worktree. The conductor merges (`RULE-2026-0023`)."
+         "into main and never touch the shared worktree. The conductor merges (`SMART-RULE-0014`)."
          if fields["writes"] == "worktree" else
-         "3. Do not commit, stage or push. The conductor owns Git (`RULE-2026-0023`)."),
+         "3. Do not commit, stage or push. The conductor owns Git (`SMART-RULE-0014`)."),
         f"4. External systems and credentials: {external}",
         "5. Do not delegate further. Depth is one.",
         f"6. Stay within about {fields['max_tool_calls']} tool calls and {fields['max_output_words']} "

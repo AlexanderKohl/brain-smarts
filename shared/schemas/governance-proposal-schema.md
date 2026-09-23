@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-08-04T23:16:08+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T20:00:00+10:00
 owner: brain-owner
 ---
 
@@ -37,7 +37,7 @@ No status makes proposed wording active. Only the implemented content of the pro
 All proposals require:
 
 ```yaml
-id: RULE-YYYY-NNNN
+id: PROPOSAL-short-slug
 type: governance_proposal
 status: draft
 owner: OWNER
@@ -51,6 +51,12 @@ Statuses `accepted`, `implemented`, `verified` and `reverted` also require:
 ```yaml
 accepted_by: OWNER
 accepted_at: YYYY-MM-DDTHH:mm:ss+HH:MM
+```
+
+A proposal that introduces or amends a rule also records, from acceptance onwards:
+
+```yaml
+rule_id: SMART-RULE-NNNN   # or MEMORY-RULE-NNNN, <PROJECT>-RULE-NNNN
 ```
 
 Statuses `implemented`, `verified` and `reverted` require:
@@ -77,4 +83,4 @@ Acceptance must unambiguously identify the proposal or displayed exact change se
 
 Keep a rule's ID stable. Small additive or clarifying changes amend the existing numbered rule and its proposal record, and are presented for acceptance under that same ID.
 
-Assign a new `RULE-YYYY-NNNN` only when introducing a distinct new rule. `superseded` remains available when a distinct new rule replaces an old rule's behaviour (for example `RULE-2026-0017` superseding `RULE-2026-0014`), not as the default path for a wording tweak.
+A proposal's `id` is `PROPOSAL-<short-slug>`, matching its file name `<short-slug>.md`, and never changes. It carries no rule number while it is under review. When the owner accepts a proposal that introduces a distinct new rule, the rule takes the next free number in its layer (`SMART-RULE-NNNN`, `MEMORY-RULE-NNNN` or `<PROJECT>-RULE-NNNN`; CONTRACT §13.2, *Rule identifiers*), recorded in the proposal as `rule_id`. A proposal that amends an existing rule records that rule's identifier in `rule_id` from the start. Assign a new number only when introducing a distinct new rule. `superseded` remains available when a distinct new rule replaces an old rule's behaviour (for example a broad commit-checkpoint rule replacing a narrower rule about when to commit), not as the default path for a wording tweak.

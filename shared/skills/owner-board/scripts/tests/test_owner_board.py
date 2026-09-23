@@ -3,7 +3,7 @@
 Run from the brain root:
     python -m unittest discover -s shared/skills/owner-board/scripts/tests -v
 
-Every name, product and identifier here is invented (RULE-2026-0016).
+Every name, product and identifier here is invented (SMART-RULE-0008).
 """
 
 from __future__ import annotations

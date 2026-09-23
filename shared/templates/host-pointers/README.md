@@ -17,7 +17,7 @@ the reasoning and the questions to ask.
 
 Two kinds of file live here:
 
-- **Pointers** make a host's session start from `/CONTRACT.md`. `RULE-2026-0015` allows a host
+- **Pointers** make a host's session start from `/CONTRACT.md`. `SMART-RULE-0007` allows a host
   entry file to point at the portable bootstrap and nothing more, so each pointer names the
   contract and says it is only a pointer. Never add a behavioural rule to an installed copy; it
   belongs in `/RULES.md`, `/memory/RULES.md` or a node `RULES.md`.

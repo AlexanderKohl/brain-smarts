@@ -18,5 +18,5 @@ When the working folder is inside `<BRAIN_ROOT>` or `<PROJECT_REPOS_ROOT>`, read
 `<BRAIN_ROOT>/BOOTSTRAP.md`). Treat that path as a location hint: if it does not hold
 `CONTRACT.md`, say so and stop.
 
-This file is a pointer only (`RULE-2026-0015`). Every rule lives in the contract and the
+This file is a pointer only (`SMART-RULE-0007`). Every rule lives in the contract and the
 `RULES.md` files it names.

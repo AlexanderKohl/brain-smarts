@@ -28,10 +28,6 @@ Folders are alphabetical.
 
 Contains the ABR ABN Lookup JSON web-services skill (vault-stored authentication GUID). Use for ABN/ACN validation and name search whenever an Australian Business Number is required. Docs: https://abr.business.gov.au/Tools/WebServices. Never commit the GUID.
 
-##### `ai-session-log/`
-
-Contains the portable temporary AI session JSONL helper (`session_log.py` CLI + importable helpers). Canonical log path is `/temp/ai-session/ai-call-log.jsonl` with kinds `model_call` / `model_response` / `thinking` / `tool_result` / `python_run` (ephemeral; not governance `LOG.md`). The transcript listener auto-detects Cursor, Claude Code, and Codex transcripts with no flags – Codex sessions are filtered per file to this brain since Codex does not store transcripts per project. Local HTML viewer: `session_log.py view` on `127.0.0.1:8768`. Cursor option-2 hooks via `.cursor/hooks.json`.
-
 ##### `crm/`
 
 Contains the contact register (CRM) skill: the contact and persona model, procedures for creating a contact on first encounter, deduplication, newsletter handling, persona-to-account binding and directory merges, the templates for a CRM node, and `scripts/crm_check.py` (read-only find, validate and duplicate checks). The register itself and its rules live in the owner's memory; the skeleton ships a starter node at `projects/contacts/`.
@@ -54,7 +50,7 @@ Contains the canonical portable Google Workspace skill (Gmail, Calendar, Tasks, 
 
 ##### `learning-maintenance/`
 
-Portable capture, research, cross-model review, retirement, single-writer integration and weekly digest under RULE-2026-0043. Agents read the compact discovery index at task entry. No vendor dependency or active concurrency prototype.
+Portable capture, research, cross-model review, retirement, single-writer integration and weekly digest under SMART-RULE-0028. Agents read the compact discovery index at task entry. No vendor dependency or active concurrency prototype.
 
 ##### `manage-credentials/`
 

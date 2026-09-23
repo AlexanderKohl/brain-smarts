@@ -1,4 +1,4 @@
-"""Behavioural tests for delegation.py (RULE-2026-0035).
+"""Behavioural tests for delegation.py (SMART-RULE-0022).
 
 Run from the repository root:
     python -m unittest discover -s shared/skills/delegate-work/scripts/tests -v

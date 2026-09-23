@@ -54,7 +54,7 @@ REPO_ROOT = brain_root()
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "temp" / "ghl-migration-output"
 # Owner configuration for a shared skill lives at /memory/skills/<skill>/ (brain-memory).
 DEFAULT_MAPPINGS_FILE = REPO_ROOT / "memory" / "skills" / SKILL_NAME / "data" / "opportunity-stage-mappings.json"
-# Avoid 8765–8768 (Xero, HighLevel OAuth, Google, AI session viewer).
+# Avoid 8765–8768 (Xero, HighLevel and Google OAuth callbacks; 8768 is left free for owner-local tools).
 DEFAULT_PORT = 8769
 
 

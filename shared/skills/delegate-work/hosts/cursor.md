@@ -33,5 +33,5 @@ running version before claiming parallel execution.
 
 - Model selection per subagent is a host setting, not something the packet can force. Record
   the model that ran, or `unknown`.
-- The session-log listener covers Cursor `agent-transcripts`; whether subagent transcripts land
-  there is unverified.
+- Cursor writes `agent-transcripts`; whether subagent transcripts land there is unverified,
+  which matters if a transcript logger is in use.

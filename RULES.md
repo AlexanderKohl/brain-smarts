@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-23T18:00:00+10:00
+updated: 2026-09-23T20:00:00+10:00
 owner: brain-owner
 ---
 
@@ -15,13 +15,46 @@ owner: brain-owner
 
 Read `/CONTRACT.md` first.
 
-This file is the generic root-rule set: mechanisms any owner could adopt. Headings are the stable `RULE-2026-NNNN` IDs. Not every numbered rule lives here: some belong in `/CONTRACT.md`, the owner layer `/memory/RULES.md`, a node `RULES.md`, or a skill. Those keep their original homes and are not given a second number in this file.
+This file is the generic root-rule set: mechanisms any owner could adopt. Headings are the stable `SMART-RULE-NNNN` identifiers (CONTRACT §13.2, *Rule identifiers*). The `SMART-RULE` series also numbers the mechanics rules whose canonical wording lives in `/CONTRACT.md`, a shared skill or a shared template; they are indexed below and are not restated here. Rules in the owner layer `/memory/RULES.md` and in node `RULES.md` files carry their own `MEMORY-RULE` and `<PROJECT>-RULE` series.
 
 Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer, always read) -> node `RULES.md` files. "The owner" is the person named in `/memory/OWNER.md`.
 
-Root IDs in this file: `0003`, `0004`, `0010`, `0013`, `0015`, `0016`, `0017`, `0018`, `0022`, `0023`, `0025`, `0028`, `0029`, `0030`, `0032`, `0033`, `0034`, `0035`, `0037`, `0039`, `0040`, `0043`. `RULE-2026-0042` (en dash, never em dash) is an owner preference and lives in `/memory/RULES.md`.
+`SMART-RULE` identifiers, in number order. The next new mechanics rule takes the number after the highest one listed here.
 
-## RULE-2026-0018 – Communication efficiency
+| ID | Rule | Canonical home |
+|---|---|---|
+| `SMART-RULE-0001` | Governance safety, bootstrap and preflight | `/CONTRACT.md` §1, §15 |
+| `SMART-RULE-0002` | Protected governance | this file; `/CONTRACT.md` §13.2 |
+| `SMART-RULE-0003` | Token-efficient operation | this file; formal task conversion in the task node's `RULES.md` (`/shared/templates/memory-skeleton/tasks/RULES.md`) |
+| `SMART-RULE-0004` | Forward-looking rules and external target confirmation | `/CONTRACT.md` §5.6, §10.5 |
+| `SMART-RULE-0005` | Internal-first then external lookup | this file |
+| `SMART-RULE-0006` | Owner-facing shell includes cd | this file |
+| `SMART-RULE-0007` | Portable behavioural rules only | this file |
+| `SMART-RULE-0008` | No real data in mock or sample data | this file |
+| `SMART-RULE-0009` | Logical checkpoint commits | this file |
+| `SMART-RULE-0010` | Communication efficiency | this file |
+| `SMART-RULE-0011` | Raw evidence files are exempt from front-matter validation | `/CONTRACT.md` §8, §15; `/shared/skills/repository-preflight/` |
+| `SMART-RULE-0012` | Plain-language summary when asking for governance acceptance | `/CONTRACT.md` §13.2 |
+| `SMART-RULE-0013` | Per-API quirk knowledge base | this file |
+| `SMART-RULE-0014` | Lightweight Git exit check | this file |
+| `SMART-RULE-0015` | Reuse project-native UI patterns | this file |
+| `SMART-RULE-0016` | Product-development process | this file; `/shared/skills/product-development/` |
+| `SMART-RULE-0017` | Surface external-system configuration mismatches before coding around them | this file |
+| `SMART-RULE-0018` | One canonical implementation, no duplicated side effects | this file |
+| `SMART-RULE-0019` | Context handoff checkpoint | this file |
+| `SMART-RULE-0020` | Whole-system implementation review | this file |
+| `SMART-RULE-0021` | Security designed into every implementation | this file |
+| `SMART-RULE-0022` | Tests demonstrate behaviour | this file |
+| `SMART-RULE-0023` | Preflight resolves heading anchors in declared references | `/shared/skills/repository-preflight/` |
+| `SMART-RULE-0024` | Delegated parallel work | this file; `/shared/skills/delegate-work/` |
+| `SMART-RULE-0025` | Task state enumerates every open task | `/shared/templates/memory-skeleton/tasks/RULES.md`; `/shared/skills/repository-preflight/` |
+| `SMART-RULE-0026` | Version every change, and show it | this file |
+| `SMART-RULE-0027` | Every list has a deliberate order | this file |
+| `SMART-RULE-0028` | Evidence-driven learning | this file; `/shared/skills/learning-maintenance/` |
+| `SMART-RULE-0029` | Three layers: mechanics, memory and project repositories | `/CONTRACT.md` §3.4–§3.6 |
+| `SMART-RULE-0030` | Rule identifiers | `/CONTRACT.md` §13.2 |
+
+## SMART-RULE-0010 – Communication efficiency
 
 - In voice mode, when a clarifying question is required, ask one question at a time and wait for the answer before asking the next, unless the owner explicitly requests a grouped questionnaire. Outside voice mode, presenting a list of clarifying questions is acceptable-especially when scoping a software project. Do not invent questions when a safe default exists.
 - Prefer a reversible default and proceed when multiple approaches are valid and the risk is low; state the chosen approach in one short line. Ask only for irreversible actions, secrets, material trade-offs, or when policy requires owner choice.
@@ -31,15 +64,15 @@ Root IDs in this file: `0003`, `0004`, `0010`, `0013`, `0015`, `0016`, `0017`, `
   recommended one, so the owner can reply with a number. The owner may always answer with
   different instructions instead; a suggestion or a numbered list never limits the choice.
 
-## RULE-2026-0023 – Lightweight Git exit check
+## SMART-RULE-0014 – Lightweight Git exit check
 
 - **Mandatory Git exit check:** After making any file change in a Git repository, run `git status --short` immediately before every final response. Do not send the final response until every completed, separable, validated, agent-owned change is committed, or one of the permitted blocking reasons in the detailed Git checkpoint rules below is reported.
 - After a turn that modified a Git repository, end the final response with exactly one compact Git accounting line per modified repository: `Git: <short-hash> committed; push <succeeded|not attempted - reason|failed - reason>` or `Git: no commit - <specific permitted reason>`. An answer-only turn with no file change does not require this line.
 - In a shared worktree, the primary agent is responsible for committing completed agent work unless a subagent was explicitly assigned an isolated worktree or branch. Subagents must report every changed path and validation result to the primary agent and must not assume another agent will commit without that handoff.
 
-## RULE-2026-0017 – Logical checkpoint commits
+## SMART-RULE-0009 – Logical checkpoint commits
 
-- Portable git checkpoint rules in this file (`RULE-2026-0017`) override any host-specific "ask before commit", "only commit when asked", or "always present commit/push options" instructions in this repository and in every other Git repository modified during an owner-authorised task. Still never commit secrets or unrelated dirty files. Host "only commit when asked" instructions apply only when this rule does not apply (for example a repository the owner has not authorised this task to change).
+- Portable git checkpoint rules in this file (`SMART-RULE-0009`) override any host-specific "ask before commit", "only commit when asked", or "always present commit/push options" instructions in this repository and in every other Git repository modified during an owner-authorised task. Still never commit secrets or unrelated dirty files. Host "only commit when asked" instructions apply only when this rule does not apply (for example a repository the owner has not authorised this task to change).
 - In every Git repository modified during an owner-authorised task, automatically create a commit at each successful logical checkpoint. A logical checkpoint exists when an independently describable improvement, fix, document update, configuration change or tested implementation is complete. Do not wait for the entire project to finish and do not bundle unrelated logical changes.
 - A Git checkpoint is mandatory after relevant validation passes; before switching tasks, repositories, branches or workstreams; before pausing for owner input or approval while agent-owned changes remain; before asking the owner to test, reload, load-unpacked, install, or try a build; before the final response when the agent produced durable repository changes; and after 30 minutes of active work with uncommitted agent-owned changes, even if the larger task continues.
 - **Owner-test handoff:** Before asking the owner to test, reload, load-unpacked, install, or try a build, commit the agent-owned change in that product repository. That commit is the rollback point if the test fails. Do not wait for the owner to ask. If the work is a sequence of trials, commit each testable batch separately so a working version can be restored without unpicking later experiments.
@@ -48,16 +81,16 @@ Root IDs in this file: `0003`, `0004`, `0010`, `0013`, `0015`, `0016`, `0017`, `
 - Treat commit and push as separate decisions. A push failure or unavailable remote must never prevent the local commit. Owner-test handoff commits stay local: do not push solely because the owner is being asked to test. Push accumulated agent-created commits to the tracked remote when the unit of work finishes and before the final response (except a response that is only an owner-test handoff), or after 30 minutes since the last successful push while work continues, unless the owner has prohibited pushing or repository policy requires review through another path. Also push when the owner asked to push.
 - Never silently finish with committable agent-owned changes. In the final response, report the commit hash and push status for each modified repository, or state `No commit` with the specific reason. Valid reasons include: no durable change, no Git repository, the owner explicitly prohibited committing, validation or a hook failed, a merge/rebase/conflict is active, required Git identity or permission is unavailable, or the change cannot be separated safely from uncertain or unrelated files.
 
-## RULE-2026-0004 – Token-efficient operation
+## SMART-RULE-0003 – Token-efficient operation
 
 - Read and prompt with only the minimum context relevant to the current task; avoid loading unrelated files, restating unchanged context, or repeating information already available elsewhere.
 - Structure nodes, files and skills so related content can be read independently in small, targeted pieces; split large or mixed-purpose files where that measurably improves token efficiency and response time.
 
-## RULE-2026-0016 – No real data in mock or sample data
+## SMART-RULE-0008 – No real data in mock or sample data
 
 - Mock, sample, seed, fixture and placeholder data (in any project, coded or otherwise) must be entirely fictional: invented names, addresses, companies and identifiers only. Never copy or adapt real customer, employee, or business data into mock/sample data - including data merely seen in another file, project or filename while working, even unintentionally. When realistic-looking sample data is needed, invent it fresh and do not reuse strings noticed elsewhere in the same session.
 
-## RULE-2026-0025 – Reuse project-native UI patterns
+## SMART-RULE-0015 – Reuse project-native UI patterns
 
 - In every software or development project, before creating or styling a user-interface element,
   search the active project's code, components, styles and design-system assets for the same or
@@ -72,20 +105,20 @@ Root IDs in this file: `0003`, `0004`, `0010`, `0013`, `0015`, `0016`, `0017`, `
   consistency. Explicit owner requirements and supplied design references may override an
   existing pattern; when they do, integrate the change deliberately with the rest of the project.
 
-## RULE-2026-0003 / CONTRACT §13.2 – Protected governance
+## SMART-RULE-0002 / CONTRACT §13.2 – Protected governance
 
 - Do not activate a protected governance change without the owner's explicit acceptance under Contract section 13.2.
 - Report accepted governance changes with their proposal ID, exact changed files, effective contract version and validation result.
-- Small additive or clarifying changes to an existing numbered rule amend that rule in place and keep its ID. Mint a new `RULE-YYYY-NNNN` only for a distinct new rule, not a tweak, extra sentence or tighter constraint on an existing one. Record the amendment on the original proposal record; do not supersede a live rule with a new number.
+- Small additive or clarifying changes to an existing numbered rule amend that rule in place and keep its ID. Give a new identifier only to a distinct new rule, not to a tweak, extra sentence or tighter constraint on an existing one; it takes the next number in its layer when the owner accepts it (CONTRACT §13.2, *Rule identifiers*). Record the amendment on the original proposal record; do not supersede a live rule with a new number.
 
-## RULE-2026-0010 – Internal-first then external lookup
+## SMART-RULE-0005 – Internal-first then external lookup
 
 - When looking up a fact or identifier, check the brain first (CRM contacts, project knowledge, and other already-known canonical homes) with a **targeted** search. Do not run exhaustive repository grep theatre to prove absence.
 - If the fact is absent or still uncertain after that internal check, use the authoritative external shared skill when one exists or is mandated (for example ABR Web Services for Australian Business Numbers and GST registration). After a verified external result, update the relevant durable brain record when the fact belongs in the repository.
 - Do not delegate work to explore/repo-only subagents when the answer requires vault credentials, Gmail, or an external API. Match agent capabilities to the job, or do the lookup in-session.
 - When the owner redirects to a different path (skill, external system, email), abandon or stop parallel searches that the redirect made obsolete; do not finish a doomed explore pass "for completeness."
 
-## RULE-2026-0022 – Per-API quirk knowledge base
+## SMART-RULE-0013 – Per-API quirk knowledge base
 
 - Every shared `<system>-access` skill owns a `knowledge/` folder beside its `SKILL.md`, holding one small file per confirmed or hypothesised piece of non-obvious external-API behaviour for that system. Scaffold it (empty, plus one `_CONVENTION.md` copied from `/shared/templates/api-knowledge-convention.template.md`) whenever a new `<system>-access` skill is created. If a quirk worth logging is found for a system with no shared skill yet, create the minimal skill folder and its `knowledge/` scaffold first rather than leaving the finding without a canonical home.
 - Before diagnosing unexpected, undocumented or previously-surprising behaviour from an external API, search that system's `knowledge/` folder first - by filename convention (for example `Glob "business--*"` for one object type, `Glob "*--textbox-list--*"` for one field type across objects) and by frontmatter (`Grep` for `object_type:`, `field_type:`, `endpoint:` or `status:`) - before re-investigating from scratch. Treat a `refuted` entry as a warning against repeating that exact hypothesis; treat a `deprecated` entry as a pointer to its `superseded_by` replacement, not as current fact.
@@ -93,16 +126,16 @@ Root IDs in this file: `0003`, `0004`, `0010`, `0013`, `0015`, `0016`, `0017`, `
 - Set a new entry's `status` to `pending` when the fix it documents relies on a hypothesis not yet independently confirmed; set `confirmed` only once a live probe or observed real subsequent use corroborates it. When later evidence contradicts a `pending` or `confirmed` entry, do not delete it: set `status: refuted` for a wrong hypothesis or `status: deprecated` for behaviour that has genuinely changed, add a one-line note of what changed and when, and set `superseded_by` or leave it for the correcting entry to backlink via `refuted_by` once one exists.
 - Promote, refute or deprecate an existing entry opportunistically - the next time work touches that same quirk and turns up corroborating or contradicting evidence - rather than deferring it to a scheduled review that does not otherwise exist in this repository.
 
-## RULE-2026-0013 – Owner-facing shell includes cd
+## SMART-RULE-0006 – Owner-facing shell includes cd
 
 - Whenever giving the owner shell commands to run, always include an explicit `cd` (or equivalent) to the brain root named as `brain_root` in `/memory/OWNER.md` (or the active absolute working directory if the command must run elsewhere, such as the memory checkout or a project repository) before the command, so the owner does not have to locate the correct folder.
 
-## RULE-2026-0015 – Portable behavioural rules only
+## SMART-RULE-0007 – Portable behavioural rules only
 
 - Keep durable behavioural rules only in portable governance: `/CONTRACT.md`, root and node `RULES.md` files, and skill operating instructions. Do not create or maintain host-specific behavioural rule files that restate or extend how agents must behave.
 - Host entry files may only point agents to portable bootstrap (`/CONTRACT.md`, `/BOOTSTRAP.md`, `/AGENTS.md`, `/ONBOARDING_AGENT.md`) and must not carry independent behavioural policy.
 
-## RULE-2026-0028 – Product-development process
+## SMART-RULE-0016 – Product-development process
 
 - Before starting or continuing a non-trivial discovery, design, implementation, release or lifecycle-investment increment for a software product or internal tool, follow this rule and use `/shared/skills/product-development/` as its implementation guide. Clearly non-material copy/formatting corrections, behaviour-preserving mechanical refactors and like-for-like bounded repairs use ordinary proportionate engineering discipline; a small reversible behavioural improvement may use the skill's compact light path.
 - Establish whether the work is a new product, existing-product baseline, feature/change, urgent repair or lifecycle review; locate existing work at its current lifecycle position; reuse valid evidence; and reopen only the gates whose assumptions or downstream consequences are affected.
@@ -112,14 +145,14 @@ Root IDs in this file: `0003`, `0004`, `0010`, `0013`, `0015`, `0016`, `0017`, `
 - At standard and high-assurance depth, use at least two distinct underlying AI models at material opportunity/build-versus-buy, design/delivery and release-readiness checkpoints when proportionate, available and permitted. Protect secrets and minimize personal, customer, security-sensitive and commercially sensitive context before review. Synthesize disagreements as evidence rather than votes. If distinct models are unavailable, disclose the limitation and do not claim that multi-model review occurred.
 - The mandatory semantics are contained in this rule. `/shared/skills/product-development/` supplies operational detail and may not weaken these requirements or expand an agent's authority.
 
-## RULE-2026-0029 – Surface external-system configuration mismatches before coding around them
+## SMART-RULE-0017 – Surface external-system configuration mismatches before coding around them
 
 - When work against an external system reveals that its configuration is inconsistent with what
   the task needs – mismatched option sets, a missing or wrongly-typed field, a naming collision, a
   value that cannot be represented in the target – stop and put the finding to the owner before
   writing code that bridges it. State precisely what disagrees, what a fix in that system would
   be, and what the code workaround would otherwise cost.
-- This overrides the "prefer a reversible default and proceed" guidance in `RULE-2026-0018` for
+- This overrides the "prefer a reversible default and proceed" guidance in `SMART-RULE-0010` for
   configuration mismatches specifically. The reason is not risk but economy: a change in the
   external system's own interface is frequently far cheaper than a translation layer, and the
   layer outlives the mismatch it was written for.
@@ -127,9 +160,9 @@ Root IDs in this file: `0003`, `0004`, `0010`, `0013`, `0015`, `0016`, `0017`, `
   with the rest of the work already done rather than blocking it.
 - This does not apply to genuine API behaviour that cannot be configured away – an endpoint's
   response shape, a required header, a status code. Absorb those in code and record them under
-  `RULE-2026-0022`.
+  `SMART-RULE-0013`.
 
-## RULE-2026-0030 – One canonical implementation, no duplicated side effects
+## SMART-RULE-0018 – One canonical implementation, no duplicated side effects
 
 - In every software or development project, before adding a function, write, call, or extra
   control-flow path, search the active project for an existing implementation that already performs
@@ -148,7 +181,7 @@ Root IDs in this file: `0003`, `0004`, `0010`, `0013`, `0015`, `0016`, `0017`, `
   (for example a later workflow step that must refresh it). Do not treat a second write at the
   same stage as a backup.
 
-## RULE-2026-0032 – Context handoff checkpoint
+## SMART-RULE-0019 – Context handoff checkpoint
 
 - Write a handoff checkpoint before context runs out, and prefer a **stage boundary** to a
   context threshold: the best moment is immediately after a validated, committed increment and
@@ -186,10 +219,10 @@ Root IDs in this file: `0003`, `0004`, `0010`, `0013`, `0015`, `0016`, `0017`, `
   before dispatching anything. Take the checkpoint whenever the remaining context is unlikely
   to carry the next stage, and at any natural handover where a fresh thread would work more
   efficiently.
-- The active-conductor question is not required for at most one bounded, read-only learning or public-research worker per thread under RULE-2026-0043, within RULE-2026-0037’s delegation budget. Workers use no credentials, take no external side effects and write only their separate result artifacts. This exception grants no product-editing, merging or canonical-integration authority.
-- Finish with the Git exit check under `RULE-2026-0023`, so the handoff and the tree agree.
+- The active-conductor question is not required for at most one bounded, read-only learning or public-research worker per thread under SMART-RULE-0028, within SMART-RULE-0024’s delegation budget. Workers use no credentials, take no external side effects and write only their separate result artifacts. This exception grants no product-editing, merging or canonical-integration authority.
+- Finish with the Git exit check under `SMART-RULE-0014`, so the handoff and the tree agree.
 
-## RULE-2026-0033 – Whole-system implementation review
+## SMART-RULE-0020 – Whole-system implementation review
 
 - In every software or development project, optimise each change for the health of the whole
   system, not only for completing the immediate task. Evaluate it against upstream and downstream
@@ -202,7 +235,7 @@ Root IDs in this file: `0003`, `0004`, `0010`, `0013`, `0015`, `0016`, `0017`, `
   requirement demands. Prefer the smallest clear implementation that fully satisfies it.
 - When a requirement conflicts with an existing architectural, product or data-model decision,
   surface the conflict to the owner and resolve it deliberately. Do not quietly create an
-  exception. This extends `RULE-2026-0029` from external configuration to decisions inside the
+  exception. This extends `SMART-RULE-0017` from external configuration to decisions inside the
   codebase.
 - When a workaround or compromise is unavoidable, make it visible in the code and the project
   record, and state what would be required to remove it.
@@ -215,9 +248,9 @@ Root IDs in this file: `0003`, `0004`, `0010`, `0013`, `0015`, `0016`, `0017`, `
   for this problem? Has it introduced a second way of doing something that already has one? Does
   it conflict with an architectural, product or data-model decision elsewhere? Can any obsolete
   code now be removed? Has it made the system easier or harder to maintain? Clearly non-material
-  changes as defined in `RULE-2026-0028` may skip this review.
+  changes as defined in `SMART-RULE-0016` may skip this review.
 
-## RULE-2026-0034 – Security designed into every implementation
+## SMART-RULE-0021 – Security designed into every implementation
 
 - In every software or development project, treat security, privacy and access control as part
   of the implementation, not a later review step. For each change that touches an endpoint,
@@ -238,9 +271,9 @@ Root IDs in this file: `0003`, `0004`, `0010`, `0013`, `0015`, `0016`, `0017`, `
   entitled to. Treat a leaked identifier that grants access as a credential.
 - When a change materially widens an externally reachable surface, adds an authentication or
   payment path, or handles sensitive data for the first time, escalate to at least standard depth
-  under `RULE-2026-0028` and say so in the change.
+  under `SMART-RULE-0016` and say so in the change.
 
-## RULE-2026-0035 – Tests demonstrate behaviour
+## SMART-RULE-0022 – Tests demonstrate behaviour
 
 - In every software or development project, tests must prove that the required behaviour
   works, not merely exercise the implementation. For each change, identify the important
@@ -254,11 +287,11 @@ Root IDs in this file: `0003`, `0004`, `0010`, `0013`, `0015`, `0016`, `0017`, `
   behaviour and outputs, not on private structure or call sequences.
 - Do not report an existing green suite as evidence for new or changed behaviour unless a test
   actually asserts that behaviour. State what the tests prove and what they do not.
-- Fixture and sample data remain subject to `RULE-2026-0016`: entirely fictional.
-- Proportion applies. Clearly non-material changes as defined in `RULE-2026-0028` need no new
+- Fixture and sample data remain subject to `SMART-RULE-0008`: entirely fictional.
+- Proportion applies. Clearly non-material changes as defined in `SMART-RULE-0016` need no new
   test; a behavioural change always does.
 
-## RULE-2026-0037 – Delegated parallel work
+## SMART-RULE-0024 – Delegated parallel work
 
 - Delegate to another agent only work that is independent, bounded and consumable as a
   compressed result: one clear outcome, no back-and-forth with sibling workers, and a result
@@ -272,7 +305,7 @@ Root IDs in this file: `0003`, `0004`, `0010`, `0013`, `0015`, `0016`, `0017`, `
 - Workers start isolated by default. A packet that forks the conductor's context states why.
 - Workers do not write canonical repository files and do not commit. They return findings,
   artifacts inside their run folder, and every changed path with its validation result. A
-  worker that must change code works in an isolated worktree or branch (`RULE-2026-0023`); the
+  worker that must change code works in an isolated worktree or branch (`SMART-RULE-0014`); the
   conductor merges, commits and reports.
 - Workers use no credentials and take no external side effect unless the packet names a target
   the owner confirmed for this operation under CONTRACT §10.5. The default is none. A worker
@@ -281,11 +314,11 @@ Root IDs in this file: `0003`, `0004`, `0010`, `0013`, `0015`, `0016`, `0017`, `
   measured trial recorded under `/memory/projects/brain-development/` justifies more.
 - The conductor routes each result under CONTRACT §5 and §6, treats worker claims as
   unverified until checked, writes one `LOG.md` entry per run in the owning node, and does the
-  Git accounting under `RULE-2026-0023`. Never claim parallel execution on a host that ran
+  Git accounting under `SMART-RULE-0014`. Never claim parallel execution on a host that ran
   packets in sequence. Record the host and the model that actually ran each packet; never
   invent one.
 
-## RULE-2026-0039 – Version every change, and show it
+## SMART-RULE-0026 – Version every change, and show it
 
 - Every software or development project carries one version of three numbers,
   `first.middle.last`, kept in the project's own version field (`package.json`,
@@ -323,7 +356,7 @@ Root IDs in this file: `0003`, `0004`, `0010`, `0013`, `0015`, `0016`, `0017`, `
 - When asking the owner to reload, test or deploy, state the version and build identity they
   should see, so a stale build is recognised at a glance.
 
-## RULE-2026-0040 – Every list has a deliberate order
+## SMART-RULE-0027 – Every list has a deliberate order
 
 - Every list a person reads is put in an order chosen for that reader, never left in the
   order it was produced: the options of a dropdown, the rows of a table, the sections of a
@@ -342,7 +375,7 @@ Root IDs in this file: `0003`, `0004`, `0010`, `0013`, `0015`, `0016`, `0017`, `
 - Reviews of a deliverable check its lists: an unordered list is a defect, not a style
   choice.
 
-## RULE-2026-0043 – Evidence-driven learning
+## SMART-RULE-0028 – Evidence-driven learning
 
 - **Keep the owner’s work first.** At task entry, check the compact learning index for relevant pending work. Do not load the learning corpus. Maintenance runs as bounded background work; when unavailable, leave it pending for a later session. Never claim background execution that did not occur.
 - **Try, observe and capture.** Within existing safeguards, prefer bounded experimentation when appropriate. At natural checkpoints, capture useful discoveries, failures, recurring errors, negative findings, owner corrections, preferences and decisions without waiting for a reminder. Update an existing record rather than duplicate it. Routine activity needs no learning record.
@@ -358,7 +391,7 @@ Root IDs in this file: `0003`, `0004`, `0010`, `0013`, `0015`, `0016`, `0017`, `
 
 ## Contract restatements
 
-These restatements of `/CONTRACT.md` keep no separate `RULE-2026-NNNN`. Find the canonical wording in the contract section named here.
+These restatements of `/CONTRACT.md` keep no separate rule identifier. Find the canonical wording in the contract section named here.
 
 - Use repository-root paths in metadata and cross-references. (CONTRACT §8 / §12)
 - Use one canonical home for every durable item. (CONTRACT §3.3)

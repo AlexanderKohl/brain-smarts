@@ -15,7 +15,7 @@ owner: OWNER_SHORT_NAME
 Read `/CONTRACT.md` first.
 
 Canonical ready, in-progress, waiting, scheduled or blocked task records. Every record here is
-listed in `/memory/tasks/STATE.md` with its status word (`RULE-2026-0038`).
+listed in `/memory/tasks/STATE.md` with its status word (`SMART-RULE-0025`).
 
 #### Folders
 

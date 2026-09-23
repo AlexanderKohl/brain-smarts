@@ -1,7 +1,7 @@
 """Behavioural tests for the repository preflight validator.
 
 Every fixture is built fresh in a temporary directory from invented content: the owner is
-"Example Owner", the project is "example-project", and no identifier is real (RULE-2026-0016).
+"Example Owner", the project is "example-project", and no identifier is real (SMART-RULE-0008).
 
 Run from the brain root:
     python -m unittest discover -s shared/skills/repository-preflight/tests -v
@@ -342,10 +342,10 @@ class ProtectedPathTests(unittest.TestCase):
             "README.md": True,
             "RULES.md": True,
             "governance/README.md": False,
-            "governance/proposals/RULE-2026-0099-example.md": False,
+            "governance/proposals/example-change.md": False,
             "memory/README.md": False,
             "memory/RULES.md": True,
-            "memory/governance/proposals/RULE-2026-0098-example.md": False,
+            "memory/governance/proposals/owner-example-change.md": False,
             "memory/projects/example-project/RULES.md": True,
             "memory/tasks/open/TASK-2026-0001.md": False,
             "shared/skills/example-skill/SKILL.md": False,
@@ -369,7 +369,7 @@ class GovernanceTests(BrainTestCase):
         return brain
 
     def accepted_proposal(self, brain: Brain, relative: str, targets: list[str]) -> None:
-        brain.write(relative, md(Path(relative).stem, type="governance_proposal", status="accepted",
+        brain.write(relative, md("PROPOSAL-" + Path(relative).stem, type="governance_proposal", status="accepted",
                                  accepted_by="brain-owner", accepted_at=TS, target_files=targets))
 
     def test_clean_repositories_pass(self) -> None:
@@ -388,10 +388,10 @@ class GovernanceTests(BrainTestCase):
                                    owner="brain-owner"))
         brain.write("governance/README.md", readme("governance-readme", ["proposals"]))
         brain.write("governance/proposals/README.md", readme("proposals-readme", []))
-        self.accepted_proposal(brain, "governance/proposals/RULE-2026-0099-example.md", ["/RULES.md"])
+        self.accepted_proposal(brain, "governance/proposals/example-change.md", ["/RULES.md"])
         brain.write("README.md", readme("brain-root-readme", ["governance", "memory", "shared"],
                                         owner="brain-owner"))
-        self.accepted_proposal(brain, "governance/proposals/RULE-2026-0100-readme.md", ["/README.md"])
+        self.accepted_proposal(brain, "governance/proposals/readme-change.md", ["/README.md"])
         self.assertEqual(brain.run().errors, [])
 
     def test_uncovered_memory_rules_change_is_an_error(self) -> None:
@@ -404,7 +404,7 @@ class GovernanceTests(BrainTestCase):
         brain = self.make_repos()
         brain.write("memory/RULES.md", md("owner-rules", "# Owner rules\n\n- A preference.\n", type="rules"))
         brain.write("memory/governance/proposals/README.md", readme("owner-proposals-readme", []))
-        self.accepted_proposal(brain, "memory/governance/proposals/RULE-2026-0098-example.md",
+        self.accepted_proposal(brain, "memory/governance/proposals/owner-example-change.md",
                                ["/memory/RULES.md"])
         errors = brain.run().errors
         self.assertFalse(any("changed protected governance" in e for e in errors), errors)
@@ -413,10 +413,10 @@ class GovernanceTests(BrainTestCase):
         brain = self.make_repos()
         brain.write("RULES.md", md("brain-root-rules", "# Rules\n\n- Changed.\n", type="rules",
                                    owner="brain-owner"))
-        brain.write("governance/proposals/RULE-2026-0099-example.md",
-                    md("RULE-2026-0099", type="governance_proposal", status="accepted",
+        brain.write("governance/proposals/example-change.md",
+                    md("PROPOSAL-example-change", type="governance_proposal", status="accepted",
                        target_files=["/RULES.md"]))
-        self.assertIn("/governance/proposals/RULE-2026-0099-example.md: accepted proposal lacks "
+        self.assertIn("/governance/proposals/example-change.md: accepted proposal lacks "
                       "acceptance evidence", brain.run().errors)
 
     def test_memory_that_is_not_its_own_repository_is_a_warning(self) -> None:

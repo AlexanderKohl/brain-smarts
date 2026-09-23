@@ -31,7 +31,7 @@ sub-steps) that the progress record uses.
 
 ### 1.1 How to ask
 
-Every question carries a suggested answer (`RULE-2026-0018`). When several answers are valid,
+Every question carries a suggested answer (`SMART-RULE-0010`). When several answers are valid,
 number them and mark one as recommended, so the person can reply "yes" or a number. They may
 always answer something else. Multi-select questions accept a list such as `1, 3, 7`. In
 voice mode, ask one question at a time.
@@ -74,7 +74,7 @@ The agent may show the **last four characters** of a stored secret for confirmat
   person's machine or accounts.
 - Before creating a GitHub repository, confirm the named GitHub account for that operation
   (CONTRACT §10.5); the person may have several.
-- Give every shell command with an explicit `cd` first (`RULE-2026-0013`). Before
+- Give every shell command with an explicit `cd` first (`SMART-RULE-0006`). Before
   `/memory/OWNER.md` exists, use the chosen brain root; afterwards read `brain_root` from it.
 - Never write owner content into the mechanics repository (CONTRACT §3.4). Everything about the
   person goes under `/memory/`.
@@ -315,7 +315,7 @@ front matter, and `<brain_root>/memory/` is its own Git repository with an `orig
    ```
 
    `git add -A` is safe here only because the folder is brand new and holds nothing else; from
-   now on stage named paths only (`RULE-2026-0017`).
+   now on stage named paths only (`SMART-RULE-0009`).
 
 ### B5. Owner profile interview
 
@@ -361,7 +361,7 @@ table.
 
 ```yaml
 active_skills:
-  - ai-session-log
+  - crm
   - manage-credentials
   - xero-access
 ```
@@ -383,10 +383,10 @@ others. Numbers run through both groups so a reply stays short.
 
 | Skill | What it does |
 |---|---|
-| delegate-work | Hands independent pieces of work to parallel worker agents and collects their results (`RULE-2026-0037`) |
-| learning-maintenance | Captures and reviews what the brain learns from use (`RULE-2026-0043`) |
+| delegate-work | Hands independent pieces of work to parallel worker agents and collects their results (`SMART-RULE-0024`) |
+| learning-maintenance | Captures and reviews what the brain learns from use (`SMART-RULE-0028`) |
 | problem-recovery | Searches the brain's own knowledge before re-investigating a failure |
-| product-development | Evidence-and-decision process for software work (`RULE-2026-0028`) |
+| product-development | Evidence-and-decision process for software work (`SMART-RULE-0016`) |
 | raw-file-ingestion | Keeps every uploaded file unchanged under `/memory/raw/` with a readable Markdown copy |
 | repository-preflight | Validates both repositories before every commit |
 | tasks | Keeps your task list under `/memory/tasks/` and reviews what has come due |
@@ -398,26 +398,24 @@ others. Numbers run through both groups so a reply stays short.
 | # | Skill | What it does | Needs |
 |---|---|---|---|
 | 1 | abr-access | Looks up Australian Business Numbers and company names on the Australian Business Register | Free ABR web-services GUID (emailed after registration); the vault |
-| 2 | ai-session-log | Keeps a local, temporary log of every AI call and a viewer at `127.0.0.1:8768` | Nothing external |
-| 3 | crm | Remembers the people and organisations you deal with, and which of your identities to reply as | Nothing external; chosen automatically with 6 |
-| 4 | gohighlevel-access | Reads and, with your confirmation, writes HighLevel CRM data across sub-accounts | A HighLevel **agency** account; a Marketplace app you register; the vault |
-| 5 | google-drive-access | Legacy Drive access through a host's own connector | A host Google connector – **not recommended**; use 6 |
-| 6 | google-workspace-access | Gmail (draft-first), Calendar, Tasks, Drive and Contacts for one or more Google accounts | A Google account; a Google Cloud project and OAuth client you register; the vault; the contact register (3) |
-| 7 | manage-credentials | The encrypted vault every credentialed skill uses | A passphrase you choose; chosen automatically with 1, 4, 6, 9 or 10 |
-| 8 | owner-board | One permanent page showing every request you have made and what needs you | Nothing external – **see the note below** |
-| 9 | railway-access | Reads Railway projects, deployments and logs | A Railway account token you create; the vault |
-| 10 | xero-access | Reads Xero accounting data and, with your approval, creates planned accounts or draft invoices | A Xero organisation; a Xero developer app you register; the vault |
+| 2 | crm | Remembers the people and organisations you deal with, and which of your identities to reply as | Nothing external; chosen automatically with 5 |
+| 3 | gohighlevel-access | Reads and, with your confirmation, writes HighLevel CRM data across sub-accounts | A HighLevel **agency** account; a Marketplace app you register; the vault |
+| 4 | google-drive-access | Legacy Drive access through a host's own connector | A host Google connector – **not recommended**; use 5 |
+| 5 | google-workspace-access | Gmail (draft-first), Calendar, Tasks, Drive and Contacts for one or more Google accounts | A Google account; a Google Cloud project and OAuth client you register; the vault; the contact register (2) |
+| 6 | manage-credentials | The encrypted vault every credentialed skill uses | A passphrase you choose; chosen automatically with 1, 3, 5, 8 or 9 |
+| 7 | owner-board | One permanent page showing every request you have made and what needs you | Nothing external – **see the note below** |
+| 8 | railway-access | Reads Railway projects, deployments and logs | A Railway account token you create; the vault |
+| 9 | xero-access | Reads Xero accounting data and, with your approval, creates planned accounts or draft invoices | A Xero organisation; a Xero developer app you register; the vault |
 
-> **Ask:** Which of 1 to 10 do you want? You can add more later by asking me to resume setup.
-> 1. `2` only – start local, add accounts later (recommended for a first session)
-> 2. A list you give, for example `2, 3, 6, 10`
-> 3. None for now
+> **Ask:** Which of 1 to 9 do you want? You can add more later by asking me to resume setup.
+> 1. None for now – start local, add accounts later (recommended for a first session)
+> 2. A list you give, for example `2, 5, 9`
 >
-> **Suggested reply:** `2`
+> **Suggested reply:** `1`
 
 Owner-board note: nothing to install or register. Its scripts ship in
 `/shared/skills/owner-board/scripts/`; the first board is made when the owner first asks for
-work to be tracked (step G.2), so the `## Setup` row is `done` once the skill is listed in
+work to be tracked (step G.1), so the `## Setup` row is `done` once the skill is listed in
 `active_skills`.
 
 Record the choice in `active_skills` (alphabetical; add `manage-credentials` whenever a
@@ -548,20 +546,7 @@ python shared/skills/manage-credentials/scripts/vault_credentials.py run `
   -- python shared/skills/abr-access/scripts/abr_search_name.py --name "Australian Taxation Office" --max-results 1
 ```
 
-### D.3 ai-session-log
-
-**Agent does** (no credentials, no external account):
-
-```powershell
-cd C:\dev\brain
-python shared/skills/ai-session-log/scripts/session_log.py self-test
-python shared/skills/ai-session-log/scripts/session_log.py listen --once
-```
-
-**Agent verifies:** `self-test` passes and `session_log.py path` prints a file under
-`/temp/ai-session/`. Keeping the listener running and the viewer are in step G.
-
-### D.4 crm
+### D.3 crm
 
 **Agent does** (no credentials, no external account):
 
@@ -579,7 +564,7 @@ python shared/skills/ai-session-log/scripts/session_log.py listen --once
 
 3. Creates `personas/persona-<key>.md` from `personas/_TEMPLATE.md` for each answer and adds
    the rows to the persona catalogue in `KNOWLEDGE.md`. `google_account_alias` stays `null`
-   until a mail account is connected (D.6).
+   until a mail account is connected (D.5).
 4. Asks about the optional tax-registration check in the node's `RULES.md`:
 
    > **Ask:** When you process an invoice, should I check the other party's tax registration?
@@ -601,7 +586,7 @@ python shared/skills/crm/scripts/crm_check.py --node /memory/projects/contacts v
 `done` when it reports `PASS`. When `crm` is not chosen, the starter node stays in memory and its
 rules do not apply.
 
-### D.5 gohighlevel-access
+### D.4 gohighlevel-access
 
 Needs a HighLevel **agency** login with admin rights.
 
@@ -645,13 +630,13 @@ python shared/skills/gohighlevel-access/scripts/ghl_subaccounts.py
 `done` when it prints the agency name and the approved sub-accounts. Every later write still
 needs the target sub-account confirmed for that operation (CONTRACT §10.5).
 
-### D.6 google-workspace-access
+### D.5 google-workspace-access
 
 **Agent does first:**
 
 1. Installs the dependencies:
    `python -m pip install -r shared/skills/google-workspace-access/requirements.txt`.
-2. Makes sure the contact register from D.4 is in place (`crm` is chosen with this skill),
+2. Makes sure the contact register from D.3 is in place (`crm` is chosen with this skill),
    adds its `data/` folder, and writes `/memory/skills/google-workspace-access/config/crm.json`:
 
    ```json
@@ -739,7 +724,7 @@ python shared/skills/manage-credentials/scripts/vault_credentials.py run `
 `google-accounts.json`, and `google_account_alias` on each persona that sends through it. Email stays draft-first: nothing is sent without the owner approving a
 specific draft.
 
-### D.7 railway-access
+### D.6 railway-access
 
 **You do:**
 
@@ -766,7 +751,7 @@ python shared/skills/manage-credentials/scripts/vault_credentials.py run `
   -- python shared/skills/railway-access/scripts/railway_projects.py --list-workspaces
 ```
 
-### D.8 xero-access
+### D.7 xero-access
 
 **You do** (portal labels move – `verify against current host docs`):
 
@@ -816,7 +801,7 @@ the mechanics. Every write still needs the organisation confirmed for that opera
 
 **Done when:** each file below exists on this machine for each host the person uses.
 
-`RULE-2026-0015` allows host entry files to **point** at the portable bootstrap and nothing
+`SMART-RULE-0007` allows host entry files to **point** at the portable bootstrap and nothing
 more: no behavioural rule may live in them. Every template in `/shared/templates/host-pointers/`
 is such a pointer. Copy the body, fill `<BRAIN_ROOT>`, and change nothing else.
 
@@ -831,7 +816,7 @@ Rows are grouped by host, then in the order a session looks for them.
 | Codex | `<brain_root>/memory/AGENTS.md` | `memory-root.AGENTS.template.md` | Codex stops at the Git root, and `memory/` is its own repository (installed in B4) |
 | Codex | `~/.codex/AGENTS.md` | `codex-user.AGENTS.template.md` | Every Codex session, any folder |
 | Codex, Cursor and others | `<project repo>/AGENTS.md` | `project-repo.AGENTS.template.md` | A project repository's own pointer |
-| Cursor | `<brain_root>/AGENTS.md` and `.cursor/hooks.json` | already in the smarts | Cursor reads `AGENTS.md`; the hooks feed the session log |
+| Cursor | `<brain_root>/AGENTS.md` | already in the smarts | Cursor reads `AGENTS.md` |
 | Cursor | `<project repo>/.cursor/rules/brain-contract.mdc` | `cursor-project-repo.brain-contract.mdc.template` | Only when the project's Cursor does not pick up `AGENTS.md` (`verify`) |
 
 **Agent does:** for a user-level file that already exists, show the person the current content
@@ -844,7 +829,7 @@ and offer:
 >
 > **Suggested reply:** `1`
 
-If the existing content carries behavioural rules, point out that `RULE-2026-0015` wants them in
+If the existing content carries behavioural rules, point out that `SMART-RULE-0007` wants them in
 `/memory/RULES.md` instead, and offer to draft that proposal.
 
 Project repository pointers name the brain by its usual sibling location and never name a
@@ -858,7 +843,7 @@ the host defaults.
 ### F.1 The trade-off
 
 Hosts ask before commands and edits by default. That is safe and slow: the brain's own rules
-already require a commit at every checkpoint (`RULE-2026-0017`), so a person who approves each
+already require a commit at every checkpoint (`SMART-RULE-0009`), so a person who approves each
 `git add` and `git commit` spends the session clicking. Allowing routine commands removes the
 clicks. The cost is that a mistaken command runs without a human looking at it first.
 
@@ -869,7 +854,7 @@ What stays whatever the setting:
    reading the same file, so the contract's credential rules (CONTRACT §10.3) still apply as
    instructions, not only as settings.
 2. **No destructive Git.** Force push, hard reset, `git clean`, amending and `--no-verify` are
-   denied (`RULE-2026-0017`).
+   denied (`SMART-RULE-0009`).
 3. **Recursive deletes ask.** `rm -rf` and `Remove-Item -Recurse` always ask.
 4. **External side effects are still confirmed** with the owner for each operation (CONTRACT
    §10.5). No setting replaces that conversation; the skills also refuse writes without their
@@ -949,37 +934,13 @@ credentialed command.
 Offer each; each is `skipped` unless the person says yes.
 
 > **Ask:** Which extras do you want?
-> 1. Session-log listener at sign-in, and the viewer (recommended if `ai-session-log` was chosen)
-> 2. Owner board (blocked until its scripts ship – see step C)
-> 3. A scheduled task (see G.3)
-> 4. None now
+> 1. Owner board (recommended if `owner-board` was chosen – see step C)
+> 2. A scheduled task (see G.2)
+> 3. None now
 >
 > **Suggested reply:** `1`
 
-### G.1 Session-log listener and viewer
-
-Run while working:
-
-```powershell
-cd C:\dev\brain
-python shared/skills/ai-session-log/scripts/session_log.py listen --model "<host> <model>"
-python shared/skills/ai-session-log/scripts/session_log.py view --open
-```
-
-The viewer is at `http://127.0.0.1:8768/`. Use the model name the host shows; never invent one.
-
-To start the listener at every Windows sign-in (after a yes; it creates a scheduled task):
-
-```powershell
-cd C:\dev\brain
-schtasks /Create /TN "Brain\SessionLogListener" /SC ONLOGON /RL LIMITED `
-  /TR "pythonw C:\dev\brain\shared\skills\ai-session-log\scripts\session_log.py listen --root C:\dev\brain"
-```
-
-`pythonw` must be on `PATH` for the task, or give its full path (`where.exe pythonw`). macOS
-(`launchd`) and Linux (`systemd --user`) equivalents are not written yet (`verify`).
-
-### G.2 Owner board
+### G.1 Owner board
 
 When `owner-board` is in `active_skills`: a board per project node at
 `/memory/projects/<node>/status/status.html` and the directory at `/memory/boards/index.html`,
@@ -995,7 +956,7 @@ python shared/skills/owner-board/scripts/build_status.py --board <id>
 **Done when:** that command prints `wrote ...status.html` and `wrote ...index.html`, and the
 owner has opened and bookmarked `/memory/boards/index.html`.
 
-### G.3 Scheduled tasks
+### G.2 Scheduled tasks
 
 The contract forbids claiming future follow-up unless a scheduler is actually configured
 (CONTRACT §14). Candidates, alphabetical:
@@ -1026,7 +987,7 @@ given.
    ```
 
 2. Commit each repository separately, staging named paths only, with the host and model in the
-   message (`RULE-2026-0017`):
+   message (`SMART-RULE-0009`):
 
    List what setup changed with `git status --short`, check that no secret or vault file is
    among it, and stage those paths by name (example below):
@@ -1045,7 +1006,7 @@ given.
    The smarts commit exists only if the manifest changed; nothing about the person goes there.
 3. Set every `## Setup` row to its final status and append one `LOG.md` entry naming the
    chosen skills, the host wiring and the settings level.
-4. Report the commit hash and push status for each repository (`RULE-2026-0023`).
+4. Report the commit hash and push status for each repository (`SMART-RULE-0014`).
 
 **Tour** – five minutes, in this order (the order the owner will meet them):
 

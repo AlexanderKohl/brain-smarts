@@ -94,7 +94,7 @@ One word for one thing, across the interface, the code, the stored data and the 
 
 ### 7. Every list has a deliberate order, and it serves the batch being worked
 
-Root `RULE-2026-0040` requires the order to be chosen. This skill adds what to choose it for: the
+Root `SMART-RULE-0027` requires the order to be chosen. This skill adds what to choose it for: the
 way the reader batches the work.
 
 Two axes usually compete. Grouping by **question** makes one judgement serve a run of rows.
@@ -153,7 +153,7 @@ fact.
 - The screen or surface being changed, and the specification section that governs it.
 - What arrives underneath it while a person is using it: which events repaint, and how often.
 - What the person can have in progress on it: typed text, uncommitted choices, an open panel.
-- The product's version rule (root `RULE-2026-0039`) and its harness command.
+- The product's version rule (root `SMART-RULE-0026`) and its harness command.
 
 ## Data sources
 

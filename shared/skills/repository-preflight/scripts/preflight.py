@@ -403,7 +403,7 @@ def validate_tasks(
             result.errors.append(
                 f"{display}: {status} task requires next_review"
             )
-        # RULE-2026-0038: every open task is listed in its store's STATE.md with its status word.
+        # SMART-RULE-0025: every open task is listed in its store's STATE.md with its status word.
         for open_dir, state_path, state_lines in open_stores:
             if open_dir not in path.parents or not metadata.get("id"):
                 continue

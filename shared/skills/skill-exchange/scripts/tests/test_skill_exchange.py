@@ -3,7 +3,7 @@
 Run from the brain root:
     python -m unittest discover -s shared/skills/skill-exchange/scripts/tests -v
 
-Every name and value here is invented (RULE-2026-0016).
+Every name and value here is invented (SMART-RULE-0008).
 """
 
 from __future__ import annotations

@@ -33,7 +33,7 @@ Connect one authorised HighLevel agency, rotate its OAuth credentials securely, 
 - Read Company and Location resources (contacts, opportunities, pipelines, custom fields and values, workflows, calendars, phone numbers) through the reusable client.
 - Create or update a sub-account, or perform any other write, only after the owner confirms the exact target for this operation (CONTRACT §10.5).
 - Run the pipeline and stage migration review UI on `localhost:8769` and apply only owner-approved migrations.
-- Record non-obvious API behaviour under `knowledge/` (`RULE-2026-0022`).
+- Record non-obvious API behaviour under `knowledge/` (`SMART-RULE-0013`).
 
 ## Permissions
 

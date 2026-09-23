@@ -24,7 +24,7 @@ that live in their own repositories. Decide which with CONTRACT §7.1; create a 
 ##### `brain-development/`
 
 Contains the node for the owner's work on the brain itself: the active conductor and
-`## Handover` (`RULE-2026-0032`), delegation trials (`RULE-2026-0037`) and measurements.
+`## Handover` (`SMART-RULE-0019`), delegation trials (`SMART-RULE-0024`) and measurements.
 
 ##### `contacts/`
 

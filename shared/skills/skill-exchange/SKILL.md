@@ -39,7 +39,7 @@ Skills move between brains in both directions, and each move is the owner's deci
    and commit recorded in memory.
 
 The skill never pushes, opens a pull request, merges, installs or switches a skill on by
-itself. Each of those is one question to the owner with a suggested answer (`RULE-2026-0018`).
+itself. Each of those is one question to the owner with a suggested answer (`SMART-RULE-0010`).
 
 ## Where things live
 
@@ -69,7 +69,7 @@ exchange lives in memory:
 ```
 
 `suggestions` is `checkpoint` (default: at natural checkpoints, batched), `weekly` (only in
-the weekly review of `RULE-2026-0043`) or `off` (only when the owner asks).
+the weekly review of `SMART-RULE-0028`) or `off` (only when the owner asks).
 
 ## When to suggest, and how much
 
@@ -83,7 +83,7 @@ the weekly review of `RULE-2026-0043`) or `off` (only when the owner asks).
   same upstream commit.
 - **Silent when there is nothing**: no "nothing new upstream" line unless the owner asked.
 - **The exception**: an upstream change that fixes a security fault in a skill the owner uses
-  is reported at the next response, not the next checkpoint (`RULE-2026-0043`, *Interrupt only
+  is reported at the next response, not the next checkpoint (`SMART-RULE-0028`, *Interrupt only
   when needed*).
 
 ## Procedure
@@ -97,7 +97,7 @@ that project) meets **two** of these:
 - it is used, or copied, by a second node;
 - nothing in it depends on this owner's data once its configuration is moved out;
 - it wraps an external system or format other owners use;
-- the agent searched `/shared/skills/` for it first and found nothing (`RULE-2026-0010`).
+- the agent searched `/shared/skills/` for it first and found nothing (`SMART-RULE-0005`).
 
 ```powershell
 cd <brain_root>
@@ -119,7 +119,7 @@ The answer is recorded with `candidate mark <path> suggested|declined|promoted`.
 
 Promotion follows CONTRACT §3.4: the mechanism goes to `/shared/skills/<name>/` in generalised
 form (`SKILL.md` with `status: proposed`, `scripts/`, `scripts/tests/` with fictional data per
-`RULE-2026-0016`), owner configuration and notes go to `/memory/skills/<name>/`, and the
+`SMART-RULE-0008`), owner configuration and notes go to `/memory/skills/<name>/`, and the
 original incident stays in its node. Then, **before the first mechanics commit**:
 
 ```powershell

@@ -203,7 +203,7 @@ Before calling full `gmail read` or fetching images for an **already classified*
 3. Text-first: never invent image content; fetch images only when the flag allows or the owner explicitly requests them.
 4. Do not invent `preferred_reply_persona` for newsletters (leave null; no default reply draft).
 
-Governance note: the auto-create / first-encounter full-body / Google Contacts merge rules are governed by the CRM node's own `<crm-node>/RULES.md` (in this brain, accepted as `RULE-2026-0009`).
+Governance note: the auto-create / first-encounter full-body / Google Contacts merge rules are governed by the CRM node's own `<crm-node>/RULES.md`.
 
 Search / read:
 

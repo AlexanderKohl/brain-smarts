@@ -1,5 +1,5 @@
 ---
-id: RULE-YYYY-NNNN
+id: PROPOSAL-short-slug
 title: Concise Governance Change
 type: governance_proposal
 schema_version: 0.2
@@ -8,6 +8,7 @@ status: draft
 owner: OWNER
 created: YYYY-MM-DDTHH:mm:ss+HH:MM
 updated: YYYY-MM-DDTHH:mm:ss+HH:MM
+rule_id: null
 accepted_by: null
 accepted_at: null
 implemented_at: null

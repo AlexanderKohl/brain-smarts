@@ -266,7 +266,7 @@ def main() -> int:
         if args.operation == "session":
             print(
                 "WARNING: vault_credentials.py session is deprecated. "
-                "Prefer the unlocked Portable Vault tray app (RULE-2026-0012).",
+                "Prefer the unlocked Portable Vault tray app.",
                 file=sys.stderr,
             )
             broker_values = _try_broker_fields(
