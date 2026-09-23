@@ -17,7 +17,7 @@ metadata:
     - /shared/skills/owner-board
     - /shared/skills/repository-preflight
   created: 2026-09-23T13:10:00+10:00
-  updated: 2026-09-23T15:00:00+10:00
+  updated: 2026-09-23T15:38:35+10:00
 ---
 
 # Tasks
@@ -70,9 +70,22 @@ The task records, `/memory/tasks/STATE.md`, and the `STATE.md` of each reference
    It takes the next number across every folder, copies `/memory/tasks/templates/TASK_TEMPLATE.md`
    to `open/TASK-YYYY-NNNN-<slug>.md` (or `inbox/` for `--status inbox`, the default, when the
    task still needs clarifying) with title, status, owner, priority, timestamps and
-   `project_refs` filled, adds the row to `/memory/tasks/STATE.md` for an open task, and – when
-   the owner board is set up – regenerates the one board the task lands on, so it is on that
-   board at once (see **Boards** below).
+   `project_refs` filled, adds the row to `/memory/tasks/STATE.md` for an open task (and sets
+   the count in the `## Open tasks (N, ...)` heading above that table), and – when the owner
+   board is set up – regenerates the one board the task lands on, so it is on that board at once
+   (see **Boards** below).
+
+   **Timestamps** are in the owner's timezone, the IANA name in `timezone` in
+   `/memory/OWNER.md`, when Python has a zone database for it. Windows usually has none unless
+   the `tzdata` package is installed (`python -m pip install tzdata`); without it `new` stamps
+   the machine's zone, and says so in its output when that offset is not one of the offsets
+   written after the zone name (for example `Australia/Brisbane (+10:00)`). `--now` overrides
+   the stamp.
+
+   **Git Bash on Windows** rewrites `/memory/...` into a Windows path before the script sees
+   it; put `MSYS_NO_PATHCONV=1` in front of the command there. `new` refuses a `--project` value
+   that is not a repository-root path under `/memory/` (or another existing `/` path in the
+   brain), and names the fix.
 3. Order `--project` deliberately: **the first project that has a board decides which board
    shows the task**; a task with no project, or whose projects have no board, is shown on the
    owner's personal board.

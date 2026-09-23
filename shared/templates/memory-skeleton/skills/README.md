@@ -21,5 +21,11 @@ stay canonical in `/shared/skills/`. Never store a secret here.
 
 #### Folders
 
-No immediate child folders exist yet. Add one per skill that needs owner configuration, and
-summarise it here.
+Listed alphabetically. Add one per skill that needs owner configuration, and summarise it here.
+
+##### `owner-board/`
+
+Contains `config/boards.json`, the owner-board registry (`/shared/skills/owner-board/SKILL.md`,
+section "Configuration"). It ships with no project boards, so the personal task board and the
+directory at `/memory/boards/` are generated from the first task. Harmless when the
+`owner-board` skill is not in `active_skills`.

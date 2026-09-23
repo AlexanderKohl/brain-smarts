@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-23T13:00:00+10:00
-updated: 2026-09-23T15:02:27+10:00
+updated: 2026-09-23T15:38:35+10:00
 owner: brain-owner
 skill_refs:
   - /shared/skills/manage-credentials
@@ -78,6 +78,23 @@ The agent may show the **last four characters** of a stored secret for confirmat
   `/memory/OWNER.md` exists, use the chosen brain root; afterwards read `brain_root` from it.
 - Never write owner content into the mechanics repository (CONTRACT §3.4). Everything about the
   person goes under `/memory/`.
+
+### 1.4 Shells
+
+Command blocks in this guide are **PowerShell** unless marked `bash` (a backtick continues a
+line, `$env:NAME = "value"` sets a variable). In bash (macOS, Linux, or Git Bash on Windows) end
+a continued line with `\` instead, and set a variable for one command with
+`NAME=value python ...`.
+
+**Git Bash on Windows rewrites any argument that starts with `/` into a Windows path**, so a
+repository-root argument such as `/memory/projects/contacts` reaches the script as
+`C:/Program Files/Git/memory/projects/contacts`. This applies to every command in this guide
+and to every later session. In Git Bash, put `MSYS_NO_PATHCONV=1` in front of any command that
+passes a `/memory/...` or other `/`-path argument, for example
+`MSYS_NO_PATHCONV=1 python shared/skills/tasks/scripts/tasks.py new --title "..." --project /memory/projects/<node>`.
+It is harmless on macOS and Linux. `tasks.py` refuses a rewritten `--project` value, and the
+tasks, CRM and owner-board scripts name `MSYS_NO_PATHCONV` when a path they were given looks
+rewritten.
 
 ## 2. Resuming
 
@@ -292,12 +309,15 @@ front matter, and `<brain_root>/memory/` is its own Git repository with an `orig
 
    macOS and Linux: `cd ~/dev/brain && [ -e memory ] || cp -R shared/templates/memory-skeleton memory`.
 2. Run the owner-profile interview (B5) and write the answers into `memory/OWNER.md`.
-3. In every file under `memory/`: replace `OWNER_SHORT_NAME` and remove the `template-` prefix
-   from each `id`. Outside `memory/tasks/templates/`, also set `created`, `updated` and the first
-   `LOG.md` heading to the current time in the owner's timezone (CONTRACT §8.2). Leave the
-   `YYYY-...` timestamps in `memory/tasks/templates/` as they are: the task template is filled
-   each time a task is made. In `memory/tasks/STATE.md`, replace the year in the next free number
-   (`TASK-YYYY-0001` becomes, for example, `TASK-2026-0001`).
+3. In every file under `memory/`: replace `OWNER_SHORT_NAME`, remove the `template-` prefix
+   from each `id`, and set `created`, `updated` and the first `LOG.md` heading to the current
+   time in the owner's timezone (CONTRACT §8.2). **Exception** for the templates that are
+   copied again for every new record – the files in `memory/tasks/templates/` and the two
+   `memory/projects/contacts/*/_TEMPLATE.md` files (contacts and personas): leave their
+   `YYYY-...` timestamps and other upper-case placeholders as shipped, because each copy is
+   filled when a task, contact or persona is made. Their `id` still loses its `template-` prefix:
+   an id may exist only once across both repositories, and the skeleton keeps the original. The
+   next free task number is not stored anywhere: `tasks.py next-id` reads it from the records.
 4. Add the `## Setup` section to `memory/STATE.md` (section 2.1) with every step detected so far.
 5. Copy `/shared/templates/host-pointers/memory-root.AGENTS.template.md` to
    `memory/AGENTS.md`; in the copy, drop the `template-` prefix from its `id`, delete the
@@ -350,6 +370,23 @@ pwsh -NoProfile -c '$w = (Get-TimeZone).Id; $i = $null; [void][TimeZoneInfo]::Tr
 Use `powershell` instead of `pwsh` when PowerShell 7 is not installed; the conversion needs .NET 6
 or later, so on Windows PowerShell 5.1 map the printed Windows zone by hand. Do not run
 `tzutil /g` from Git Bash: its output arrives mangled there.
+
+The conversion (and `readlink /etc/localtime` on a machine set up by someone else) gives the
+zone's **reference city**, which is often not where the person lives: every machine on
+`AUS Eastern Standard Time` converts to `Australia/Sydney`, although a person in Melbourne
+belongs in `Australia/Melbourne`. So ask for their city and use the IANA zone that names it, or
+the zone that covers it when it has none of its own:
+
+> **Ask:** Which city do you live in? It sets the timezone on everything your agents write.
+> 1. `<reference city of the detected zone>` (recommended when it is yours)
+> 2. Another city you name
+>
+> **Suggested reply:** `1`
+
+Scripts that stamp a time (for example `tasks.py new`) use this zone when Python has a zone
+database for it; Windows usually has none unless the `tzdata` package is installed
+(`python -m pip install tzdata`). Without it they stamp the machine's zone and say so whenever
+its offset is not one of the offsets written after the zone name.
 
 > **Ask:** Here is your profile as I detected it. Is it right?
 > 1. Yes, write it (recommended)
@@ -431,10 +468,11 @@ others. Numbers run through both groups so a reply stays short.
 > **Suggested reply:** `1`
 
 Owner-board note: nothing to install or register. Its scripts ship in
-`/shared/skills/owner-board/scripts/`; the first board is made when the owner first asks for
-work to be tracked (step G.1), so the `## Setup` row is `done` once the skill is listed in
-`active_skills`. The personal task board needs no step: it appears at
-`/memory/boards/personal.html` the first time any board or task is generated.
+`/shared/skills/owner-board/scripts/`, and the memory skeleton ships its registry,
+`/memory/skills/owner-board/config/boards.json`, with no project boards yet. So the personal task
+board needs no step: the first `tasks.py new` writes `/memory/boards/personal.html` and the
+directory `/memory/boards/index.html`. The `## Setup` row is `done` once the skill is listed in
+`active_skills`; project boards are offered in step G.1.
 
 Not on the menu: `skill-exchange` (sharing skills with other brains and pulling new ones from
 `upstream`) is proposed but not yet active (`PROPOSAL-skill-exchange`), so it is not offered
@@ -454,12 +492,8 @@ that command succeeds.
 Every command below runs from the brain root. Commands that read the vault need the **Vault
 Agent unlocked** (tray icon red, or `vaultctl.py status` reports unlocked).
 
-**Shells.** The command blocks in this step are **PowerShell** (a backtick continues a line,
-`$env:NAME = "value"` sets a variable). In bash (macOS, Linux, or Git Bash on Windows) end a
-continued line with `\` instead, and set a variable for one command with `NAME=value python ...`.
-Git Bash rewrites any argument that starts with `/` into a Windows path, so `/memory/...`
-arguments break there; prefix those commands with `MSYS_NO_PATHCONV=1` (the bash variants below
-show it). It is harmless on macOS and Linux.
+**Shells.** The command blocks in this step are PowerShell; section 1.4 gives the bash forms
+and the Git Bash `MSYS_NO_PATHCONV=1` prefix (the bash variants below show it).
 
 ### D.0 Credential registry (agent only)
 
@@ -898,8 +932,8 @@ Two kinds of file, two owners:
 
    ```powershell
    New-Item -ItemType Directory -Force "$HOME\.claude", "$HOME\.codex" | Out-Null
-   if (Test-Path "$HOME\.claude\CLAUDE.md") { Copy-Item "$HOME\.claude\CLAUDE.md" "$HOME\.claude\CLAUDE.md.bak-<date>" }
-   if (Test-Path "$HOME\.codex\AGENTS.md") { Copy-Item "$HOME\.codex\AGENTS.md" "$HOME\.codex\AGENTS.md.bak-<date>" }
+   $f = "$HOME\.claude\CLAUDE.md"; if ((Test-Path $f) -and -not (Test-Path "$f.bak-<date>")) { Copy-Item $f "$f.bak-<date>" }
+   $f = "$HOME\.codex\AGENTS.md"; if ((Test-Path $f) -and -not (Test-Path "$f.bak-<date>")) { Copy-Item $f "$f.bak-<date>" }
    Copy-Item "<brain_root>\temp\setup\claude-CLAUDE.md" "$HOME\.claude\CLAUDE.md"
    Copy-Item "<brain_root>\temp\setup\codex-AGENTS.md" "$HOME\.codex\AGENTS.md"
    ```
@@ -908,14 +942,15 @@ Two kinds of file, two owners:
 
    ```bash
    mkdir -p ~/.claude ~/.codex
-   [ -e ~/.claude/CLAUDE.md ] && cp ~/.claude/CLAUDE.md ~/.claude/CLAUDE.md.bak-<date>
-   [ -e ~/.codex/AGENTS.md ] && cp ~/.codex/AGENTS.md ~/.codex/AGENTS.md.bak-<date>
+   f=~/.claude/CLAUDE.md; [ -e "$f" ] && [ ! -e "$f.bak-<date>" ] && cp "$f" "$f.bak-<date>"
+   f=~/.codex/AGENTS.md; [ -e "$f" ] && [ ! -e "$f.bak-<date>" ] && cp "$f" "$f.bak-<date>"
    cp <brain_root>/temp/setup/claude-CLAUDE.md ~/.claude/CLAUDE.md
    cp <brain_root>/temp/setup/codex-AGENTS.md ~/.codex/AGENTS.md
    ```
 
-   Give only the lines for the hosts the person uses. The Codex trust entry belongs to the
-   settings, step F.3.
+   Give only the lines for the hosts the person uses. A backup is made only when none exists
+   for that date, so running the commands a second time never overwrites the first backup with
+   the already-replaced file. The Codex trust entry belongs to the settings, step F.3.
 4. After the person says done, verify read-only: each installed file matches its scratch file,
    and, only where a file existed before, its backup exists. Record the result under `## Setup`.
 
@@ -992,6 +1027,17 @@ python -c "import json,os,sys; e,t,o=sys.argv[1:]; a=json.load(open(e)) if os.pa
 The three arguments are the existing file, the filled template and the output. In bash use
 `~/.claude/settings.json` and forward slashes; the command is otherwise the same. Show the
 person the merged file, then give them the step E backup-then-copy commands for it.
+
+The merge never replaces a value the person already has. When their file already sets
+`defaultMode` (or any other single value the template also sets) to something else, the merged
+file keeps theirs; say so and ask:
+
+> **Ask:** Your settings already use `defaultMode: "<their value>"`; the template suggests
+> `"acceptEdits"`. Which should stay?
+> 1. Keep yours (recommended – it is what you chose)
+> 2. Use `acceptEdits` – I change it in the merged scratch file before you copy it
+>
+> **Suggested reply:** `1`
 
 ### F.2 Claude Code
 
@@ -1098,13 +1144,34 @@ Show the person only the suggestion that applies to them.
 When `owner-board` is in `active_skills`: a board per project node at
 `/memory/projects/<node>/status/status.html`, the personal task board at
 `/memory/boards/personal.html` (every task no project board holds), and the directory at
-`/memory/boards/index.html`, which the owner bookmarks once. The agent makes a board by following **Making a board** in
-`/shared/skills/owner-board/SKILL.md`: `board.md` and `cards/` in the node, one entry in
-`/memory/skills/owner-board/config/boards.json`, then
+`/memory/boards/index.html`, which the owner bookmarks once. The personal board and the
+directory already come from the skeleton's registry (step C); this step adds the first project
+board.
+
+> **Ask:** Which work should get the first board?
+> 1. The brain itself – node `/memory/projects/brain-development`, board id `brain`, label
+>    `My brain` (recommended – setup and every later improvement land there)
+> 2. A project you name
+> 3. None yet – the personal board is enough for now
+>
+> **Suggested reply:** `1`
+
+The agent makes the board by following **Making a board** in
+`/shared/skills/owner-board/SKILL.md`: copy `/shared/skills/owner-board/templates/board.template.md`
+to `<node>/status/board.md` and fill it, create `cards/` beside it, list `status/` in the node's
+`README.md`, and add one entry to the `boards` list in
+`/memory/skills/owner-board/config/boards.json`. For option 1 the entry is:
+
+```json
+{ "id": "brain", "label": "My brain", "status": "projects/brain-development/status",
+  "blurb": "Setting up the brain and every later improvement" }
+```
+
+Then build it:
 
 ```powershell
 cd C:\dev\brain
-python shared/skills/owner-board/scripts/build_status.py --board <id>
+python shared/skills/owner-board/scripts/build_status.py --board brain
 ```
 
 **Done when:** that command prints `wrote ...status.html` and `wrote ...index.html`, and the

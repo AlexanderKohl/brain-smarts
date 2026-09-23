@@ -241,6 +241,13 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("no owner-board configuration", err.getvalue())
 
+    def test_a_config_path_rewritten_by_git_bash_names_the_fix(self):
+        mangled = "C:/Program Files/Git/memory/skills/owner-board/config/boards.json"
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            code = board_config.cli(build_status.main, ["--root", str(self.brain.root), "--config", mangled])
+        self.assertEqual(code, 2)
+        self.assertIn("MSYS_NO_PATHCONV=1", err.getvalue())
+
 
 class CardTests(unittest.TestCase):
     def setUp(self):
@@ -514,6 +521,18 @@ class TaskBoardTests(unittest.TestCase):
                            updated=updated, due=due, review=review, waiting=waiting,
                            refs="".join("\n  - " + r for r in refs) if refs else " []")
         (self.brain.memory / "tasks" / folder / (tid + "-fictional.md")).write_text(text, encoding="utf-8")
+
+    def test_the_memory_skeleton_config_draws_the_personal_board_from_the_first_task(self):
+        skeleton = (SCRIPTS.parents[3] / "shared" / "templates" / "memory-skeleton" / "skills" / "owner-board"
+                    / "config" / "boards.json")
+        path = self.brain.memory / "skills" / "owner-board" / "config" / "boards.json"
+        shutil.copyfile(skeleton, path)
+        self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["boards"], [])
+        _, out = quiet(task_board.main, ["--root", str(self.brain.root), "--no-fetch", "build",
+                                         "--for", "TASK-2026-0910"])
+        self.assertIn("is on Personal tasks", out)
+        self.assertTrue((self.brain.memory / "boards" / "personal.html").is_file())
+        self.assertTrue((self.brain.memory / "boards" / "index.html").is_file())
 
     def set_tasks(self, **values):
         path = self.brain.memory / "skills" / "owner-board" / "config" / "boards.json"

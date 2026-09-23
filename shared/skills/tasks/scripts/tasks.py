@@ -8,9 +8,19 @@ Commands:
              STATE.md row, and refresh the owner board that shows it
 
 The store is `--tasks` (a repository-root path such as /memory/tasks, or an absolute path),
-default /memory/tasks. Standard library only. Only `new` writes: one record, one STATE.md row,
-and (through /shared/skills/owner-board/scripts/task_board.py, when the owner board is set up)
-the generated board pages.
+default /memory/tasks. Standard library only. Only `new` writes: one record, one STATE.md row
+(and the open-task count in that table's heading), and (through
+/shared/skills/owner-board/scripts/task_board.py, when the owner board is set up) the generated
+board pages.
+
+Timestamps from `new` are in the owner's timezone, the IANA name in `timezone` in
+/memory/OWNER.md. Python resolves that name only where the operating system or the `tzdata`
+package supplies the zone database (Windows usually has neither); otherwise `new` stamps the
+machine's zone and says so when its offset is not one OWNER.md lists.
+
+Git Bash on Windows rewrites an argument that starts with `/` into a Windows path, so
+`--project /memory/...` would arrive as `C:/Program Files/Git/memory/...`. `new` refuses such a
+value; run the command with `MSYS_NO_PATHCONV=1` in front.
 
 Status validity per record, `next_review` on waiting and scheduled tasks, and the
 /memory/tasks/STATE.md listing are also enforced by /shared/skills/repository-preflight/.
@@ -20,13 +30,20 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+
+try:
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+except ImportError:  # pragma: no cover - Python before 3.9
+    ZoneInfo = None  # type: ignore[assignment]
+    ZoneInfoNotFoundError = Exception  # type: ignore[assignment,misc]
 
 DEFAULT_STORE = "/memory/tasks"
 FOLDER_STATUSES = {
@@ -104,6 +121,26 @@ def brain_root(start: Path) -> Path | None:
         if (parent / "CONTRACT.md").is_file():
             return parent
     return None
+
+
+MSYS_HINT = ("Git Bash rewrites an argument that starts with / into a Windows path; "
+             "run the command with MSYS_NO_PATHCONV=1 in front")
+
+
+def looks_path_converted(value: str) -> bool:
+    """True for a repository-root path that Git Bash (MSYS) has turned into a Windows path."""
+    return bool(re.match(r"^[A-Za-z]:[\\/]", value)) and (
+        bool(os.environ.get("MSYSTEM")) or bool(re.search(r"[\\/]Git[\\/]", value, re.I)))
+
+
+def check_project_ref(value: str, root: Path | None) -> None:
+    """A --project value must be a repository-root path: /memory/..., or an existing /<path>."""
+    if value.startswith("/memory/"):
+        return
+    if value.startswith("/") and root is not None and (root / value.strip("/")).exists():
+        return
+    hint = f" ({MSYS_HINT})" if looks_path_converted(value) else ""
+    raise ValueError(f"--project {value} is not a repository-root path starting with /memory/{hint}")
 
 
 def resolve_store(store: str | None, cwd: Path) -> Path:
@@ -311,7 +348,9 @@ def state_row(state_text: str, fields: dict[str, Any]) -> tuple[str, bool]:
 
     Cells follow that table's own header: Task, Status, Priority, a review or waiting column,
     Title; anything else gets `-`. The row goes at the end of the table: a new task has the
-    highest number, and the table is ordered by number.
+    highest number, and the table is ordered by number. The count in the nearest heading above
+    the table (`## Open tasks (N, ...`) becomes the table's row count, and an older
+    `Next free number:` line, where a store still keeps one, is moved on.
     """
     lines = state_text.split("\n")
     for i, line in enumerate(lines):
@@ -341,8 +380,47 @@ def state_row(state_text: str, fields: dict[str, Any]) -> tuple[str, bool]:
             else:
                 row.append("-")
         lines.insert(end, "| " + " | ".join(cell.replace("|", "/") for cell in row) + " |")
-        return "\n".join(lines), True
+        rows = sum(1 for line in lines[i + 2:end + 1] if line.lstrip().startswith("|"))
+        for j in range(i - 1, -1, -1):
+            if lines[j].startswith("#"):
+                lines[j] = re.sub(r"^(#+ Open tasks \()\d+", lambda m: f"{m.group(1)}{rows}", lines[j], count=1)
+                break
+        text = "\n".join(lines)
+        if fields.get("_next_free"):
+            text = re.sub(r"(Next free number: `)TASK-[0-9Y]{4}-\d{4}(`)",
+                          lambda m: f"{m.group(1)}{fields['_next_free']}{m.group(2)}", text)
+        return text, True
     return state_text, False
+
+
+def owner_now(store: Path) -> tuple[str, str | None]:
+    """The current time in the owner's timezone (OWNER.md `timezone`), and a note when it is not.
+
+    `timezone` holds an IANA name, optionally followed by its offsets, for example
+    `Australia/Brisbane (+10:00)`. Without a zone database for that name, the machine's zone is
+    used; the note says so when the machine's offset is not one of the listed offsets.
+    """
+    machine = datetime.now().astimezone().replace(microsecond=0)
+    profile = store.parent / "OWNER.md"
+    meta = parse_front_matter(profile.read_text(encoding="utf-8")) if profile.is_file() else None
+    value = str((meta or {}).get("timezone") or "").strip()
+    name = value.split("(")[0].strip()
+    if not name or name == "IANA_ZONE":
+        return machine.isoformat(), None
+    if name in ("UTC", "Etc/UTC", "GMT", "Etc/GMT"):
+        return datetime.now(timezone.utc).replace(microsecond=0).isoformat(), None
+    if ZoneInfo is not None:
+        try:
+            return datetime.now(ZoneInfo(name)).replace(microsecond=0).isoformat(), None
+        except (ZoneInfoNotFoundError, ValueError, OSError):
+            pass
+    offsets = re.findall(r"[+-]\d{2}:\d{2}", value)
+    offset = machine.isoformat()[-6:]
+    if offset in offsets:
+        return machine.isoformat(), None
+    return machine.isoformat(), (f"timestamp: {name} from OWNER.md cannot be resolved here (no zone "
+                                 f"database; `python -m pip install tzdata` adds one), so the "
+                                 f"machine's zone {offset} was used")
 
 
 def create(store: Path, title: str, status: str = "inbox", priority: str = "normal",
@@ -364,8 +442,15 @@ def create(store: Path, title: str, status: str = "inbox", priority: str = "norm
     template_path = store / TEMPLATE
     if not template_path.is_file():
         raise ValueError(f"no task template at {template_path}")
+    root = brain_root(store)
+    for ref in projects or []:
+        check_project_ref(ref, root)
     template = template_path.read_text(encoding="utf-8")
-    stamp = now or datetime.now().astimezone().replace(microsecond=0).isoformat()
+    note = None
+    if now:
+        stamp = now
+    else:
+        stamp, note = owner_now(store)
     tid = next_id(store, year or int(stamp[:4]))
     template_meta = parse_front_matter(template) or {}
     fields: dict[str, Any] = {
@@ -380,11 +465,13 @@ def create(store: Path, title: str, status: str = "inbox", priority: str = "norm
     text = render_new(template, dict(fields, _outcome=outcome, _next_action=next_action))
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8", newline="\n")
-    said = [f"created {tid}: {path}"]
+    said = [f"created {tid}: {path}"] + ([note] if note else [])
     if folder == "open" and update_state:
         state = store / "STATE.md"
         if state.is_file():
-            updated, added = state_row(state.read_text(encoding="utf-8"), fields)
+            prefix, number = tid.rsplit("-", 1)
+            next_free = f"{prefix}-{int(number) + 1:04d}"
+            updated, added = state_row(state.read_text(encoding="utf-8"), dict(fields, _next_free=next_free))
             if added:
                 state.write_text(updated, encoding="utf-8", newline="\n")
                 said.append(f"STATE.md: row added for {tid}")
@@ -433,7 +520,8 @@ def main(argv: list[str] | None = None, cwd: Path | None = None) -> int:
                    help="default inbox (captured, not yet processed)")
     c.add_argument("--priority", default="normal", help="default normal")
     c.add_argument("--project", action="append", default=[], metavar="NODE",
-                   help="a project_refs entry, repeatable; the first one with a board decides the board")
+                   help="a project_refs entry such as /memory/projects/<node>, repeatable; the first one "
+                        "with a board decides the board (Git Bash: put MSYS_NO_PATHCONV=1 in front)")
     c.add_argument("--skill", action="append", default=[], metavar="SKILL", help="a skill_refs entry, repeatable")
     c.add_argument("--due", help="YYYY-MM-DD, only for a real deadline")
     c.add_argument("--next-review", help="YYYY-MM-DD; required for waiting and scheduled")
@@ -449,7 +537,8 @@ def main(argv: list[str] | None = None, cwd: Path | None = None) -> int:
 
     store = resolve_store(args.tasks, cwd or Path.cwd())
     if not store.is_dir():
-        print(f"ERROR: task store not found: {store}")
+        hint = f" ({MSYS_HINT})" if args.tasks and looks_path_converted(args.tasks) else ""
+        print(f"ERROR: task store not found: {store}{hint}")
         return 2
 
     if args.command == "review":

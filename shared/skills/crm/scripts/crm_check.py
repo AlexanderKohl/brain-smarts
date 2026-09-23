@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import unicodedata
@@ -135,6 +136,16 @@ def brain_root(start: Path) -> Path | None:
         if (parent / "CONTRACT.md").is_file():
             return parent
     return None
+
+
+MSYS_HINT = ("Git Bash rewrites an argument that starts with / into a Windows path; "
+             "run the command with MSYS_NO_PATHCONV=1 in front")
+
+
+def looks_path_converted(value: str | None) -> bool:
+    """True for a repository-root path that Git Bash (MSYS) has turned into a Windows path."""
+    return bool(value) and bool(re.match(r"^[A-Za-z]:[\/]", str(value))) and (
+        bool(os.environ.get("MSYSTEM")) or bool(re.search(r"[\/]Git[\/]", str(value), re.I)))
 
 
 def resolve_node(node: str | None, cwd: Path) -> Path:
@@ -314,7 +325,8 @@ def main(argv: list[str] | None = None, cwd: Path | None = None) -> int:
 
     node = resolve_node(args.node, cwd or Path.cwd())
     if not node.is_dir():
-        print(f"ERROR: CRM node not found: {node}")
+        hint = f" ({MSYS_HINT})" if looks_path_converted(args.node) else ""
+        print(f"ERROR: CRM node not found: {node}{hint}")
         return 2
 
     if args.command == "find":

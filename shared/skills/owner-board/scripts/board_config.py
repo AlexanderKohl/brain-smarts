@@ -79,6 +79,20 @@ PERSONAL_DEFAULTS: dict[str, Any] = {
 }
 
 
+MSYS_HINT = ("Git Bash rewrites an argument that starts with / into a Windows path; "
+             "run the command with MSYS_NO_PATHCONV=1 in front")
+
+
+def looks_path_converted(value: str | None) -> bool:
+    """True for a repository-root path that Git Bash (MSYS) has turned into a Windows path."""
+    return bool(value) and bool(re.match(r"^[A-Za-z]:[\/]", str(value))) and (
+        bool(os.environ.get("MSYSTEM")) or bool(re.search(r"[\/]Git[\/]", str(value), re.I)))
+
+
+def _hint(value) -> str:
+    return " (" + MSYS_HINT + ")" if looks_path_converted(value) else ""
+
+
 class ConfigError(Exception):
     """The configuration is missing, unreadable or names something that does not exist."""
 
@@ -100,7 +114,7 @@ def find_brain_root(start: str | os.PathLike | None = None) -> Path:
         for folder in (here, *here.parents):
             if (folder / "CONTRACT.md").is_file():
                 return folder
-    raise ConfigError("CONTRACT.md not found above " + ", ".join(str(c) for c in candidates))
+    raise ConfigError("CONTRACT.md not found above " + ", ".join(str(c) for c in candidates) + _hint(start))
 
 
 def front_matter(path: Path) -> dict[str, str]:
@@ -138,7 +152,7 @@ class Config:
         self.path = Path(config_path) if config_path else self.memory.joinpath(*CONFIG_PARTS)
         if not self.path.is_file():
             raise ConfigError("no owner-board configuration at " + str(self.path)
-                              + " - see /shared/skills/owner-board/SKILL.md, Configuration")
+                              + " - see /shared/skills/owner-board/SKILL.md, Configuration" + _hint(config_path))
         try:
             raw = json.loads(self.path.read_text(encoding="utf-8"))
         except ValueError as err:

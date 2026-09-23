@@ -193,6 +193,11 @@ class CrmCheckTest(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("CRM node not found", out)
 
+    def test_a_node_path_rewritten_by_git_bash_names_the_fix(self) -> None:
+        code, out = run("--node", "C:/Program Files/Git/memory/projects/contacts", "validate", cwd=self.root)
+        self.assertEqual(code, 2)
+        self.assertIn("MSYS_NO_PATHCONV=1", out)
+
 
 class StarterNodeInStepTest(unittest.TestCase):
     """The memory skeleton's starter node is a copy of the skill templates, ids aside."""

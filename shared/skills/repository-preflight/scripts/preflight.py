@@ -284,7 +284,9 @@ def markdown_paths(root: Path) -> list[Path]:
 
 
 def is_template_path(path: Path, root: Path) -> bool:
-    return "templates" in path.relative_to(root).parts
+    """A file under a `templates/` folder, or a `_TEMPLATE.md` copied again for every new record
+    (a CRM node's contact and persona templates): its placeholders stay unfilled."""
+    return "templates" in path.relative_to(root).parts or path.name == "_TEMPLATE.md"
 
 
 def validate_markdown(
