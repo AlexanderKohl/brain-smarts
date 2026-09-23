@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-23T13:00:00+10:00
-updated: 2026-09-23T18:00:00+10:00
+updated: 2026-09-23T15:30:00+10:00
 owner: brain-owner
 ---
 
@@ -35,6 +35,14 @@ Alphabetical. Fill them from `/memory/OWNER.md`.
 | `<BRAIN_ROOT>` | `brain_root`, absolute |
 | `<PROJECT_REPOS_ROOT>` | `project_repos_root`, absolute |
 
+Write the paths with forward slashes in the Markdown pointers and the JSON settings (for example
+`C:/dev/brain`), so a filled path such as `<BRAIN_ROOT>/CONTRACT.md` never mixes `\` and `/`.
+The one exception is the Codex trust table in `codex.config.template.toml`: there `<BRAIN_ROOT>`
+takes the form Codex itself records (on Windows `C:\dev\brain`, inside single quotes).
+
+Pointer templates name no rule number: a pointer only points, so an installed copy cannot go
+stale when rules are renumbered.
+
 ## Installing
 
 - **Markdown pointers going outside the brain** (user-level files): copy the text below the
@@ -43,7 +51,9 @@ Alphabetical. Fill them from `/memory/OWNER.md`.
   project's `AGENTS.md` or `CLAUDE.md`): keep the front matter, remove the `template-` prefix
   from `id`, drop `install_to`, and set `created` and `updated` to the install time.
 - **Settings files:** merge into an existing file key by key; never overwrite a file the person
-  already has. JSON has no comments, so the reasons for each entry are in `/SETUP.md` step F.
+  already has. `/SETUP.md` step F gives the merge command for JSON and the placement rule for
+  TOML. JSON has no comments, so the reasons for each entry are in `/SETUP.md` step F. The allow
+  list names `python -m unittest`, the runner every shared skill's tests use.
 
 ## Files
 

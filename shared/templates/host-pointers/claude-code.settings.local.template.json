@@ -14,7 +14,6 @@
       "Bash(git show*)",
       "Bash(git status*)",
       "Bash(ls *)",
-      "Bash(python -m pytest *)",
       "Bash(python -m unittest *)",
       "Bash(python shared/skills/delegate-work/scripts/delegation.py *)",
       "Bash(python shared/skills/manage-credentials/scripts/vaultctl.py status)",

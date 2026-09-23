@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-23T13:00:00+10:00
-updated: 2026-09-23T18:00:00+10:00
+updated: 2026-09-23T15:30:00+10:00
 owner: brain-owner
 install_to: ~/.codex/AGENTS.md
 ---
@@ -18,5 +18,5 @@ When the working folder is inside `<BRAIN_ROOT>` or `<PROJECT_REPOS_ROOT>`, read
 `<BRAIN_ROOT>/BOOTSTRAP.md`). Treat that path as a location hint: if it does not hold
 `CONTRACT.md`, say so and stop.
 
-This file is a pointer only (`SMART-RULE-0007`). Every rule lives in the contract and the
-`RULES.md` files it names.
+This file is a pointer only. Every rule lives in the contract and the `RULES.md` files it
+names.
