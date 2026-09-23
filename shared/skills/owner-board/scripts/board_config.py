@@ -7,7 +7,7 @@ is found by moving upwards to `CONTRACT.md` (CONTRACT section 3.5), the memory c
 
     /memory/skills/owner-board/config/boards.json
 
-whose schema is documented in `/library/skills/owner-board/SKILL.md` (section "Configuration").
+whose schema is documented in `/shared/skills/owner-board/SKILL.md` (section "Configuration").
 A value such as `{project_repos_root}/example-product` is filled from `/memory/OWNER.md`.
 """
 
@@ -152,7 +152,7 @@ class Config:
         self.path = Path(config_path) if config_path else self.memory.joinpath(*CONFIG_PARTS)
         if not self.path.is_file():
             raise ConfigError("no owner-board configuration at " + str(self.path)
-                              + " - see /library/skills/owner-board/SKILL.md, Configuration" + _hint(config_path))
+                              + " - see /shared/skills/owner-board/SKILL.md, Configuration" + _hint(config_path))
         try:
             raw = json.loads(self.path.read_text(encoding="utf-8"))
         except ValueError as err:

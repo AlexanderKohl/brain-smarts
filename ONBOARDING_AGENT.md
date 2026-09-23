@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-08-06T09:37:00+10:00
-updated: 2026-09-23T17:43:07+10:00
+updated: 2026-09-23T19:34:24+10:00
 owner: brain-owner
 ---
 
@@ -48,6 +48,7 @@ Numbered in reading order.
 | delegate-work | `/shared/skills/delegate-work/` | Conductor-to-worker packets and results for parallel subagent work; isolated, read-only, no credentials by default; max four workers, depth one; run folders under `/temp/delegation/runs/`; governed by root `SMART-RULE-0024`. Also holds the two handover procedures: conductor to conductor, and **a research or design thread back to the conductor**, which settles every open decision with the owner before it hands over |
 | learning-maintenance | `/shared/skills/learning-maintenance/` | Evidence-driven learning, single-writer integration and weekly digest under SMART-RULE-0028 |
 | manage-credentials | `/shared/skills/manage-credentials/` | Passphrase vault + per-login Vault Agent broker; inject mapped secrets only; store rotating OAuth JSON |
+| owner-board | `/shared/skills/owner-board/` | One permanent link showing the owner every request they have made and what needs them; cards are Markdown records under `<node>/status/cards/`, the page is **generated** from them, and `reconcile.py` compares it against git on every regeneration. The owner's verdict comes back as a saved file, not as copied text. **A card is closed only by the owner** |
 | problem-recovery | `/shared/skills/problem-recovery/` | Targeted knowledge lookup, bounded recovery and narrow escalation |
 | product-development | `/shared/skills/product-development/` | Investment-proportionate product-development process and gate decisions under `SMART-RULE-0016` |
 | raw-file-ingestion | `/shared/skills/raw-file-ingestion/` | Immutable `/memory/raw/` preservation and Markdown source records under `/memory/sources/` |
@@ -63,7 +64,6 @@ Numbered in reading order.
 | crm | `/library/skills/crm/` | Contact register in memory: one file per person, organisation, newsletter or system; owner personas bound to sending accounts; create on first encounter, deduplicate, merge directories; node rules ship as a template; `crm_check.py` find, validate, duplicates |
 | gohighlevel-access | `/library/skills/gohighlevel-access/` | HighLevel agency OAuth (port 8766), subaccounts, CRM APIs; pipeline migration review UI (port 8769) |
 | google-workspace-access | `/library/skills/google-workspace-access/` | Multi-account Google OAuth (port 8767); Gmail/Calendar/Tasks/Drive/Contacts; contact-register integration; draft-first email; optional local SQLite Gmail/Tasks sync (`google_sync_ctl.py` / `google_local_email.py` / `google_local_tasks.py`) |
-| owner-board | `/library/skills/owner-board/` | One permanent link showing the owner every request they have made and what needs them; cards are Markdown records under `<node>/status/cards/`, the page is **generated** from them, and `reconcile.py` compares it against git on every regeneration. The owner's verdict comes back as a saved file, not as copied text. **A card is closed only by the owner** |
 | railway-access | `/library/skills/railway-access/` | Railway GraphQL: projects, current deployment ID, timeframe/filtered deploy/build/HTTP logs (account/workspace token in vault) |
 | ui-implementation | `/library/skills/ui-implementation/` | What a live screen must never do to the person using it: remove only what you made, keep their choices through a refresh, hold a repaint while work is unsaved, put the rule where it cannot be forgotten |
 | ui-mockup | `/library/skills/ui-mockup/` | UI previews built from the product's own stylesheets and measured in the browser; **owner refines the mockup before any of it is implemented or pushed** |

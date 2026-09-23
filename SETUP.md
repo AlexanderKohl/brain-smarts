@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-23T13:00:00+10:00
-updated: 2026-09-23T17:43:07+10:00
+updated: 2026-09-23T19:34:24+10:00
 owner: brain-owner
 skill_refs:
   - /shared/skills/manage-credentials
@@ -472,6 +472,7 @@ others. Numbers run through both groups so a reply stays short.
 |---|---|
 | delegate-work | Hands independent pieces of work to parallel worker agents and collects their results (`SMART-RULE-0024`) |
 | learning-maintenance | Captures and reviews what the brain learns from use (`SMART-RULE-0028`) |
+| owner-board | One permanent page showing every request you have made and what needs you, plus a board for your tasks – each project's on its own board, the rest on your personal board (see the note below) |
 | problem-recovery | Searches the brain's own knowledge before re-investigating a failure |
 | product-development | Evidence-and-decision process for software work (`SMART-RULE-0016`) |
 | raw-file-ingestion | Keeps every uploaded file unchanged under `/memory/raw/` with a readable Markdown copy |
@@ -489,23 +490,22 @@ others. Numbers run through both groups so a reply stays short.
 | 2 | crm | Remembers the people and organisations you deal with, and which of your identities to reply as | Nothing external; chosen automatically with 4 |
 | 3 | gohighlevel-access | Reads and, with your confirmation, writes HighLevel CRM data across sub-accounts | A HighLevel **agency** account; a Marketplace app you register; the vault |
 | 4 | google-workspace-access | Gmail (draft-first), Calendar, Tasks, Drive and Contacts for one or more Google accounts | A Google account; a Google Cloud project and OAuth client you register; the vault; the contact register (2) |
-| 5 | manage-credentials | The encrypted vault every credentialed skill uses | A passphrase you choose; chosen automatically with 1, 3, 4, 7 or 8 |
-| 6 | owner-board | One permanent page showing every request you have made and what needs you, plus a board for your tasks – each project's on its own board, the rest on your personal board | Nothing external – **see the note below** |
-| 7 | railway-access | Reads Railway projects, deployments and logs | A Railway account token you create; the vault |
-| 8 | xero-access | Reads Xero accounting data and, with your approval, creates planned accounts or draft invoices | A Xero organisation; a Xero developer app you register; the vault |
+| 5 | manage-credentials | The encrypted vault every credentialed skill uses | A passphrase you choose; chosen automatically with 1, 3, 4, 6 or 7 |
+| 6 | railway-access | Reads Railway projects, deployments and logs | A Railway account token you create; the vault |
+| 7 | xero-access | Reads Xero accounting data and, with your approval, creates planned accounts or draft invoices | A Xero organisation; a Xero developer app you register; the vault |
 
-> **Ask:** Which of 1 to 8 do you want? You can add more later by asking me to resume setup.
+> **Ask:** Which of 1 to 7 do you want? You can add more later by asking me to resume setup.
 > 1. None for now – start local, add accounts later (recommended for a first session)
-> 2. A list you give, for example `2, 4, 8`
+> 2. A list you give, for example `2, 4, 7`
 >
 > **Suggested reply:** `1`
 
-Owner-board note: nothing to install or register. Its scripts ship in
-`/library/skills/owner-board/scripts/`, and the memory skeleton ships its registry,
+Owner-board note (always on): nothing to install or register. Its scripts ship in
+`/shared/skills/owner-board/scripts/`, and the memory skeleton ships its registry,
 `/memory/skills/owner-board/config/boards.json`, with no project boards yet. So the personal task
 board needs no step: the first `tasks.py new` writes `/memory/boards/personal.html` and the
-directory `/memory/boards/index.html`. The `## Setup` row is `done` once the skill is listed in
-`active_skills`; project boards are offered in step G.1.
+directory `/memory/boards/index.html`. It is a core skill, always on, so it needs no `## Setup`
+row; project boards are offered in step G.1.
 
 Record the choice in `active_skills` (alphabetical; add `manage-credentials` whenever a
 credentialed skill is chosen, and `crm` whenever `google-workspace-access` is), add one
@@ -1163,17 +1163,17 @@ credentialed command.
 Offer each; each is `skipped` unless the person says yes.
 
 > **Ask:** Which extras do you want?
-> 1. Owner board (recommended if `owner-board` was chosen – see step C)
+> 1. A project board (recommended when you already have a project – see G.1)
 > 2. A scheduled task (see G.2)
 > 3. None now
 >
-> **Suggested reply:** `1` when `owner-board` is in `active_skills`, otherwise `3`
+> **Suggested reply:** `1` when the person named a project, otherwise `3`
 
 Show the person only the suggestion that applies to them.
 
 ### G.1 Owner board
 
-When `owner-board` is in `active_skills`: a board per project node at
+A board per project node at
 `/memory/projects/<node>/status/status.html`, the personal task board at
 `/memory/boards/personal.html` (every task no project board holds), and the directory at
 `/memory/boards/index.html`, which the owner bookmarks once. The personal board and the
@@ -1189,7 +1189,7 @@ board.
 > **Suggested reply:** `1`
 
 The agent makes the board by following **Making a board** in
-`/library/skills/owner-board/SKILL.md`: copy `/library/skills/owner-board/templates/board.template.md`
+`/shared/skills/owner-board/SKILL.md`: copy `/shared/skills/owner-board/templates/board.template.md`
 to `<node>/status/board.md` and fill it, create `cards/` beside it, list `status/` in the node's
 `README.md`, and add one entry to the `boards` list in
 `/memory/skills/owner-board/config/boards.json`. For option 1 the entry is:
@@ -1203,7 +1203,7 @@ Then build it:
 
 ```powershell
 cd C:\dev\brain
-python library/skills/owner-board/scripts/build_status.py --board brain
+python shared/skills/owner-board/scripts/build_status.py --board brain
 ```
 
 **Done when:** that command prints `wrote ...status.html` and `wrote ...index.html`, and the

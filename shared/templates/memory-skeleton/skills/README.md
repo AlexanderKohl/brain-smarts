@@ -25,7 +25,7 @@ Listed alphabetically. Add one per skill that needs owner configuration, and sum
 
 ##### `owner-board/`
 
-Contains `config/boards.json`, the owner-board registry (`/library/skills/owner-board/SKILL.md`,
+Contains `config/boards.json`, the owner-board registry (`/shared/skills/owner-board/SKILL.md`,
 section "Configuration"). It ships with no project boards, so the personal task board and the
 directory at `/memory/boards/` are generated from the first task. Harmless when the
 `owner-board` skill is not in `active_skills`.
