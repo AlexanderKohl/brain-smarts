@@ -10,7 +10,7 @@ script_paths:
   - /shared/skills/repository-preflight/scripts/preflight.py
   - /shared/skills/repository-preflight/tests/test_preflight.py
 created: 2026-08-04T23:16:08+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T14:40:00+10:00
 owner: brain-owner
 ---
 
@@ -75,8 +75,9 @@ The script uses only the Python standard library.
 
 - fail if the contract is missing or malformed
 - skip immutable `/memory/raw/` (and `/raw/` in a brain without a separate memory) Markdown evidence (companion source records remain validated)
-- fail on missing required Markdown metadata, duplicate IDs, invalid task states, an open task missing from its store's `STATE.md` (`/memory/tasks/STATE.md`) or listed there without its status word (`SMART-RULE-0025`), broken declared references (a `#fragment` after the path must match the start of a Markdown heading in the referenced file), a `/memory/` reference that does not resolve while memory is present, contract-version mismatch in either manifest, or an uncovered protected-governance change in either repository
-- warn about undocumented immediate folders, unavailable Git state, an absent memory checkout, a memory folder that is not its own repository, `/memory/` references left unchecked because memory is absent, a missing memory manifest, and a mechanics file whose `owner` is not `brain-owner` (a tripwire for CONTRACT §3.4, not a personal-data scan)
+- skip the scratch folder `/temp/` and any Markdown file Git ignores, each asked of the repository that holds it (memory paths of the memory repository)
+- fail on missing required Markdown metadata, duplicate IDs, invalid task states, an open task missing from its store's `STATE.md` (`/memory/tasks/STATE.md`) or listed there without its status word (`SMART-RULE-0025`), broken declared references (a `#fragment` after the path must match the start of a Markdown heading in the referenced file), a `/memory/` reference that does not resolve while memory is present, a metadata reference in a mechanics file (any `*_ref`, `*_refs`, `evidence` or other reference key) to a `/memory/` path that `/shared/templates/memory-skeleton/` does not provide – another owner's memory would not have it, so the reference belongs in the owner's memory copy of the file (for a knowledge entry `/memory/skills/<skill>/knowledge/<same filename>`), or the target belongs in the skeleton – contract-version mismatch in either manifest, or an uncovered protected-governance change in either repository
+- warn about undocumented immediate folders, unavailable Git state, an absent memory checkout, a memory folder that is not its own repository, `/memory/` references left unchecked because memory is absent, a missing memory manifest, a declared reference to a git-ignored file absent from this checkout (a local-only recording or scratch run), and a mechanics file whose `owner` is not `brain-owner` (a tripwire for CONTRACT §3.4, not a personal-data scan)
 - never repair content silently
 
 ## Logging behaviour
@@ -85,6 +86,6 @@ The script does not edit activity logs. The calling agent records significant va
 
 ## Repository updates
 
-With `--write-manifest`, replace each repository's manifest atomically with its layer, the current contract version, validation time, that repository's counts, errors and warnings. Otherwise make no repository update.
+With `--write-manifest`, replace each repository's manifest atomically, with LF line endings on every platform, with its layer, the current contract version, validation time, that repository's counts, errors and warnings. Otherwise make no repository update.
 
 Validation does not itself update state, knowledge or tasks. The calling agent must route any discovered durable issue under the contract.

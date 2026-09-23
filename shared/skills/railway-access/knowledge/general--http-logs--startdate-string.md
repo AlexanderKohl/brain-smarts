@@ -13,10 +13,9 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-08-31
 verified: 2026-09-12
-source_refs:
-  - /memory/skills/railway-access/knowledge/general--http-logs--startdate-string.md
+source_refs: []
 created: 2026-08-31T15:45:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # httpLogs date arguments are String
@@ -47,6 +46,8 @@ Live probe 2026-08-31 against staging web deployment
 `<uuid-01>` (`railway_logs.py --kind http`, with and without
 `--since`). `deploymentLogs` with `--since 2h` on the same deployment succeeded.
 `status: confirmed`.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Amendment 2026-09-12 – they are also deprecated no-ops
 

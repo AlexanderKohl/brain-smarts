@@ -13,10 +13,9 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-14
 verified: 2026-09-14
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/general--ai-employees--action-targets-need-separate-search.md
+source_refs: []
 created: 2026-09-14T10:12:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # AI employee action targets need a separate search call
@@ -69,6 +68,10 @@ Call the search endpoint once per employee id and raise `limit`. Until then an A
 node with no edges: its workflow triggers, calendar bookings, field writes and user assignments
 are all invisible, which makes a workflow started only by a bot look like a workflow with no
 entry point.
+
+## Evidence
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Related
 

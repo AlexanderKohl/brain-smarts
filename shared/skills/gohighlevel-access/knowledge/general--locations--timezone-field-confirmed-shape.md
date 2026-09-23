@@ -17,7 +17,6 @@ source_refs: []
 created: 2026-08-25T09:45:00+10:00
 updated: 2026-09-23T18:00:00+10:00
 evidence:
-- /memory/skills/gohighlevel-access/knowledge/general--locations--timezone-field-confirmed-shape.md
 - Live raw authenticated call (gohighlevel-access skill), 2026-08-25, against the "Example Test" sub-account (loc_EXAMPLE_04) -- returned "Australia/Brisbane"
 ---
 
@@ -48,6 +47,8 @@ Confirmed live via a raw authenticated `GET` (`gohighlevel-access` skill)
 against the "Example Test" sub-account: `200`, full location object,
 `timezone: "Australia/Brisbane"` (also separately echoed under
 `location.business.timezone`).
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

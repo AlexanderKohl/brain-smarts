@@ -13,8 +13,7 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-15
 verified: null
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/workflow--trigger--checkbox-add-does-not-fire-on-create.md
+source_refs: []
 created: 2026-09-15T12:50:00+10:00
 updated: 2026-09-23T18:00:00+10:00
 ---
@@ -37,3 +36,6 @@ in when they evaluate.
 ## Evidence
 
 Rows of a local test-run folder, 15 September 2026.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
+

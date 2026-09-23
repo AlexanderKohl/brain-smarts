@@ -13,10 +13,9 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-14
 verified: 2026-09-14
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/general--publishing--state-is-a-field-not-an-endpoint.md
+source_refs: []
 created: 2026-09-14T19:35:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # "Save" and "Save and publish" are the same request
@@ -68,6 +67,8 @@ look at that field specifically.
 README). Offer `<uuid-01>` saved twice, `visibility` being
 the only difference; post `<uuid-02>` likewise; estimate
 `000000000000000000000001` carrying `estimateStatus: draft`.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

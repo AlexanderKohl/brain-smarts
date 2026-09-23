@@ -13,10 +13,9 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-22
 verified: 2026-09-22
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/general--custom-fields--classic-catalogue-defaults-to-contact-model.md
+source_refs: []
 created: 2026-09-22T12:05:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # The classic catalogue silently answers for contacts only
@@ -59,6 +58,8 @@ Live read-only probe against Example Co (Staging) `loc_EXAMPLE_01`
 (company `comp_EXAMPLE_01`) on 22 September 2026 through
 `/shared/skills/gohighlevel-access`, using an agency-derived Location token. All four
 calls above were made in the same session, seconds apart. `confirmed`, not inferred.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

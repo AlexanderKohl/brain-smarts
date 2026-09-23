@@ -13,8 +13,7 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-09
 verified: 2026-09-09
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/custom_object--records-write--locationid-body-on-create-query-on-update.md
+source_refs: []
 created: 2026-09-09T18:40:00+10:00
 updated: 2026-09-23T18:00:00+10:00
 ---
@@ -99,6 +98,8 @@ Rationale: an earlier change moved `locationId` out of the write body
 for *both* verbs on the strength of a single 422 on update. That was
 correct for PUT and is what broke POST; the fix changed only the create
 call.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

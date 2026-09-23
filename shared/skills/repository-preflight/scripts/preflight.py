@@ -61,6 +61,23 @@ PROPOSAL_ROOTS = (
 )
 # Task stores: /memory/tasks/ in the three-layer layout, /tasks/ in a single-repository brain.
 TASK_ROOTS = ((MEMORY_DIR, "tasks"), ("tasks",))
+# The memory skeleton every new owner starts from. A mechanics file may declare a metadata
+# reference into /memory/ only when this skeleton provides the target, so the mechanics work for
+# any owner.
+SKELETON_PARTS = ("shared", "templates", "memory-skeleton")
+# Scratch folder at the brain root, git-ignored; skipped even when Git cannot be asked.
+SCRATCH_DIR = "temp"
+# Front-matter keys holding repository-root paths that must resolve.
+REFERENCE_KEYS = {
+    "project_refs",
+    "knowledge_refs",
+    "skill_refs",
+    "source_refs",
+    "raw_source",
+    "canonical_source_md",
+    "script_paths",
+    "target_files",
+}
 
 
 def is_raw_evidence_path(path: Path, root: Path) -> bool:
@@ -165,10 +182,17 @@ def read_front_matter(path: Path) -> tuple[dict[str, Any], str]:
             active_list = key if raw_value == "" else None
             continue
         nested_metadata = False
-        if line.startswith("  - ") and active_list:
+        # A list item may be indented ("  - x") or not ("- x"); both are the same YAML.
+        if line.startswith("  - "):
+            list_item: str | None = line[4:]
+        elif line.startswith("- "):
+            list_item = line[2:]
+        else:
+            list_item = None
+        if list_item is not None and active_list:
             if not isinstance(metadata[active_list], list):
                 metadata[active_list] = []
-            metadata[active_list].append(parse_scalar(line[4:]))
+            metadata[active_list].append(parse_scalar(list_item))
             continue
         match = KEY_RE.match(line)
         if not match:
@@ -201,13 +225,62 @@ def discover_root(start: Path) -> Path:
     raise FileNotFoundError("CONTRACT.md was not found at or above the supplied path")
 
 
+def git_ignored(repo: Path, relatives: list[str]) -> set[str] | None:
+    """The subset of `relatives` (POSIX paths relative to `repo`) that Git ignores in `repo`,
+    or None when Git cannot answer (not installed, or `repo` is not a repository)."""
+    if not relatives:
+        return set()
+    try:
+        completed = subprocess.run(
+            ["git", "-c", f"safe.directory={repo.as_posix()}", "-C", str(repo),
+             "check-ignore", "-z", "--stdin"],
+            input="\0".join(relatives) + "\0",
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+    except OSError:
+        return None
+    # 0: some paths ignored; 1: none ignored; anything else: Git could not answer.
+    if completed.returncode not in (0, 1):
+        return None
+    return {value for value in completed.stdout.split("\0") if value}
+
+
+def ignored_paths(root: Path, paths: list[Path]) -> set[Path]:
+    """The paths Git ignores, each asked of the repository that holds it. Memory paths are asked
+    of the memory repository, because the mechanics repository ignores the whole memory/ folder."""
+    memory = memory_root(root)
+    memory_repo = memory if memory is not None and is_own_repository(memory) else None
+    groups: dict[Path, list[Path]] = {}
+    for path in paths:
+        if in_memory(path, root):
+            if memory_repo is not None:
+                groups.setdefault(memory_repo, []).append(path)
+        else:
+            groups.setdefault(root, []).append(path)
+    ignored: set[Path] = set()
+    for repo, members in groups.items():
+        relatives = {path.relative_to(repo).as_posix(): path for path in members}
+        answer = git_ignored(repo, list(relatives))
+        if answer is None:
+            continue
+        ignored.update(relatives[value] for value in answer if value in relatives)
+    return ignored
+
+
 def markdown_paths(root: Path) -> list[Path]:
-    return sorted(
+    """Markdown files to validate: not raw evidence, not tool state, not the scratch folder and
+    not anything else Git ignores in the repository that holds it."""
+    candidates = [
         path
         for path in root.rglob("*.md")
         if not any(part in IGNORED_DIRS for part in path.relative_to(root).parts)
+        and path.relative_to(root).parts[0] != SCRATCH_DIR
         and not is_raw_evidence_path(path, root)
-    )
+    ]
+    ignored = ignored_paths(root, candidates)
+    return sorted(path for path in candidates if path not in ignored)
 
 
 def is_template_path(path: Path, root: Path) -> bool:
@@ -328,21 +401,11 @@ def heading_exists(target: Path, anchor: str) -> bool:
 def validate_declared_references(
     root: Path, records: dict[Path, dict[str, Any]], result: Result
 ) -> None:
-    reference_keys = {
-        "project_refs",
-        "knowledge_refs",
-        "skill_refs",
-        "source_refs",
-        "raw_source",
-        "canonical_source_md",
-        "script_paths",
-        "target_files",
-    }
     memory_present = memory_root(root) is not None
     for path, metadata in records.items():
         display = root_path(path, root)
         is_template = is_template_path(path, root)
-        for key in reference_keys:
+        for key in REFERENCE_KEYS:
             raw_values = metadata.get(key)
             if raw_values in (None, "", []):
                 continue
@@ -365,14 +428,69 @@ def validate_declared_references(
                     )
                     continue
                 if not target.exists():
-                    result.errors.append(
-                        f"{display}: broken {key} reference {value}"
-                    )
+                    if is_local_only(root, target):
+                        result.warnings.append(
+                            f"{display}: {key} reference {value} not checked: "
+                            "the target is git-ignored and absent from this checkout"
+                        )
+                    else:
+                        result.errors.append(
+                            f"{display}: broken {key} reference {value}"
+                        )
                     continue
                 if anchor and not heading_exists(target, anchor):
                     result.errors.append(
                         f"{display}: broken {key} anchor {value}"
                     )
+
+
+def is_local_only(root: Path, target: Path) -> bool:
+    """True when Git ignores `target` in the repository that would hold it: a local-only file,
+    such as a traffic recording or a scratch run, that a fresh clone cannot have."""
+    relative = target.relative_to(root)
+    repo = root
+    if relative.parts and relative.parts[0] == MEMORY_DIR:
+        memory = memory_root(root)
+        if memory is None or not is_own_repository(memory):
+            return False
+        repo = memory
+    return bool(git_ignored(repo, [target.relative_to(repo).as_posix()]))
+
+
+def is_reference_key(key: str) -> bool:
+    return key in REFERENCE_KEYS or key.endswith(("_ref", "_refs")) or key == "evidence"
+
+
+def validate_mechanics_memory_references(
+    root: Path, records: dict[Path, dict[str, Any]], result: Result
+) -> None:
+    """A mechanics file may declare a metadata reference into /memory/ only when the memory
+    skeleton provides the target: a new owner's memory holds only what the skeleton creates."""
+    skeleton = root.joinpath(*SKELETON_PARTS)
+    if not skeleton.is_dir():
+        return
+    skeleton_display = root_path(skeleton, root)
+    for path, metadata in records.items():
+        if in_memory(path, root) or is_template_path(path, root):
+            continue
+        display = root_path(path, root)
+        for key, raw_values in metadata.items():
+            if not is_reference_key(key):
+                continue
+            values = raw_values if isinstance(raw_values, list) else [raw_values]
+            for value in values:
+                if not isinstance(value, str) or not value.startswith(MEMORY_PREFIX):
+                    continue
+                inner = value.partition("#")[0][len(MEMORY_PREFIX):].strip("/")
+                if inner and skeleton.joinpath(*inner.split("/")).exists():
+                    continue
+                result.errors.append(
+                    f"{display}: {key} reference {value} is an owner-specific memory path that "
+                    f"{skeleton_display}/ does not provide; move the reference to the owner's "
+                    "memory copy of this file (for a knowledge entry, "
+                    "/memory/skills/<skill>/knowledge/<same filename>) or add the target to "
+                    "the skeleton"
+                )
 
 
 def validate_tasks(
@@ -596,9 +714,11 @@ def write_manifests(root: Path, result: Result) -> None:
             "validator": VALIDATOR_PATH,
         }
         temporary = path.with_suffix(path.suffix + ".tmp")
+        # LF on every platform, so a rewrite on Windows is not a whole-file change.
         temporary.write_text(
             json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",
+            newline="\n",
         )
         temporary.replace(path)
 
@@ -615,6 +735,7 @@ def run(root: Path, writing: bool) -> Result:
     records = validate_markdown(root, paths, result)
     validate_contract(root, records, result)
     validate_declared_references(root, records, result)
+    validate_mechanics_memory_references(root, records, result)
     validate_tasks(root, records, result)
     validate_governance(root, records, result)
     validate_manifest(root, result, writing)

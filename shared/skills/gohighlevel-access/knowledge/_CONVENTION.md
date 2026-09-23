@@ -57,3 +57,8 @@ original with its real identifiers and source paths is kept in the memory
 layer at `/memory/skills/gohighlevel-access/knowledge/<same filename>`,
 which carries a `generic_version:` pointer back here. A new entry follows
 the same split: the learning here, the owner's evidence there.
+
+The entry here names no `/memory/` path in its front matter, because another owner's memory
+does not have that file; its Evidence section says instead that it was observed on a live account
+and the owner's record is kept in their memory. Preflight rejects a mechanics metadata reference
+into `/memory/` that the memory skeleton does not provide.

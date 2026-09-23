@@ -14,9 +14,7 @@ refuted_by: null
 discovered: '2026-08-22'
 verified: '2026-08-22'
 created: '2026-08-24T21:30:00+10:00'
-updated: 2026-09-23T12:00:00+10:00
-evidence:
-- /memory/skills/gohighlevel-access/knowledge/general--client--refresh-token-rotation-needs-memoized-client.md
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Refresh-token rotation requires a memoized client, not a fresh one per call
@@ -48,6 +46,8 @@ Identified via code review confirming the mechanism (client construction
 site, and that `refresh()` mutates only its own instance's copy of the
 installation record) rather than a captured live failure – the fix
 (memoize the client per adapter instance) removes the race by construction.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

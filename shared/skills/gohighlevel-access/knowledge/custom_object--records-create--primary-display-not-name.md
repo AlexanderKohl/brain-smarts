@@ -13,10 +13,9 @@ superseded_by: null
 refuted_by: null
 discovered: '2026-09-10'
 verified: '2026-09-10'
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/custom_object--records-create--primary-display-not-name.md
+source_refs: []
 created: 2026-09-10T14:25:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Custom object create requires the primary display property, not `name`
@@ -57,6 +56,8 @@ Confirmed live 2026-09-10: workflow `4.5` webhook request
 `primaryDisplayProperty` and `requiredProperties` both equal to
 `custom_objects.site_visits.project_name`. The field catalogue entry is TEXT
 `Project Name` (`id_EXAMPLE_02`).
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

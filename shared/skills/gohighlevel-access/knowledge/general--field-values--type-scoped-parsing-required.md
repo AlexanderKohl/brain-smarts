@@ -14,9 +14,7 @@ refuted_by: null
 discovered: '2026-08-22'
 verified: '2026-08-22'
 created: '2026-08-24T21:30:00+10:00'
-updated: 2026-09-23T12:00:00+10:00
-evidence:
-- /memory/skills/gohighlevel-access/knowledge/general--field-values--type-scoped-parsing-required.md
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # File-shape parsing must be type-scoped, not run on every value
@@ -56,6 +54,8 @@ Confirmed live: a Contact timezone always showed empty on form reload
 despite the dropdown having the correct options and the value being saved
 correctly; traced to the generic file-parsing branch firing on the plain
 string value.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

@@ -13,10 +13,9 @@ superseded_by: null
 refuted_by: null
 discovered: '2026-09-02'
 verified: '2026-09-02'
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/general--invoices-tax--list-endpoint-500-use-invoice-line-items.md
+source_refs: []
 created: 2026-09-02T10:50:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Invoice tax catalogue list is unusable; tax IDs live on line items
@@ -70,6 +69,8 @@ on a different scope, so the durable IDs are only on document line items.
 Confirmed 2026-09-02 with a live agency-OAuth location-token pull against
 `Example Co (Staging)` (`loc_EXAMPLE_01`). Regenerable probe
 artefacts under a local run folder.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

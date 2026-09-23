@@ -13,8 +13,7 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-12
 verified: 2026-09-12
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/general--merge-fields--custom-data-endpoint-per-surface.md
+source_refs: []
 created: 2026-09-12T16:40:00+10:00
 updated: 2026-09-23T18:00:00+10:00
 ---
@@ -86,6 +85,8 @@ Observed against `Example Co` (`loc_EXAMPLE_01`) on 2026-09-12 during a walk of 
 menu-accessible page, captured by a browser extension's traffic
 recorder. Ten distinct surface responses; the full vocabulary can be extracted
 from those responses.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

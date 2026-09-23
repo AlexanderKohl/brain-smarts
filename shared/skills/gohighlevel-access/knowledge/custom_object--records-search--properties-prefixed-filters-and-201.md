@@ -13,10 +13,9 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-09
 verified: 2026-09-09
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/custom_object--records-search--properties-prefixed-filters-and-201.md
+source_refs: []
 created: 2026-09-09T11:20:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Custom-object record search: 201, `pageLimit`, and `properties.`-prefixed filters
@@ -82,3 +81,6 @@ A positive control – `properties.project_name eq "Test Site Visit"` returning
 the record, and `eq "Nope"` returning none – confirmed the filter genuinely
 matches on property values rather than merely being accepted. `confirmed`, not
 hypothesised.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
+

@@ -13,8 +13,7 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-17
 verified: null
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/general--rate-limits--hundred-per-ten-seconds-and-daily-cap.md
+source_refs: []
 created: 2026-09-17T21:10:00+10:00
 updated: 2026-09-23T18:00:00+10:00
 ---
@@ -54,6 +53,10 @@ one request at a time is the only rate obviously safe without a number. On a tes
 runner that is the difference between a run of minutes and a run of hours: its fixture
 creation alone is one contact, one opportunity and two collision searches per check, and it
 performs them one after another.
+
+## Evidence
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

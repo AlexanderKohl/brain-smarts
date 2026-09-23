@@ -13,10 +13,9 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-22
 verified: 2026-09-22
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/opportunity--search--custom-field-values-omitted.md
+source_refs: []
 created: 2026-09-22T12:10:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Search gives you opportunities without their custom field values
@@ -78,6 +77,8 @@ return, so only changed opportunities are re-fetched.
 Live read-only probe against Example Co (Staging) `loc_EXAMPLE_01` on
 22 September 2026 through `/shared/skills/gohighlevel-access`. All 11 opportunities
 were read both ways in the same session. `confirmed`.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

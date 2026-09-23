@@ -13,12 +13,9 @@ superseded_by: null
 refuted_by: null
 discovered: '2026-08-24'
 verified: '2026-08-24'
-source_refs:
-- /memory/skills/gohighlevel-access/knowledge/contact--textbox-list--uuid-keyed-object-write.md
+source_refs: []
 created: '2026-08-24T21:30:00+10:00'
-updated: 2026-09-23T12:00:00+10:00
-evidence:
-- /memory/skills/gohighlevel-access/knowledge/contact--textbox-list--uuid-keyed-object-write.md
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Contact Textbox List: reuse the record's own UUID keys
@@ -59,6 +56,8 @@ Confirmed via a real write+read round-trip against a live Contact record
 (`gohighlevel-access` skill): the record's own current keys, reused,
 persisted the new text; every other shape tried round-tripped back to the
 unchanged prior value with a `200` response and no error.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

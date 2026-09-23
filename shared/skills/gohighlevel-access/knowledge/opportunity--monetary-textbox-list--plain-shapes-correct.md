@@ -13,12 +13,9 @@ superseded_by: null
 refuted_by: null
 discovered: '2026-08-24'
 verified: '2026-08-24'
-source_refs:
-- /memory/skills/gohighlevel-access/knowledge/opportunity--monetary-textbox-list--plain-shapes-correct.md
+source_refs: []
 created: '2026-08-24T21:30:00+10:00'
-updated: 2026-09-23T12:00:00+10:00
-evidence:
-- /memory/skills/gohighlevel-access/knowledge/opportunity--monetary-textbox-list--plain-shapes-correct.md
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Opportunity Monetary/Textbox List: already plain, don't touch
@@ -58,6 +55,8 @@ stored Opportunity data showed Monetary as a bare number and Textbox List
 as a plain string array – exactly what this app sent before the incorrect
 fix; a live write+read round-trip confirmed both persist correctly in
 plain form.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

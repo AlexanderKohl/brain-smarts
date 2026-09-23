@@ -13,8 +13,7 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-01
 verified: 2026-09-01
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/contact--delete--search-index-lag-and-400-not-found.md
+source_refs: []
 created: 2026-09-01T08:27:41+10:00
 updated: 2026-09-23T18:00:00+10:00
 ---
@@ -64,6 +63,8 @@ deleted (HTTP 200 each); immediate `POST /contacts/search` returned all five
 across ten identifiers; `GET /contacts/{id}` returned HTTP 400 `Contact not
 found` for all five; a later repeat of the same ten searches returned zero.
 `confirmed`, not hypothesised – both halves were observed directly.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Correct usage
 

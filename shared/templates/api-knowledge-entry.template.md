@@ -13,8 +13,7 @@ superseded_by: null
 refuted_by: null
 discovered: YYYY-MM-DD
 verified: null
-source_refs:
-  - /memory/projects/EXAMPLE/LOG.md#TIMESTAMP
+source_refs: []
 created: YYYY-MM-DDTHH:mm:ss+HH:MM
 updated: YYYY-MM-DDTHH:mm:ss+HH:MM
 ---
@@ -37,6 +36,14 @@ been guessed without trial and error.
 How this was confirmed and when: a live raw-API probe, a production log,
 an official SDK example, etc. State whether this is a `pending` hypothesis
 or independently `confirmed`.
+
+Keep `source_refs` to mechanics paths. Evidence from the owner's own
+accounts (project logs, raw files, real identifiers) goes in the owner's
+memory copy at `/memory/skills/<skill>/knowledge/<same filename>`, which
+carries a `generic_version:` pointer back here; this entry then says
+"Observed on a live account; the owner's record is kept in their memory."
+Preflight rejects a mechanics `source_refs` value the memory skeleton does
+not provide.
 
 ## Applies to
 

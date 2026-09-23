@@ -17,7 +17,6 @@ created: '2026-09-14T12:20:00+10:00'
 updated: 2026-09-23T18:00:00+10:00
 evidence:
 - Railway staging deploy logs, deployment <uuid-01>, 2026-09-14T02:16:01Z–02:17:10Z
-- /memory/skills/gohighlevel-access/knowledge/general--marketplace-action-fields--second-alters-dynamic-refires.md
 ---
 
 # More than one action field can refresh the Dynamic field group
@@ -78,6 +77,8 @@ Between 03:55:04 and 03:55:24, with no save, the widget stopped holding a 2-item
 list (Hide Fields' seeded default for Contact) and started holding a 51-item *included* list
 (Select Fields' seeded default). HighLevel cannot have populated an include list unless it
 had actually rendered the `included_field_keys` field. The group refreshed.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Correction history
 

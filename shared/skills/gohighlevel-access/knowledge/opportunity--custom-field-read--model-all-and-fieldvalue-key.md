@@ -13,10 +13,9 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-01
 verified: 2026-09-01
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/opportunity--custom-field-read--model-all-and-fieldvalue-key.md
+source_refs: []
 created: 2026-09-01T11:13:57+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Opportunity custom fields: catalogue needs `?model=all`, record uses `fieldValue`
@@ -69,6 +68,8 @@ Live probe against `Example Co (Staging)` (`loc_EXAMPLE_01`) on
 `id_EXAMPLE_02` resolved to zero known keys against the unqualified
 catalogue and all seven against `?model=all`; values were `None` under `value`
 and correct under `fieldValue`. `confirmed` – both halves observed directly.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Correct usage
 

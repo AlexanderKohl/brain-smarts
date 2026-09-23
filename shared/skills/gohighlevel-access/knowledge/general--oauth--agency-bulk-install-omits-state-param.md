@@ -14,9 +14,7 @@ refuted_by: null
 discovered: '2026-08-24'
 verified: '2026-08-24'
 created: '2026-08-24T21:30:00+10:00'
-updated: 2026-09-23T12:00:00+10:00
-evidence:
-- /memory/skills/gohighlevel-access/knowledge/general--oauth--agency-bulk-install-omits-state-param.md
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Agency bulk-install OAuth callback: no `state` param
@@ -58,6 +56,8 @@ Confirmed via Railway production logs during a real agency bulk install
 across 18 sub-accounts: cookie present, `state` param absent in the actual
 redirect, callback rejected, followed by 18 webhook-side `401 Invalid JWT`
 token-exchange failures in the same log window.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

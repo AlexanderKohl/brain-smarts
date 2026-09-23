@@ -14,9 +14,7 @@ refuted_by: ghl-contact-monetary-bare-number
 discovered: '2026-08-24'
 verified: null
 created: '2026-08-24T21:30:00+10:00'
-updated: 2026-09-23T12:00:00+10:00
-evidence:
-- /memory/skills/gohighlevel-access/knowledge/general--monetary--currency-value-wrap-hypothesis.md
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # REFUTED: `{currency, value}` wrap for Monetary on every object
@@ -58,3 +56,7 @@ correct shape for Business/Custom Object on the Objects API. Check which
 write surface (classic vs. Objects API) the target object actually uses
 before assuming a field-type-level serialization rule generalises across
 objects.
+
+## Evidence
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.

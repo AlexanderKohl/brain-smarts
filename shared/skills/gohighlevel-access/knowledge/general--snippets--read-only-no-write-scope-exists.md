@@ -14,10 +14,9 @@ refuted_by: null
 discovered: 2026-08-28
 verified: 2026-09-15
 source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/general--snippets--read-only-no-write-scope-exists.md
   - /shared/skills/gohighlevel-access/knowledge/general--email-templates--requires-version-v3-header.md
 created: 2026-09-15T15:55:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Snippets are readable but not writable over the API
@@ -85,6 +84,8 @@ Confirmed live 2026-09-15 against `Example Co (Staging)` (`loc_EXAMPLE_01`), whi
 `PUT`, name-only `PUT`, `PATCH`) with the results tabulated above. A re-read afterwards confirmed
 the name and body were completely unchanged, so the failed attempts are non-destructive. Granted
 scopes were enumerated from the live token. Earlier `POST` evidence is from 2026-08-28.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

@@ -13,10 +13,9 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-12
 verified: 2026-09-12
-source_refs:
-  - /memory/skills/google-workspace-access/knowledge/oauth--refresh-token--invalid-grant-stored-tray-token.md
+source_refs: []
 created: 2026-09-12T14:50:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Tray-stored Google refresh token rejected as invalid_grant
@@ -56,8 +55,8 @@ connect/browser consent is a different operation from "use the tray vault".
 
 Live probes on 2026-09-12 against one owner account alias from Cursor with the
 tray agent unlocked. Confirmed independently by `google_status.py` and
-`google_tray_token.py`. The owner-account original, with the alias, is at
-`/memory/skills/google-workspace-access/knowledge/oauth--refresh-token--invalid-grant-stored-tray-token.md`.
+`google_tray_token.py`. The owner's record, with the account alias and its sources, is kept
+in their memory.
 
 ## Applies to
 

@@ -223,6 +223,80 @@ class ReferenceTests(BrainTestCase):
         self.assertEqual(result.errors, [])
         self.assertFalse(any("not-yet" in w for w in result.warnings))
 
+    def add_skeleton(self, brain: Brain) -> None:
+        brain.write("shared/templates/memory-skeleton/projects/example-project/README.md",
+                    readme("template-example-project-readme", []))
+
+    def test_mechanics_reference_to_a_path_the_skeleton_provides_passes(self) -> None:
+        brain = self.make()
+        self.add_skeleton(brain)
+        brain.write("memory/projects/example-project/README.md", readme("example-project-readme", []))
+        brain.write("shared/NOTE.md", md("note", project_refs=["/memory/projects/example-project"]))
+        self.assertEqual(brain.run().errors, [])
+
+    def test_mechanics_reference_to_an_owner_specific_memory_path_is_an_error(self) -> None:
+        brain = self.make()
+        self.add_skeleton(brain)
+        # It resolves in this owner's memory, but another owner's memory would not have it.
+        brain.write("memory/sources/source-0001.md", md("source-0001"))
+        brain.write("shared/NOTE.md", md("note", source_refs=["/memory/sources/source-0001.md"]))
+        errors = brain.run().errors
+        self.assertTrue(any(e.startswith("/shared/NOTE.md: source_refs reference /memory/sources/source-0001.md "
+                                         "is an owner-specific memory path")
+                            and "owner's memory copy" in e for e in errors), errors)
+
+    def test_owner_specific_reference_is_an_error_even_without_memory(self) -> None:
+        brain = self.make(with_memory=False)
+        self.add_skeleton(brain)
+        brain.write("shared/NOTE.md", md("note", evidence=["/memory/projects/owner-only/LOG.md"]))
+        self.assertTrue(any("/memory/projects/owner-only/LOG.md is an owner-specific memory path" in e
+                            for e in brain.run().errors))
+
+    def test_memory_file_may_reference_owner_specific_memory_paths(self) -> None:
+        brain = self.make()
+        self.add_skeleton(brain)
+        brain.write("memory/sources/source-0001.md", md("source-0001"))
+        brain.write("memory/NOTE.md", md("note", source_refs=["/memory/sources/source-0001.md"]))
+        self.assertEqual(brain.run().errors, [])
+
+    def test_unindented_list_items_are_read(self) -> None:
+        brain = self.make()
+        brain.write("memory/NOTE.md", md("note").replace(
+            f"updated: {TS}\n---", f"updated: {TS}\nsource_refs:\n- /memory/projects/missing\n---"))
+        self.assertIn("/memory/NOTE.md: broken source_refs reference /memory/projects/missing",
+                      brain.run().errors)
+
+
+class IgnoredPathTests(BrainTestCase):
+    def test_scratch_folder_is_skipped_without_git(self) -> None:
+        brain = self.make()
+        brain.write("temp/run/NOTES.md", "# scratch, no front matter\n")
+        self.assertEqual(brain.run().errors, [])
+
+    @unittest.skipUnless(HAS_GIT, "git is not available")
+    def test_git_ignored_markdown_is_skipped_in_both_repositories(self) -> None:
+        brain = self.make()
+        brain.write(".gitignore", "memory/\nscratch-*/\n")
+        brain.write("memory/.gitignore", "local/\n")
+        init_repo(brain.root)
+        init_repo(brain.root / "memory")
+        brain.write("scratch-probe/NOTES.md", "# no front matter\n")
+        brain.write("memory/local/NOTES.md", "# no front matter\n")
+        self.assertEqual(brain.run().errors, [])
+
+    @unittest.skipUnless(HAS_GIT, "git is not available")
+    def test_reference_to_an_absent_git_ignored_file_is_a_warning(self) -> None:
+        brain = self.make()
+        brain.write("memory/.gitignore", "recordings/\n")
+        brain.write(".gitignore", "memory/\n")
+        brain.write("memory/NOTE.md", md("note", source_refs=["/memory/recordings/traffic-0001.json"]))
+        init_repo(brain.root)
+        init_repo(brain.root / "memory")
+        result = brain.run()
+        self.assertEqual(result.errors, [])
+        self.assertTrue(any("/memory/recordings/traffic-0001.json not checked" in w and "git-ignored" in w
+                            for w in result.warnings))
+
 
 class TaskTests(BrainTestCase):
     def test_open_memory_task_missing_from_state_is_an_error(self) -> None:
@@ -325,6 +399,13 @@ class ManifestTests(BrainTestCase):
         self.assertGreater(memory["markdown_files"], 0)
         # Once written, both manifests validate.
         self.assertFalse(any("manifest" in e for e in brain.run().errors))
+
+    def test_write_manifest_uses_lf_line_endings(self) -> None:
+        brain = self.make()
+        brain.run(writing=True)
+        for relative in ("repository-manifest.json", "memory/repository-manifest.json"):
+            with self.subTest(manifest=relative):
+                self.assertNotIn(b"\r\n", (brain.root / relative).read_bytes())
 
     def test_write_manifest_without_memory_writes_only_the_mechanics_manifest(self) -> None:
         brain = self.make(with_memory=False)

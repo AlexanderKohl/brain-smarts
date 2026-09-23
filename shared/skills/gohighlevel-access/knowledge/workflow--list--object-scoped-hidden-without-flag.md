@@ -13,10 +13,9 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-14
 verified: 2026-09-14
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/workflow--list--object-scoped-hidden-without-flag.md
+source_refs: []
 created: 2026-09-14T19:30:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Object-scoped workflows are hidden by a default, not by a limitation
@@ -80,6 +79,8 @@ both scoped to `custom_objects.site_visits`. Neither appeared anywhere in a
 the pages that list them were never opened. The flag was found by comparing the
 sweep's list URL against the seven list URLs the UI was recorded sending, every one
 of which carried `includeCustomObjects=true`.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

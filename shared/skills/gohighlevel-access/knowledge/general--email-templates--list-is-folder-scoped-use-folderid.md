@@ -14,10 +14,9 @@ refuted_by: null
 discovered: 2026-09-15
 verified: 2026-09-15
 source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/general--email-templates--list-is-folder-scoped-use-folderid.md
   - /shared/skills/gohighlevel-access/knowledge/general--email-templates--requires-version-v3-header.md
 created: 2026-09-15T14:40:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # The template list is one folder level, not the whole location
@@ -67,6 +66,8 @@ returned 5 rows (4 folders with `childCount` 11/9/9/5, plus 1 template). A recur
 `folderId` found the 34 children; `?search=DELETE` independently returned the same 34 ids.
 The earlier single-level pass in the same session had reported 5 active templates and found
 only the 1 root-level match – the owner knew more existed, which is what exposed this.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

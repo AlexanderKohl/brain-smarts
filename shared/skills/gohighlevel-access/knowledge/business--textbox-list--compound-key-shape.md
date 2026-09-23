@@ -13,12 +13,9 @@ superseded_by: null
 refuted_by: null
 discovered: '2026-08-24'
 verified: '2026-08-24'
-source_refs:
-- /memory/skills/gohighlevel-access/knowledge/business--textbox-list--compound-key-shape.md
+source_refs: []
 created: '2026-08-24T21:30:00+10:00'
-updated: 2026-09-23T12:00:00+10:00
-evidence:
-- /memory/skills/gohighlevel-access/knowledge/business--textbox-list--compound-key-shape.md
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Business Textbox List: compound-key row properties, not an array
@@ -60,6 +57,8 @@ convention (see `custom_object--textbox-list--compound-key-nested-in-properties.
 confirming this is an Objects-API-wide Textbox List convention, not
 Business-specific, that also happens to surface through Business's classic
 read.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

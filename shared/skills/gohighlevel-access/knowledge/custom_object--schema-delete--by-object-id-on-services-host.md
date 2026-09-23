@@ -13,8 +13,7 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-15
 verified: 2026-09-15
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/custom_object--schema-delete--by-object-id-on-services-host.md
+source_refs: []
 created: 2026-09-15T21:30:47+10:00
 updated: 2026-09-23T18:00:00+10:00
 ---
@@ -64,3 +63,7 @@ way in, and it also proves which sub-account the object belongs to.
   the status and the response keys are exact.
 - Destructive and not reversible. Run it only with the owner's explicit permission for that
   object in that confirmed sub-account (see `SKILL.md` and the owning node's `RULES.md`).
+
+## Evidence
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.

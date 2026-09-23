@@ -13,8 +13,7 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-03
 verified: 2026-09-03
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/task--search--location-endpoint-not-in-snapshots.md
+source_refs: []
 created: 2026-09-03T11:15:00+10:00
 updated: 2026-09-23T18:00:00+10:00
 ---
@@ -106,6 +105,8 @@ location search found **909**. The two-task gap is unexplained and small –
 most likely tasks on contacts created during the ~13-minute scan. Treat
 the location search as the more complete of the two, not as exactly
 reconciled.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 
