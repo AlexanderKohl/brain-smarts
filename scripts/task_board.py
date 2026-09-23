@@ -43,9 +43,9 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-# The task store has one reader, the tasks skill's own (SMART-RULE-0018); it sits beside this
-# skill under /shared/skills/.
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tasks" / "scripts"))
+# The task store has one reader, the tasks skill's own (SMART-RULE-0018), a core
+# skill in the smarts at /shared/skills/tasks/, found from the brain root.
+sys.path.insert(0, str(next(p for p in Path(__file__).resolve().parents if (p / "CONTRACT.md").is_file()) / "shared" / "skills" / "tasks" / "scripts"))
 
 import board_config  # noqa: E402
 import tasks as task_store  # noqa: E402

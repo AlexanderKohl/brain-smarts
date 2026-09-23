@@ -13,7 +13,7 @@ owner: OWNER_SHORT_NAME
 
 # The board
 
-Copy this file to `<node>/status/board.md` (`/shared/skills/owner-board/SKILL.md`, **Making a
+Copy this file to `<node>/status/board.md` (`/library/skills/owner-board/SKILL.md`, **Making a
 board**). Set `id` to `<node-slug>-status-board`, `parent` to the node's repository-root path
 (for example `/memory/projects/brain-development`), `owner`, `created` and `updated`; in the
 JSON block set `id` and `label` to the same values as the board's entry in

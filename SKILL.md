@@ -7,15 +7,15 @@ contract: /CONTRACT.md
 status: active
 scope: shared
 script_paths:
-  - /shared/skills/owner-board/scripts/apply_verdicts.py
-  - /shared/skills/owner-board/scripts/board_config.py
-  - /shared/skills/owner-board/scripts/build_boards.py
-  - /shared/skills/owner-board/scripts/build_status.py
-  - /shared/skills/owner-board/scripts/card.py
-  - /shared/skills/owner-board/scripts/cards.py
-  - /shared/skills/owner-board/scripts/reconcile.py
-  - /shared/skills/owner-board/scripts/task_board.py
-  - /shared/skills/owner-board/scripts/verdicts.py
+  - /library/skills/owner-board/scripts/apply_verdicts.py
+  - /library/skills/owner-board/scripts/board_config.py
+  - /library/skills/owner-board/scripts/build_boards.py
+  - /library/skills/owner-board/scripts/build_status.py
+  - /library/skills/owner-board/scripts/card.py
+  - /library/skills/owner-board/scripts/cards.py
+  - /library/skills/owner-board/scripts/reconcile.py
+  - /library/skills/owner-board/scripts/task_board.py
+  - /library/skills/owner-board/scripts/verdicts.py
 created: 2026-09-18T11:05:00+10:00
 updated: 2026-09-23T15:38:35+10:00
 owner: brain-owner
@@ -53,7 +53,7 @@ keep by hand is a board that can be quietly wrong, which is worse than a list.
 There is **one implementation**, in this skill's `scripts/` folder, and it serves every board
 (`SMART-RULE-0018`). Boards hold data only.
 
-    /shared/skills/owner-board/scripts/          the scripts (this skill)
+    /library/skills/owner-board/scripts/          the scripts (this skill)
     /memory/skills/owner-board/config/boards.json the owner's registry and per-board settings
     /memory/<node>/status/                        one board per node: cards, board.md, page
     /memory/boards/index.html                     the directory above every board (generated)
@@ -171,7 +171,7 @@ and `git fetch`.
 
 ### Making a board
 
-1. Copy `/shared/skills/owner-board/templates/board.template.md` to `<node>/status/board.md`,
+1. Copy `/library/skills/owner-board/templates/board.template.md` to `<node>/status/board.md`,
    fill it as its first paragraph says, create an empty `cards/` folder beside it, and add
    `status/` to the node's `README.md` (CONTRACT section 4).
 2. **Register it** in `boards.json`. Creating a board is not finished until it is registered:
@@ -206,12 +206,12 @@ merges, carrying the version the owner can load. **Only the owner's verdict reti
 
 Always through `card.py`, never by editing the file by hand:
 
-    python shared/skills/owner-board/scripts/card.py --board <id> new <card-id> --track <track> \
+    python library/skills/owner-board/scripts/card.py --board <id> new <card-id> --track <track> \
         --branch fix/x --title "<the owner's words>" --landed "..." --review "..." \
         --where-text "Product - Page" --where-href "<link>"
-    python shared/skills/owner-board/scripts/card.py --board <id> set <card-id> \
+    python library/skills/owner-board/scripts/card.py --board <id> set <card-id> \
         --state needs_review --version 1.4.0 --branch -
-    python shared/skills/owner-board/scripts/card.py --board <id> list
+    python library/skills/owner-board/scripts/card.py --board <id> list
 
 It writes the card, regenerates the page and the directory and runs the reconciliation in one
 act, so a card cannot change without the check seeing it. `--branch -` clears the branch, which
@@ -236,8 +236,8 @@ The owner decides on the card face and presses **Save my verdicts**, which hands
 JSON file naming its board. It should be saved into `<board>/verdicts-in/`; the browser asks once
 and remembers the folder. The owner then sends one short message, and the conductor runs:
 
-    python shared/skills/owner-board/scripts/apply_verdicts.py            # every saved file
-    python shared/skills/owner-board/scripts/apply_verdicts.py --dry-run  # say, change nothing
+    python library/skills/owner-board/scripts/apply_verdicts.py            # every saved file
+    python library/skills/owner-board/scripts/apply_verdicts.py --dry-run  # say, change nothing
 
 - *accepted* retires the card: version and title into `board.md` under `closed`, card file
   deleted.
@@ -293,12 +293,12 @@ exactly as before.
 `task_board.py build --for <task>`, which rebuilds the one board the task lands on and the
 directory. After editing a task record by hand, run
 
-    python shared/skills/owner-board/scripts/task_board.py --no-fetch build
+    python library/skills/owner-board/scripts/task_board.py --no-fetch build
 
 and, to prove what the owner sees, read the pages back:
 
-    python shared/skills/owner-board/scripts/task_board.py route   # which board each task is on
-    python shared/skills/owner-board/scripts/task_board.py check   # each open task once, on its board
+    python library/skills/owner-board/scripts/task_board.py route   # which board each task is on
+    python library/skills/owner-board/scripts/task_board.py check   # each open task once, on its board
 
 ### Then act on it
 
@@ -344,7 +344,7 @@ Run from the brain root. Alphabetical.
 Common options: `--root`, `--config`, `--no-fetch`, and `--board` where a command acts on one
 board. Tests (fictional data only):
 
-    python -m unittest discover -s shared/skills/owner-board/scripts/tests -v
+    python -m unittest discover -s library/skills/owner-board/scripts/tests -v
 
 ## What the reconciliation checks
 

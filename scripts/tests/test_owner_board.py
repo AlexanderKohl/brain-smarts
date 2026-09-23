@@ -1,7 +1,7 @@
 """Behavioural tests for the owner-board scripts, on a fictional brain built in a temporary folder.
 
 Run from the brain root:
-    python -m unittest discover -s shared/skills/owner-board/scripts/tests -v
+    python -m unittest discover -s library/skills/owner-board/scripts/tests -v
 
 Every name, product and identifier here is invented (SMART-RULE-0008).
 """
@@ -22,6 +22,7 @@ from unittest import mock
 from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parents[1]
+BRAIN = next(p for p in Path(__file__).resolve().parents if (p / "CONTRACT.md").is_file())  # the brain root: tasks and the skeleton are in the smarts
 sys.path.insert(0, str(SCRIPTS))
 
 import apply_verdicts  # noqa: E402
@@ -523,7 +524,7 @@ class TaskBoardTests(unittest.TestCase):
         (self.brain.memory / "tasks" / folder / (tid + "-fictional.md")).write_text(text, encoding="utf-8")
 
     def test_the_memory_skeleton_config_draws_the_personal_board_from_the_first_task(self):
-        skeleton = (SCRIPTS.parents[3] / "shared" / "templates" / "memory-skeleton" / "skills" / "owner-board"
+        skeleton = (BRAIN / "shared" / "templates" / "memory-skeleton" / "skills" / "owner-board"
                     / "config" / "boards.json")
         path = self.brain.memory / "skills" / "owner-board" / "config" / "boards.json"
         shutil.copyfile(skeleton, path)
@@ -613,7 +614,7 @@ class TaskBoardTests(unittest.TestCase):
         self.assertEqual(columns, ["inbox", "ready", "in_progress", "waiting", "scheduled", "blocked", "completed"])
 
     def test_a_new_task_appears_on_its_board_at_once(self):
-        sys.path.insert(0, str(SCRIPTS.parents[1] / "tasks" / "scripts"))
+        sys.path.insert(0, str(BRAIN / "shared" / "skills" / "tasks" / "scripts"))
         import tasks as task_cli
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
