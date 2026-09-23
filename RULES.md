@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-23T20:00:00+10:00
+updated: 2026-09-23T22:20:00+10:00
 owner: brain-owner
 ---
 
@@ -53,6 +53,7 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 | `SMART-RULE-0028` | Evidence-driven learning | this file; `/shared/skills/learning-maintenance/` |
 | `SMART-RULE-0029` | Three layers: mechanics, memory and project repositories | `/CONTRACT.md` §3.4–§3.6 |
 | `SMART-RULE-0030` | Rule identifiers | `/CONTRACT.md` §13.2 |
+| `SMART-RULE-0031` | Show the text of every new or changed rule | this file |
 
 ## SMART-RULE-0010 – Communication efficiency
 
@@ -388,6 +389,14 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 - **Interrupt only when needed.** Contact the owner when authority is required, a consequential trade-off needs judgement, uncertainty about their goals blocks a useful decision, or a finding materially affects current work. Failure or disagreement alone is not an escalation trigger. Ordinary maintenance stays silent.
 - **Present a weekly review.** When due during an active session, present new learning and substantive changes since the previous delivered review, including retirements and uncertainty. Track delivery; label a possible repeat after uncertain delivery. Presentation is not acceptance of proposed governance changes.
 - **One writer at a time, not one writer for all time.** Background workers return findings and do not edit canonical learning or shared views; the thread that launched a worker validates and integrates its results. Any session may integrate, and while it writes it must be the only writer: exclusion lasts for the write and never outlives the session holding it, so no designation goes stale and no work waits on a session that has ended. Re-read the target inside that window, stage only its own paths, and treat a Git conflict as the signal to reconcile rather than overwrite. Generated views are derived from the records and are regenerated after integration, never edited as source. `/shared/skills/learning-maintenance/` implements this process without expanding its authority.
+
+## SMART-RULE-0031 – Show the text of every new or changed rule
+
+- Whenever an agent proposes, amends, accepts or applies a rule at any level (the contract,
+  `/RULES.md`, `/memory/RULES.md`, a node's `RULES.md` or a skill's operating rules), the reply
+  to the owner quotes the rule's full text – its heading and every bullet, or the exact
+  before-and-after for an amendment – before the file path. A summary may accompany the text but
+  never replaces it.
 
 ## Contract restatements
 
