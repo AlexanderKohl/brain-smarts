@@ -14,7 +14,7 @@ metadata:
   script_paths:
     - /shared/skills/tasks/scripts/tasks.py
   skill_refs:
-    - /shared/skills/owner-board
+    - /library/skills/owner-board
     - /shared/skills/repository-preflight
   created: 2026-09-23T13:10:00+10:00
   updated: 2026-09-23T15:38:35+10:00
@@ -139,12 +139,12 @@ changed.
 When `owner-board` is active, every open task is shown on exactly one board, drawn from its
 record – never copied – with columns by status (inbox, ready, in progress, waiting with what it
 waits on and its review date, scheduled, blocked, completed recently). The routing and the
-pages belong to `/shared/skills/owner-board/SKILL.md` (**Tasks on the boards**). Tasks carry no
+pages belong to `/library/skills/owner-board/SKILL.md` (**Tasks on the boards**). Tasks carry no
 verdict: a status changes in the record. `tasks.py new` refreshes the board itself; after
 changing a record by hand (a status, `project_refs`, a move to `completed/`), run
 
 ```powershell
-python shared/skills/owner-board/scripts/task_board.py --no-fetch build
+python library/skills/owner-board/scripts/task_board.py --no-fetch build
 ```
 
 ### 5. Check

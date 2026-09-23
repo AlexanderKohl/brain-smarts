@@ -1,4 +1,0 @@
-interface:
-  display_name: "Railway Access"
-  short_description: "Fetch Railway deployments and filtered logs via vault-stored API token"
-  default_prompt: "Use $railway-access with the vault-stored Railway API token to list projects, resolve the current deployment ID, and fetch timeframe/filtered deploy logs."

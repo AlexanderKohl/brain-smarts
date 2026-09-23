@@ -150,6 +150,47 @@ class UpstreamTests(unittest.TestCase):
         self.assertEqual(sx.verify_installs(brain)[0][1], "changed since install")
 
 
+@unittest.skipUnless(HAS_GIT, "git is not installed")
+class LibraryTests(unittest.TestCase):
+    """A skill library beside the smarts, with its own upstream (CONTRACT §3.4)."""
+
+    def setUp(self):
+        self.f = Fixture()
+        self.lib_up = self.f.base / "library-upstream"
+        self.lib_up.mkdir()
+        git(self.lib_up, "init", "-q", "-b", "main")
+        Fixture.identity(self.lib_up)
+        write(self.lib_up / "skills/pond-access/SKILL.md", "# pond-access\n")
+        commit_all(self.lib_up, "start")
+        self.library = self.f.root / "library"
+        subprocess.run(["git", "clone", "-q", "-o", "upstream", str(self.lib_up), str(self.library)],
+                       check=True, capture_output=True)
+        Fixture.identity(self.library)
+        write(self.lib_up / "skills/pond-access/SKILL.md", "# pond-access v2\n")
+        write(self.lib_up / "skills/beehive-log/SKILL.md", "# beehive-log\n")
+        commit_all(self.lib_up, "library improvements")
+
+    def tearDown(self):
+        self.f.close()
+
+    def test_library_changes_join_the_digest(self):
+        changes = sx.upstream_changes(self.f.brain())
+        self.assertIn("library: ", " ".join(changes["commits"]))
+        self.assertEqual(changes["skills"]["new"], ["beehive-log"])
+        self.assertIn("pond-access", changes["skills"]["other"])
+
+    def test_an_installed_skill_goes_to_the_library_and_is_verified_there(self):
+        brain = self.f.brain()
+        source = git(self.lib_up, "rev-parse", "HEAD")
+        entry = sx.record_install(brain, "pond-access", "https://example.com/someone/brain-skills", source)
+        self.assertEqual(entry["path"], "library/skills/pond-access")
+        self.assertTrue(entry["tree"])
+        self.assertIn("matches source", sx.verify_installs(brain)[0][1])
+        write(self.library / "skills/pond-access/SKILL.md", "# edited here\n")
+        commit_all(self.library, "local edit")
+        self.assertEqual(sx.verify_installs(self.f.brain())[0][1], "changed since install")
+
+
 class ScrubTests(unittest.TestCase):
     def setUp(self):
         self.f = Fixture(with_git=False)

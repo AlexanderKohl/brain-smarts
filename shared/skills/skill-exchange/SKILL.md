@@ -9,7 +9,7 @@ scope: shared
 script_paths:
   - /shared/skills/skill-exchange/scripts/skill_exchange.py
 created: 2026-09-23T14:00:00+10:00
-updated: 2026-09-23T17:31:00+10:00
+updated: 2026-09-23T17:45:03+10:00
 owner: brain-owner
 skill_refs:
   - /shared/skills/learning-maintenance
@@ -27,7 +27,7 @@ This skill is the operating detail of `SMART-RULE-0032` in `/RULES.md`.
 Skills move between brains in both directions, and each move is the owner's decision:
 
 1. **Notice** – an agent sees a capability built for one node that another node or another
-   owner could use, and suggests promoting it to a shared skill.
+   owner could use, and suggests promoting it to a library skill.
 2. **Offer upstream** – a promoted, scrubbed skill goes to the original mechanics repository as
    a pull request the upstream maintainer accepts or declines.
 3. **Hear about upstream** – on a cadence, the agent tells the owner what changed upstream that
@@ -40,12 +40,13 @@ itself. Each of those is one question to the owner with a suggested answer (`SMA
 
 ## Where things live
 
-Mechanics (this folder) holds the procedure and the script. Everything about this owner's
-exchange lives in memory:
+Mechanics (this folder) holds the procedure and the script; the upstream check covers the
+smarts and, when it is checked out, the skill library, each against its own `upstream`.
+Everything about this owner's exchange lives in memory:
 
 | Path | What it holds |
 |---|---|
-| `/memory/OWNER.md` `active_skills` | The optional shared skills the owner has switched on; drives relevance. |
+| `/memory/OWNER.md` `active_skills` | The library skills the owner has switched on; drives relevance. |
 | `/memory/skills/installed.json` | Provenance of every skill installed from another brain. |
 | `/memory/skills/skill-exchange/candidates.json` | Promotion candidates and the owner's answers. |
 | `/memory/skills/skill-exchange/config/settings.json` | Cadence and suggestion settings (below). |
@@ -103,8 +104,8 @@ python shared/skills/skill-exchange/scripts/skill_exchange.py candidate add /mem
 At the next checkpoint the agent suggests it:
 
 > **Suggest:** `<name>` in `<node>` looks reusable: <one line of evidence>. Promote it to a
-> shared skill?
-> 1. Yes – generalise it into `/shared/skills/<name>/`, owner settings to
+> library skill?
+> 1. Yes – generalise it into `/library/skills/<name>/`, owner settings to
 >    `/memory/skills/<name>/` (recommended)
 > 2. Not now – ask again only if it is copied somewhere else
 > 3. Never for this one
@@ -113,15 +114,17 @@ The answer is recorded with `candidate mark <path> suggested|declined|promoted`.
 
 ### 2. Promote, then scrub before anything leaves memory
 
-Promotion follows CONTRACT §3.4: the mechanism goes to `/shared/skills/<name>/` in generalised
+Promotion follows CONTRACT §3.4: the mechanism goes to `/library/skills/<name>/` in generalised
 form (`SKILL.md` with `status: proposed`, `scripts/`, `scripts/tests/` with fictional data per
 `SMART-RULE-0008`), owner configuration and notes go to `/memory/skills/<name>/`, and the
-original incident stays in its node. Then, **before the first mechanics commit**:
+original incident stays in its node – written that way from the first draft (`SMART-RULE-0008`).
+A skill becomes a core skill in `/shared/skills/` only when the brain itself comes to depend on it
+(CONTRACT §3.4), which is a governance change. Then, **before the first library commit**:
 
 ```powershell
 cd <brain_root>
-python shared/skills/skill-exchange/scripts/skill_exchange.py scrub shared/skills/<name>
-python -m unittest discover -s shared/skills/<name>/scripts/tests
+python shared/skills/skill-exchange/scripts/skill_exchange.py scrub library/skills/<name>
+python -m unittest discover -s library/skills/<name>/scripts/tests
 python shared/skills/repository-preflight/scripts/preflight.py
 ```
 
@@ -197,14 +200,19 @@ presented as a proposal with the diff and waits for explicit acceptance (CONTRAC
 Only on the owner's request, and only after the agent has read every file of the skill
 (scripts run with the owner's credentials and access):
 
+A skill from someone else is installed into the library, the same way whether their library or
+their older smarts holds it (`<their path>` is `skills/<name>` or `shared/skills/<name>`):
+
 ```powershell
-cd <brain_root>
+cd <brain_root>\library
 git fetch <source repository url> <commit>
 git switch -c install/<name>
-git checkout FETCH_HEAD -- shared/skills/<name>
-python shared/skills/skill-exchange/scripts/skill_exchange.py scrub shared/skills/<name>
-python -m unittest discover -s shared/skills/<name>/scripts/tests
-git commit -m "<host> <model>: install <name> from <source> at <commit>" -- shared/skills/<name>
+git checkout FETCH_HEAD -- <their path>
+# when <their path> is shared/skills/<name>, move it: git mv shared/skills/<name> skills/<name>
+cd <brain_root>
+python shared/skills/skill-exchange/scripts/skill_exchange.py scrub library/skills/<name>
+python -m unittest discover -s library/skills/<name>/scripts/tests
+git -C library commit -m "<host> <model>: install <name> from <source> at <commit>" -- skills/<name>
 python shared/skills/skill-exchange/scripts/skill_exchange.py record-install --skill <name> --source <source repository url> --commit <full commit>
 ```
 

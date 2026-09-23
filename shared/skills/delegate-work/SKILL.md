@@ -201,7 +201,7 @@ the first person to notice is the owner.
 **So, for any packet whose output is something a person looks at:**
 
 1. **Name the artefact by path, in the packet.** The mockup, the screenshot, the page it
-   must match. `/shared/skills/ui-mockup/` builds these against the product's own
+   must match. `/library/skills/ui-mockup/` builds these against the product's own
    stylesheet; they live under `temp/ui-mockup/` and are gitignored, so a path in a task
    record is not a path in a packet. **The packet must carry it.**
 2. **Say the artefact is the target and the prose is the commentary.** Then say what
@@ -293,7 +293,7 @@ the record gets written at the moment attention is highest and never again. A ru
 *remember to update it* would be the same habit with a sentence attached.
 
 **So it is checked mechanically, not remembered.** The owner board's
-`/shared/skills/owner-board/scripts/reconcile.py` (check 10) reads every board track's parent task and says so when a track has landed work or a card in
+`/library/skills/owner-board/scripts/reconcile.py` (check 10) reads every board track's parent task and says so when a track has landed work or a card in
 flight while its record still says `ready`, or when a track's task is missing from the index. It
 runs on every board regeneration, so the conductor cannot choose not to run it.
 

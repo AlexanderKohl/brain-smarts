@@ -47,3 +47,7 @@ extracted_text.txt
 
 # Generated deliverables belong in /memory/outbox/, never in the mechanics repository
 outbox/
+
+# The skill library repository is checked out here as a separate repository (CONTRACT §3.5).
+# It must never be committed to this mechanics repository.
+library/

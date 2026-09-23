@@ -1,4 +1,0 @@
-interface:
-  display_name: "ABR ABN Lookup"
-  short_description: "Look up ABNs, ACNs, and business names via ABR web services"
-  default_prompt: "Use $abr-access with the vault-stored ABR GUID to look up or search Australian business numbers."

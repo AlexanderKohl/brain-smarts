@@ -1,2 +1,0 @@
-# Railway Access uses Python's standard library only (urllib + json).
-# No extra pip packages required for the GraphQL client or CLIs.

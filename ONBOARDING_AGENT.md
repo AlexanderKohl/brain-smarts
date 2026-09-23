@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-08-06T09:37:00+10:00
-updated: 2026-09-23T17:32:00+10:00
+updated: 2026-09-23T17:43:07+10:00
 owner: brain-owner
 ---
 
@@ -20,10 +20,10 @@ This file holds the generic mechanics every owner's agents share. The owner's ow
 
 Numbered in reading order.
 
-1. Find the brain root by locating `CONTRACT.md` (see also `/BOOTSTRAP.md` and `/AGENTS.md`). The owner's memory is the separate repository checked out at `/memory/`; owner content is addressed as `/memory/...` (CONTRACT §3.5).
+1. Find the brain root by locating `CONTRACT.md` (see also `/BOOTSTRAP.md` and `/AGENTS.md`). The owner's memory is the separate repository checked out at `/memory/`; owner content is addressed as `/memory/...`. The skill library is the separate repository checked out at `/library/`; its skills are addressed as `/library/skills/<skill>/` (CONTRACT §3.4, §3.5).
 2. Read `/CONTRACT.md` before interpreting or changing brain content.
 3. Read root `/RULES.md`, `/memory/OWNER.md` and `/memory/RULES.md`, then the active node's `README.md`, `STATE.md` and relevant `PLAN.md` / `KNOWLEDGE.md`.
-4. Prefer shared executable skills under `/shared/skills/` over ad-hoc scripts. Owner configuration and notes for a skill are in `/memory/skills/<skill>/`.
+4. Prefer executable skills – core under `/shared/skills/`, optional under `/library/skills/` – over ad-hoc scripts. Owner configuration and notes for a skill are in `/memory/skills/<skill>/`.
 5. Never commit secrets. Use `/shared/skills/manage-credentials/` and the encrypted portable vault. Prefer the per-login tray Vault Agent (`vault_tray.py` / logon task; grey=locked, red=unlocked) over console `serve` and over deprecated chat-long PowerShell sessions. Never put `PORTABLE_VAULT_PASSPHRASE` into child environments.
 6. Governance activity appends to each node's `LOG.md`.
 7. **Lookup order (`SMART-RULE-0005`):** check the brain first (contacts / knowledge / known homes in `/memory/`, targeted – not exhaustive grep theatre); if absent or uncertain, use the authoritative external skill (e.g. `abr-access` for ABN/GST). Match subagent capabilities to the job; on owner redirect, abandon obsolete parallel searches.
@@ -39,30 +39,35 @@ Numbered in reading order.
 17. **Skill exchange (`SMART-RULE-0032`):** at session start run `python shared/skills/skill-exchange/scripts/skill_exchange.py due`; when it exits 0, run `upstream` and keep its digest for the first natural checkpoint. Record reusable capabilities with `candidate add` as you notice them. Procedure and etiquette: `/shared/skills/skill-exchange/SKILL.md`.
 18. **A name means one thing (`SMART-RULE-0033`):** one name per thing across interface, code, data and conversation; raise a name that will not hold before building on it, with a better one.
 
-## Shared skills (current)
+## Skills (current)
 
-Rows are alphabetical by skill name.
+**Core skills** (`/shared/skills/`, always on). Rows are alphabetical by skill name.
 
 | Skill | Path | Role |
 |---|---|---|
-| abr-access | `/shared/skills/abr-access/` | ABR ABN Lookup JSON web services (GUID in vault); ABN/ACN lookup and name search |
-| crm | `/shared/skills/crm/` | Contact register in memory: one file per person, organisation, newsletter or system; owner personas bound to sending accounts; create on first encounter, deduplicate, merge directories; node rules ship as a template; `crm_check.py` find, validate, duplicates |
 | delegate-work | `/shared/skills/delegate-work/` | Conductor-to-worker packets and results for parallel subagent work; isolated, read-only, no credentials by default; max four workers, depth one; run folders under `/temp/delegation/runs/`; governed by root `SMART-RULE-0024`. Also holds the two handover procedures: conductor to conductor, and **a research or design thread back to the conductor**, which settles every open decision with the owner before it hands over |
-| gohighlevel-access | `/shared/skills/gohighlevel-access/` | HighLevel agency OAuth (port 8766), subaccounts, CRM APIs; pipeline migration review UI (port 8769) |
-| google-workspace-access | `/shared/skills/google-workspace-access/` | Multi-account Google OAuth (port 8767); Gmail/Calendar/Tasks/Drive/Contacts; contact-register integration; draft-first email; optional local SQLite Gmail/Tasks sync (`google_sync_ctl.py` / `google_local_email.py` / `google_local_tasks.py`) |
 | learning-maintenance | `/shared/skills/learning-maintenance/` | Evidence-driven learning, single-writer integration and weekly digest under SMART-RULE-0028 |
 | manage-credentials | `/shared/skills/manage-credentials/` | Passphrase vault + per-login Vault Agent broker; inject mapped secrets only; store rotating OAuth JSON |
-| owner-board | `/shared/skills/owner-board/` | One permanent link showing the owner every request they have made and what needs them; cards are Markdown records under `<node>/status/cards/`, the page is **generated** from them, and `reconcile.py` compares it against git on every regeneration. The owner's verdict comes back as a saved file, not as copied text. **A card is closed only by the owner** |
 | problem-recovery | `/shared/skills/problem-recovery/` | Targeted knowledge lookup, bounded recovery and narrow escalation |
 | product-development | `/shared/skills/product-development/` | Investment-proportionate product-development process and gate decisions under `SMART-RULE-0016` |
-| railway-access | `/shared/skills/railway-access/` | Railway GraphQL: projects, current deployment ID, timeframe/filtered deploy/build/HTTP logs (account/workspace token in vault) |
 | raw-file-ingestion | `/shared/skills/raw-file-ingestion/` | Immutable `/memory/raw/` preservation and Markdown source records under `/memory/sources/` |
 | repository-preflight | `/shared/skills/repository-preflight/` | Metadata, refs, task and README validation for the mechanics repository and, when present, `/memory/` |
 | skill-exchange | `/shared/skills/skill-exchange/` | Notices reusable capability and suggests promotion; personal-data check before anything leaves memory; offers upstream as a pull request; weekly upstream digest filtered by `active_skills`; provenance of installed skills in `/memory/skills/installed.json` |
 | tasks | `/shared/skills/tasks/` | Task procedure and the CONTRACT §9.1 task review for `/memory/tasks/`: `tasks.py review` (inbox, reviews due, deadlines, blocked), `check`, `next-id` |
-| ui-implementation | `/shared/skills/ui-implementation/` | What a live screen must never do to the person using it: remove only what you made, keep their choices through a refresh, hold a repaint while work is unsaved, put the rule where it cannot be forgotten |
-| ui-mockup | `/shared/skills/ui-mockup/` | UI previews built from the product's own stylesheets and measured in the browser; **owner refines the mockup before any of it is implemented or pushed** |
-| xero-access | `/shared/skills/xero-access/` | Xero OAuth (port 8765), org selection, downloads, approved writes |
+
+**Library skills** (`/library/skills/`, used when listed in `active_skills`). Rows are alphabetical by skill name.
+
+| Skill | Path | Role |
+|---|---|---|
+| abr-access | `/library/skills/abr-access/` | ABR ABN Lookup JSON web services (GUID in vault); ABN/ACN lookup and name search |
+| crm | `/library/skills/crm/` | Contact register in memory: one file per person, organisation, newsletter or system; owner personas bound to sending accounts; create on first encounter, deduplicate, merge directories; node rules ship as a template; `crm_check.py` find, validate, duplicates |
+| gohighlevel-access | `/library/skills/gohighlevel-access/` | HighLevel agency OAuth (port 8766), subaccounts, CRM APIs; pipeline migration review UI (port 8769) |
+| google-workspace-access | `/library/skills/google-workspace-access/` | Multi-account Google OAuth (port 8767); Gmail/Calendar/Tasks/Drive/Contacts; contact-register integration; draft-first email; optional local SQLite Gmail/Tasks sync (`google_sync_ctl.py` / `google_local_email.py` / `google_local_tasks.py`) |
+| owner-board | `/library/skills/owner-board/` | One permanent link showing the owner every request they have made and what needs them; cards are Markdown records under `<node>/status/cards/`, the page is **generated** from them, and `reconcile.py` compares it against git on every regeneration. The owner's verdict comes back as a saved file, not as copied text. **A card is closed only by the owner** |
+| railway-access | `/library/skills/railway-access/` | Railway GraphQL: projects, current deployment ID, timeframe/filtered deploy/build/HTTP logs (account/workspace token in vault) |
+| ui-implementation | `/library/skills/ui-implementation/` | What a live screen must never do to the person using it: remove only what you made, keep their choices through a refresh, hold a repaint while work is unsaved, put the rule where it cannot be forgotten |
+| ui-mockup | `/library/skills/ui-mockup/` | UI previews built from the product's own stylesheets and measured in the browser; **owner refines the mockup before any of it is implemented or pushed** |
+| xero-access | `/library/skills/xero-access/` | Xero OAuth (port 8765), org selection, downloads, approved writes |
 
 ## Local ports
 

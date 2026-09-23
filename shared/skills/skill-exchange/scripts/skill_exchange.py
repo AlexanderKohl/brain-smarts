@@ -146,38 +146,61 @@ def always_on(brain: Brain) -> set:
     return names
 
 
+def exchange_repositories(brain: Brain) -> list:
+    """(label, repository, skills prefix) for each shareable repository that holds skills: the
+    mechanics (core skills) and, when checked out as its own repository, the skill library."""
+    repos = [("smarts", brain.root, "shared/skills/")]
+    library = brain.root / "library"
+    if (library / ".git").exists():
+        repos.append(("library", library, "skills/"))
+    return repos
+
+
+def local_skills(brain: Brain) -> set:
+    names: set = set()
+    for _, repo, prefix in exchange_repositories(brain):
+        folder = repo / prefix
+        if folder.is_dir():
+            names.update(p.name for p in folder.iterdir() if p.is_dir())
+    return names
+
+
 def upstream_changes(brain: Brain, fetch: bool = True) -> dict:
-    """What upstream has that this brain does not, grouped for the owner."""
+    """What upstream has that this brain does not, grouped for the owner. The smarts must have
+    the remote; the library is checked when it has one too."""
     settings = brain.settings()
     remote, branch = settings["remote"], settings["branch"]
     if remote not in git(brain.root, "remote").split():
         raise SystemExit("no remote named " + remote + " - see /SETUP.md step B3")
-    if fetch:
-        git(brain.root, "fetch", "-q", remote)
-    ref = remote + "/" + branch
-    head = git(brain.root, "rev-parse", ref)
-    base = git(brain.root, "merge-base", "HEAD", ref)
-    commits = git(brain.root, "log", "--format=%h %s", base + ".." + ref).splitlines()
-    changed = git(brain.root, "diff", "--name-status", base, ref).splitlines()
     active = set(brain.active_skills())
     required = always_on(brain)
-    local = {p.name for p in (brain.root / "shared" / "skills").iterdir() if p.is_dir()} \
-        if (brain.root / "shared" / "skills").is_dir() else set()
+    local = local_skills(brain)
+    refs, heads, commits = [], [], []
     skills: dict = {}
     governance: list = []
     other = 0
-    for line in changed:
-        parts = line.split("\t")
-        path = parts[-1]
-        found = re.match(r"shared/skills/([^/]+)/", path)
-        if found:
-            name = found.group(1)
-            skills.setdefault(name, 0)
-            skills[name] += 1
-        elif path in ("CONTRACT.md", "RULES.md", "BOOTSTRAP.md", "AGENTS.md") or path.startswith("governance/"):
-            governance.append(path)
-        else:
-            other += 1
+    for label, repo, prefix in exchange_repositories(brain):
+        if remote not in git(repo, "remote").split():
+            continue
+        if fetch:
+            git(repo, "fetch", "-q", remote)
+        ref = remote + "/" + branch
+        head = git(repo, "rev-parse", ref)
+        base = git(repo, "merge-base", "HEAD", ref)
+        found_commits = git(repo, "log", "--format=%h %s", base + ".." + ref).splitlines()
+        refs.append(ref if label == "smarts" else label + " " + ref)
+        heads.append(head if label == "smarts" else label + ":" + head)
+        commits += found_commits if label == "smarts" else [label + ": " + c for c in found_commits]
+        for line in git(repo, "diff", "--name-status", base, ref).splitlines():
+            path = line.split("\t")[-1]
+            found = re.match(re.escape(prefix) + r"([^/]+)/", path)
+            if found:
+                skills[found.group(1)] = skills.get(found.group(1), 0) + 1
+            elif label == "smarts" and (path in ("CONTRACT.md", "RULES.md", "BOOTSTRAP.md", "AGENTS.md")
+                                        or path.startswith("governance/")):
+                governance.append(path)
+            else:
+                other += 1
     grouped = {"active": [], "always_on": [], "new": [], "other": []}
     for name in sorted(skills):
         if name in active:
@@ -188,8 +211,8 @@ def upstream_changes(brain: Brain, fetch: bool = True) -> dict:
             grouped["new"].append(name)
         else:
             grouped["other"].append(name)
-    return {"ref": ref, "upstream_commit": head, "commits": commits, "skills": grouped,
-            "governance": sorted(set(governance)), "other_files": other}
+    return {"ref": ", ".join(refs), "upstream_commit": " ".join(heads), "commits": commits,
+            "skills": grouped, "governance": sorted(set(governance)), "other_files": other}
 
 
 def digest(brain: Brain, changes: dict) -> list:
@@ -310,10 +333,20 @@ def tree_of(repo: Path, commit: str, path: str) -> str:
     return git(repo, "rev-parse", commit + ":" + path)
 
 
+def repository_for(brain: Brain, path: str) -> tuple:
+    """The repository holding a brain-root-relative skill path, and the path inside it."""
+    if path.startswith("library/"):
+        return brain.root / "library", path[len("library/"):]
+    return brain.root, path
+
+
 def record_install(brain: Brain, skill: str, source: str, commit: str, path: str | None = None) -> dict:
-    path = path or "shared/skills/" + skill
-    local_tree = tree_of(brain.root, "HEAD", path) if git(brain.root, "rev-parse", "--verify", "--quiet",
-                                                          "HEAD:" + path, check=False) else ""
+    """A skill from someone else goes to the library when there is one (CONTRACT §3.4)."""
+    if path is None:
+        path = ("library/skills/" if len(exchange_repositories(brain)) > 1 else "shared/skills/") + skill
+    repo, inner = repository_for(brain, path)
+    local_tree = tree_of(repo, "HEAD", inner) if git(repo, "rev-parse", "--verify", "--quiet",
+                                                   "HEAD:" + inner, check=False) else ""
     record_file = brain.memory / "skills" / "installed.json"
     data = read_json(record_file, {"installed": []})
     entry = {"skill": skill, "path": path, "source_repo": source, "source_commit": commit,
@@ -327,7 +360,8 @@ def record_install(brain: Brain, skill: str, source: str, commit: str, path: str
 def verify_installs(brain: Brain) -> list:
     out = []
     for e in read_json(brain.memory / "skills" / "installed.json", {"installed": []})["installed"]:
-        now = git(brain.root, "rev-parse", "HEAD:" + e["path"], check=False)
+        repo, inner = repository_for(brain, e["path"])
+        now = git(repo, "rev-parse", "HEAD:" + inner, check=False)
         if not now:
             out.append((e["skill"], "missing"))
         elif e.get("tree") and now != e["tree"]:

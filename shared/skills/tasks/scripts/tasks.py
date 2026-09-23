@@ -10,7 +10,7 @@ Commands:
 The store is `--tasks` (a repository-root path such as /memory/tasks, or an absolute path),
 default /memory/tasks. Standard library only. Only `new` writes: one record, one STATE.md row
 (and the open-task count in that table's heading), and (through
-/shared/skills/owner-board/scripts/task_board.py, when the owner board is set up) the generated
+/library/skills/owner-board/scripts/task_board.py, when the owner board is set up) the generated
 board pages.
 
 Timestamps from `new` are in the owner's timezone, the IANA name in `timezone` in
@@ -268,7 +268,7 @@ def next_id(store: Path, year: int) -> str:
 
 NEW_STATUSES = ("inbox", "ready", "in_progress", "waiting", "scheduled", "blocked")
 TEMPLATE = Path("templates") / "TASK_TEMPLATE.md"
-BOARD_SCRIPT = Path(__file__).resolve().parents[2] / "owner-board" / "scripts" / "task_board.py"
+BOARD_SCRIPT = next(p for p in Path(__file__).resolve().parents if (p / "CONTRACT.md").is_file()) / "library" / "skills" / "owner-board" / "scripts" / "task_board.py"
 PLACEHOLDER_OWNERS = {"", "OWNER_SHORT_NAME", "null"}
 
 

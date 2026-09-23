@@ -107,7 +107,7 @@ Use this recovery sequence:
 4. Run `python shared/skills/manage-credentials/scripts/vaultctl.py status` in that same context. Continue only when it reports the existing agent as unlocked.
 5. If the discovery file is genuinely absent or the broker remains unreachable in the current-user context, have the owner quit the tray, restart it, and unlock once. Do not attempt to reconstruct the broker auth key or connect to the named pipe without the broker client.
 
-Python integrations should use their established client, which will select `BrokerOAuthStore` automatically. For example, the HighLevel client in `/shared/skills/gohighlevel-access/` uses `HighLevelConnection.from_environment()`. Connector code that needs the rotating JSON store directly may use:
+Python integrations should use their established client, which will select `BrokerOAuthStore` automatically. For example, the HighLevel client in `/library/skills/gohighlevel-access/` uses `HighLevelConnection.from_environment()`. Connector code that needs the rotating JSON store directly may use:
 
 ```python
 from portable_vault import PortableVaultJsonStore
@@ -155,7 +155,7 @@ python shared/skills/manage-credentials/scripts/vaultctl.py run `
   --entry xero-oauth `
   --map XERO_CLIENT_ID=client_id `
   --map XERO_CLIENT_SECRET=client_secret `
-  -- python shared/skills/xero-access/scripts/xero_connect.py
+  -- python library/skills/xero-access/scripts/xero_connect.py
 ```
 
 Equivalent: `vault_credentials.py run` (also prefers the agent; interactive passphrase only for one-shot mapped-field injection when the agent is unavailable).

@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-23T13:00:00+10:00
-updated: 2026-09-23T17:32:00+10:00
+updated: 2026-09-23T17:43:07+10:00
 owner: brain-owner
 skill_refs:
   - /shared/skills/manage-credentials
@@ -200,12 +200,14 @@ Installed per skill in step D, never globally ahead of need. If the person prefe
 environment, create it at `<brain_root>/.venv` (already ignored by Git) and use its `python`
 in every command.
 
-## 4. Step B – Your two repositories
+## 4. Step B – Your repositories
 
-The brain is three layers (CONTRACT §3.4). The person gets:
+The brain is four layers (CONTRACT §3.4). The person gets:
 
 - **Smarts** – their own private copy of the mechanics repository, with the original kept as
   the `upstream` remote so improvements can be pulled in. Checked out at the brain root.
+- **Skill library** – their own private copy of the skill library, with the original kept as
+  `upstream`. Checked out at `<brain_root>/library/`.
 - **Memory** – a new private repository made from `/shared/templates/memory-skeleton/`,
   checked out at `<brain_root>/memory/`.
 - **Project repositories** – later, one per large body of work, as siblings under
@@ -292,6 +294,37 @@ option 3: the person clicks **Use this template** on the original's GitHub page,
 If the person already cloned the smarts to follow the seed prompt, keep that checkout and only
 fix the remotes.
 
+### B3a. Your skill library
+
+**Done when:** `<brain_root>/library/skills/README.md` exists, and `git remote -v` in
+`<brain_root>/library/` shows `origin` pointing at the person's own repository and `upstream` at
+the original.
+
+**Agent does:** the original library sits beside the original smarts under the same account and
+is named `brain-skills`, so its address is the smarts' `upstream` address with the last part
+replaced. Check that it exists (`git ls-remote <address>`); if it does not, or the smarts have no
+`upstream`, ask:
+
+> **Ask:** Where is the skill library that goes with these smarts?
+> 1. `<derived address>` (recommended)
+> 2. An address you give me
+>
+> **Suggested reply:** `1`
+
+Then, the same way as B3 option 1 (Windows shown; on macOS and Linux use forward slashes):
+
+```powershell
+cd C:\dev\brain
+$library = (git remote get-url upstream) -replace '[^/]+?(\.git)?$', 'brain-skills.git'
+git clone $library library
+cd C:\dev\brain\library
+git remote rename origin upstream
+git remote set-url --push upstream DISABLED
+gh repo create <github_account>/brain-skills --private --source . --remote origin --push
+```
+
+The mechanics repository ignores `library/`, as it ignores `memory/`: each is its own repository.
+
 ### B4. Your memory repository
 
 **Done when:** `<brain_root>/memory/OWNER.md` exists with no upper-case placeholder left in its
@@ -312,8 +345,8 @@ front matter, and `<brain_root>/memory/` is its own Git repository with an `orig
 3. In every file under `memory/`: replace `OWNER_SHORT_NAME`, remove the `template-` prefix
    from each `id`, and set `created`, `updated` and the first `LOG.md` heading to the current
    time in the owner's timezone (CONTRACT §8.2). **Exception** for the templates that are
-   copied again for every new record – the files in `memory/tasks/templates/` and the two
-   `memory/projects/contacts/*/_TEMPLATE.md` files (contacts and personas): leave their
+   copied again for every new record – the files in `memory/tasks/templates/`, and later the
+   two `memory/projects/contacts/*/_TEMPLATE.md` files of the contact register (D.3): leave their
    `YYYY-...` timestamps and other upper-case placeholders as shipped, because each copy is
    filled when a task, contact or persona is made. Their `id` still loses its `template-` prefix:
    an id may exist only once across both repositories, and the skeleton keeps the original. The
@@ -442,7 +475,7 @@ others. Numbers run through both groups so a reply stays short.
 | problem-recovery | Searches the brain's own knowledge before re-investigating a failure |
 | product-development | Evidence-and-decision process for software work (`SMART-RULE-0016`) |
 | raw-file-ingestion | Keeps every uploaded file unchanged under `/memory/raw/` with a readable Markdown copy |
-| repository-preflight | Validates both repositories before every commit, including the personal-data check (`SMART-RULE-0008`) |
+| repository-preflight | Validates every repository before each commit, including the personal-data check (`SMART-RULE-0008`) |
 | skill-exchange | Reports upstream changes about weekly and offers to share what is worth sharing, always asking first (`SMART-RULE-0032`) |
 | tasks | Keeps your task list under `/memory/tasks/`, reviews what has come due, and puts each new task on its board |
 | ui-implementation | Rules a live screen must keep while data changes underneath it |
@@ -468,7 +501,7 @@ others. Numbers run through both groups so a reply stays short.
 > **Suggested reply:** `1`
 
 Owner-board note: nothing to install or register. Its scripts ship in
-`/shared/skills/owner-board/scripts/`, and the memory skeleton ships its registry,
+`/library/skills/owner-board/scripts/`, and the memory skeleton ships its registry,
 `/memory/skills/owner-board/config/boards.json`, with no project boards yet. So the personal task
 board needs no step: the first `tasks.py new` writes `/memory/boards/personal.html` and the
 directory `/memory/boards/index.html`. The `## Setup` row is `done` once the skill is listed in
@@ -512,7 +545,7 @@ and agents; no script reads it. Shape of one item (fictional values):
     "client_secret": "client_secret",
     "oauth_token_json": "oauth_token_json"
   },
-  "consumers": ["/shared/skills/xero-access"]
+  "consumers": ["/library/skills/xero-access"]
 }
 ```
 
@@ -611,17 +644,17 @@ four characters.
 cd C:\dev\brain
 python shared/skills/manage-credentials/scripts/vault_credentials.py run `
   --entry abr-webservices-guid --map ABR_AUTHENTICATION_GUID=authentication_guid `
-  -- python shared/skills/abr-access/scripts/abr_search_name.py --name "Australian Taxation Office" --max-results 1
+  -- python library/skills/abr-access/scripts/abr_search_name.py --name "Australian Taxation Office" --max-results 1
 ```
 
 ### D.3 crm
 
 **Agent does** (no credentials, no external account):
 
-1. Checks that the starter contact register exists at `/memory/projects/contacts/` (the
-   skeleton ships it in B4). For a memory created without it, copies
-   `/shared/templates/memory-skeleton/projects/contacts/` there, applies B4 step 3 to the copied
-   files, and lists the folder in `/memory/projects/README.md`.
+1. Unless `/memory/projects/contacts/` already exists, copies the starter contact register
+   `/library/skills/crm/templates/starter-node/` there, applies B4 step 3 to the copied files
+   (including its exception for the two `_TEMPLATE.md` files), and lists the folder in
+   `/memory/projects/README.md`.
 2. Asks for the owner's identities:
 
    > **Ask:** In which capacities do you write to people?
@@ -648,11 +681,11 @@ python shared/skills/manage-credentials/scripts/vault_credentials.py run `
 
 ```powershell
 cd C:\dev\brain
-python shared/skills/crm/scripts/crm_check.py --node /memory/projects/contacts validate
+python library/skills/crm/scripts/crm_check.py --node /memory/projects/contacts validate
 ```
 
 Git Bash:
-`MSYS_NO_PATHCONV=1 python shared/skills/crm/scripts/crm_check.py --node /memory/projects/contacts validate`.
+`MSYS_NO_PATHCONV=1 python library/skills/crm/scripts/crm_check.py --node /memory/projects/contacts validate`.
 
 `done` when it reports `PASS`. When `crm` is not chosen, the starter node stays in memory and its
 rules do not apply.
@@ -685,7 +718,7 @@ Needs a HighLevel **agency** login with admin rights.
 
 ```powershell
 cd C:\dev\brain
-python shared/skills/gohighlevel-access/scripts/ghl_connect.py
+python library/skills/gohighlevel-access/scripts/ghl_connect.py
 ```
 
 **You do:** open `http://localhost:8766/`, paste the Installation URL, sign in as agency admin
@@ -695,7 +728,7 @@ and approve the sub-accounts the brain may reach.
 
 ```powershell
 cd C:\dev\brain
-python shared/skills/gohighlevel-access/scripts/ghl_subaccounts.py
+python library/skills/gohighlevel-access/scripts/ghl_subaccounts.py
 ```
 
 `done` when it prints the agency name and the approved sub-accounts. Every later write still
@@ -706,7 +739,7 @@ needs the target sub-account confirmed for that operation (CONTRACT §10.5).
 **Agent does first:**
 
 1. Installs the dependencies after a yes:
-   `python -m pip install -r shared/skills/google-workspace-access/requirements.txt`.
+   `python -m pip install -r library/skills/google-workspace-access/requirements.txt`.
 2. Makes sure the contact register from D.3 is in place (`crm` is chosen with this skill),
    adds its `data/` folder, and writes `/memory/skills/google-workspace-access/config/crm.json`:
 
@@ -773,7 +806,7 @@ $env:GOOGLE_TOKEN_STORE = "vault"; $env:GOOGLE_REDIRECT_URI = "http://localhost:
 python shared/skills/manage-credentials/scripts/vault_credentials.py run `
   --entry google-workspace-oauth-personal `
   --map GOOGLE_CLIENT_ID=client_id --map GOOGLE_CLIENT_SECRET=client_secret `
-  -- python shared/skills/google-workspace-access/scripts/google_connect.py --account personal
+  -- python library/skills/google-workspace-access/scripts/google_connect.py --account personal
 ```
 
 **You do:** open `http://localhost:8767/`, connect, sign in with **the login recorded for that
@@ -788,7 +821,7 @@ $env:GOOGLE_TOKEN_STORE = "vault"
 python shared/skills/manage-credentials/scripts/vault_credentials.py run `
   --entry google-workspace-oauth-personal `
   --map GOOGLE_CLIENT_ID=client_id --map GOOGLE_CLIENT_SECRET=client_secret `
-  -- python shared/skills/google-workspace-access/scripts/google_status.py --account personal
+  -- python library/skills/google-workspace-access/scripts/google_status.py --account personal
 ```
 
 `done` when the status succeeds; then set the account's `status` to `connected` in
@@ -810,7 +843,7 @@ specific draft.
      --entry railway-api --secret api_token
    ```
 
-**Agent does:** `python -m pip install -r shared/skills/railway-access/requirements.txt` after a
+**Agent does:** `python -m pip install -r library/skills/railway-access/requirements.txt` after a
 yes, and the registry entry.
 
 **Agent verifies:**
@@ -819,7 +852,7 @@ yes, and the registry entry.
 cd C:\dev\brain
 python shared/skills/manage-credentials/scripts/vault_credentials.py run `
   --entry railway-api --map RAILWAY_API_TOKEN=api_token `
-  -- python shared/skills/railway-access/scripts/railway_projects.py --list-workspaces
+  -- python library/skills/railway-access/scripts/railway_projects.py --list-workspaces
 ```
 
 ### D.7 xero-access
@@ -847,7 +880,7 @@ cd C:\dev\brain
 $env:XERO_TOKEN_STORE = "vault"; $env:XERO_VAULT_ENTRY = "xero-oauth"; $env:XERO_VAULT_FIELD = "oauth_token_json"; $env:XERO_REDIRECT_URI = "http://localhost:8765/oauth/callback"
 python shared/skills/manage-credentials/scripts/vault_credentials.py run `
   --entry xero-oauth --map XERO_CLIENT_ID=client_id --map XERO_CLIENT_SECRET=client_secret `
-  -- python shared/skills/xero-access/scripts/xero_connect.py
+  -- python library/skills/xero-access/scripts/xero_connect.py
 ```
 
 **You do:** open `http://localhost:8765/`, choose **Add Organisation…**, sign in to Xero, tick
@@ -861,7 +894,7 @@ cd C:\dev\brain
 $env:XERO_TOKEN_STORE = "vault"; $env:XERO_VAULT_ENTRY = "xero-oauth"; $env:XERO_VAULT_FIELD = "oauth_token_json"
 python shared/skills/manage-credentials/scripts/vault_credentials.py run `
   --entry xero-oauth --map XERO_CLIENT_ID=client_id --map XERO_CLIENT_SECRET=client_secret `
-  -- python shared/skills/xero-access/scripts/xero_download.py --resource Organisation `
+  -- python library/skills/xero-access/scripts/xero_download.py --resource Organisation `
      --output temp/xero-access/organisation.json --requesting-node /memory/projects/credential-management
 ```
 
@@ -872,7 +905,7 @@ cd ~/dev/brain   # Git Bash: cd /c/dev/brain
 MSYS_NO_PATHCONV=1 XERO_TOKEN_STORE=vault XERO_VAULT_ENTRY=xero-oauth XERO_VAULT_FIELD=oauth_token_json \
   python shared/skills/manage-credentials/scripts/vault_credentials.py run \
   --entry xero-oauth --map XERO_CLIENT_ID=client_id --map XERO_CLIENT_SECRET=client_secret \
-  -- python shared/skills/xero-access/scripts/xero_download.py --resource Organisation \
+  -- python library/skills/xero-access/scripts/xero_download.py --resource Organisation \
      --output temp/xero-access/organisation.json --requesting-node /memory/projects/credential-management
 ```
 
@@ -1156,7 +1189,7 @@ board.
 > **Suggested reply:** `1`
 
 The agent makes the board by following **Making a board** in
-`/shared/skills/owner-board/SKILL.md`: copy `/shared/skills/owner-board/templates/board.template.md`
+`/library/skills/owner-board/SKILL.md`: copy `/library/skills/owner-board/templates/board.template.md`
 to `<node>/status/board.md` and fill it, create `cards/` beside it, list `status/` in the node's
 `README.md`, and add one entry to the `boards` list in
 `/memory/skills/owner-board/config/boards.json`. For option 1 the entry is:
@@ -1170,7 +1203,7 @@ Then build it:
 
 ```powershell
 cd C:\dev\brain
-python shared/skills/owner-board/scripts/build_status.py --board brain
+python library/skills/owner-board/scripts/build_status.py --board brain
 ```
 
 **Done when:** that command prints `wrote ...status.html` and `wrote ...index.html`, and the
@@ -1193,14 +1226,14 @@ Record each configured schedule in `/memory/STATE.md` so the next session knows 
 
 ## 10. Step H – Final validation and tour
 
-**Done when:** preflight passes on both repositories, the memory has a pushed commit, the smarts
+**Done when:** preflight passes on every repository, the memory has a pushed commit, the smarts
 working tree is clean, and the tour is given.
 
 **Agent does:**
 
 1. Set every `## Setup` row to its final status and append one `LOG.md` entry naming the
    chosen skills, the host wiring and the settings level.
-2. Validate both repositories in one pass and write the manifests:
+2. Validate every repository in one pass and write the manifests:
 
    ```powershell
    cd C:\dev\brain

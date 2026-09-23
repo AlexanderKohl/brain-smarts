@@ -1,4 +1,0 @@
-interface:
-  display_name: "Google Workspace Access"
-  short_description: "Vault-backed Gmail, Calendar, Tasks, Drive and Contacts"
-  default_prompt: "Use $google-workspace-access with the Personal CRM persona/account resolution rules. Draft-first for email; confirm the Google account alias before side effects."

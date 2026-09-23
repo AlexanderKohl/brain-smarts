@@ -1,4 +1,0 @@
-google-api-python-client>=2.100.0,<3
-google-auth>=2.23.0,<3
-# Optional: required only for Gmail Pub/Sub pull in the local sync worker
-google-cloud-pubsub>=2.18.0,<3

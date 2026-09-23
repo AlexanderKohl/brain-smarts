@@ -36,7 +36,7 @@ Listed alphabetically.
 ##### `boards/`
 
 Contains the generated owner-board pages: `index.html`, the directory of every board, and
-`personal.html`, the personal task board. Written by `/shared/skills/owner-board/scripts/` from
+`personal.html`, the personal task board. Written by `/library/skills/owner-board/scripts/` from
 the first task on and never edited by hand; the registry is
 `/memory/skills/owner-board/config/boards.json`.
 

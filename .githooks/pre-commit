@@ -12,9 +12,9 @@
 # root `RULES.md`, `governance/`, the preflight validator) and everything else (skills,
 # templates, systems). A commit touching both is nearly always a sweep.
 #
-# It also refuses any path under `memory/`: the owner's memory is a separate repository and
-# must never be committed here (CONTRACT §3.5). `.gitignore` already excludes it; this catches
-# a forced add.
+# It also refuses any path under `memory/` or `library/`: the owner's memory and the skill
+# library are separate repositories and must never be committed here (CONTRACT §3.5).
+# `.gitignore` already excludes both; this catches a forced add.
 #
 # **The stronger half is the command**, and it needs no hook: `git commit -- <paths>`
 # commits exactly the paths named and ignores the index entirely, so a careless `add`
@@ -25,12 +25,12 @@
 staged=$(git diff --cached --name-only)
 [ -z "$staged" ] && exit 0
 
-leaked=$(printf '%s\n' "$staged" | grep '^memory/' || true)
+leaked=$(printf '%s\n' "$staged" | grep -E '^(memory|library)/' || true)
 if [ -n "$leaked" ]; then
-  echo "pre-commit: these paths belong to the separate memory repository and must not be committed here:"
+  echo "pre-commit: these paths belong to the separate memory or library repository and must not be committed here:"
   printf '    %s\n' $leaked
   echo
-  echo "Unstage them: git restore --staged -- memory/"
+  echo "Unstage them: git restore --staged -- memory/ library/"
   exit 1
 fi
 
