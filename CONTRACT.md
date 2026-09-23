@@ -4,11 +4,11 @@ title: Portable AI Brain Contract
 type: contract
 status: active
 schema_version: 0.2
-contract_version: 1.1.0
+contract_version: 2.0.0
 contract: /CONTRACT.md
 canonical: true
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-23T14:12:51+10:00
+updated: 2026-09-23T17:41:53+10:00
 owner: brain-owner
 ---
 
@@ -16,7 +16,7 @@ owner: brain-owner
 
 ## 1. Authority and bootstrap
 
-This file is the canonical operating contract for the entire brain: the mechanics repository that holds this file, the owner's memory repository checked out beneath it at `/memory/`, and every external project repository the memory points to (section 16).
+This file is the canonical operating contract for the entire brain: the mechanics repository that holds this file, the skill library checked out beneath it at `/library/`, the owner's memory repository checked out beneath it at `/memory/`, and every external project repository the memory points to (section 16).
 
 Every AI agent, script or person working anywhere in the brain must:
 
@@ -125,32 +125,35 @@ Other nodes reference the canonical item. They do not maintain independent copie
 
 When a derivative is required, its metadata must identify the canonical source.
 
-### 3.4 The three layers
+### 3.4 The four layers
 
-The brain is made of three layers, each with its own repository and its own audience.
+The brain is made of four layers, each with its own repository and its own audience.
 
-1. **Mechanics (this repository).** The contract, generic rules, bootstrap and onboarding files, shared skills (instructions, scripts, tests and generic external-API knowledge), templates, schemas, the raw-file system node and governance proposals about the mechanics. It holds **no personal data**: no owner name, client, contact, company, account, location or tenant identifier, email address, phone number, machine path or owner project name. Anyone could adopt it unchanged.
-2. **Memory (`/memory/`).** Everything specific to one owner: the owner profile, owner-layer rules, tasks, in-brain projects, contacts, raw files, sources, outbox, boards, the brain-wide `STATE.md`, `LOG.md` and `KNOWLEDGE.md`, per-skill owner configuration and notes, and pointer nodes for projects that live in their own repositories.
-3. **Project repositories.** Bodies of work with their own lifecycle, each in its own repository, checked out as siblings of the brain root (section 16). The memory keeps only a small pointer node for each.
+1. **Mechanics (this repository).** The contract, generic rules, bootstrap and onboarding files, the core skills the brain itself depends on (a skill a `SMART-RULE` or this contract requires, or that another core skill calls), templates, schemas, the raw-file system node and governance proposals about the mechanics. It holds **no personal data**: no owner name, client, contact, company, account, location or tenant identifier, email address, phone number, machine path or owner project name. Anyone could adopt it unchanged.
+2. **Skill library (`/library/`).** Every other reusable skill: access to an outside system, or a way of working an owner may choose. Instructions, scripts, tests and generic external-API knowledge, under the same no-personal-data condition as the mechanics. An owner uses the skills listed in `active_skills` in `/memory/OWNER.md`, and may merge skills from other libraries into their own.
+3. **Memory (`/memory/`).** Everything specific to one owner: the owner profile, owner-layer rules, tasks, in-brain projects, contacts, raw files, sources, outbox, boards, the brain-wide `STATE.md`, `LOG.md` and `KNOWLEDGE.md`, per-skill owner configuration and notes, and pointer nodes for projects that live in their own repositories.
+4. **Project repositories.** Bodies of work with their own lifecycle, each in its own repository, checked out as siblings of the brain root (section 16). The memory keeps only a small pointer node for each.
 
-When an item could sit in either of the first two layers, it belongs in memory unless it is free of every owner specific listed above and useful to another owner as it stands. A mechanism learnt from an owner incident goes to the mechanics layer in generalised form, and the original incident, with its real identifiers, stays in memory at the node that owns it.
+When an item could sit in memory or in a shareable layer (the mechanics or the skill library), it belongs in memory unless it is free of every owner specific listed above and useful to another owner as it stands. A mechanism learnt from an owner incident goes to the mechanics layer in generalised form, and the original incident, with its real identifiers, stays in memory at the node that owns it.
 
 ### 3.5 Runtime layout and the `/memory/` path rule
 
-One working tree holds two repositories:
+One working tree holds three repositories:
 
 ```text
 <brain_root>/                  mechanics repository; the brain root "/"; CONTRACT.md lives here
+<brain_root>/library/          skill library repository; listed in the mechanics repository's .gitignore
 <brain_root>/memory/           memory repository; listed in the mechanics repository's .gitignore
 <project_repos_root>/<repo>/   each external project repository, a sibling checkout
 ```
 
 - A repository-root path such as `/CONTRACT.md`, `/RULES.md` or `/shared/...` names a file in the mechanics repository.
+- A library skill is addressed as `/library/skills/<skill>/`. A core skill stays `/shared/skills/<skill>/`. Owner configuration, data and notes for either live at `/memory/skills/<skill>/`. A script that needs another skill finds it from the brain root, never by a path relative to its own folder, so a skill works whichever repository holds it.
 - Everything owned by memory is addressed as `/memory/...`: for example `/memory/tasks/open/`, `/memory/projects/<node>/`, `/memory/raw/YYYY/MM/<source-id>/`, `/memory/sources/<source-id>.md`, `/memory/outbox/`, `/memory/boards/`, `/memory/STATE.md`.
 - **Path rule:** an item that belongs to memory keeps the path it would have in a single tree, prefixed with `/memory/`: `/X` becomes `/memory/X`. Moving content into memory applies this rule mechanically and does not rename the rest of the path.
-- Owner-specific configuration, data and notes for a shared skill `/shared/skills/<skill>/` live at `/memory/skills/<skill>/`, using the same inner layout as the skill (`config/`, `data/`, `knowledge/` and so on). A shared script finds them by locating the brain root (moving upwards to `CONTRACT.md`) and joining `memory/skills/<skill>/`, or by a path the owner profile names. It never hard-codes a machine path.
-- `/temp/` is local scratch in the brain root working tree, ignored by both repositories. Nothing durable belongs there.
-- The mechanics repository never commits anything under `/memory/`, and the memory repository never carries a copy of a mechanics file. A file that must change in both layers is changed in each repository and committed in each.
+- Owner-specific configuration, data and notes for a shared or library skill live at `/memory/skills/<skill>/`, using the same inner layout as the skill (`config/`, `data/`, `knowledge/` and so on). A shared script finds them by locating the brain root (moving upwards to `CONTRACT.md`) and joining `memory/skills/<skill>/`, or by a path the owner profile names. It never hard-codes a machine path.
+- `/temp/` is local scratch in the brain root working tree, ignored by every brain repository. Nothing durable belongs there.
+- The mechanics repository never commits anything under `/memory/` or `/library/`; the memory repository never carries a copy of a mechanics or library file; the library never carries a copy of a mechanics file. A file that must change in both layers is changed in each repository and committed in each.
 
 ### 3.6 The owner profile
 
@@ -456,7 +459,7 @@ node_type: project
 project_refs:
   - /memory/projects/example
 skill_refs:
-  - /shared/skills/xero-access
+  - /library/skills/xero-access
 tags:
   - accounting
 ```
@@ -588,7 +591,7 @@ A skill may retrieve or update data in external systems such as Xero or GoHighLe
 
 Keep a skill local when it contains project-specific logic or permissions.
 
-Place it in `/shared/skills/` when multiple nodes can use the general capability.
+Place it in the skill library (`/library/skills/`) when multiple nodes can use the general capability, and in `/shared/skills/` only when the brain itself depends on it (section 3.4).
 
 Separate:
 
@@ -723,7 +726,7 @@ Every local derivative must retain the raw source reference.
 
 ## 12. Shared resources and dependencies
 
-Store reusable capabilities and schemas under `/shared/`.
+Store schemas, templates and core skills under `/shared/`, and every other reusable skill in the skill library.
 
 A node declares dependencies in `README.md` using repository-root paths.
 
@@ -733,14 +736,14 @@ Example:
 knowledge_refs:
   - /memory/domains/finance
 skill_refs:
-  - /shared/skills/xero-access
+  - /library/skills/xero-access
 source_refs:
   - /memory/sources/source-id.md
 ```
 
 Do not copy shared skills or knowledge into each project.
 
-A project may store configuration for a shared skill, but the general skill remains canonical under `/shared/skills/`. Owner-wide configuration, data and notes for a shared skill live in `/memory/skills/<skill>/` (section 3.5); a mechanics skill never carries them.
+A project may store configuration for a shared skill, but the general skill remains canonical under `/shared/skills/` or `/library/skills/`. Owner-wide configuration, data and notes for a shared skill live in `/memory/skills/<skill>/` (section 3.5); a mechanics skill never carries them.
 
 ## 13. Change protocol
 
@@ -874,8 +877,8 @@ Before finishing a substantive update, verify:
 - no credentials were stored
 - every README.md lists and accurately summarises each immediate child folder
 - protected governance changes have an accepted proposal
-- the active `contract_version` is recorded in the repository manifest of each brain repository changed (`/repository-manifest.json` and `/memory/repository-manifest.json`)
-- no personal data has entered the mechanics repository (section 3.4)
+- the active `contract_version` is recorded in the repository manifest of each brain repository changed (`/repository-manifest.json`, `/library/repository-manifest.json` and `/memory/repository-manifest.json`)
+- no personal data has entered the mechanics repository or the skill library (section 3.4)
 - the repository preflight validator passes
 - every separable, validated, agent-owned durable change has been committed at the required logical checkpoint
 - the final report identifies each resulting commit and push status, or gives the exact permitted reason no commit was created
@@ -905,4 +908,4 @@ References from a project repository's `brain/` files to its own files use paths
 
 ### 16.3 Validation and commits
 
-The repository preflight validator validates the mechanics repository and, when present, `/memory/`. A project repository runs its own checks; its `brain/` folder follows section 15 where it applies. Commits and pushes in a project repository follow the inherited Git rules and are reported separately from the brain's own repositories.
+The repository preflight validator validates the mechanics repository and, when present, `/library/` and `/memory/`. A project repository runs its own checks; its `brain/` folder follows section 15 where it applies. Commits and pushes in a project repository follow the inherited Git rules and are reported separately from the brain's own repositories.

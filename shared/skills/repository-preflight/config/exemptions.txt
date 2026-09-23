@@ -7,5 +7,6 @@ path: */openapi/*  # a vendor's published API documentation, kept verbatim with 
 value: C:\dev  # documented default folder for project repositories on Windows (SETUP)
 value: C:\dev\  # the same default folder as written in the README layout diagram
 value: C:\dev\brain  # documented default brain root on Windows (SETUP, seed prompt)
+value: C:\dev\brain\library  # documented default skill library checkout on Windows (SETUP)
 value: C:\dev\brain\memory  # documented default memory checkout on Windows (SETUP)
 value: gmail-api-push@system.gserviceaccount.com  # Google's published service account for Gmail push notifications

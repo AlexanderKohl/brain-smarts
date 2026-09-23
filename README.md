@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 node_type: system
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-23T17:32:00+10:00
+updated: 2026-09-23T17:43:07+10:00
 owner: brain-owner
 ---
 
@@ -50,28 +50,33 @@ Every fact, task, rule and source file has exactly one home; other places link t
 
 ### Reusable skills for common systems
 
-Skills are instructions plus tested scripts for a job or an outside system. They carry no personal data; your own configuration for each lives in your memory. Current shared skills, alphabetical:
+Skills are instructions plus tested scripts for a job or an outside system. They carry no personal data; your own configuration for each lives in your memory.
 
-- `abr-access` – Australian Business Register lookups (ABN, ACN, name search)
-- `crm` – a contact register: people, organisations and which of your identities to reply as
+**Core skills** live here and are always on, because the brain itself depends on them. Alphabetical:
+
 - `delegate-work` – hands bounded pieces of work to parallel worker agents
-- `gohighlevel-access` – HighLevel CRM access across sub-accounts, with rotating tokens in the vault
-- `google-workspace-access` – Gmail (draft-first), Calendar, Tasks, Drive and Contacts for several accounts
 - `learning-maintenance` – captures, reviews and integrates what the brain learns from use
 - `manage-credentials` – the encrypted vault every credentialed skill uses
-- `owner-board` – one permanent page showing every request you have made and what needs you
 - `problem-recovery` – searches the brain's own knowledge before re-investigating a failure
 - `product-development` – the evidence-and-decision process for software work
-- `railway-access` – Railway projects, deployments and logs
 - `raw-file-ingestion` – keeps uploaded files unchanged with a traceable Markdown copy
 - `repository-preflight` – the validator run before every commit
 - `skill-exchange` – offers to share what is worth sharing, reports upstream changes, and installs skills from other brains
 - `tasks` – capture, review and close tasks, and surface what has come due
+
+**Library skills** live in the separate skill library repository, checked out at `/library/`; you switch on the ones you want, and can take in skills other people have written. Alphabetical:
+
+- `abr-access` – Australian Business Register lookups (ABN, ACN, name search)
+- `crm` – a contact register: people, organisations and which of your identities to reply as
+- `gohighlevel-access` – HighLevel CRM access across sub-accounts, with rotating tokens in the vault
+- `google-workspace-access` – Gmail (draft-first), Calendar, Tasks, Drive and Contacts for several accounts
+- `owner-board` – one permanent page showing every request you have made and what needs you
+- `railway-access` – Railway projects, deployments and logs
 - `ui-implementation` – rules a live screen must keep while data changes underneath it
 - `ui-mockup` – builds a measured preview of a screen for you to refine before anything is built
 - `xero-access` – Xero organisation selection and read-only downloads
 
-You switch on only the optional skills you want; the full list with what each needs is in [`/SETUP.md`](SETUP.md) and [`/shared/skills/README.md`](shared/skills/README.md).
+The full list with what each needs is in [`/SETUP.md`](SETUP.md), [`/shared/skills/README.md`](shared/skills/README.md) and the library's own `skills/README.md`.
 
 ### Parallel work with bounded delegation
 
@@ -83,18 +88,20 @@ New software, internal tools and feature changes follow an investment-proportion
 
 ### Shareable by design
 
-The mechanics – contract, generic rules, skills, templates – live in this repository and contain no personal data, so anyone can adopt them unchanged. Everything about you lives in a separate private memory repository. Large projects live in their own repositories, where collaborators get the project's own brain files without seeing your memory.
+The mechanics – contract, generic rules, core skills, templates – live in this repository, and optional skills in a separate skill library; neither contains personal data, so anyone can adopt them unchanged. Everything about you lives in a separate private memory repository. Large projects live in their own repositories, where collaborators get the project's own brain files without seeing your memory.
 
 ## How it fits together
 
-The brain is three layers, each its own repository. One working tree holds the first two; project repositories sit beside it.
+The brain is four layers, each its own repository. One working tree holds the first three; project repositories sit beside it.
 
 ```text
 C:\dev\                        project repositories root (your choice)
 ├── brain\                     brain-smarts – this repository; the brain root "/"
 │   ├── CONTRACT.md            the operating contract every agent reads first
 │   ├── RULES.md               generic rules any owner could adopt
-│   ├── shared\skills\         reusable skills (no personal data)
+│   ├── shared\skills\         core skills the brain depends on (no personal data)
+│   ├── library\               brain-skills – the skill library, ignored by this repository
+│   │   └── skills\            optional skills: outside systems and ways of working
 │   └── memory\                brain-memory – your private repository, ignored by this one
 │       ├── OWNER.md           who the brain works for
 │       ├── RULES.md           your own standing preferences
@@ -103,8 +110,9 @@ C:\dev\                        project repositories root (your choice)
 ```
 
 1. **Smarts** (this repository) – how the brain works. Identical for every owner.
-2. **Memory** (`/memory/`) – what the brain knows about you: profile, rules, tasks, projects, contacts, files, state and history.
-3. **Project repositories** – bodies of work with their own lifecycle; memory keeps a small pointer to each.
+2. **Skill library** (`/library/`) – optional skills, shareable like the smarts; you use the ones you switch on.
+3. **Memory** (`/memory/`) – what the brain knows about you: profile, rules, tasks, projects, contacts, files, state and history.
+4. **Project repositories** – bodies of work with their own lifecycle; memory keeps a small pointer to each.
 
 Rules inherit downwards – contract, generic rules, your rules, then each project's rules – and a lower level may add constraints but never override a higher one. See [`/CONTRACT.md`](CONTRACT.md) §3.4 to §3.6 and §16.
 
@@ -160,13 +168,17 @@ Entries are in reading order.
 
 Describes how a change to the mechanics layer is proposed (`governance/proposals/`): changes to `/CONTRACT.md`, `/RULES.md`, shared governance schemas and templates, bootstrap files and the preflight validator. Proposals are not active governance; only the implemented content of the target file is. Owner-layer proposals, and an owner's record of mechanics decisions, live in `/memory/governance/proposals/`.
 
+##### `library/`
+
+The skill library: a **separate repository**, checked out here and listed in this repository's `.gitignore`. Never commit anything under it to this repository. It holds the optional skills – outside systems and ways of working – each with its own `SKILL.md`, scripts and tests, and no personal data (CONTRACT §3.4). See [`/SETUP.md`](SETUP.md) step B3a to check it out.
+
 ##### `memory/`
 
 The owner's memory: a **separate repository**, checked out here and listed in this repository's `.gitignore`. Never commit anything under it to this repository. It holds the owner profile, owner-layer rules, tasks, projects, contacts, raw files, sources, outbox, boards and the brain-wide state, log and knowledge. When absent, agents work on the mechanics only (see [`/SETUP.md`](SETUP.md) step B4 to create one).
 
 ##### `shared/`
 
-Contains canonical shared skills, schemas and templates, including the skeleton for a new owner's memory (`shared/templates/memory-skeleton/`). Reusable resources belong here and must be referenced rather than copied into projects. Owner configuration for a skill lives in `/memory/skills/<skill>/`, never here.
+Contains the core skills the brain depends on, schemas and templates, including the skeleton for a new owner's memory (`shared/templates/memory-skeleton/`). Reusable resources belong here and must be referenced rather than copied into projects. Owner configuration for a skill lives in `/memory/skills/<skill>/`, never here.
 
 ##### `systems/`
 
@@ -174,4 +186,4 @@ Contains canonical persistent operating-system nodes without a natural completio
 
 ##### `temp/`
 
-Local, ephemeral, regenerable runtime artefacts (delegation run folders, probe output). Ignored by Git in both repositories and absent from a fresh clone. Safe to delete; never store credentials or durable knowledge here.
+Local, ephemeral, regenerable runtime artefacts (delegation run folders, probe output). Ignored by Git in every brain repository and absent from a fresh clone. Safe to delete; never store credentials or durable knowledge here.

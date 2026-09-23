@@ -51,6 +51,7 @@ IGNORED_DIRS = {".git", ".claude", "node_modules", "__pycache__", ".pytest_cache
 MEMORY_DIR = "memory"
 MEMORY_PREFIX = "/" + MEMORY_DIR + "/"
 LIBRARY_DIR = "library"
+LIBRARY_PREFIX = "/" + LIBRARY_DIR + "/"
 # The owner value mechanics files may carry (CONTRACT §3.6).
 GENERIC_OWNER = "brain-owner"
 MANIFEST_NAME = "repository-manifest.json"
@@ -100,6 +101,25 @@ def memory_root(root: Path) -> Path | None:
     return candidate if candidate.is_dir() else None
 
 
+def in_library(path: Path, root: Path) -> bool:
+    parts = path.relative_to(root).parts
+    return bool(parts) and parts[0] == LIBRARY_DIR
+
+
+def library_root(root: Path) -> Path | None:
+    candidate = root / LIBRARY_DIR
+    return candidate if candidate.is_dir() else None
+
+
+def layer_of(path: Path, root: Path) -> str:
+    """The repository that holds `path`: memory, the skill library or the mechanics."""
+    if in_memory(path, root):
+        return "memory"
+    if in_library(path, root):
+        return "library"
+    return "mechanics"
+
+
 @dataclass
 class Result:
     errors: list[str] = field(default_factory=list)
@@ -119,8 +139,10 @@ class Result:
 
 def message_layer(message: str) -> str:
     """The repository a message belongs to. Anything that names a memory path is memory's,
-    so owner paths never reach the mechanics manifest."""
-    return "memory" if MEMORY_PREFIX in message else "mechanics"
+    so owner paths never reach a shareable manifest; then the library's own paths."""
+    if MEMORY_PREFIX in message:
+        return "memory"
+    return "library" if message.startswith(LIBRARY_PREFIX) else "mechanics"
 
 
 def parse_scalar(value: str) -> Any:
@@ -249,17 +271,18 @@ def git_ignored(repo: Path, relatives: list[str]) -> set[str] | None:
 
 
 def ignored_paths(root: Path, paths: list[Path]) -> set[Path]:
-    """The paths Git ignores, each asked of the repository that holds it. Memory paths are asked
-    of the memory repository, because the mechanics repository ignores the whole memory/ folder."""
-    memory = memory_root(root)
-    memory_repo = memory if memory is not None and is_own_repository(memory) else None
+    """The paths Git ignores, each asked of the repository that holds it. Memory and library paths
+    are asked of their own repositories, because the mechanics repository ignores both folders."""
+    nested = {}
+    for layer, folder in (("memory", memory_root(root)), ("library", library_root(root))):
+        nested[layer] = folder if folder is not None and is_own_repository(folder) else None
     groups: dict[Path, list[Path]] = {}
     for path in paths:
-        if in_memory(path, root):
-            if memory_repo is not None:
-                groups.setdefault(memory_repo, []).append(path)
-        else:
+        layer = layer_of(path, root)
+        if layer == "mechanics":
             groups.setdefault(root, []).append(path)
+        elif nested[layer] is not None:
+            groups.setdefault(nested[layer], []).append(path)
     ignored: set[Path] = set()
     for repo, members in groups.items():
         relatives = {path.relative_to(repo).as_posix(): path for path in members}
@@ -295,14 +318,14 @@ def validate_markdown(
 ) -> dict[Path, dict[str, Any]]:
     records: dict[Path, dict[str, Any]] = {}
     id_locations: dict[str, list[str]] = {}
-    layer_ids: dict[str, set[str]] = {"mechanics": set(), "memory": set()}
+    layer_ids: dict[str, set[str]] = {"mechanics": set(), "memory": set(), "library": set()}
     # A single-repository brain keeps /tasks/ at the root and names its owner everywhere; the
     # owner tripwire applies only to the split layout.
     split_layout = memory_root(root) is not None or not (root / "tasks").is_dir()
 
     for path in paths:
         display = root_path(path, root)
-        layer = "memory" if in_memory(path, root) else "mechanics"
+        layer = layer_of(path, root)
         result.layer_markdown_files[layer] = result.layer_markdown_files.get(layer, 0) + 1
         try:
             metadata, text = read_front_matter(path)
@@ -336,7 +359,7 @@ def validate_markdown(
             # CONTRACT §3.4 / §3.6: mechanics files name no owner. A cheap tripwire only;
             # it cannot find personal data in prose.
             owner = metadata.get("owner")
-            if split_layout and layer == "mechanics" and owner not in (None, "", GENERIC_OWNER):
+            if split_layout and layer != "memory" and owner not in (None, "", GENERIC_OWNER):
                 result.warnings.append(
                     f"{display}: mechanics file sets owner to a value other than {GENERIC_OWNER}"
                 )
@@ -450,13 +473,13 @@ def validate_declared_references(
 def is_local_only(root: Path, target: Path) -> bool:
     """True when Git ignores `target` in the repository that would hold it: a local-only file,
     such as a traffic recording or a scratch run, that a fresh clone cannot have."""
-    relative = target.relative_to(root)
     repo = root
-    if relative.parts and relative.parts[0] == MEMORY_DIR:
-        memory = memory_root(root)
-        if memory is None or not is_own_repository(memory):
+    layer = layer_of(target, root)
+    if layer != "mechanics":
+        nested = memory_root(root) if layer == "memory" else library_root(root)
+        if nested is None or not is_own_repository(nested):
             return False
-        repo = memory
+        repo = nested
     return bool(git_ignored(repo, [target.relative_to(repo).as_posix()]))
 
 
@@ -664,6 +687,9 @@ def manifest_paths(root: Path) -> dict[str, Path]:
     memory = memory_root(root)
     if memory is not None:
         paths["memory"] = memory / MANIFEST_NAME
+    library = library_root(root)
+    if library is not None:
+        paths["library"] = library / MANIFEST_NAME
     return paths
 
 
@@ -699,7 +725,8 @@ def validate_manifest(
 def write_manifests(root: Path, result: Result) -> None:
     """Write one manifest per repository, each holding only its own layer's messages."""
     now = datetime.now().astimezone().isoformat(timespec="seconds")
-    names = {"mechanics": "Portable AI Brain – mechanics", "memory": "Portable AI Brain – memory"}
+    names = {"mechanics": "Portable AI Brain – mechanics", "memory": "Portable AI Brain – memory",
+             "library": "Portable AI Brain – skill library"}
     for layer, path in manifest_paths(root).items():
         created = now
         name = names[layer]
@@ -750,9 +777,12 @@ def validate_personal_data(root: Path, result: Result) -> None:
     for repo in shareable_repositories(root):
         hits, problems = personal_data.check_repository(root, repo)
         result.errors.extend(f"personal-data exemptions: {problem}" for problem in problems)
-        for file, line, kind, value in hits:
+        # The value itself is withheld: errors are written into the committed manifest, and
+        # repeating it there would copy the leak. File, line and kind are enough to find it;
+        # `skill_exchange.py scrub <file>` prints the value on the console only.
+        for file, line, kind, _value in hits:
             display = root_path(Path(file), root)
-            result.errors.append(f"{display}:{line}: personal data ({kind}): {value}")
+            result.errors.append(f"{display}:{line}: personal data ({kind}); value withheld")
 
 
 def run(root: Path, writing: bool) -> Result:

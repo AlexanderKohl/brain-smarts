@@ -47,6 +47,13 @@ class PersonalDataTests(unittest.TestCase):
         self.assertEqual(kinds, ["email", "owner-term", "phone"])
         self.assertTrue(all(e.startswith("/shared/skills/garden-access/SKILL.md:") for e in found))
 
+    def test_an_error_never_repeats_the_value(self) -> None:
+        self.brain.write("shared/notes.md", md("shared-notes", "Mail robin" + AT + "realmail.test\n"))
+        found = personal(self.brain.run().errors)
+        self.assertEqual(len(found), 1)
+        self.assertNotIn("realmail", found[0])
+        self.assertIn("value withheld", found[0])
+
     def test_the_same_values_in_memory_pass(self) -> None:
         self.brain.write("memory/projects/orchard-planner/NOTES.md", md(
             "orchard-notes", "Example Owner, robin" + AT + "realmail.test, +61 7 " + "3000 0199.\n"))

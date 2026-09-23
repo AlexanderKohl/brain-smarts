@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-23T17:30:00+10:00
+updated: 2026-09-23T17:43:07+10:00
 owner: brain-owner
 ---
 
@@ -51,7 +51,7 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 | `SMART-RULE-0026` | Version every change, and show it | this file |
 | `SMART-RULE-0027` | Every list has a deliberate order | this file |
 | `SMART-RULE-0028` | Evidence-driven learning | this file; `/shared/skills/learning-maintenance/` |
-| `SMART-RULE-0029` | Three layers: mechanics, memory and project repositories | `/CONTRACT.md` §3.4–§3.6 |
+| `SMART-RULE-0029` | Four layers: mechanics, skill library, memory and project repositories | `/CONTRACT.md` §3.4–§3.6 |
 | `SMART-RULE-0030` | Rule identifiers | `/CONTRACT.md` §13.2 |
 | `SMART-RULE-0031` | Show the text of every new or changed rule | this file |
 | `SMART-RULE-0032` | Skill exchange | this file; `/shared/skills/skill-exchange/` |
@@ -126,7 +126,7 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 
 ## SMART-RULE-0013 – Per-API quirk knowledge base
 
-- Every shared `<system>-access` skill owns a `knowledge/` folder beside its `SKILL.md`, holding one small file per confirmed or hypothesised piece of non-obvious external-API behaviour for that system. Scaffold it (empty, plus one `_CONVENTION.md` copied from `/shared/templates/api-knowledge-convention.template.md`) whenever a new `<system>-access` skill is created. If a quirk worth logging is found for a system with no shared skill yet, create the minimal skill folder and its `knowledge/` scaffold first rather than leaving the finding without a canonical home.
+- Every `<system>-access` skill owns a `knowledge/` folder beside its `SKILL.md`, holding one small file per confirmed or hypothesised piece of non-obvious external-API behaviour for that system. Scaffold it (empty, plus one `_CONVENTION.md` copied from `/shared/templates/api-knowledge-convention.template.md`) whenever a new `<system>-access` skill is created. If a quirk worth logging is found for a system with no shared skill yet, create the minimal skill folder and its `knowledge/` scaffold first rather than leaving the finding without a canonical home.
 - Before diagnosing unexpected, undocumented or previously-surprising behaviour from an external API, search that system's `knowledge/` folder first - by filename convention (for example `Glob "business--*"` for one object type, `Glob "*--textbox-list--*"` for one field type across objects) and by frontmatter (`Grep` for `object_type:`, `field_type:`, `endpoint:` or `status:`) - before re-investigating from scratch. Treat a `refuted` entry as a warning against repeating that exact hypothesis; treat a `deprecated` entry as a pointer to its `superseded_by` replacement, not as current fact.
 - After a fix or investigation resolves genuinely unexpected or undocumented external-API behaviour, write one entry under that system's `knowledge/` folder, copied from `/shared/templates/api-knowledge-entry.template.md`, named `<object_type>--<field_or_topic>--<short-slug>.md`, with `system`, `object_type`, `field_type`, `endpoint`, `status` and `source_refs` set. Do not create an entry for routine work that reveals nothing unexpected about the external API - this store is for quirks and workarounds, not a general changelog.
 - Set a new entry's `status` to `pending` when the fix it documents relies on a hypothesis not yet independently confirmed; set `confirmed` only once a live probe or observed real subsequent use corroborates it. When later evidence contradicts a `pending` or `confirmed` entry, do not delete it: set `status: refuted` for a wrong hypothesis or `status: deprecated` for behaviour that has genuinely changed, add a one-line note of what changed and when, and set `superseded_by` or leave it for the correcting entry to backlink via `refuted_by` once one exists.
