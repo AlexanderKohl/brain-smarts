@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 node_type: system
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-23T17:43:07+10:00
+updated: 2026-09-23T19:34:24+10:00
 owner: brain-owner
 ---
 
@@ -57,6 +57,7 @@ Skills are instructions plus tested scripts for a job or an outside system. They
 - `delegate-work` – hands bounded pieces of work to parallel worker agents
 - `learning-maintenance` – captures, reviews and integrates what the brain learns from use
 - `manage-credentials` – the encrypted vault every credentialed skill uses
+- `owner-board` – one permanent page showing every request you have made and what needs you
 - `problem-recovery` – searches the brain's own knowledge before re-investigating a failure
 - `product-development` – the evidence-and-decision process for software work
 - `raw-file-ingestion` – keeps uploaded files unchanged with a traceable Markdown copy
@@ -70,7 +71,6 @@ Skills are instructions plus tested scripts for a job or an outside system. They
 - `crm` – a contact register: people, organisations and which of your identities to reply as
 - `gohighlevel-access` – HighLevel CRM access across sub-accounts, with rotating tokens in the vault
 - `google-workspace-access` – Gmail (draft-first), Calendar, Tasks, Drive and Contacts for several accounts
-- `owner-board` – one permanent page showing every request you have made and what needs you
 - `railway-access` – Railway projects, deployments and logs
 - `ui-implementation` – rules a live screen must keep while data changes underneath it
 - `ui-mockup` – builds a measured preview of a screen for you to refine before anything is built
