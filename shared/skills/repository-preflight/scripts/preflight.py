@@ -15,7 +15,7 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -43,6 +43,10 @@ ACCEPTED_PROPOSAL_STATUSES = {"accepted", "implemented", "verified", "reverted"}
 TIMESTAMP_RE = re.compile(
     r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2})$"
 )
+# CONTRACT §8.2: a timestamp is never later than the moment it was written. Five minutes allow
+# for clocks on different machines disagreeing slightly when repositories are synced.
+FUTURE_TOLERANCE = timedelta(minutes=5)
+LOG_HEADING_RE = re.compile(r"^## (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2}))", re.M)
 SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
 KEY_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_-]*):(?:\s*(.*))?$")
 FOLDER_HEADING_RE = re.compile(r"^#####\s+`([^`]+?)/`\s*$", re.MULTILINE)
@@ -313,6 +317,24 @@ def is_template_path(path: Path, root: Path) -> bool:
     return "templates" in path.relative_to(root).parts or path.name == "_TEMPLATE.md"
 
 
+def clock() -> datetime:
+    """Now, as the validator runs; a test replaces it."""
+    return datetime.now().astimezone()
+
+
+def ahead_of_clock(value: str, now: datetime) -> str | None:
+    """How far a timestamp is ahead of `now`, in words, when that is beyond the tolerance."""
+    try:
+        stamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    gap = stamp - now
+    if gap <= FUTURE_TOLERANCE:
+        return None
+    minutes = int(gap.total_seconds() // 60)
+    return f"{minutes // 60} h {minutes % 60} min" if minutes >= 60 else f"{minutes} min"
+
+
 def validate_markdown(
     root: Path, paths: list[Path], result: Result
 ) -> dict[Path, dict[str, Any]]:
@@ -322,6 +344,7 @@ def validate_markdown(
     # A single-repository brain keeps /tasks/ at the root and names its owner everywhere; the
     # owner tripwire applies only to the split layout.
     split_layout = memory_root(root) is not None or not (root / "tasks").is_dir()
+    now = clock()
 
     for path in paths:
         display = root_path(path, root)
@@ -356,6 +379,14 @@ def validate_markdown(
                     result.errors.append(
                         f"{display}: {key} must be an ISO 8601 timestamp with seconds and timezone"
                     )
+                elif value is not None and (gap := ahead_of_clock(str(value), now)):
+                    result.errors.append(f"{display}: {key} {value} is {gap} ahead of the clock (CONTRACT §8.2)")
+            if path.name == "LOG.md":
+                for found in LOG_HEADING_RE.finditer(text):
+                    gap = ahead_of_clock(found.group(1), now)
+                    if gap:
+                        result.errors.append(
+                            f"{display}: log heading {found.group(1)} is {gap} ahead of the clock (CONTRACT §8.2)")
             # CONTRACT §3.4 / §3.6: mechanics files name no owner. A cheap tripwire only;
             # it cannot find personal data in prose.
             owner = metadata.get("owner")

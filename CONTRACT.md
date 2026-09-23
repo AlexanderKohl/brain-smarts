@@ -4,11 +4,11 @@ title: Portable AI Brain Contract
 type: contract
 status: active
 schema_version: 0.2
-contract_version: 2.0.0
+contract_version: 2.0.1
 contract: /CONTRACT.md
 canonical: true
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-23T17:41:53+10:00
+updated: 2026-09-23T20:46:21+10:00
 owner: brain-owner
 ---
 
@@ -442,6 +442,7 @@ Do not use a date without a time for these fields or entries.
 
 - Keep `created` unchanged after the item is created.
 - Set `updated` to the time of the latest substantive content or metadata change.
+- Take a new timestamp from the system clock at the moment of writing – the command's or the script's own clock, never a remembered or rounded time. A timestamp is never later than the moment it was written; the repository preflight validator fails on one more than five minutes ahead of the time it runs.
 - Use the timezone of the event when known; otherwise use UTC.
 - Do not invent precision for migrated legacy records. Use the most reliable available filesystem, source-system or provenance timestamp and record the migration decision in the relevant log.
 
