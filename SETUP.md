@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-23T13:00:00+10:00
-updated: 2026-09-24T09:06:26+10:00
+updated: 2026-09-24T09:15:50+10:00
 owner: brain-owner
 skill_refs:
   - /shared/skills/manage-credentials
@@ -100,9 +100,11 @@ rewritten.
 
 ### 2.1 The progress record
 
-Once the memory exists (step B4), progress lives under `## Setup` in `/memory/STATE.md`. Keep
-one row per step, in setup order (the order a reader follows), and replace a row when its status
-changes; history goes to `/memory/LOG.md`.
+Once the memory exists (step B4), progress lives under `## Setup` in `/memory/STATE.md`. A
+per-owner step (B1a, B3, B3a, B4, B5, C, and D's skill choices) has one row; a per-machine step
+(A, B2, D vault and connections, E, F, G, H) has one row for each computer, named in `Machine`.
+Keep rows in setup order (the order a reader follows), replace a row when its status changes,
+and put history in `/memory/LOG.md`.
 
 ```markdown
 ## Setup
@@ -124,8 +126,8 @@ settings are per machine, while the repositories and skill choices are per owner
 
 1. Find the brain root (walk up to `CONTRACT.md`). If none is found, start at step A.
 2. If `/memory/STATE.md` has a `## Setup` section, continue from the first row that is not
-   `done` or `skipped` on this machine. For a new machine, re-run the per-machine steps (A, D
-   vault and connections, E, F, G) and skip the per-owner ones already `done`.
+   `done` or `skipped` on this machine. For a new machine, run the per-machine steps (A, B2, D
+   vault and connections, E, F, G, H) and skip the per-owner ones already `done`.
 3. If memory does not exist yet, ask B1a first: on another computer of an existing brain the
    memory is cloned, not made. Otherwise detect progress with each step's **Done when** check below,
    then continue from the first step that fails its check. Record the detected results as soon
@@ -233,7 +235,9 @@ If more than one account is signed in, ask which one owns the brain:
 ### B1a. A new brain, or this brain on another computer?
 
 **Done when:** the person has answered, and for another computer all three of their repositories
-are checked out: the smarts at the brain root, the library at `library/`, the memory at `memory/`.
+are checked out – the smarts at the brain root, the library at `library/`, the memory at
+`memory/` – each with `origin` at the person's own repository, `upstream` added where step 1
+below says, and `git config core.hooksPath` printing `.githooks` in the brain root.
 
 **Agent does:** looks for an existing brain under the account (read-only):
 
@@ -243,7 +247,9 @@ gh repo view <github_account>/brain-smarts --json name
 gh repo view <github_account>/brain-skills --json name
 ```
 
-None found: a new brain – continue with B2. `brain-memory` found: ask –
+None found: a new brain – continue with B2. Only some found (an earlier setup stopped before
+B4): resume that setup – keep what exists, and at B3, B3a or B4 clone the existing repository
+instead of creating it. `brain-memory` found: ask –
 
 > **Ask:** Your account already has a brain (`brain-smarts`, `brain-skills`, `brain-memory`). Is
 > this another computer for that same brain?
@@ -269,9 +275,11 @@ if (Test-Path brain\CONTRACT.md) {
   cd C:\dev\brain
 }
 git config core.hooksPath .githooks
-git clone https://github.com/<github_account>/brain-skills.git library
-git clone https://github.com/<github_account>/brain-memory.git memory
+if (-not (Test-Path library)) { git clone https://github.com/<github_account>/brain-skills.git library }
+if (-not (Test-Path memory)) { git clone https://github.com/<github_account>/brain-memory.git memory }
 ```
+
+macOS and Linux: the same steps with `[ -e library ] || git clone …` and `[ -e memory ] || git clone …`.
 
 `git checkout -B main origin/main` discards nothing of the person's: a fresh seed-prompt clone has
 no work of its own. Then:
@@ -281,12 +289,17 @@ no work of its own. Then:
    `smarts`, in `library/` for `library`:
    `git remote add upstream <address>` then `git remote set-url --push upstream DISABLED`. A brain
    whose owner maintains the originals has none; skip it.
-2. **The vault is not in Git.** `credentials.vault` stays on the computer where it was made.
-   Copy it from there to `/memory/projects/credential-management/data/` by USB stick or a private
-   folder you control, only while no process is using it on either computer; or skip it and add
-   the accounts again in D. Never commit it, and never merge two vault files – pick the complete one.
-3. **Resume** with section 2.2: the per-owner steps are already `done` in `/memory/STATE.md`; run
-   the per-machine steps (A, D vault and connections, E, F, G) on this computer and add a
+2. **Each computer has its own vault.** The vault is never in Git and is never shared: sign-in
+   tokens change every time they are used, so a copy stops working as soon as the other computer
+   refreshes it. In D.1 this computer gets a new vault with its own passphrase prompt, and in D
+   the person signs in afresh to each service this computer needs (Xero, Google, HighLevel) and
+   types the few fixed keys (such as the ABR GUID) into the hidden prompt again. The list of
+   which entries exist, `credential-registry.json`, is shared through memory and needs no change.
+3. **This computer's folders.** `brain_root` and `project_repos_root` in `/memory/OWNER.md` are the
+   first computer's. When this computer's differ, say so in its B1a row and use the real folders
+   here for every `cd`; do not change `OWNER.md` for it.
+4. **Resume** with section 2.2: the per-owner steps are already `done` in `/memory/STATE.md`; run
+   the per-machine steps (A, B2, D vault and connections, E, F, G, H) on this computer and add a
    `## Setup` row for each with this computer's name.
 
 ### B2. Git identity
@@ -322,19 +335,17 @@ at the person's own repository and `upstream` at the original, and
 >
 > **Suggested reply:** `1`
 
-> **Ask:** Where should the brain live on this computer?
-> 1. `C:\dev\brain` on Windows, `~/dev/brain` on macOS and Linux (recommended)
-> 2. Another folder you name
->
-> **Suggested reply:** `1`
+The brain lives where the seed prompt cloned it (`C:\dev\brain` on Windows, `~/dev/brain` on
+macOS and Linux, unless the person chose another folder then).
 
 **Agent does**, for option 1 after confirming the GitHub account (Windows shown; on macOS and
-Linux use `mkdir -p ~/dev && cd ~/dev` and forward slashes):
+Linux use `mkdir -p ~/dev && cd ~/dev`, `[ -e brain/CONTRACT.md ] || git clone …` and forward
+slashes). A checkout the seed prompt already made is kept, not cloned again:
 
 ```powershell
 New-Item -ItemType Directory -Force C:\dev | Out-Null
 cd C:\dev
-git clone <SMARTS_REPO_URL> brain
+if (-not (Test-Path brain\CONTRACT.md)) { git clone <SMARTS_REPO_URL> brain }
 cd C:\dev\brain
 git remote rename origin upstream
 git remote set-url --push upstream DISABLED
@@ -351,9 +362,6 @@ original `upstream` itself), then the same `set-url --push` and `core.hooksPath`
 option 3: the person clicks **Use this template** on the original's GitHub page, chooses
 **Private**, and the agent clones the new repository and adds `upstream` by hand.
 
-If the person already cloned the smarts to follow the seed prompt, keep that checkout and only
-fix the remotes.
-
 ### B3a. Your skill library
 
 **Done when:** `<brain_root>/library/skills/README.md` exists, and `git remote -v` in
@@ -362,20 +370,32 @@ the original.
 
 **Agent does:** the original library sits beside the original smarts under the same account and
 is named `brain-skills`, so its address is the smarts' `upstream` address with the last part
-replaced. Check that it exists (`git ls-remote <address>`); if it does not, or the smarts have no
-`upstream`, ask:
-
-> **Ask:** Where is the skill library that goes with these smarts?
-> 1. `<derived address>` (recommended)
-> 2. An address you give me
->
-> **Suggested reply:** `1`
-
-Then, the same way as B3 option 1 (Windows shown; on macOS and Linux use forward slashes):
+replaced – whichever form the address takes (`https://…/`, `git@…:`, or a folder path with `\`
+or `/`):
 
 ```powershell
 cd C:\dev\brain
-$library = (git remote get-url upstream) -replace '[^/]+?(\.git)?$', 'brain-skills.git'
+$library = (git remote get-url upstream) -replace '[^/\\:]+?(\.git)?[/\\]?$', 'brain-skills.git'
+git ls-remote $library HEAD
+```
+
+macOS and Linux:
+`library=$(git remote get-url upstream | sed -E 's#[^/\\:]+(\.git)?[/\\]?$#brain-skills.git#'); git ls-remote "$library" HEAD`.
+
+When `ls-remote` answers, use that address. When it fails, or the smarts have no `upstream`, ask –
+without recommending the address that failed:
+
+> **Ask:** Where is the skill library that goes with these smarts? The address I worked out
+> (`<derived address>`) does not answer.
+> 1. An address you give me – the person who shared the smarts will have it
+> 2. Go on without a library for now; library skills can be added later
+>
+> **Suggested reply:** `1`
+
+Then, the same way as B3 option 1 (on macOS and Linux use forward slashes):
+
+```powershell
+cd C:\dev\brain
 git clone $library library
 cd C:\dev\brain\library
 git remote rename origin upstream
@@ -404,7 +424,10 @@ front matter, and `<brain_root>/memory/` is its own Git repository with an `orig
 2. Run the owner-profile interview (B5) and write the answers into `memory/OWNER.md`.
 3. In every file under `memory/`: replace `OWNER_SHORT_NAME`, remove the `template-` prefix
    from each `id`, and set `created`, `updated` and the first `LOG.md` heading to the current
-   time in the owner's timezone (CONTRACT §8.2). **Exception** for the templates that are
+   time in the owner's timezone (CONTRACT §8.2), read from the clock at that moment –
+   PowerShell `Get-Date -Format "yyyy-MM-ddTHH:mm:sszzz"`, macOS and Linux `date +%FT%T%z` (then
+   put a colon in the offset). In Git Bash on Windows do not use `TZ=<Area/City> date`: without
+   the zone database it silently prints UTC. **Exception** for the templates that are
    copied again for every new record – the files in `memory/tasks/templates/`, and later the
    two `memory/projects/contacts/*/_TEMPLATE.md` files of the contact register (D.3): leave their
    `YYYY-...` timestamps and other upper-case placeholders as shipped, because each copy is
@@ -416,18 +439,22 @@ front matter, and `<brain_root>/memory/` is its own Git repository with an `orig
    `memory/AGENTS.md`; in the copy, drop the `template-` prefix from its `id`, delete the
    `install_to` line, and set `created` and `updated` to the current time. List it in
    `memory/README.md` Navigation (step E explains why).
-6. Run the validator from the brain root and fix every error:
+6. Record where the originals are, so another computer of this brain can find them (B1a):
+   write `/memory/skills/skill-exchange/config/settings.json` as
+   `{"upstreams": {"library": "<library upstream address>", "smarts": "<smarts upstream address>"}}`
+   from `git remote get-url upstream` in the brain root and in `library/`; leave out any that has
+   no `upstream`. Add `skill-exchange/` to the Folders of `/memory/skills/README.md` ("the owner's
+   settings for skill exchange, including where the original repositories are").
+7. Run the validator from the brain root and fix every error in memory. Two warnings are expected
+   here and go away at step 8 and in H: memory is not yet its own Git repository, and its
+   manifest is missing. An error in a file of the smarts or the library is not the person's to
+   fix: mark the row `blocked`, tell the person, and report it to whoever shared the smarts.
 
    ```powershell
    cd C:\dev\brain
    python shared/skills/repository-preflight/scripts/preflight.py --root .
    ```
 
-7. Record where the originals are, so another computer of this brain can find them (B1a):
-   write `/memory/skills/skill-exchange/config/settings.json` as
-   `{"upstreams": {"library": "<library upstream address>", "smarts": "<smarts upstream address>"}}`
-   from `git remote get-url upstream` in the brain root and in `library/`; leave out any that has
-   no `upstream`.
 8. After confirming the GitHub account, create the repository and the first commit:
 
    ```powershell
@@ -544,8 +571,6 @@ others. Numbers run through both groups so a reply stays short.
 | repository-preflight | Validates every repository before each commit, including the personal-data check (`SMART-RULE-0008`) |
 | skill-exchange | Reports upstream changes about weekly and offers to share what is worth sharing, always asking first (`SMART-RULE-0032`) |
 | tasks | Keeps your task list under `/memory/tasks/`, reviews what has come due, and puts each new task on its board |
-| ui-implementation | Rules a live screen must keep while data changes underneath it |
-| ui-mockup | Builds a preview of a screen for you to refine before anything is built |
 
 **Choose from these.** Alphabetical; `Needs` says what the person must provide.
 
@@ -555,13 +580,15 @@ others. Numbers run through both groups so a reply stays short.
 | 2 | crm | Remembers the people and organisations you deal with, and which of your identities to reply as | Nothing external; chosen automatically with 4 |
 | 3 | gohighlevel-access | Reads and, with your confirmation, writes HighLevel CRM data across sub-accounts | A HighLevel **agency** account; a Marketplace app you register; the vault |
 | 4 | google-workspace-access | Gmail (draft-first), Calendar, Tasks, Drive and Contacts for one or more Google accounts | A Google account; a Google Cloud project and OAuth client you register; the vault; the contact register (2) |
-| 5 | manage-credentials | The encrypted vault every credentialed skill uses | A passphrase you choose; chosen automatically with 1, 3, 4, 6 or 7 |
+| 5 | manage-credentials | The encrypted vault every credentialed skill uses | A passphrase you choose; chosen automatically with 1, 3, 4, 6 or 9 |
 | 6 | railway-access | Reads Railway projects, deployments and logs | A Railway account token you create; the vault |
-| 7 | xero-access | Reads Xero accounting data and, with your approval, creates planned accounts or draft invoices | A Xero organisation; a Xero developer app you register; the vault |
+| 7 | ui-implementation | Rules a live screen must keep while data changes underneath it | Nothing external |
+| 8 | ui-mockup | Builds a preview of a screen for you to refine before anything is built | Nothing external |
+| 9 | xero-access | Reads Xero accounting data and, with your approval, creates planned accounts or draft invoices | A Xero organisation; a Xero developer app you register; the vault |
 
-> **Ask:** Which of 1 to 7 do you want? You can add more later by asking me to resume setup.
+> **Ask:** Which of 1 to 9 do you want? You can add more later by asking me to resume setup.
 > 1. None for now – start local, add accounts later (recommended for a first session)
-> 2. A list you give, for example `2, 4, 7`
+> 2. A list you give, for example `2, 4, 9`
 >
 > **Suggested reply:** `1`
 
@@ -1285,14 +1312,15 @@ The contract forbids claiming future follow-up unless a scheduler is actually co
 - **Task review**, surfacing waiting tasks at `next_review` (CONTRACT §9.1) – through the host's
   own scheduler (for example Claude Code scheduled tasks or routines), started from the brain
   root.
-- **Vault Agent tray at sign-in** – already created in D.1.
+- **Vault Agent tray at sign-in** – created in D.1 when a skill that needs the vault was chosen;
+  otherwise not needed yet.
 
 Record each configured schedule in `/memory/STATE.md` so the next session knows it exists.
 
 ## 10. Step H – Final validation and tour
 
 **Done when:** preflight passes on every repository, the memory has a pushed commit, the smarts
-working tree is clean, and the tour is given.
+and library working trees are clean, and the tour is given.
 
 **Agent does:**
 
@@ -1325,16 +1353,20 @@ working tree is clean, and the tour is given.
    change the validator leaves in the smarts is its own `repository-manifest.json` (new
    timestamps), which would conflict with the next update from `upstream`. Put it back:
 
+   The library's manifest is the same case:
+
    ```powershell
    cd C:\dev\brain
    git restore repository-manifest.json
+   git -C library restore repository-manifest.json
    git status --short
+   git -C library status --short
    ```
 
-   `git status --short` in the brain root should now print nothing; if it lists anything else,
-   show it to the person before going on.
-4. Report the memory commit hash and its push status, and that the smarts is clean
-   (`SMART-RULE-0014`).
+   Both `git status --short` should now print nothing; if either lists anything else, show it to
+   the person before going on.
+4. Report the memory commit hash and its push status, and that the smarts and library are
+   clean (`SMART-RULE-0014`).
 
 **Tour** – five minutes, in this order (the order the owner will meet them):
 
