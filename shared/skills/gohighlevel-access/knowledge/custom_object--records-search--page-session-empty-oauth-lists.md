@@ -13,8 +13,7 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-15
 verified: 2026-09-15
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/custom_object--records-search--page-session-empty-oauth-lists.md
+source_refs: []
 created: 2026-09-15T12:35:00+10:00
 updated: 2026-09-23T18:00:00+10:00
 ---
@@ -57,6 +56,8 @@ nothing points at the token. The index and the schema were suspected for five ru
 
 Storage test reports of 15 September 2026 (10:15 and 11:45 local) and a read-only OAuth
 probe at 12:20.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Confirmed 15 September 2026, 15:30
 

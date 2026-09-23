@@ -31,3 +31,9 @@ Contains the node for the owner's work on the brain itself: the active conductor
 Contains the owner's contact register: one file per person, organisation, newsletter sender or
 system, and one file per identity the owner communicates as. Its rules apply while `crm` is in
 `active_skills` (`/shared/skills/crm/`).
+
+##### `credential-management/`
+
+Contains the owner's credential node: the non-secret registry
+`data/credential-registry.json` that every credentialed skill records its vault entry in, and the
+git-ignored encrypted vault operated by `/shared/skills/manage-credentials/`.

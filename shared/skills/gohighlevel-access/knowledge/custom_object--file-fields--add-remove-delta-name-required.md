@@ -14,9 +14,7 @@ refuted_by: null
 discovered: '2026-08-22'
 verified: '2026-08-22'
 created: '2026-08-24T21:30:00+10:00'
-updated: 2026-09-23T12:00:00+10:00
-evidence:
-- /memory/skills/gohighlevel-access/knowledge/custom_object--file-fields--add-remove-delta-name-required.md
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Custom Object file properties: delta shape needs `name` despite docs
@@ -56,6 +54,8 @@ Confirmed live in both directions: dropping `name` reproduced the 422 on a
 merge; restoring `{url, name}` unconditionally fixed it, matching the
 state Custom Object uploads already worked in before the documentation-
 aligned attempt.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

@@ -13,10 +13,9 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-12
 verified: 2026-09-12
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/workflow--triggers--separate-resource-own-endpoint.md
+source_refs: []
 created: 2026-09-12T16:40:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Workflow triggers are a separate resource
@@ -86,6 +85,8 @@ Recorded from live builder traffic against `Example Co` (`loc_EXAMPLE_01`) on
 was observed being called by the builder itself, returning `200 []` for a workflow whose
 `newTriggers` in the same page's `validate-workflows` request body was also `[]` –
 consistent, but the non-empty response shape has **not** yet been observed directly.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

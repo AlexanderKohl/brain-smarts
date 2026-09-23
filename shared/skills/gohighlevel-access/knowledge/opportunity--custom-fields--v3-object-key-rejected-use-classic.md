@@ -13,10 +13,9 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-04
 verified: 2026-09-04
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/opportunity--custom-fields--v3-object-key-rejected-use-classic.md
+source_refs: []
 created: 2026-09-04T12:27:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Opportunity field definitions: v3 object-key rejected, use classic catalogue
@@ -37,6 +36,8 @@ Custom Fields v3 accepts an `objectKey`, and `opportunity` is a recognised stand
 ## Evidence
 
 Live probe against `Example Co (Staging)` (`loc_EXAMPLE_01`) on 2026-09-04 while copying Opportunity fields onto Site Visit. The v3 object-key route returned HTTP 400; `?model=opportunity` returned the 190-field catalogue used for the writes. `confirmed`.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

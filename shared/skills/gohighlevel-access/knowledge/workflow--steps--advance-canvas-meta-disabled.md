@@ -13,10 +13,9 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-14
 verified: 2026-09-14
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/workflow--steps--advance-canvas-meta-disabled.md
+source_refs: []
 created: 2026-09-14T21:00:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # A disabled step is still in the graph
@@ -82,6 +81,8 @@ Found by direct inspection of 45 committed workflow captures from `Example Co`
 `isDisabled: true`. Three of the captures carrying it were taken through the headless
 `GET`, which is what confirms the field is served by the read rather than only present
 in a save payload.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

@@ -13,12 +13,9 @@ superseded_by: null
 refuted_by: null
 discovered: '2026-08-22'
 verified: '2026-08-24'
-source_refs:
-- /memory/skills/gohighlevel-access/knowledge/business--standard-fields--write-shape-and-key-overrides.md
+source_refs: []
 created: '2026-08-24T21:30:00+10:00'
-updated: 2026-09-23T12:00:00+10:00
-evidence:
-- /memory/skills/gohighlevel-access/knowledge/business--standard-fields--write-shape-and-key-overrides.md
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Business standard-field write/read mechanics
@@ -60,6 +57,8 @@ Confirmed live via Railway production logs: a real submission 422'd with
 `"property postalcode should not exist"`, `"property businessTurnover
 should not exist"`, and `"property locationId should not exist"` in the
 same response.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

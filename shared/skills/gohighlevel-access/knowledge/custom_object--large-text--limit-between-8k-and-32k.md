@@ -13,8 +13,7 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-15
 verified: 2026-09-15
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/custom_object--large-text--limit-between-8k-and-32k.md
+source_refs: []
 created: 2026-09-15T11:20:00+10:00
 updated: 2026-09-23T18:00:00+10:00
 ---
@@ -53,6 +52,8 @@ the reason off the end of any log line that shows the message's head.
 Two storage test runs of 15 September 2026 on Example Test through the page-session
 token. Consequence for a client storing JSON there: one record per item, split across records
 once the JSON passes a safe margin below the limit (12,000 characters, say).
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

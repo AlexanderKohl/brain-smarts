@@ -14,7 +14,6 @@ refuted_by: null
 discovered: 2026-09-15
 verified: 2026-09-15
 source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/general--forms-delete--undocumented-bare-id-route.md
   - /shared/skills/gohighlevel-access/knowledge/general--forms-list--type-param-folder-records-and-invalid-value.md
 created: 2026-09-15T15:30:00+10:00
 updated: 2026-09-23T18:00:00+10:00
@@ -61,6 +60,8 @@ was probed against one designated target form, `DELETE Example Form
 V2` (`id_EXAMPLE_01`); the first candidate, the bare-id route, returned the 200 body
 above. A re-list confirmed the location went from 24 forms to 23, the target absent, its
 non-prefixed twin and all four folders untouched.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

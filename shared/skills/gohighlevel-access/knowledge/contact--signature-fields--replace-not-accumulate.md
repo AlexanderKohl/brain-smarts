@@ -15,8 +15,6 @@ discovered: '2026-08-22'
 verified: '2026-08-25'
 created: '2026-08-24T21:30:00+10:00'
 updated: 2026-09-23T18:00:00+10:00
-evidence:
-- /memory/skills/gohighlevel-access/knowledge/contact--signature-fields--replace-not-accumulate.md
 ---
 
 # Signature fields: own meta shape, always replace
@@ -58,6 +56,8 @@ underneath.
 Confirmed live: a real field accumulated a 3-entry array across three
 separate signings before this was caught; a fresh signing that discards
 the kept set was verified to leave exactly one current entry.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

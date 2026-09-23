@@ -13,10 +13,9 @@ superseded_by: null
 refuted_by: ghl-general-forms-list-type-param-semantics
 discovered: 2026-09-09
 verified: null
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/general--forms-list--type-folder-returns-unfoldered-subset.md
+source_refs: []
 created: 2026-09-09T16:40:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # GET /forms/ `type=folder` returns a subset of forms, not folders
@@ -61,6 +60,8 @@ hypothesis is that `type=folder` returns forms that sit at the root of the
 forms list rather than inside a folder – it matched the count the owner saw
 in the HighLevel forms UI – but no second location has been probed and no
 folder was created or moved to test it.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

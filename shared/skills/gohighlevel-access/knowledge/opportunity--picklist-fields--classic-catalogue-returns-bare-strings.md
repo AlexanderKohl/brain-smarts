@@ -13,8 +13,7 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-21
 verified: null
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/opportunity--picklist-fields--classic-catalogue-returns-bare-strings.md
+source_refs: []
 created: 2026-09-21T09:13:02+10:00
 updated: 2026-09-23T18:00:00+10:00
 ---
@@ -85,6 +84,8 @@ string – is an inference. No opportunity in that sub-account had any of these 
 no stored classic choice value was read back. Promote to `confirmed` once a write-then-read on
 a classic RADIO field is observed, or refute it if the stored value turns out to be a
 server-derived key that the catalogue simply does not expose.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

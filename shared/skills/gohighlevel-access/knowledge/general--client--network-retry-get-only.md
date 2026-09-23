@@ -14,9 +14,7 @@ refuted_by: null
 discovered: '2026-08-18'
 verified: '2026-08-18'
 created: '2026-08-24T21:30:00+10:00'
-updated: 2026-09-23T12:00:00+10:00
-evidence:
-- /memory/skills/gohighlevel-access/knowledge/general--client--network-retry-get-only.md
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Network-level retry: GET only, never a write
@@ -45,6 +43,8 @@ Confirmed in production: a single transient connection reset on a plain
 only the three standard objects, with no visible error beyond a
 `marketplace_objects_location_unavailable` warning in the logs – the retry
 fix directly addresses that failure mode.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

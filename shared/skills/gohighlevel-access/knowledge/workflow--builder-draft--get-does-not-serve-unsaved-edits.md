@@ -13,8 +13,7 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-16
 verified: 2026-09-16
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/workflow--builder-draft--get-does-not-serve-unsaved-edits.md
+source_refs: []
 created: 2026-09-16T09:48:08+10:00
 updated: 2026-09-23T18:00:00+10:00
 ---
@@ -105,6 +104,8 @@ draft/published table above is that session, and it is what turns this entry fro
 stale" into "for a published workflow nothing is written at all".
 
 Not observed: a step deleted in the builder.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

@@ -13,10 +13,9 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-12
 verified: 2026-09-12
-source_refs:
-  - /memory/skills/railway-access/knowledge/general--http-logs--empty-for-account.md
+source_refs: []
 created: 2026-09-12T08:20:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # httpLogs returns no rows, even when correctly formed
@@ -51,6 +50,8 @@ Live probes 2026-09-12:
   `forms.example.com`): 0 rows for `--since 6h` and with `beforeDate` = now.
 
 Two unrelated projects, one of them a live production site, both empty.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Candidate explanations, none yet confirmed
 

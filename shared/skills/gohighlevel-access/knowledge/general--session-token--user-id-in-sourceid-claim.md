@@ -13,8 +13,7 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-15
 verified: 2026-09-15
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/general--session-token--user-id-in-sourceid-claim.md
+source_refs: []
 created: 2026-09-15T12:10:00+10:00
 updated: 2026-09-23T18:00:00+10:00
 ---
@@ -46,3 +45,6 @@ user actually is.
 ## Evidence
 
 Claim names as reported by a browser-extension storage test, 15 September 2026. Values not recorded; the token never leaves the page realm.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
+

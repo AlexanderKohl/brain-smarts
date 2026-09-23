@@ -13,10 +13,9 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-09
 verified: 2026-09-09
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/general--forms-list--type-param-folder-records-and-invalid-value.md
+source_refs: []
 created: 2026-09-09T17:20:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # `GET /forms/` `type` parameter: folder records, and an unfiltered invalid value
@@ -82,6 +81,8 @@ its own form list: `New Quote Request` `id_EXAMPLE_01`,
 stored folder-ish marker despite being forms. Unexplained; not reproduced
 elsewhere. Verify a `type=folder` result against the form list before treating
 its items as folders.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

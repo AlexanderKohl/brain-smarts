@@ -5,7 +5,7 @@ type: api_knowledge_convention
 schema_version: 0.2
 contract: /CONTRACT.md
 created: 2026-08-31T15:45:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Knowledge base convention
@@ -45,3 +45,8 @@ placeholders (`<uuid-01>`, `forms.example.com`). Where an entry was learnt on th
 account, the original with its real identifiers and source paths is kept in the memory layer at
 `/memory/skills/railway-access/knowledge/<same filename>`, which carries a `generic_version:`
 pointer back here.
+
+The entry here names no `/memory/` path in its front matter, because another owner's memory
+does not have that file; its Evidence section says instead that it was observed on a live account
+and the owner's record is kept in their memory. Preflight rejects a mechanics metadata reference
+into `/memory/` that the memory skeleton does not provide.

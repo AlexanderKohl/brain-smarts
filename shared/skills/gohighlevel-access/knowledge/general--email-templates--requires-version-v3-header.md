@@ -13,8 +13,7 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-08-28
 verified: 2026-08-30
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/general--email-templates--requires-version-v3-header.md
+source_refs: []
 created: 2026-08-28T14:30:00+10:00
 updated: 2026-09-23T18:00:00+10:00
 ---
@@ -175,6 +174,8 @@ as full HTML (`<p>`, `<br>`, `<ol><li><p>`), not plain text with `\n`. Reproduce
 markup shape via `PATCH` (single request, all content fields together) with a numbered list and
 a bulleted list, then independently re-fetched via `GET` and confirmed the stored
 `editorContentUrl` matched the sent HTML byte-for-byte.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

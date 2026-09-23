@@ -13,10 +13,9 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-08-26
 verified: 2026-08-26
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/opportunity--custom-field-folders--v3-standard-object-unsupported.md
+source_refs: []
 created: 2026-08-26T11:45:20+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Custom Fields v3 cannot create Opportunity or Contact folders
@@ -64,6 +63,8 @@ Confirmed on 2026-08-26 by a live write probe against authorised `Example Co
 folder. This matches the official endpoint note that the operation supports
 Custom Objects and Company (Business), not standard Contact or Opportunity
 objects.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

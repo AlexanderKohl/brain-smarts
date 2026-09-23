@@ -13,10 +13,9 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-04
 verified: 2026-09-04
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/opportunity--custom-fields--classic-put-payload-by-type.md
+source_refs: []
 created: 2026-09-04T12:27:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Classic Opportunity field PUT: JSON body and type-specific allowed keys
@@ -38,6 +37,8 @@ The OpenAPI custom-fields schema lists `maxFileLimit` / `acceptedFormats` as FIL
 ## Evidence
 
 Live writes against `Example Co (Staging)` (`loc_EXAMPLE_01`) on 2026-09-04 while prefixing Opportunity names with `DELETE `. RADIO Yes/No fields succeeded with `options`; FILE_UPLOAD `Front of Location` (`id_EXAMPLE_01`) failed until `maxFileLimit` / `acceptedFormats` / `options` were omitted. `confirmed`.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

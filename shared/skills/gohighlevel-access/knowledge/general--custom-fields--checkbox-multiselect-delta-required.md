@@ -14,9 +14,7 @@ refuted_by: null
 discovered: '2026-08-22'
 verified: '2026-08-22'
 created: '2026-08-24T21:30:00+10:00'
-updated: 2026-09-23T12:00:00+10:00
-evidence:
-- /memory/skills/gohighlevel-access/knowledge/general--custom-fields--checkbox-multiselect-delta-required.md
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Objects API checkbox/multiselect: add/remove delta required
@@ -48,6 +46,8 @@ Confirmed live, in complete isolation (a single-field request, nothing
 else present): `PUT /objects/custom_objects.employment/records/:id` with
 `{"include_fair_work_note":["yes"]}` reproduced the exact 422 against a
 real record whose own `GET` response returns that identical array shape.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

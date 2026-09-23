@@ -13,10 +13,9 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-15
 verified: 2026-09-15
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/workflow--contact-tag-trigger--tag-by-name-rename-propagates.md
+source_refs: []
 created: 2026-09-15T12:55:31+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Contact Tag triggers and tag steps reference a tag by name only; a tag rename is rewritten into them server-side
@@ -60,6 +59,8 @@ tag created as `trigger tag`, trigger saved with that value, tag renamed to
 `trigger tag new name` at seq `1789439899671331`; the next trigger read and workflow read (no
 user save in between - the only writes after the rename were contact search, analytics, Firestore
 and a token refresh) carry the new name, as does the 12:42 sweep. Confirmed, not pending.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

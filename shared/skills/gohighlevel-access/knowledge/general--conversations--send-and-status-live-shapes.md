@@ -13,10 +13,9 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-08-26
 verified: 2026-08-26
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/general--conversations--send-and-status-live-shapes.md
+source_refs: []
 created: 2026-08-26T18:20:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Conversations send and status live shapes
@@ -67,6 +66,8 @@ against Contact `id_EXAMPLE_01` in `Example Co (Staging)`
 present. No destination value, message body, OAuth material or broker state was stored in this
 entry. A follow-up read of the Contact's recent conversation found both messages and confirmed
 the SMS as `delivered`.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

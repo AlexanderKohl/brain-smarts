@@ -14,9 +14,7 @@ refuted_by: null
 discovered: '2026-08-24'
 verified: '2026-08-24'
 created: '2026-08-24T21:30:00+10:00'
-updated: 2026-09-23T12:00:00+10:00
-evidence:
-- /memory/skills/gohighlevel-access/knowledge/opportunity--file-fields--single-file-needs-multifile-array-shape.md
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Opportunity single-file writes: use the array shape
@@ -55,6 +53,8 @@ Confirmed live against a real Opportunity: sending the array shape to a
 single-file-configured field succeeded and preserved the real filename on
 the next read; the bare-string shape had previously round-tripped nameless
 on the same kind of field.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

@@ -13,10 +13,9 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-04
 verified: 2026-09-04
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/custom_object--custom-fields--file-upload-create-omit-multifile.md
+source_refs: []
 created: 2026-09-04T12:27:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Custom object FILE_UPLOAD create: omit isMultiFileAllowed and options
@@ -34,6 +33,8 @@ The classic Opportunity GET payload includes `isMultiFileAllowed` and sometimes 
 ## Evidence
 
 Live create of Site Visit `Front of Location` and `Inverter Label Photo` on `Example Co (Staging)` (`loc_EXAMPLE_01`) on 2026-09-04 after omitting those keys. `confirmed`.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

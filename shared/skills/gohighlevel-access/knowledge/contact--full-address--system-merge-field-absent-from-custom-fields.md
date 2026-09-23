@@ -13,8 +13,7 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-12
 verified: 2026-09-12
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/contact--full-address--system-merge-field-absent-from-custom-fields.md
+source_refs: []
 created: 2026-09-12T18:40:00+10:00
 updated: 2026-09-23T18:00:00+10:00
 ---
@@ -59,6 +58,8 @@ Not established: the full set of undocumented standard merge fields. `mailgun.ev
 `message.direction` are a **different** shape and remain open – they are event-payload
 attributes rather than fields on any object, so "is it a system field?" is the wrong question
 for them.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

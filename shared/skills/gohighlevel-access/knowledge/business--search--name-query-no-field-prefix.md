@@ -14,9 +14,7 @@ refuted_by: null
 discovered: '2026-08-22'
 verified: '2026-08-22'
 created: '2026-08-24T21:30:00+10:00'
-updated: 2026-09-23T12:00:00+10:00
-evidence:
-- /memory/skills/gohighlevel-access/knowledge/business--search--name-query-no-field-prefix.md
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Business Object Records Search: no field-prefix, substring match only
@@ -43,6 +41,8 @@ erroring, which reads as "no match" rather than "wrong syntax."
 Confirmed live via a raw authenticated call (`gohighlevel-access` skill +
 agency token, bypassing the app) against a real location, tried against two
 distinct real businesses.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

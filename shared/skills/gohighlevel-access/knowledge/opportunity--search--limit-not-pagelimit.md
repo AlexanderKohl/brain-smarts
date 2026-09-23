@@ -13,10 +13,9 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-02
 verified: 2026-09-02
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/opportunity--search--limit-not-pagelimit.md
+source_refs: []
 created: 2026-09-02T21:20:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # POST /opportunities/search takes `limit`, not `pageLimit`
@@ -79,6 +78,8 @@ then their ids were used in a `contains_set` filter across six body shapes:
 
 Production logs for the same period show the identical 422 repeating on every dashboard load of the
 Opportunity tab.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

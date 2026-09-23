@@ -13,8 +13,7 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-16
 verified: 2026-09-16
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/workflow--validate-endpoints--carry-the-whole-definition.md
+source_refs: []
 created: 2026-09-16T09:48:08+10:00
 updated: 2026-09-23T18:00:00+10:00
 ---
@@ -153,6 +152,8 @@ The 16 September 10:33 recording continues that session through a **delete** of 
 a workflow save. It is what established the `validate-assets` asymmetry, the hash-returns-to-a-
 previous-state case, and `deletedSteps` populated (on the save, not on the validate that
 witnessed the delete).
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

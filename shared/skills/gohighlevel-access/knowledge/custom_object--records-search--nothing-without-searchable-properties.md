@@ -13,8 +13,7 @@ superseded_by: null
 refuted_by: ghl-custom_object--records-search--page-session-empty-oauth-lists
 discovered: 2026-09-15
 verified: null
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/custom_object--records-search--nothing-without-searchable-properties.md
+source_refs: []
 created: 2026-09-15T11:20:00+10:00
 updated: 2026-09-23T18:00:00+10:00
 ---
@@ -53,6 +52,8 @@ and nothing in the search's answer says the object is unindexed – it is a clea
 ## Evidence
 
 Storage test runs of 15 September 2026 on Example Test.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Refuted 15 September 2026, 12:35
 

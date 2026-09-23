@@ -13,10 +13,9 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-08-31
 verified: 2026-08-31
-source_refs:
-  - /memory/skills/railway-access/knowledge/customdomain--certificatestatus--type-valid.md
+source_refs: []
 created: 2026-08-31T18:14:30+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Ready certificates use CERTIFICATE_STATUS_TYPE_VALID
@@ -52,6 +51,8 @@ Live GraphQL `domains` query 2026-08-31 against staging project
 `<uuid-02>`. Both the existing `staging.forms.example.com`
 attachment and a newly attached customer hostname returned
 `CERTIFICATE_STATUS_TYPE_VALID` while `verified` was true. `status: confirmed`.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

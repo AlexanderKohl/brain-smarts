@@ -14,9 +14,7 @@ refuted_by: null
 discovered: 2026-08-22
 verified: 2026-08-22
 created: 2026-08-24T21:30:00+10:00
-updated: 2026-09-23T12:00:00+10:00
-evidence:
-- /memory/skills/gohighlevel-access/knowledge/business--custom-fields--objects-api-required.md
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Business custom fields: Objects API only
@@ -58,6 +56,8 @@ Confirmed live via a raw authenticated call (`gohighlevel-access` skill +
 agency token, bypassing the app): the classic write attempt reproduced the
 422, the Objects API write with short key succeeded, and a follow-up `GET`
 confirmed the change.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

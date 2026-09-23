@@ -14,10 +14,9 @@ refuted_by: null
 discovered: 2026-09-15
 verified: 2026-09-15
 source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/general--email-templates--delete-route-needs-location-id-segment.md
   - /shared/skills/gohighlevel-access/knowledge/general--email-templates--requires-version-v3-header.md
 created: 2026-09-15T14:20:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Email template hard delete needs the location ID as a path segment
@@ -60,6 +59,8 @@ deletion of one template named `DELETE Default - Invoice received`
 the 404 above; both active and archived listings on both path families no longer contained the
 id. Listing cross-check before the delete: documented list and builder alias both returned the
 same five active ids.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

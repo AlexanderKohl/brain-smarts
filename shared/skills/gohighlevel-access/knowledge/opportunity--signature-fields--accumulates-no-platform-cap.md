@@ -17,7 +17,6 @@ source_refs: []
 created: 2026-08-25T09:15:00+10:00
 updated: 2026-09-23T18:00:00+10:00
 evidence:
-- /memory/skills/gohighlevel-access/knowledge/opportunity--signature-fields--accumulates-no-platform-cap.md
 - Production Railway logs, 2026-08-24T20:24-20:26+00:00 (two real submissions two minutes apart, on the same Opportunity/field)
 ---
 
@@ -67,6 +66,8 @@ Confirmed directly from real production Railway logs: two `PUT
 appending one new entry with no prior entry ever marked `deleted`, and the
 Form Submitted trigger payload showing the identical oldest URL both
 times before the fix.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

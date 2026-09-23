@@ -14,9 +14,7 @@ refuted_by: ghl-custom-object-file-fields-delta-name
 discovered: '2026-08-22'
 verified: null
 created: '2026-08-24T21:30:00+10:00'
-updated: 2026-09-23T12:00:00+10:00
-evidence:
-- /memory/skills/gohighlevel-access/knowledge/custom_object--file-fields--name-dropped-hypothesis.md
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # REFUTED: `{url}`-only Custom Object file writes, matching the docs
@@ -56,3 +54,7 @@ Do not drop `name` from a Custom Object file-property write entry just
 because HighLevel's own docs show it without one – the documented shape is
 verified incomplete for the multi-file-merge case, which is easy to miss
 if testing only covers a single brand-new upload.
+
+## Evidence
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.

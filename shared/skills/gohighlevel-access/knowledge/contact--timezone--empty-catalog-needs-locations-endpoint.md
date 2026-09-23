@@ -14,9 +14,7 @@ refuted_by: null
 discovered: '2026-08-22'
 verified: '2026-08-22'
 created: '2026-08-24T21:30:00+10:00'
-updated: 2026-09-23T12:00:00+10:00
-evidence:
-- /memory/skills/gohighlevel-access/knowledge/contact--timezone--empty-catalog-needs-locations-endpoint.md
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Contact timezone: catalog is empty, use the locations endpoint
@@ -56,6 +54,8 @@ erroring – it just returns zero matched results.
 Confirmed live via `GET /locations/:locationId/timezones` returning `200`
 with data under `timeZones`; confirmed the real list contains `Etc/GMT+12`
 and `Australia/Canberra`, both absent from a generated `Intl` list.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

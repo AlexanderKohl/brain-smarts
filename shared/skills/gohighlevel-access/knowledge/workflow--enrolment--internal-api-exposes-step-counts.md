@@ -13,10 +13,9 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-12
 verified: 2026-09-12
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/workflow--enrolment--internal-api-exposes-step-counts.md
+source_refs: []
 created: 2026-09-12T16:40:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Enrolment is readable on the internal API
@@ -66,6 +65,8 @@ Observed in live builder traffic against `Example Co` (`loc_EXAMPLE_01`) on
 2026-09-12, captured by a browser extension's traffic recorder.
 Responses quoted verbatim. Not probed deliberately – the builder issues both on opening a
 workflow – so the parameter space beyond what is shown is untested.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

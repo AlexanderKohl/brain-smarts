@@ -13,10 +13,9 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-14
 verified: 2026-09-14
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/general--folder-lists--top-level-returns-folders-not-records.md
+source_refs: []
 created: 2026-09-14T10:10:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Funnel and workflow list endpoints return folders at the top level
@@ -66,6 +65,10 @@ level.
 Recurse. Treat any row with `category: "folder"` (funnels) or `type: "directory"` (workflows) as
 a node to descend into, and keep descending until no new folder ids appear. Count the records
 you end up with against the account's own UI before believing a zero.
+
+## Evidence
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Related
 

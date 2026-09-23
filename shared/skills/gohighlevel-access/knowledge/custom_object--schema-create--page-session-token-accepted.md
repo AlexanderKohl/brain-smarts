@@ -13,8 +13,7 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-15
 verified: 2026-09-15
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/custom_object--schema-create--page-session-token-accepted.md
+source_refs: []
 created: 2026-09-15T09:40:00+10:00
 updated: 2026-09-23T18:00:00+10:00
 ---
@@ -51,6 +50,8 @@ also creates the fields folder – it does, so `POST /custom-fields/folder` was 
 Live run, 15 September 2026, from a browser-extension storage test on sub-account
 `Example Test` (`loc_EXAMPLE_04`): fifteen requests, every one 2xx, all twelve fields read
 back.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

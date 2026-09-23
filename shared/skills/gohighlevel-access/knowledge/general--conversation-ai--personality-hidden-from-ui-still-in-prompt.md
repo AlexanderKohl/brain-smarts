@@ -13,8 +13,7 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-15
 verified: null
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/general--conversation-ai--personality-hidden-from-ui-still-in-prompt.md
+source_refs: []
 created: 2026-09-15T11:30:00+10:00
 updated: 2026-09-23T18:00:00+10:00
 ---
@@ -51,6 +50,8 @@ The two voice agents in the same sweep (`GET /voice-ai/agents/{id}`) carry
 `agentPrompt`, `agentWelcomeMessage` and `agentSettings`, and none of `personality`,
 `instructions`, `steps` or `fullPrompt`. Whether any voice-agent field is orphaned the
 same way is not established; on this account there is no such field to orphan.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

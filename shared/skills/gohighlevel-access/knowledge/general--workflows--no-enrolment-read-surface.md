@@ -13,8 +13,7 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-10
 verified: 2026-09-10
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/general--workflows--no-enrolment-read-surface.md
+source_refs: []
 created: 2026-09-10T07:35:00+10:00
 updated: 2026-09-23T18:00:00+10:00
 ---
@@ -85,3 +84,6 @@ Live raw-API probes against `Example Co (Staging)` (`loc_EXAMPLE_01`) on
 staging workflow test run. All eight request forms above were
 issued in one pass; status codes and bodies are quoted verbatim. Confirmed, not
 hypothesised.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
+

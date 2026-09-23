@@ -14,9 +14,7 @@ refuted_by: null
 discovered: '2026-08-22'
 verified: '2026-08-22'
 created: '2026-08-24T21:30:00+10:00'
-updated: 2026-09-23T12:00:00+10:00
-evidence:
-- /memory/skills/gohighlevel-access/knowledge/opportunity--file-fields--multi-file-full-array-deleted-flag.md
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Opportunity multi-file: resend everything, flag deletions
@@ -41,6 +39,8 @@ than a snapshot.
 
 Confirmed via an official `@gohighlevel/api-client` SDK example for
 `opportunities.updateOpportunity`.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

@@ -22,4 +22,7 @@ flight, and what was measured.
 
 #### Folders
 
-No immediate child folders exist yet.
+##### `data/`
+
+Contains measurements and the learning discovery index read by
+`/shared/skills/learning-maintenance/`.

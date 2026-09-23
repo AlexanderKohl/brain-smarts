@@ -13,8 +13,7 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-15
 verified: 2026-09-15
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/custom_object--schema-update--searchable-properties-max-three.md
+source_refs: []
 created: 2026-09-15T14:30:00+10:00
 updated: 2026-09-23T18:00:00+10:00
 ---
@@ -36,6 +35,8 @@ maximum; the minimum of one is enforced by the DTO, the maximum only by the serv
 
 Live, 15 September 2026, from a browser-extension storage test on Example Test
 (`loc_EXAMPLE_04`) through the page-session token.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Also confirmed 15 September 2026, 17:20
 

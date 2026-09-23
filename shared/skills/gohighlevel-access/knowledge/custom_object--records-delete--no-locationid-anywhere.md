@@ -13,8 +13,7 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-15
 verified: 2026-09-15
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/custom_object--records-delete--no-locationid-anywhere.md
+source_refs: []
 created: 2026-09-15T11:20:00+10:00
 updated: 2026-09-23T18:00:00+10:00
 ---
@@ -41,4 +40,6 @@ about the body, which the request did not have.
 
 One live 422 with `locationId` in the query, then two live 200s with the bare path, both
 on 15 September 2026 from a browser-extension storage test on Example Test.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 

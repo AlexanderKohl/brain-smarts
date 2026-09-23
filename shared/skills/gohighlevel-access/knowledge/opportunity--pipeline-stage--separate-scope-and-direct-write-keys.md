@@ -15,8 +15,6 @@ discovered: '2026-08-20'
 verified: '2026-08-20'
 created: '2026-08-24T21:30:00+10:00'
 updated: 2026-09-23T18:00:00+10:00
-evidence:
-- /memory/skills/gohighlevel-access/knowledge/opportunity--pipeline-stage--separate-scope-and-direct-write-keys.md
 ---
 
 # Opportunity Pipeline/Stage: distinct scope, direct-write keys
@@ -54,6 +52,8 @@ at request time until the feature is actually exercised.
 
 Documented in a maintained API/scope reference (last verified
 2026-08-15), itself built from confirmed live behaviour (2026-08-20).
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

@@ -14,9 +14,7 @@ refuted_by: null
 discovered: '2026-08-22'
 verified: '2026-08-22'
 created: '2026-08-24T21:30:00+10:00'
-updated: 2026-09-23T12:00:00+10:00
-evidence:
-- /memory/skills/gohighlevel-access/knowledge/contact--file-fields--multi-file-full-kept-set-required.md
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Contact multi-file fields: resend the full kept set
@@ -52,6 +50,8 @@ dangerous.
 Confirmed via an official `@gohighlevel/api-client` SDK example for
 `contacts.updateContact` for the write shape; confirmed live that the
 Contact-specific upload endpoint drops sibling files.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

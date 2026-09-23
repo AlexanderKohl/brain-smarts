@@ -11,8 +11,6 @@ scope: shared
 owner: brain-owner
 created: 2026-09-03T14:05:35+10:00
 updated: 2026-09-23T18:00:00+10:00
-source_refs:
-  - /memory/sources/source-71ae7cca6b7a-product-development-process.md
 ---
 
 # Product Development

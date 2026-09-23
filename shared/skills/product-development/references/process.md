@@ -6,14 +6,12 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-03T14:05:35+10:00
-updated: 2026-09-23T12:00:00+10:00
-source_refs:
-  - /memory/sources/source-71ae7cca6b7a-product-development-process.md
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Adapted Product Development Process
 
-This is the operational adaptation of the owner's source process. It adds proportional depth, internal/commercial dual consideration, existing-product and feature re-entry, delivery planning, earlier lifecycle constraints and independent AI review.
+This is the operational adaptation of a source product-development process; the owner's source record is kept in their memory. It adds proportional depth, internal/commercial dual consideration, existing-product and feature re-entry, delivery planning, earlier lifecycle constraints and independent AI review.
 
 ## Proportional depth
 

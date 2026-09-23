@@ -13,8 +13,7 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-14
 verified: null
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/workflow--custom-webhook--bearer-token-stored-as-handle.md
+source_refs: []
 created: 2026-09-14T16:10:00+10:00
 updated: 2026-09-23T18:00:00+10:00
 ---
@@ -58,6 +57,8 @@ manager" or similar by shape alone; HighLevel has not been observed naming it. T
 storage-side claim – that HighLevel holds the token and resolves the handle at run
 time – is **pending**: it is the only reading consistent with the shape, but no probe
 has confirmed it, and no endpoint that lists or resolves handles has been observed.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

@@ -13,12 +13,9 @@ superseded_by: null
 refuted_by: null
 discovered: '2026-08-24'
 verified: '2026-08-24'
-source_refs:
-- /memory/skills/gohighlevel-access/knowledge/business--all-field-types--classic-read-typed-value-keys.md
+source_refs: []
 created: 2026-08-24T21:30:00+10:00
-updated: 2026-09-23T12:00:00+10:00
-evidence:
-- /memory/skills/gohighlevel-access/knowledge/business--all-field-types--classic-read-typed-value-keys.md
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Business classic read: type-specific value keys required
@@ -46,6 +43,8 @@ silent (empty form field, no error), not a loud rejection.
 Confirmed directly against real Business record raw `customFields` arrays
 pulled from production Railway logs – each blank-on-load field's value was
 genuinely present under its own typed key the whole time.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

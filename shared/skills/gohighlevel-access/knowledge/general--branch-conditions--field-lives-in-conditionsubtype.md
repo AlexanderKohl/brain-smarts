@@ -13,10 +13,9 @@ superseded_by: null
 refuted_by: null
 discovered: 2026-09-14
 verified: 2026-09-14
-source_refs:
-  - /memory/skills/gohighlevel-access/knowledge/general--branch-conditions--field-lives-in-conditionsubtype.md
+source_refs: []
 created: 2026-09-14T09:40:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # A branch condition names its field in `conditionSubType`
@@ -74,6 +73,8 @@ Confirmed 14 September 2026 against 45 captured workflows from the Example Co lo
 branch conditions, zero carrying `field` or `__customFieldKey__`; after reading
 `conditionSubType`, 123 of 168 modelled conditions resolve to a field and the remaining 45 are
 all `conditionType: trigger`.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 

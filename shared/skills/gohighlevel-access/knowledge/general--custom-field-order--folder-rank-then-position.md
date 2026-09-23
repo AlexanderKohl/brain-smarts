@@ -13,12 +13,9 @@ superseded_by: null
 refuted_by: null
 discovered: '2026-08-24'
 verified: '2026-08-24'
-source_refs:
-- /memory/skills/gohighlevel-access/knowledge/general--custom-field-order--folder-rank-then-position.md
+source_refs: []
 created: '2026-08-24T21:30:00+10:00'
-updated: 2026-09-23T12:00:00+10:00
-evidence:
-- /memory/skills/gohighlevel-access/knowledge/general--custom-field-order--folder-rank-then-position.md
+updated: 2026-09-23T14:40:00+10:00
 ---
 
 # Field ordering: folder rank dominates, and must use array index
@@ -66,6 +63,8 @@ first field were both at position 0, and every subsequent slot in both
 folders also collided (0/50/100/150/...), reproducing the exact reported
 symptom (fields from two folders scrambled together). The array-index fix
 was independently re-verified against the same real catalog end-to-end.
+
+Observed on a live account; the owner's record, with its real identifiers and sources, is kept in their memory.
 
 ## Applies to
 
