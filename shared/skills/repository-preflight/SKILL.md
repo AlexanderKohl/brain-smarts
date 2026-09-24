@@ -10,7 +10,7 @@ script_paths:
   - /shared/skills/repository-preflight/scripts/preflight.py
   - /shared/skills/repository-preflight/tests/test_preflight.py
 created: 2026-08-04T23:16:08+10:00
-updated: 2026-09-23T20:46:21+10:00
+updated: 2026-09-24T10:47:45+10:00
 owner: brain-owner
 ---
 
@@ -57,6 +57,14 @@ python -m unittest discover -s shared/skills/repository-preflight/tests -v
 The tests build fictional two-repository brains in temporary folders and need `git` for the governance cases.
 
 The script uses only the Python standard library.
+
+## Starting from the latest
+
+`scripts/sync.py` (`SMART-RULE-0034`) is run at the start of every session, before anything is
+read: for the mechanics, the library, the memory and any `--also` project repository it fetches
+`origin` and fast-forwards a branch that is only behind. A branch with uncommitted changes, a
+diverged branch and an unreachable `origin` are reported and left untouched; it never merges,
+rebases, resets, stashes, discards or pushes. Exit code 1 means a repository needs the owner.
 
 ## Outputs
 

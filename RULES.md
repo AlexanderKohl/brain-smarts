@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-23T17:43:07+10:00
+updated: 2026-09-24T10:47:45+10:00
 owner: brain-owner
 ---
 
@@ -56,6 +56,7 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 | `SMART-RULE-0031` | Show the text of every new or changed rule | this file |
 | `SMART-RULE-0032` | Skill exchange | this file; `/shared/skills/skill-exchange/` |
 | `SMART-RULE-0033` | A name means one thing, everywhere | this file |
+| `SMART-RULE-0034` | Start from the latest | this file; `/shared/skills/repository-preflight/` |
 
 ## SMART-RULE-0010 – Communication efficiency
 
@@ -418,6 +419,14 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 - A name says what the thing is, in the domain's own words, at the length that makes it unambiguous. Names in one set are built the same way, so a reader who learns one can guess the rest.
 - A name is corrected while it is cheap. The moment a rename costs only a delete and a rebuild is the moment to do it; once data, integrations or habits carry the old name, the same fix needs a migration. Renaming is not deferred to a tidy-up that never comes.
 - An agent given a name that will not hold – one that means something else in the same system, one that will read as wrong to the next person, one inconsistent with the names around it – says so before building on it, proposes the better name and the reason, and proceeds on the owner's answer. This is not a veto: the owner may keep their word, and the agent then uses it consistently everywhere.
+
+## SMART-RULE-0034 – Start from the latest
+
+- At the start of a session, before reading state or changing anything, bring every brain repository on this computer up to date with its `origin`: the mechanics, the skill library and the memory, and a project repository before working in it. Fetch; when the local branch is only behind, fast-forward it. `python shared/skills/repository-preflight/scripts/sync.py` does this for all of them (`--also <repo>` for a project repository).
+- When a repository has uncommitted changes, or has commits of its own that `origin` does not (the history has diverged), change nothing in it and tell the owner what differs before starting work there.
+- Never rewrite history or force a push to make a pull work. Diverged history is merged, and when files conflict, only after the owner says how.
+- A computer that cannot reach `origin` says so, and works on only after the owner agrees.
+- Push at the end of each unit of work (`SMART-RULE-0009`), so the next computer starts from it.
 
 ## Contract restatements
 
