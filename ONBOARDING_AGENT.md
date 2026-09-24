@@ -61,6 +61,7 @@ Numbered in reading order.
 | Skill | Path | Role |
 |---|---|---|
 | abr-access | `/library/skills/abr-access/` | ABR ABN Lookup JSON web services (GUID in vault); ABN/ACN lookup and name search |
+| cec-access | `/library/skills/cec-access/` | Clean Energy Council approved panels, inverters and batteries (public JSON endpoints; one request per list; page with `pageNumber`, not `page`) |
 | crm | `/library/skills/crm/` | Contact register in memory: one file per person, organisation, newsletter or system; owner personas bound to sending accounts; create on first encounter, deduplicate, merge directories; node rules ship as a template; `crm_check.py` find, validate, duplicates |
 | gohighlevel-access | `/library/skills/gohighlevel-access/` | HighLevel agency OAuth (port 8766), subaccounts, CRM APIs; pipeline migration review UI (port 8769) |
 | google-workspace-access | `/library/skills/google-workspace-access/` | Multi-account Google OAuth (port 8767); Gmail/Calendar/Tasks/Drive/Contacts; contact-register integration; draft-first email; optional local SQLite Gmail/Tasks sync (`google_sync_ctl.py` / `google_local_email.py` / `google_local_tasks.py`) |
