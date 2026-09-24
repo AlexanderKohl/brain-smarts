@@ -41,14 +41,14 @@ class PersonalDataTests(unittest.TestCase):
     def test_owner_terms_and_patterns_in_the_mechanics_fail(self) -> None:
         self.brain.write("shared/skills/garden-access/SKILL.md", md(
             "skill-garden", "Written for Example Owner on the orchard-planner node.\n"
-            "Mail robin" + AT + "realmail.test or call +61 7 " + "3000 0199.\n"))
+            "Mail ex.tester" + AT + "realmail.test or call +61 7 " + "3000 0199.\n"))
         found = personal(self.brain.run().errors)
         kinds = sorted({e.split("(")[1].split(")")[0] for e in found})
         self.assertEqual(kinds, ["email", "owner-term", "phone"])
         self.assertTrue(all(e.startswith("/shared/skills/garden-access/SKILL.md:") for e in found))
 
     def test_an_error_never_repeats_the_value(self) -> None:
-        self.brain.write("shared/notes.md", md("shared-notes", "Mail robin" + AT + "realmail.test\n"))
+        self.brain.write("shared/notes.md", md("shared-notes", "Mail ex.tester" + AT + "realmail.test\n"))
         found = personal(self.brain.run().errors)
         self.assertEqual(len(found), 1)
         self.assertNotIn("realmail", found[0])
@@ -56,7 +56,7 @@ class PersonalDataTests(unittest.TestCase):
 
     def test_the_same_values_in_memory_pass(self) -> None:
         self.brain.write("memory/projects/orchard-planner/NOTES.md", md(
-            "orchard-notes", "Example Owner, robin" + AT + "realmail.test, +61 7 " + "3000 0199.\n"))
+            "orchard-notes", "Example Owner, ex.tester" + AT + "realmail.test, +61 7 " + "3000 0199.\n"))
         self.assertEqual(personal(self.brain.run().errors), [])
 
     def test_a_personal_name_matches_only_as_written(self) -> None:
@@ -82,7 +82,7 @@ class PersonalDataTests(unittest.TestCase):
     def test_without_memory_only_patterns_run(self) -> None:
         bare = Brain(with_memory=False)
         try:
-            bare.write("shared/notes.md", md("shared-notes", "orchard-planner, and robin" + AT + "realmail.test\n"))
+            bare.write("shared/notes.md", md("shared-notes", "orchard-planner, and ex.tester" + AT + "realmail.test\n"))
             kinds = [e.split("(")[1].split(")")[0] for e in personal(bare.run().errors)]
             self.assertEqual(kinds, ["email"])
         finally:
