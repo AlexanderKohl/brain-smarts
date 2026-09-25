@@ -17,7 +17,7 @@ script_paths:
   - /shared/skills/owner-board/scripts/task_board.py
   - /shared/skills/owner-board/scripts/verdicts.py
 created: 2026-09-18T11:05:00+10:00
-updated: 2026-09-23T15:38:35+10:00
+updated: 2026-09-26T09:16:13+10:00
 owner: brain-owner
 project_refs:
   - /memory/projects/brain-development
@@ -144,6 +144,7 @@ stops the build), `folder` (default `boards`, under the memory root) and `title`
 | `auto_boards` | `false` | Off: a task whose projects have no registered board goes to the personal board. On: its first project under `auto_roots` gets a generated task-only board. |
 | `auto_folder` | `projects` | Where automatic boards are written, under the directory folder. |
 | `auto_roots` | `["/memory/projects/"]` | Which references may get an automatic board. |
+| `board_declined` | `[]` | Projects the owner said need no board of their own; the build stops suggesting one for them or any folder beneath them (`SMART-RULE-0035`). |
 | `completed_days` | `14` | How long a completed or cancelled task stays in *Completed recently*. |
 | `enabled` | `true` | `false` draws no tasks anywhere. |
 | `personal` | see the example | The personal board: `id` (must not be a registered board id), `label`, `page` (relative to the directory folder), `blurb`. |
@@ -275,6 +276,15 @@ each task with its project, so nothing is lost by sharing it. When a project's t
 page of their own, **make it a board** (Making a board) – its tasks move there at the next
 regeneration. An automatic page whose tasks have all gone is kept, drawn empty, because it may
 be bookmarked.
+
+**When a project outgrows the personal board** (`SMART-RULE-0035`). Every regeneration counts,
+for each project under `auto_roots`, its open tasks on the personal board; a task that names two
+projects counts for both, and each project counts on its own, not with its parent. At five or
+more, `build_boards.py` prints `suggest a board: <project> (<path>) has <n> open tasks on the
+personal board`. The agent then asks the owner once, with a suggested answer. A "yes" is
+**Making a board**; a "no" adds the project's path to `tasks.board_declined` in `boards.json`,
+which silences it for good. Branch count is not visible to the build (a project without a board
+names no repository), so the agent watches for three or more branches itself.
 
 **Where they are drawn.** A registered board shows its tasks in a *Tasks* section below the
 cards on its own `status.html` – still one link. The personal and automatic boards are pages of

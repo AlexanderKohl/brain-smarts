@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-24T10:47:45+10:00
+updated: 2026-09-26T09:16:13+10:00
 owner: brain-owner
 ---
 
@@ -57,6 +57,7 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 | `SMART-RULE-0032` | Skill exchange | this file; `/shared/skills/skill-exchange/` |
 | `SMART-RULE-0033` | A name means one thing, everywhere | this file |
 | `SMART-RULE-0034` | Start from the latest | this file; `/shared/skills/repository-preflight/` |
+| `SMART-RULE-0035` | Offer a board when a project outgrows the personal board | this file; `/shared/skills/owner-board/` |
 
 ## SMART-RULE-0010 – Communication efficiency
 
@@ -427,6 +428,13 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 - Never rewrite history or force a push to make a pull work. Diverged history is merged, and when files conflict, only after the owner says how.
 - A computer that cannot reach `origin` says so, and works on only after the owner agrees.
 - Push at the end of each unit of work (`SMART-RULE-0009`), so the next computer starts from it.
+
+## SMART-RULE-0035 – Offer a board when a project outgrows the personal board
+
+- When a project with no board of its own gains its fifth open task, or its work runs on three or more branches at once, the agent asks the owner once whether to give it a board. The question names the project, counts its open tasks, and suggests an answer.
+- The board build (`build_boards.py`) prints the same suggestion for any project over that threshold, so the check does not rely on memory.
+- A "no" is recorded in the board configuration (`board_declined`) and the agent does not ask again unless the owner raises it.
+- A board is created only after a "yes": the agent registers it in `boards.json`, rebuilds the boards and gives the owner the link.
 
 ## Contract restatements
 

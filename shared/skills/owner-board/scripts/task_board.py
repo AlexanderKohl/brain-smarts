@@ -184,6 +184,41 @@ def _node_title(config: board_config.Config, node: str) -> str:
     return meta.get("title") or rel.rsplit("/", 1)[-1]
 
 
+# SMART-RULE-0035: a project with this many open tasks on the personal board has outgrown it.
+SUGGEST_BOARD_AT = 5
+
+
+def _refs(task: task_store.Task) -> list[str]:
+    refs = task.meta.get("project_refs") or []
+    return [refs] if isinstance(refs, str) else list(refs)
+
+
+def outgrown(config: board_config.Config, routed: dict[str, dict]) -> list[tuple[str, str, int]]:
+    """Projects with `SUGGEST_BOARD_AT` or more open tasks on the personal board: `(node, title, count)`.
+
+    Every project a task names counts, so a task shared by two projects counts for both. Only
+    references under `auto_roots` count, and a project in `board_declined` (or beneath one) is
+    never suggested again. Most tasks first, then by path.
+    """
+    personal = routed.get(config.personal["id"])
+    if not personal:
+        return []
+    roots = [_norm(r) + "/" for r in config.tasks.get("auto_roots") or []]
+    declined = [_norm(d) for d in config.tasks.get("board_declined") or []]
+    tally: dict[str, int] = {}
+    for task, _ in personal.get("tasks") or []:
+        if not is_open(task):
+            continue
+        for ref in {_norm(r) for r in _refs(task)}:
+            if not any(ref.startswith(root) and len(ref) > len(root) for root in roots):
+                continue
+            if any(ref == d or ref.startswith(d + "/") for d in declined):
+                continue
+            tally[ref] = tally.get(ref, 0) + 1
+    found = [(ref, _node_title(config, ref), n) for ref, n in tally.items() if n >= SUGGEST_BOARD_AT]
+    return sorted(found, key=lambda row: (-row[2], row[0]))
+
+
 def boards(config: board_config.Config) -> dict[str, dict]:
     """Every board a task can land on, by key: registered boards, then the personal board."""
     folder = config.directory_folder
@@ -210,9 +245,7 @@ def _auto_board(config: board_config.Config, ref: str) -> dict | None:
 
 def board_for(config: board_config.Config, task: task_store.Task, known: dict[str, dict]) -> tuple[dict, str | None]:
     """The one board a task is shown on, and the reference that put it there."""
-    refs = task.meta.get("project_refs") or []
-    if isinstance(refs, str):
-        refs = [refs]
+    refs = _refs(task)
     registered = [b for b in known.values() if b["kind"] == "registered"]
     for raw in refs:
         ref = _norm(raw)

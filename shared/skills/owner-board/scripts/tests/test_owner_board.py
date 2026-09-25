@@ -585,6 +585,31 @@ class TaskBoardTests(unittest.TestCase):
         self.assertTrue((self.brain.memory / "boards" / "projects" / "example-shed.html").is_file())
         self.assertEqual(task_board.check(config, TODAY), [])
 
+    def test_a_project_that_outgrows_the_personal_board_is_suggested_once_until_declined(self):
+        # example-shed has 0915 on the personal board; 0913 names it too but is on Pond Pump.
+        self.assertEqual(task_board.outgrown(self.brain.config(), task_board.route(self.brain.config(), today=TODAY)), [])
+        for n in range(3):
+            self.add("TASK-2026-092" + str(n), "open", "ready", ["/memory/projects/example-shed"])
+        routed = task_board.route(self.brain.config(), today=TODAY)
+        self.assertEqual(task_board.outgrown(self.brain.config(), routed), [])      # four: not yet
+        self.add("TASK-2026-0923", "open", "ready", ["/memory/projects/example-shed/roof"])
+        self.add("TASK-2026-0924", "completed", "completed", ["/memory/projects/example-shed"],
+                 updated="2026-01-09T10:00:00+10:00")                               # not open: not counted
+        config = self.brain.config()
+        found = task_board.outgrown(config, task_board.route(config, today=TODAY))
+        self.assertEqual(found, [])     # shed four, shed/roof one: each project counts on its own
+        self.add("TASK-2026-0925", "open", "waiting", ["/memory/projects/example-shed"], review="2026-01-20")
+        config = self.brain.config()
+        found = task_board.outgrown(config, task_board.route(config, today=TODAY))
+        self.assertEqual([(node, n) for node, _, n in found], [("/memory/projects/example-shed", 5)])
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            build_boards.build(config, None, "2026-01-10 09:00")
+        self.assertIn("suggest a board: example-shed (/memory/projects/example-shed) has 5 open tasks", out.getvalue())
+        self.set_tasks(board_declined=["/memory/projects/example-shed"])
+        config = self.brain.config()
+        self.assertEqual(task_board.outgrown(config, task_board.route(config, today=TODAY)), [])
+
     def test_every_open_task_appears_exactly_once_on_its_board(self):
         config = self.build_all()
         self.assertEqual(task_board.check(config, TODAY), [])

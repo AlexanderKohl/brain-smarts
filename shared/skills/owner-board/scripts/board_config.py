@@ -62,10 +62,13 @@ DEFAULT_FAVICON = (
 # How task records reach the boards (`task_board.py`). Alphabetical. `auto_boards` off means a
 # task whose projects have no registered board is shown on the personal board; on, such a
 # project gets a generated task-only board of its own under `<directory>/<auto_folder>/`.
+# `board_declined` lists the projects the owner said need no board of their own, so the build
+# stops suggesting one (SMART-RULE-0035).
 TASKS_DEFAULTS: dict[str, Any] = {
     "auto_boards": False,
     "auto_folder": "projects",
     "auto_roots": ["/memory/projects/"],
+    "board_declined": [],
     "completed_days": 14,
     "enabled": True,
     "store": "tasks",

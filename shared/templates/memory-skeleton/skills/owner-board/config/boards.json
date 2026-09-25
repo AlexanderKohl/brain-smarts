@@ -5,6 +5,7 @@
   },
   "tasks": {
     "auto_boards": false,
+    "board_declined": [],
     "completed_days": 14,
     "personal": {
       "id": "personal",

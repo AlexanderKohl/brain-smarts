@@ -201,6 +201,10 @@ def build(config: board_config.Config, known: dict | None = None, now: str | Non
         fh.write(page)
     print("wrote", out, "(" + str(len(config.boards)) + " board(s)"
           + (", " + str(sum(t["open"] for t in tallies.values())) + " open task(s)" if routed else "") + ")")
+    # SMART-RULE-0035: say which projects have outgrown the personal board, so the agent asks.
+    for node, title, n in task_board.outgrown(config, routed):
+        print("suggest a board: " + title + " (" + node + ") has " + str(n) + " open tasks on the personal board."
+              " Ask the owner whether to give it one, or add it to tasks.board_declined (SMART-RULE-0035).")
     return out
 
 
