@@ -1,9 +1,9 @@
 """Apply a verdicts file the owner saved from a board back onto that board's cards.
 
-The board is a `file://` page, which cannot write to disk, so **Save my verdicts** hands the
-browser a download. It should land in the board's own `status/verdicts-in/`; the owner's
-Downloads folder is read as a fallback, because that is where a browser puts a file when
-nobody says otherwise. The owner still sends one short message: the conductor only exists
+**Save my verdicts** writes into the board's own `status/verdicts-in/`, a folder the owner
+chooses once and the page remembers. Where it cannot, it hands the browser a download, so the
+owner's Downloads folder is read as a fallback, because that is where a browser puts a file
+when nobody says otherwise. The owner still sends one short message: the conductor only exists
 between messages, so a file saved silently would sit unread.
 
 - *accepted* retires the card: its version and title go under `closed` in `board.md` and the

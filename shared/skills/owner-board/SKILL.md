@@ -17,7 +17,7 @@ script_paths:
   - /shared/skills/owner-board/scripts/task_board.py
   - /shared/skills/owner-board/scripts/verdicts.py
 created: 2026-09-18T11:05:00+10:00
-updated: 2026-09-26T09:16:13+10:00
+updated: 2026-09-26T09:45:34+10:00
 owner: brain-owner
 project_refs:
   - /memory/projects/brain-development
@@ -238,9 +238,13 @@ is registered.
 
 ### Taking the verdict back
 
-The owner decides on the card face and presses **Save my verdicts**, which hands the browser one
-JSON file naming its board. It should be saved into `<board>/verdicts-in/`; the browser asks once
-and remembers the folder. The owner then sends one short message, and the conductor runs:
+The owner decides on the card face and presses **Save my verdicts**, which writes one JSON file
+naming its board. The first save asks once for the folder and names the one to pick,
+`<board>/verdicts-in/`; the page keeps that folder's handle in IndexedDB (keyed by board id),
+and every later save writes straight into it with no dialog. **Change folder** beside the button
+picks again. Where the browser offers no folder picker, or the write fails, the page falls back
+to a download, which lands wherever the browser puts downloads; `apply_verdicts.py` reads
+Downloads too. The owner then sends one short message, and the conductor runs:
 
     python shared/skills/owner-board/scripts/apply_verdicts.py            # every saved file
     python shared/skills/owner-board/scripts/apply_verdicts.py --dry-run  # say, change nothing
@@ -449,8 +453,8 @@ address is copied rather than linked is decided by the address itself.
 
 ## Deferred by design
 
-**Write-back without a message.** The board hands the browser a download because a `file://`
-page is not a secure context and cannot write to disk. A local process could, and was not
+**Write-back without a message.** The board writes into a folder the owner chose (or hands the
+browser a download), and nothing watches that folder. A local process could, and was not
 built: the conductor only exists between the owner's messages, so a verdict saved silently
 would sit unread and the owner would have *less* signal than when they pasted text. **One word
 in the thread is the whole protocol**, and the file is what removes the need for that word to

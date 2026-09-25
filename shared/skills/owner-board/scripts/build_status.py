@@ -38,6 +38,7 @@ import build_boards  # noqa: E402
 import cards  # noqa: E402
 import reconcile  # noqa: E402
 import task_board  # noqa: E402
+import verdicts  # noqa: E402
 
 PAGE = """<!doctype html>
 <html lang="en">
@@ -184,6 +185,7 @@ __TASKCSS__
 <div class="bar">
   <span id="tally"></span>
   <button id="save" class="primary">Save my verdicts</button>
+  <button id="folder" hidden>Change folder</button>
   <button id="copy">Copy instead</button>
   <button id="reset">Clear</button>
 </div>
@@ -546,11 +548,82 @@ __TASKCSS__
     draw();
   }
 
-  /* A `file://` page cannot write to disk, but it can hand the browser a download, which
-     needs no permission and no process running. `verdicts.py` applies the file. The file
-     names its board in its name and its body, so any folder works and `apply_verdicts.py`
-     routes it; the signature rides along so a verdict on a card that has since changed is
-     refused rather than applied. */
+  /* Where the verdicts go. Chrome lets a `file://` page write into a folder the owner chose
+     once: the folder's handle is kept in IndexedDB, so every later save writes straight into
+     it with no dialog. The first save asks for the board's own `verdicts-in` folder by name.
+     Where that is not available, or the write fails, the page hands the browser a download as
+     before, and `apply_verdicts.py` still reads Downloads. The file names its board in its
+     name and its body, so any folder works; the signature rides along so a verdict on a card
+     that has since changed is refused rather than applied. */
+  var FOLDERDB = 'owner-board', FOLDERSTORE = 'folders';
+  function folderDb() {
+    return new Promise(function (ok, fail) {
+      var req = indexedDB.open(FOLDERDB, 1);
+      req.onupgradeneeded = function () { req.result.createObjectStore(FOLDERSTORE); };
+      req.onsuccess = function () { ok(req.result); };
+      req.onerror = function () { fail(req.error); };
+    });
+  }
+  function folderGet() {
+    return folderDb().then(function (db) {
+      return new Promise(function (ok) {
+        var req = db.transaction(FOLDERSTORE).objectStore(FOLDERSTORE).get(CONFIG.board);
+        req.onsuccess = function () { ok(req.result || null); };
+        req.onerror = function () { ok(null); };
+      });
+    }).catch(function () { return null; });
+  }
+  function folderPut(handle) {
+    return folderDb().then(function (db) {
+      return new Promise(function (ok) {
+        var tx = db.transaction(FOLDERSTORE, 'readwrite');
+        if (handle) tx.objectStore(FOLDERSTORE).put(handle, CONFIG.board);
+        else tx.objectStore(FOLDERSTORE).delete(CONFIG.board);
+        tx.oncomplete = tx.onerror = function () { ok(); };
+      });
+    }).catch(function () {});
+  }
+  function chooseFolder() {
+    window.alert('Choose where verdicts are saved. This is asked once.' + NL + NL
+      + 'Pick this folder:' + NL + CONFIG.inbox);
+    return window.showDirectoryPicker({ id: 'verdicts-' + CONFIG.board, mode: 'readwrite' })
+      .then(function (handle) {
+        var want = CONFIG.inboxName;
+        if (handle.name !== want && !window.confirm('That folder is "' + handle.name + '", not "'
+            + want + '". Save there anyway?')) return chooseFolder();
+        return folderPut(handle).then(function () { showFolder(handle); return handle; });
+      });
+  }
+  function showFolder(handle) {
+    var b = document.getElementById('folder');
+    b.hidden = !handle;
+    b.title = handle ? 'Verdicts are saved into "' + handle.name + '". Press to choose another folder.' : '';
+  }
+  function writeInto(handle, name, text) {
+    return handle.queryPermission({ mode: 'readwrite' }).then(function (p) {
+      return p === 'granted' ? p : handle.requestPermission({ mode: 'readwrite' });
+    }).then(function (p) {
+      if (p !== 'granted') throw new Error('permission ' + p);
+      return handle.getFileHandle(name, { create: true });
+    }).then(function (file) { return file.createWritable(); })
+      .then(function (w) { return w.write(text).then(function () { return w.close(); }); });
+  }
+  function download(name, text) {
+    var url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+    var a = el('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+  }
+  var canPick = !!(window.showDirectoryPicker && window.indexedDB && CONFIG.inbox);
+  if (canPick) folderGet().then(showFolder);
+  document.getElementById('folder').addEventListener('click', function () {
+    chooseFolder().catch(function () {});
+  });
+
   document.getElementById('save').addEventListener('click', function () {
     var decided = Object.keys(saved).filter(function (k) { return saved[k].verdict; });
     if (!decided.length) { window.alert('Nothing decided yet.'); return; }
@@ -573,19 +646,24 @@ __TASKCSS__
     };
     var name = CONFIG.prefix + (out.board ? out.board + '-' : '')
       + out.savedAt.slice(0, 19).replace(/[:T]/g, '-') + '.json';
-    var blob = new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' });
-    var url = URL.createObjectURL(blob);
-    var a = el('a');
-    a.href = url;
-    a.download = name;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+    var text = JSON.stringify(out, null, 2);
     var btn = this;
-    btn.textContent = 'Saved - tell the conductor';
-    setTimeout(function () { btn.textContent = 'Save my verdicts'; }, 2600);
-    handOver(decided);
+    function done(where) {
+      btn.textContent = 'Saved' + where + ' - tell the conductor';
+      setTimeout(function () { btn.textContent = 'Save my verdicts'; }, 2600);
+      handOver(decided);
+    }
+    if (!canPick) { download(name, text); done(''); return; }
+    folderGet().then(function (handle) { return handle || chooseFolder(); })
+      .then(function (handle) {
+        return writeInto(handle, name, text).then(function () { done(' to ' + handle.name); });
+      })
+      .catch(function (err) {
+        // Cancelling the folder choice saves nothing, so nothing is handed over.
+        if (err && err.name === 'AbortError') return;
+        download(name, text);
+        done('');
+      });
   });
 
   document.getElementById('copy').addEventListener('click', function () {
@@ -646,6 +724,8 @@ def page_config(board: dict) -> dict:
     return {
         "board": board["id"],
         "copyOnly": list(board.get("copy_only_prefixes") or []),
+        "inbox": verdicts.inbox(board) if board.get("folder") else "",
+        "inboxName": os.path.basename(verdicts.inbox(board)) if board.get("folder") else "",
         "label": board["label"],
         "labels": {
             "accepted": (owner + " accepted") if owner else "Accepted",

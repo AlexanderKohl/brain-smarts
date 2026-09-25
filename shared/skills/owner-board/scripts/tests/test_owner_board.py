@@ -313,6 +313,17 @@ class PageTests(unittest.TestCase):
         self.assertEqual(soil["where"]["href"], "example-app://exampleappid/index.html#beds")
         self.assertNotIn("__", re.sub(r"__[a-z]", "", text).split("<script>")[0])
 
+    def test_the_page_names_the_folder_verdicts_are_saved_into_and_keeps_the_download(self):
+        config = self.brain.config()
+        quiet(build_status.build, config, config.board("garden"))
+        text, page, _ = self.page_data(self.brain.memory / "projects/example-garden/status/status.html")
+        inbox = self.brain.memory / "projects/example-garden/status/verdicts-in"
+        self.assertEqual(Path(page["inbox"]), inbox)
+        self.assertEqual(page["inboxName"], "verdicts-in")
+        # The remembered folder is asked for once; a browser without it still gets a download.
+        self.assertIn("showDirectoryPicker", text)
+        self.assertIn("a.download = name", text)
+
     def test_view_href_keeps_an_optional_part_when_its_field_exists(self):
         href = build_status.view_href("x://{appId}/p[?plot={plotId}]#{view}", "a b", {"appId": "q", "plotId": "7"})
         self.assertEqual(href, "x://q/p?plot=7#a%20b")
