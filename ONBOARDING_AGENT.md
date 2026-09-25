@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-08-06T09:37:00+10:00
-updated: 2026-09-24T10:47:45+10:00
+updated: 2026-09-25T13:32:35+10:00
 owner: brain-owner
 ---
 
@@ -67,6 +67,7 @@ Numbered in reading order.
 | gohighlevel-access | `/library/skills/gohighlevel-access/` | HighLevel agency OAuth (port 8766), subaccounts, CRM APIs; pipeline migration review UI (port 8769) |
 | google-workspace-access | `/library/skills/google-workspace-access/` | Multi-account Google OAuth (port 8767); Gmail/Calendar/Tasks/Drive/Contacts; contact-register integration; draft-first email; optional local SQLite Gmail/Tasks sync (`google_sync_ctl.py` / `google_local_email.py` / `google_local_tasks.py`) |
 | railway-access | `/library/skills/railway-access/` | Railway GraphQL: projects, current deployment ID, timeframe/filtered deploy/build/HTTP logs (account/workspace token in vault) |
+| release-notes | `/library/skills/release-notes/` | One release note per change a user would notice, not per commit; the owner chooses, edits and holds notes on a local page before anything goes out; a team page keeps every past release |
 | ui-implementation | `/library/skills/ui-implementation/` | What a live screen must never do to the person using it: remove only what you made, keep their choices through a refresh, hold a repaint while work is unsaved, put the rule where it cannot be forgotten |
 | ui-mockup | `/library/skills/ui-mockup/` | UI previews built from the product's own stylesheets and measured in the browser; **owner refines the mockup before any of it is implemented or pushed** |
 | xero-access | `/library/skills/xero-access/` | Xero OAuth (port 8765), org selection, downloads, approved writes |
