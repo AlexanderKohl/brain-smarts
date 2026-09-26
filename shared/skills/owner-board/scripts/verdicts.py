@@ -1,9 +1,9 @@
 """Apply a verdicts file the owner saved from a board back onto that board's cards.
 
-**Save my verdicts** writes into the board's own `status/verdicts-in/`, a folder the owner
-chooses once and the page remembers. Where it cannot, it hands the browser a download, so the
-owner's Downloads folder and each folder directly inside it are read too: a browser that asks
-where to save offers whichever folder it used last. A screenshot pasted with a *rework* is
+**Save my verdicts** hands the browser a download, because a page opened from disk cannot
+write a file. So the owner's Downloads folder and each folder directly inside it are read, as
+well as the board's own `status/verdicts-in/`: a browser that asks where to save offers
+whichever folder it used last. A screenshot pasted with a *rework* is
 written to the board's `img/` and shown under the owner's words. The owner still sends one short message: the conductor only exists
 between messages, so a file saved silently would sit unread.
 

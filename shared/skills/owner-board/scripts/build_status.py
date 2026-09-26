@@ -38,7 +38,6 @@ import build_boards  # noqa: E402
 import cards  # noqa: E402
 import reconcile  # noqa: E402
 import task_board  # noqa: E402
-import verdicts  # noqa: E402
 
 PAGE = """<!doctype html>
 <html lang="en">
@@ -136,12 +135,6 @@ textarea.why {
 .shots img { display:block; height:64px; border:1px solid var(--line); border-radius:4px; cursor:zoom-in; }
 .shots button { position:absolute; top:-7px; right:-7px; padding:0 6px; font-size:12px; border-radius:10px; line-height:18px; }
 .sentshots img { display:block; width:100%; height:auto; margin:6px 0 0; border:1px solid var(--line); border-radius:6px; cursor:zoom-in; }
-.folderask { position:fixed; left:50%; bottom:70px; transform:translateX(-50%); z-index:30; width:min(620px, calc(100% - 32px));
-  background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:14px 16px; box-shadow:0 6px 24px rgba(16,32,42,.18); }
-.folderask p { margin:0 0 8px; font-size:13.5px; }
-.folderask .path { display:flex; gap:8px; margin:0 0 10px; }
-.folderask input { flex:1 1 auto; min-width:0; font:inherit; font-size:12.5px; padding:6px 8px; border:1px solid var(--line); border-radius:6px; background:var(--surface-2); color:var(--ink); }
-.folderask .acts { display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; }
 .lb {
   position:fixed; inset:0; background:rgba(8,12,16,.86); z-index:50; cursor:zoom-out;
   display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; padding:28px;
@@ -169,7 +162,6 @@ textarea.why {
 }
 .bar span { color:var(--muted); font-size:12.5px; flex:1 1 220px; }
 #savenote:empty { display:none; }
-#savenote.bad { color:#b42318; }
 button {
   font:inherit; font-size:13.5px; border-radius:6px; padding:7px 13px; cursor:pointer;
   border:1px solid var(--line); background:var(--surface-2); color:var(--ink);
@@ -199,7 +191,6 @@ __TASKCSS__
   <span id="tally"></span>
   <span id="savenote" role="status"></span>
   <button id="save" class="primary">Save my verdicts</button>
-  <button id="folder" hidden>Change folder</button>
   <button id="copy">Copy instead</button>
   <button id="reset">Clear</button>
 </div>
@@ -648,130 +639,15 @@ __TASKCSS__
     draw();
   }
 
-  /* Where the verdicts go. Chrome can let a page write into a folder the owner chose once,
-     keeping the folder's handle in IndexedDB so later saves need no dialog. A page opened from
-     disk may not be allowed to keep it, so the choice is read back before it is trusted: if it
-     did not stick, the page says so once, stops offering, and saves as a download. A download
-     works anywhere inside Downloads, because `apply_verdicts.py` looks in its subfolders too.
-     The file names its board in its name and its body; the signature rides along so a verdict
-     on a card that has since changed is refused rather than applied. */
-  var FOLDERDB = 'owner-board', FOLDERSTORE = 'folders';
-  var NOFOLDER = CONFIG.storage + '-no-folder';
-  function folderDb() {
-    return new Promise(function (ok, fail) {
-      var req = indexedDB.open(FOLDERDB, 1);
-      req.onupgradeneeded = function () { req.result.createObjectStore(FOLDERSTORE); };
-      req.onsuccess = function () { ok(req.result); };
-      req.onerror = function () { fail(req.error); };
-    });
-  }
-  function within(ms, what, promise) {
-    return new Promise(function (ok, fail) {
-      var t = setTimeout(function () { fail(new Error(what + ' did not answer in ' + (ms / 1000) + 's')); }, ms);
-      promise.then(function (v) { clearTimeout(t); ok(v); }, function (e) { clearTimeout(t); fail(e); });
-    });
-  }
-  function why(err) { return err ? ((err.name && err.name !== 'Error' ? err.name + ': ' : '') + (err.message || String(err))) : 'unknown'; }
-  function note(text, bad) {
-    var n = document.getElementById('savenote');
-    n.textContent = text;
-    n.className = bad ? 'bad' : '';
-    if (window.console) (bad ? console.error : console.log)('Save my verdicts: ' + text);
-  }
-  function folderGet() {
-    return folderDb().then(function (db) {
-      return new Promise(function (ok) {
-        var req = db.transaction(FOLDERSTORE).objectStore(FOLDERSTORE).get(CONFIG.board);
-        req.onsuccess = function () { ok(req.result || null); };
-        req.onerror = function () { ok(null); };
-      });
-    }).catch(function () { return null; });
-  }
-  function folderPut(handle) {
-    return folderDb().then(function (db) {
-      return new Promise(function (ok, fail) {
-        var tx = db.transaction(FOLDERSTORE, 'readwrite');
-        tx.objectStore(FOLDERSTORE).put(handle, CONFIG.board);
-        tx.oncomplete = function () { ok(); };
-        tx.onerror = tx.onabort = function () { fail(tx.error); };
-      });
-    });
-  }
-  function noFolder() { try { return localStorage.getItem(NOFOLDER) === '1'; } catch (e) { return false; } }
-  var canPick = !!(window.showDirectoryPicker && window.indexedDB && CONFIG.inbox) && !noFolder();
-
-  /* Asked once, in the page rather than an alert, so the path can be selected and copied.
-     Rejects with 'later' when the owner says not now, which still saves, as a download. */
-  function askFolder() {
-    return new Promise(function (ok, fail) {
-      var box = el('div', 'folderask');
-      box.appendChild(el('p', null, 'Choose the folder verdicts are saved into. This is asked once; after that Save my verdicts writes there with no dialog. Pick this folder:'));
-      var row = el('div', 'path');
-      var input = el('input');
-      input.readOnly = true;
-      input.value = CONFIG.inbox;
-      input.addEventListener('focus', function () { input.select(); });
-      var copy = el('button', null, 'Copy');
-      copy.addEventListener('click', function () {
-        input.select();
-        var done = function () { copy.textContent = 'Copied'; };
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(CONFIG.inbox).then(done, function () { document.execCommand('copy'); done(); });
-        } else { document.execCommand('copy'); done(); }
-      });
-      row.appendChild(input);
-      row.appendChild(copy);
-      box.appendChild(row);
-      box.appendChild(el('p', null, 'In the folder dialog, paste it into the address bar at the top, press Enter, then Select Folder.'));
-      var acts = el('div', 'acts');
-      var later = el('button', null, 'Not now');
-      var choose = el('button', 'primary', 'Choose folder');
-      acts.appendChild(later);
-      acts.appendChild(choose);
-      box.appendChild(acts);
-      document.body.appendChild(box);
-      later.addEventListener('click', function () { box.remove(); fail(new Error('later')); });
-      choose.addEventListener('click', function () {
-        window.showDirectoryPicker({ id: 'verdicts-' + CONFIG.board, mode: 'readwrite' }).then(function (handle) {
-          if (handle.name !== CONFIG.inboxName && !window.confirm('That folder is "' + handle.name + '", not "'
-              + CONFIG.inboxName + '". Save there anyway?')) return;
-          box.remove();
-          // Trust the choice only once it has been read back.
-          return within(5000, 'Remembering the folder', folderPut(handle).then(folderGet)).then(function (back) {
-            if (!back) throw new Error('not kept');
-            showFolder(back);
-            ok(back);
-          }).catch(function (err) {
-            note('The folder could not be remembered (' + why(err) + ').', true);
-            try { localStorage.setItem(NOFOLDER, '1'); } catch (e) {}
-            canPick = false;
-            window.alert('This browser will not remember a folder for a page opened from disk, so it will not ask again. '
-              + 'Verdicts are saved as a download instead, and any folder inside Downloads is fine.');
-            fail(new Error('later'));
-          });
-        }, function (err) {
-          // Closing the dialog leaves the question open; anything else is said, not swallowed.
-          if (err && err.name === 'AbortError') return;
-          box.remove();
-          note('The folder dialog failed (' + why(err) + ').', true);
-          fail(err);
-        });
-      });
-    });
-  }
-  function showFolder(handle) {
-    var b = document.getElementById('folder');
-    b.hidden = !handle;
-    b.title = handle ? 'Verdicts are saved into "' + handle.name + '". Press to choose another folder.' : '';
-  }
-  function writeInto(handle, name, text) {
-    return handle.queryPermission({ mode: 'readwrite' }).then(function (p) {
-      return p === 'granted' ? p : handle.requestPermission({ mode: 'readwrite' });
-    }).then(function (p) {
-      if (p !== 'granted') throw new Error('permission ' + p);
-      return handle.getFileHandle(name, { create: true });
-    }).then(function (file) { return file.createWritable(); })
-      .then(function (w) { return w.write(text).then(function () { return w.close(); }); });
+  /* Where the verdicts go. A page opened from disk cannot write a file, so it hands the browser
+     a download. A folder remembered through the File System Access API was tried on
+     26 September 2026 and failed twice on the owner's Chrome, in ways that could not be
+     reproduced, so it was removed: the download is the one path. `apply_verdicts.py` reads
+     Downloads and every folder directly inside it, so whichever folder the save dialog offers
+     is fine. The file names its board in its name and its body; the signature rides along so
+     a verdict on a card that has since changed is refused rather than applied. */
+  function note(text) {
+    document.getElementById('savenote').textContent = text;
   }
   function download(name, text) {
     var url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
@@ -783,10 +659,6 @@ __TASKCSS__
     a.remove();
     setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
   }
-  if (canPick) folderGet().then(showFolder);
-  document.getElementById('folder').addEventListener('click', function () {
-    askFolder().catch(function () {});
-  });
 
   document.getElementById('save').addEventListener('click', function () {
     var decided = Object.keys(saved).filter(function (k) { return saved[k].verdict; });
@@ -813,34 +685,11 @@ __TASKCSS__
       + out.savedAt.slice(0, 19).replace(/[:T]/g, '-') + '.json';
     var text = JSON.stringify(out, null, 2);
     var btn = this;
-    function done(where) {
-      btn.textContent = 'Saved - tell the conductor';
-      setTimeout(function () { btn.textContent = 'Save my verdicts'; }, 2600);
-      handOver(decided);
-    }
-    function downloaded(reason) {
-      download(name, text);
-      note((reason ? reason + ' ' : '') + 'Downloaded ' + name + ' instead: it is found anywhere inside Downloads.', !!reason);
-      done('');
-    }
-    if (!canPick) { downloaded(''); return; }
-    var folder = null;
-    within(5000, 'Reading the remembered folder', folderGet())
-      .catch(function () { return null; })
-      .then(function (handle) { return handle || askFolder(); })
-      .then(function (handle) {
-        folder = handle;
-        return within(15000, 'Writing into ' + handle.name, writeInto(handle, name, text));
-      })
-      .then(function () {
-        note('Saved ' + name + ' into ' + folder.name + '.');
-        done('');
-      })
-      .catch(function (err) {
-        // Not now, a folder that was not kept, or a failed write: save as a download, and say why.
-        if (err && err.message === 'later') { downloaded(''); return; }
-        downloaded('Could not save into the folder (' + why(err) + ').');
-      });
+    download(name, text);
+    note('Downloaded ' + name + '. Save it in any folder inside Downloads, then tell the conductor.');
+    btn.textContent = 'Saved - tell the conductor';
+    setTimeout(function () { btn.textContent = 'Save my verdicts'; }, 2600);
+    handOver(decided);
   });
 
   document.getElementById('copy').addEventListener('click', function () {
@@ -901,8 +750,6 @@ def page_config(board: dict) -> dict:
     return {
         "board": board["id"],
         "copyOnly": list(board.get("copy_only_prefixes") or []),
-        "inbox": verdicts.inbox(board) if board.get("folder") else "",
-        "inboxName": os.path.basename(verdicts.inbox(board)) if board.get("folder") else "",
         "label": board["label"],
         "labels": {
             "accepted": (owner + " accepted") if owner else "Accepted",

@@ -17,7 +17,7 @@ script_paths:
   - /shared/skills/owner-board/scripts/task_board.py
   - /shared/skills/owner-board/scripts/verdicts.py
 created: 2026-09-18T11:05:00+10:00
-updated: 2026-09-26T11:34:49+10:00
+updated: 2026-09-26T15:13:25+10:00
 owner: brain-owner
 project_refs:
   - /memory/projects/brain-development
@@ -238,15 +238,13 @@ is registered.
 
 ### Taking the verdict back
 
-The owner decides on the card face and presses **Save my verdicts**, which writes one JSON file
-naming its board. The first save asks once, in the page, for the folder: it shows
-`<board>/verdicts-in/` in a box that can be copied, and the owner picks it in the folder dialog.
-The page keeps that folder's handle in IndexedDB (keyed by board id) and reads it back before
-trusting it; every later save writes straight into it with no dialog, and **Change folder**
-picks again. When the browser offers no folder picker, will not keep the choice for a page
-opened from disk, or the write fails, the page says so once and saves as a download instead.
-`apply_verdicts.py` reads Downloads and every folder directly inside it, so a download is found
-in whichever subfolder the browser offered.
+The owner decides on the card face and presses **Save my verdicts**, which hands the browser one
+JSON file naming its board, as a download, and says in the bar which file it was. Any folder
+inside Downloads will do: `apply_verdicts.py` reads Downloads and every folder directly inside
+it, as well as `<board>/verdicts-in/`, so whichever folder the save dialog offers is fine. A
+folder remembered through the File System Access API was tried on 26 September 2026 and failed
+twice on a real owner's Chrome for a page opened from disk; it was removed rather than kept as a
+second path.
 
 A screenshot pasted into a card's reason box travels with the verdict. The page shrinks it to at
 most 1600px wide, shows it as a thumbnail with a remove button, and puts it in the saved file.
