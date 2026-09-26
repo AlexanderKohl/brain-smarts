@@ -8,6 +8,7 @@ Every name, product and identifier here is invented (SMART-RULE-0008).
 
 from __future__ import annotations
 
+import base64
 import contextlib
 import io
 import json
@@ -384,6 +385,31 @@ class VerdictTests(unittest.TestCase):
         seed = next(c for c in cards.load(self.garden)["items"] if c["id"] == "seed-list")
         self.assertEqual((seed["state"], seed["sent_back"]), ("rework", "sort by sowing month"))
         self.assertTrue((self.garden["folder"] / "verdicts-applied" / path.name).exists())
+
+    def test_screenshots_sent_back_are_kept_beside_the_card_and_shown(self):
+        png = "data:image/png;base64," + base64.b64encode(b"\x89PNG\r\n\x1a\nfake").decode("ascii")
+        path = self.save(self.garden, [{"id": "seed-list", "verdict": "rework", "why": "see the picture",
+                                        "shots": [png, "data:text/html;base64,PHA+"]}], "s")
+        verdicts.apply(self.garden, str(path))
+        seed = next(c for c in cards.load(self.garden)["items"] if c["id"] == "seed-list")
+        # Only the image is kept; the owner's words stay exactly as written.
+        self.assertEqual(seed["sent_back"], "see the picture")
+        self.assertEqual(len(seed["sent_back_images"]), 1)
+        rel = seed["sent_back_images"][0]
+        self.assertTrue(rel.startswith("img/seed-list-") and rel.endswith(".png"))
+        self.assertTrue((self.garden["folder"] / rel).exists())
+        quiet(build_status.build, self.config, self.garden)
+        page = (self.garden["folder"] / "status.html").read_text(encoding="utf-8")
+        self.assertIn(png.split(",")[1], page)
+
+    def test_a_verdict_saved_in_a_folder_inside_downloads_is_found(self):
+        downloads = self.brain.root / "fake-downloads"
+        (downloads / "Some Folder").mkdir(parents=True)
+        body = {"schema": self.garden["verdict_schema"], "board": "garden", "verdicts": []}
+        (downloads / "Some Folder" / (self.garden["verdict_prefix"] + "x.json")).write_text(json.dumps(body), encoding="utf-8")
+        with mock.patch.object(verdicts, "downloads", return_value=str(downloads)):
+            found = apply_verdicts.candidates(self.config)
+        self.assertEqual([Path(f).parent.name for f in found], ["Some Folder"])
 
     def test_a_verdict_on_a_changed_card_is_refused(self):
         path = self.save(self.garden, [{"id": "soil-depth", "verdict": "accepted", "sig": "000000000000"}], "b")

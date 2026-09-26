@@ -131,6 +131,17 @@ textarea.why {
 .adrift ul { margin:0; padding-left:18px; font-size:13px; }
 .adrift li { margin:2px 0; }
 .shot { display:block; margin:0 0 6px; border:1px solid var(--line); border-radius:6px; overflow:hidden; cursor:zoom-in; }
+.shots { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 0; }
+.shots span { position:relative; }
+.shots img { display:block; height:64px; border:1px solid var(--line); border-radius:4px; cursor:zoom-in; }
+.shots button { position:absolute; top:-7px; right:-7px; padding:0 6px; font-size:12px; border-radius:10px; line-height:18px; }
+.sentshots img { display:block; width:100%; height:auto; margin:6px 0 0; border:1px solid var(--line); border-radius:6px; cursor:zoom-in; }
+.folderask { position:fixed; left:50%; bottom:70px; transform:translateX(-50%); z-index:30; width:min(620px, calc(100% - 32px));
+  background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:14px 16px; box-shadow:0 6px 24px rgba(16,32,42,.18); }
+.folderask p { margin:0 0 8px; font-size:13.5px; }
+.folderask .path { display:flex; gap:8px; margin:0 0 10px; }
+.folderask input { flex:1 1 auto; min-width:0; font:inherit; font-size:12.5px; padding:6px 8px; border:1px solid var(--line); border-radius:6px; background:var(--surface-2); color:var(--ink); }
+.folderask .acts { display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; }
 .lb {
   position:fixed; inset:0; background:rgba(8,12,16,.86); z-index:50; cursor:zoom-out;
   display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; padding:28px;
@@ -252,6 +263,24 @@ __TASKCSS__
     return n;
   }
   function store(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  function shrink(file) {
+    return new Promise(function (ok) {
+      var r = new FileReader();
+      r.onload = function () {
+        var im = new Image();
+        im.onload = function () {
+          var scale = Math.min(1, 1600 / im.width);
+          var cv = document.createElement('canvas');
+          cv.width = Math.round(im.width * scale);
+          cv.height = Math.round(im.height * scale);
+          cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height);
+          ok(cv.toDataURL('image/jpeg', 0.88));
+        };
+        im.src = r.result;
+      };
+      r.readAsDataURL(file);
+    });
+  }
 
   var tracks = document.getElementById('tracks');
   Object.keys(DATA.tracks || {}).forEach(function (k) {
@@ -425,6 +454,17 @@ __TASKCSS__
       said.appendChild(el('b', null, L.sentBack + ': '));
       said.appendChild(document.createTextNode(item.sent_back));
       body.appendChild(said);
+      if (item.sent_back_images && item.sent_back_images.length) {
+        var shown = el('div', 'sentshots');
+        item.sent_back_images.forEach(function (src, i) {
+          var im = document.createElement('img');
+          im.src = src;
+          im.alt = L.sentBack + ', screenshot ' + (i + 1);
+          im.addEventListener('click', function (ev) { ev.stopPropagation(); lightbox({ image: src, imageAlt: im.alt }); });
+          shown.appendChild(im);
+        });
+        body.appendChild(shown);
+      }
     }
 
     var rev = el('p', 'rev');
@@ -461,8 +501,8 @@ __TASKCSS__
       });
       c.appendChild(box);
       why.placeholder = item.state === 'yours'
-        ? 'What happened, or what is in the way (optional)'
-        : 'Anything to add, either way (optional)';
+        ? 'What happened, or what is in the way (optional) \u2013 you can paste a screenshot here'
+        : 'Anything to add, either way (optional) \u2013 you can paste a screenshot here';
       why.value = mine.why || '';
       why.addEventListener('click', function (ev) { ev.stopPropagation(); });
       why.addEventListener('input', function () {
@@ -472,6 +512,58 @@ __TASKCSS__
         store(KEY, saved);
       });
       c.appendChild(why);
+
+      /* A screenshot pasted into the reason box travels with the verdict: shrunk to at most
+         1600px wide so a handful fit in the browser's storage, shown as a thumbnail with a
+         remove button, and saved beside the card when the verdict is applied. */
+      var shots = el('div', 'shots');
+      var drawShots = function () {
+        shots.innerHTML = '';
+        ((saved[item.id] || {}).shots || []).forEach(function (src, i) {
+          var holder = el('span');
+          var im = document.createElement('img');
+          im.src = src;
+          im.alt = 'Screenshot ' + (i + 1);
+          im.addEventListener('click', function (ev) { ev.stopPropagation(); lightbox({ image: src, imageAlt: im.alt }); });
+          var x = el('button', null, '\u00d7');
+          x.title = 'Remove this screenshot';
+          x.addEventListener('click', function (ev) {
+            ev.stopPropagation();
+            saved[item.id].shots.splice(i, 1);
+            store(KEY, saved);
+            drawShots();
+          });
+          holder.appendChild(im);
+          holder.appendChild(x);
+          shots.appendChild(holder);
+        });
+      };
+      why.addEventListener('paste', function (ev) {
+        var items = (ev.clipboardData && ev.clipboardData.items) || [];
+        var files = [];
+        for (var i = 0; i < items.length; i++) {
+          if (items[i].kind === 'file' && /^image\//.test(items[i].type)) files.push(items[i].getAsFile());
+        }
+        if (!files.length) return;
+        ev.preventDefault();
+        files.forEach(function (f) {
+          shrink(f).then(function (src) {
+            saved[item.id] = saved[item.id] || {};
+            saved[item.id].title = item.title;
+            (saved[item.id].shots = saved[item.id].shots || []).push(src);
+            try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (e) {
+              // Storage refused outright (a preview, a private window) keeps it for this visit.
+              if (!e || e.name !== 'QuotaExceededError') { drawShots(); return; }
+              saved[item.id].shots.pop();
+              window.alert('That screenshot does not fit in this browser' + String.fromCharCode(39) + 's storage. Save your verdicts first, then paste it on its own.');
+            }
+            drawShots();
+          });
+        });
+      });
+      shots.addEventListener('click', function (ev) { ev.stopPropagation(); });
+      drawShots();
+      c.appendChild(shots);
     }
 
     if (moved) {
@@ -488,7 +580,11 @@ __TASKCSS__
     c.appendChild(hint);
     // Ask, decide, then the detail for anyone who wants it.
     var ctl = c.querySelector('.verdict');
-    if (ctl) { c.insertBefore(ctl, body); var w2 = c.querySelector('.why'); if (w2) c.insertBefore(w2, body); }
+    if (ctl) {
+      c.insertBefore(ctl, body);
+      var w2 = c.querySelector('.why'); if (w2) c.insertBefore(w2, body);
+      var s2 = c.querySelector('.shots'); if (s2) c.insertBefore(s2, body);
+    }
 
     c.addEventListener('click', function () {
       var now = body.style.display === 'none';
@@ -521,6 +617,7 @@ __TASKCSS__
       var v = saved[k];
       var s = (v.verdict === 'accepted' ? 'ACCEPTED' : 'REWORK') + ' \\u00b7 ' + k;
       if (v.verdict === 'rework' && v.why) s += NL + '    ' + v.why.split(NL).join(NL + '    ');
+      if (v.shots && v.shots.length) s += NL + '    (' + v.shots.length + ' screenshot(s): use Save my verdicts to send them)';
       return s;
     });
   }
@@ -548,14 +645,15 @@ __TASKCSS__
     draw();
   }
 
-  /* Where the verdicts go. Chrome lets a `file://` page write into a folder the owner chose
-     once: the folder's handle is kept in IndexedDB, so every later save writes straight into
-     it with no dialog. The first save asks for the board's own `verdicts-in` folder by name.
-     Where that is not available, or the write fails, the page hands the browser a download as
-     before, and `apply_verdicts.py` still reads Downloads. The file names its board in its
-     name and its body, so any folder works; the signature rides along so a verdict on a card
-     that has since changed is refused rather than applied. */
+  /* Where the verdicts go. Chrome can let a page write into a folder the owner chose once,
+     keeping the folder's handle in IndexedDB so later saves need no dialog. A page opened from
+     disk may not be allowed to keep it, so the choice is read back before it is trusted: if it
+     did not stick, the page says so once, stops offering, and saves as a download. A download
+     works anywhere inside Downloads, because `apply_verdicts.py` looks in its subfolders too.
+     The file names its board in its name and its body; the signature rides along so a verdict
+     on a card that has since changed is refused rather than applied. */
   var FOLDERDB = 'owner-board', FOLDERSTORE = 'folders';
+  var NOFOLDER = CONFIG.storage + '-no-folder';
   function folderDb() {
     return new Promise(function (ok, fail) {
       var req = indexedDB.open(FOLDERDB, 1);
@@ -575,24 +673,68 @@ __TASKCSS__
   }
   function folderPut(handle) {
     return folderDb().then(function (db) {
-      return new Promise(function (ok) {
+      return new Promise(function (ok, fail) {
         var tx = db.transaction(FOLDERSTORE, 'readwrite');
-        if (handle) tx.objectStore(FOLDERSTORE).put(handle, CONFIG.board);
-        else tx.objectStore(FOLDERSTORE).delete(CONFIG.board);
-        tx.oncomplete = tx.onerror = function () { ok(); };
+        tx.objectStore(FOLDERSTORE).put(handle, CONFIG.board);
+        tx.oncomplete = function () { ok(); };
+        tx.onerror = tx.onabort = function () { fail(tx.error); };
       });
-    }).catch(function () {});
+    });
   }
-  function chooseFolder() {
-    window.alert('Choose where verdicts are saved. This is asked once.' + NL + NL
-      + 'Pick this folder:' + NL + CONFIG.inbox);
-    return window.showDirectoryPicker({ id: 'verdicts-' + CONFIG.board, mode: 'readwrite' })
-      .then(function (handle) {
-        var want = CONFIG.inboxName;
-        if (handle.name !== want && !window.confirm('That folder is "' + handle.name + '", not "'
-            + want + '". Save there anyway?')) return chooseFolder();
-        return folderPut(handle).then(function () { showFolder(handle); return handle; });
+  function noFolder() { try { return localStorage.getItem(NOFOLDER) === '1'; } catch (e) { return false; } }
+  var canPick = !!(window.showDirectoryPicker && window.indexedDB && CONFIG.inbox) && !noFolder();
+
+  /* Asked once, in the page rather than an alert, so the path can be selected and copied.
+     Rejects with 'later' when the owner says not now, which still saves, as a download. */
+  function askFolder() {
+    return new Promise(function (ok, fail) {
+      var box = el('div', 'folderask');
+      box.appendChild(el('p', null, 'Choose the folder verdicts are saved into. This is asked once; after that Save my verdicts writes there with no dialog. Pick this folder:'));
+      var row = el('div', 'path');
+      var input = el('input');
+      input.readOnly = true;
+      input.value = CONFIG.inbox;
+      input.addEventListener('focus', function () { input.select(); });
+      var copy = el('button', null, 'Copy');
+      copy.addEventListener('click', function () {
+        input.select();
+        var done = function () { copy.textContent = 'Copied'; };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(CONFIG.inbox).then(done, function () { document.execCommand('copy'); done(); });
+        } else { document.execCommand('copy'); done(); }
       });
+      row.appendChild(input);
+      row.appendChild(copy);
+      box.appendChild(row);
+      box.appendChild(el('p', null, 'In the folder dialog, paste it into the address bar at the top, press Enter, then Select Folder.'));
+      var acts = el('div', 'acts');
+      var later = el('button', null, 'Not now');
+      var choose = el('button', 'primary', 'Choose folder');
+      acts.appendChild(later);
+      acts.appendChild(choose);
+      box.appendChild(acts);
+      document.body.appendChild(box);
+      later.addEventListener('click', function () { box.remove(); fail(new Error('later')); });
+      choose.addEventListener('click', function () {
+        window.showDirectoryPicker({ id: 'verdicts-' + CONFIG.board, mode: 'readwrite' }).then(function (handle) {
+          if (handle.name !== CONFIG.inboxName && !window.confirm('That folder is "' + handle.name + '", not "'
+              + CONFIG.inboxName + '". Save there anyway?')) return;
+          box.remove();
+          // Trust the choice only once it has been read back.
+          return folderPut(handle).then(folderGet).then(function (back) {
+            if (!back) throw new Error('not kept');
+            showFolder(back);
+            ok(back);
+          }).catch(function () {
+            try { localStorage.setItem(NOFOLDER, '1'); } catch (e) {}
+            canPick = false;
+            window.alert('This browser will not remember a folder for a page opened from disk, so it will not ask again. '
+              + 'Verdicts are saved as a download instead, and any folder inside Downloads is fine.');
+            fail(new Error('later'));
+          });
+        }, function () { /* the folder dialog was closed: the question stays open */ });
+      });
+    });
   }
   function showFolder(handle) {
     var b = document.getElementById('folder');
@@ -618,10 +760,9 @@ __TASKCSS__
     a.remove();
     setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
   }
-  var canPick = !!(window.showDirectoryPicker && window.indexedDB && CONFIG.inbox);
   if (canPick) folderGet().then(showFolder);
   document.getElementById('folder').addEventListener('click', function () {
-    chooseFolder().catch(function () {});
+    askFolder().catch(function () {});
   });
 
   document.getElementById('save').addEventListener('click', function () {
@@ -640,7 +781,8 @@ __TASKCSS__
           verdict: saved[id].verdict,
           why: saved[id].why || '',
           sig: (byId[id] || {}).sig || '',
-          version: (byId[id] || {}).version || ''
+          version: (byId[id] || {}).version || '',
+          shots: saved[id].shots || []
         };
       })
     };
@@ -654,13 +796,12 @@ __TASKCSS__
       handOver(decided);
     }
     if (!canPick) { download(name, text); done(''); return; }
-    folderGet().then(function (handle) { return handle || chooseFolder(); })
+    folderGet().then(function (handle) { return handle || askFolder(); })
       .then(function (handle) {
         return writeInto(handle, name, text).then(function () { done(' to ' + handle.name); });
       })
-      .catch(function (err) {
-        // Cancelling the folder choice saves nothing, so nothing is handed over.
-        if (err && err.name === 'AbortError') return;
+      .catch(function () {
+        // Not now, a folder that was not kept, or a failed write: save as a download.
         download(name, text);
         done('');
       });
@@ -778,6 +919,17 @@ def inline_images(board: dict, data: dict) -> int:
     """
     done = 0
     for item in data["items"]:
+        shots = []
+        for rel in item.get("sent_back_images") or []:
+            path = os.path.join(str(board["folder"]), rel)
+            if not os.path.exists(path):
+                print("  MISSING screenshot for " + item["id"] + ": " + rel)
+                continue
+            mime = mimetypes.guess_type(path)[0] or "image/png"
+            with open(path, "rb") as fh:
+                shots.append("data:" + mime + ";base64," + base64.b64encode(fh.read()).decode("ascii"))
+            done += 1
+        item["sent_back_images"] = shots
         src = item.get("image")
         if not src or src.startswith("data:"):
             continue

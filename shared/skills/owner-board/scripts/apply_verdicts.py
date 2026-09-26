@@ -27,7 +27,7 @@ import verdicts  # noqa: E402
 
 
 def candidates(config: board_config.Config, extra: list | None = None) -> list:
-    folders = [verdicts.downloads()] + [verdicts.inbox(b) for b in config.boards] + list(extra or [])
+    folders = verdicts.downloads_folders() + [verdicts.inbox(b) for b in config.boards] + list(extra or [])
     found: set = set()
     for board in config.boards:
         found.update(verdicts.saved_files(board, folders))

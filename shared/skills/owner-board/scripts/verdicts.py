@@ -2,8 +2,9 @@
 
 **Save my verdicts** writes into the board's own `status/verdicts-in/`, a folder the owner
 chooses once and the page remembers. Where it cannot, it hands the browser a download, so the
-owner's Downloads folder is read as a fallback, because that is where a browser puts a file
-when nobody says otherwise. The owner still sends one short message: the conductor only exists
+owner's Downloads folder and each folder directly inside it are read too: a browser that asks
+where to save offers whichever folder it used last. A screenshot pasted with a *rework* is
+written to the board's `img/` and shown under the owner's words. The owner still sends one short message: the conductor only exists
 between messages, so a file saved silently would sit unread.
 
 - *accepted* retires the card: its version and title go under `closed` in `board.md` and the
@@ -21,7 +22,9 @@ Applied files move to `status/verdicts-applied/`, which is the record of what wa
 from __future__ import annotations
 
 import argparse
+import base64
 import glob
+import re
 import json
 import os
 import sys
@@ -37,13 +40,24 @@ def downloads() -> str:
     return os.path.join(os.path.expanduser("~"), "Downloads")
 
 
+def downloads_folders() -> list:
+    """Downloads and each folder directly inside it: a browser that asks where to save offers
+    the last folder it used, so a verdict lands in whichever subfolder that was."""
+    top = downloads()
+    try:
+        subs = [e.path for e in os.scandir(top) if e.is_dir()]
+    except OSError:
+        subs = []
+    return [top] + sorted(subs)
+
+
 def inbox(board: dict) -> str:
     return os.path.join(str(board["folder"]), "verdicts-in")
 
 
 def saved_files(board: dict, folders: list | None = None) -> list:
     found: list = []
-    for folder in folders or [inbox(board), downloads()]:
+    for folder in folders or [inbox(board)] + downloads_folders():
         found += glob.glob(os.path.join(folder, board["verdict_prefix"] + "*.json"))
     return sorted(set(found), key=os.path.getmtime)
 
@@ -61,6 +75,27 @@ def read(board: dict, path: str) -> dict:
         raise Refused("That file was saved from the " + came_from + " board, not " + board["id"]
                       + ". Run apply_verdicts.py, which sends it to the right one.")
     return saved
+
+
+SHOT = re.compile(r"^data:image/(png|jpeg|webp|gif);base64,([A-Za-z0-9+/=]+)$")
+
+
+def save_shots(board: dict, card_id: str, saved_at: str, shots: list, dry_run: bool) -> list:
+    """Write the screenshots pasted with a verdict into the board's `img/` and return their
+    paths relative to the board folder. Anything that is not a plain image is dropped."""
+    stamp = re.sub(r"[^0-9]", "", saved_at)[:14] or "undated"
+    paths = []
+    for n, shot in enumerate(shots, 1):
+        found = SHOT.match(str(shot))
+        if not found:
+            continue
+        ext = "jpg" if found.group(1) == "jpeg" else found.group(1)
+        rel = "img/" + card_id + "-" + stamp + "-" + str(n) + "." + ext
+        if not dry_run:
+            os.makedirs(os.path.join(str(board["folder"]), "img"), exist_ok=True)
+            Path(os.path.join(str(board["folder"]), rel)).write_bytes(base64.b64decode(found.group(2)))
+        paths.append(rel)
+    return paths
 
 
 def apply(board: dict, path: str, dry_run: bool = False) -> tuple:
@@ -86,6 +121,8 @@ def apply(board: dict, path: str, dry_run: bool = False) -> tuple:
         elif v.get("verdict") == "rework":
             card["state"] = "rework"
             card["sent_back"] = v.get("why") or "Sent back with no reason given."
+            card["sent_back_images"] = save_shots(board, card["id"], saved.get("savedAt") or "",
+                                                  v.get("shots") or [], dry_run)
             if not dry_run:
                 cards.write(board, card)
             applied.append("sent back " + card["id"])

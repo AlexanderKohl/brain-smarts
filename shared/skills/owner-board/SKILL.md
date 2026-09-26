@@ -17,7 +17,7 @@ script_paths:
   - /shared/skills/owner-board/scripts/task_board.py
   - /shared/skills/owner-board/scripts/verdicts.py
 created: 2026-09-18T11:05:00+10:00
-updated: 2026-09-26T09:45:34+10:00
+updated: 2026-09-26T11:34:49+10:00
 owner: brain-owner
 project_refs:
   - /memory/projects/brain-development
@@ -239,12 +239,22 @@ is registered.
 ### Taking the verdict back
 
 The owner decides on the card face and presses **Save my verdicts**, which writes one JSON file
-naming its board. The first save asks once for the folder and names the one to pick,
-`<board>/verdicts-in/`; the page keeps that folder's handle in IndexedDB (keyed by board id),
-and every later save writes straight into it with no dialog. **Change folder** beside the button
-picks again. Where the browser offers no folder picker, or the write fails, the page falls back
-to a download, which lands wherever the browser puts downloads; `apply_verdicts.py` reads
-Downloads too. The owner then sends one short message, and the conductor runs:
+naming its board. The first save asks once, in the page, for the folder: it shows
+`<board>/verdicts-in/` in a box that can be copied, and the owner picks it in the folder dialog.
+The page keeps that folder's handle in IndexedDB (keyed by board id) and reads it back before
+trusting it; every later save writes straight into it with no dialog, and **Change folder**
+picks again. When the browser offers no folder picker, will not keep the choice for a page
+opened from disk, or the write fails, the page says so once and saves as a download instead.
+`apply_verdicts.py` reads Downloads and every folder directly inside it, so a download is found
+in whichever subfolder the browser offered.
+
+A screenshot pasted into a card's reason box travels with the verdict. The page shrinks it to at
+most 1600px wide, shows it as a thumbnail with a remove button, and puts it in the saved file.
+Applying a *rework* writes it to `<board>/img/<card>-<saved>-<n>.<ext>` and adds it as an image
+line under the owner's words, where the board draws it. Only `data:image/` PNG, JPEG, WebP or
+GIF is kept.
+
+The owner then sends one short message, and the conductor runs:
 
     python shared/skills/owner-board/scripts/apply_verdicts.py            # every saved file
     python shared/skills/owner-board/scripts/apply_verdicts.py --dry-run  # say, change nothing

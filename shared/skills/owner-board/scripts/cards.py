@@ -41,6 +41,9 @@ META = {"type", "schema_version", "contract", "parent", "title"}
 # Fields that are genuinely lists. Any other empty value is an empty string.
 LIST_FIELDS = {"area"}
 
+# A screenshot the owner pasted when sending a card back is an image line in that section.
+SHOT_LINE = re.compile(r"^!\[[^\]]*\]\(([^)\s]+)\)\s*$", re.M)
+
 SCALARS = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*):\s*(.*)$")
 SENT_BACK = re.compile(r"^## (?:.+ )?sent it back\s*\n(.*?)(?=\n## |\Z)", re.S | re.M | re.I)
 
@@ -123,7 +126,9 @@ def parse(text: str) -> dict:
         found = re.search(r"^## " + name + r"\s*\n(.*?)(?=\n## |\Z)", body, re.S | re.M)
         out[field] = " ".join(found.group(1).split()) if found else ""
     found = SENT_BACK.search(body)
-    out["sent_back"] = " ".join(found.group(1).split()) if found else ""
+    said = found.group(1) if found else ""
+    out["sent_back_images"] = SHOT_LINE.findall(said)
+    out["sent_back"] = " ".join(SHOT_LINE.sub("", said).split())
     return out
 
 
@@ -181,6 +186,7 @@ def write(board: dict, card: dict) -> str:
     landed = flat.pop("landed", "")
     review = flat.pop("review", "")
     sent_back = flat.pop("sent_back", "")
+    shots = flat.pop("sent_back_images", None) or []
     for name, value in (("landed", landed), ("review", review), ("sent_back", sent_back)):
         if not isinstance(value, str):
             raise TypeError("card %s: %s must be text, not %s - a trailing comma makes a tuple"
@@ -198,6 +204,9 @@ def write(board: dict, card: dict) -> str:
     # conductor's text stops being the owner's.
     if sent_back:
         lines += ["## " + sent_back_heading(board), "", sent_back, ""]
+        lines += ["![Screenshot " + str(n) + "](" + rel + ")" for n, rel in enumerate(shots, 1)]
+        if shots:
+            lines.append("")
     path = os.path.join(cards_folder(board), card["id"] + ".md")
     # Render fully before opening: opening with "w" truncates, so a failure while rendering
     # must happen before anything on disk has changed.
