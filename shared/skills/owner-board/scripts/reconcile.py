@@ -189,7 +189,8 @@ def _git_checks(board: dict, data: dict) -> tuple:
     named = {(i.get("branch") or "") for i in items}
     for tree in trees:
         b = tree["branch"]
-        if not b or b == main or b in named or b in abandoned:
+        # main is a remote name ("origin/testing"); the checkout on its local branch is not a stray.
+        if not b or b == main or prefix + b == main or b in named or b in abandoned:
             continue
         if prefix + b in merged:
             continue  # check 7 says this one better
@@ -197,7 +198,7 @@ def _git_checks(board: dict, data: dict) -> tuple:
 
     # 7. A worktree whose branch is already in.
     for tree in trees:
-        if tree["branch"] and tree["branch"] != main and prefix + tree["branch"] in merged:
+        if tree["branch"] and tree["branch"] != main and prefix + tree["branch"] != main and prefix + tree["branch"] in merged:
             said.append(tree["branch"] + " is merged but its worktree is still on disk.")
 
     # 8. A version that landed and has no card. Closing a card writes its version into

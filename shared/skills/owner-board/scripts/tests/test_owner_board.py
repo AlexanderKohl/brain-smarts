@@ -465,6 +465,20 @@ class ReconcileTests(unittest.TestCase):
         finally:
             brain.close()
 
+    @unittest.skipUnless(HAS_GIT, "git is not installed")
+    def test_the_checkout_on_the_local_main_branch_is_not_a_stray_worktree(self):
+        # main named as a remote branch ("origin/main"), the repository checked out on main.
+        brain = Brain(with_repo=True)
+        try:
+            board = brain.board()
+            board["fetch"] = False
+            board["main"] = "origin/main"
+            said = reconcile.check(board)
+            self.assertFalse(any(s.startswith("main is merged but its worktree") for s in said), said)
+            self.assertFalse(any("a worktree is building main " in s for s in said), said)
+        finally:
+            brain.close()
+
     def test_a_missing_repository_is_said_not_silent(self):
         brain = Brain()
         try:
