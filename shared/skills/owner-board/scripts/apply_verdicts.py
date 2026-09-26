@@ -9,6 +9,11 @@ offers; the conductor runs one command however many boards exist.
 A file whose board is not registered is reported and left alone. A file that names no board
 goes to the only registered board, or is reported when there is more than one.
 
+The owner's task actions (Do now, Done, a note) are applied too: the `tasks` array of a verdicts
+file, and every `task-actions-*.json` saved from the personal or an automatic task page, found in
+the same folders. They change task records through the tasks skill (`task_actions.py`), and the
+owner's *Do now* list is printed at the end for the conductor.
+
     python apply_verdicts.py [--dry-run]
 """
 
@@ -23,21 +28,31 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import board_config  # noqa: E402
+import page_js  # noqa: E402
+import task_actions  # noqa: E402
 import verdicts  # noqa: E402
 
 
 def candidates(config: board_config.Config, extra: list | None = None) -> list:
+    """Every saved verdicts file and task-actions file, oldest first."""
     folders = verdicts.downloads_folders() + [verdicts.inbox(b) for b in config.boards] + list(extra or [])
-    found: set = set()
+    found: set = set(task_actions.saved_files(folders))
     for board in config.boards:
         found.update(verdicts.saved_files(board, folders))
     return sorted(found, key=os.path.getmtime)
 
 
 def route(config: board_config.Config, dry_run: bool = False, folders: list | None = None) -> list:
-    """Apply each file. Returns the ids of the boards that changed."""
+    """Apply each file. Returns the ids of the boards that changed.
+
+    Task actions (in a verdicts file's `tasks`, or a task-actions file) are applied through the
+    tasks skill; a task that changed can be drawn on any board, so then every board is rebuilt.
+    The owner's *Do now* list is printed last, for the conductor to act on.
+    """
     boards = {b["id"]: b for b in config.boards}
     changed: list = []
+    now_list: list = []
+    tasks_changed = False
     files = candidates(config, folders)
     if not files:
         print("  nothing saved - press Save my verdicts on a board first")
@@ -48,6 +63,17 @@ def route(config: board_config.Config, dry_run: bool = False, folders: list | No
             saved = json.loads(Path(path).read_text(encoding="utf-8"))
         except Exception as err:
             print("  UNREADABLE " + name + ": " + str(err))
+            continue
+        if name.startswith(page_js.TASK_PREFIX):
+            print("  " + name + " -> tasks")
+            try:
+                applied, skipped, asked = task_actions.apply_file(config.task_store, path, dry_run)
+            except task_actions.Refused as err:
+                print("  " + str(err))
+                continue
+            verdicts.report(applied, skipped, dry_run)
+            now_list += asked
+            tasks_changed = tasks_changed or bool(applied)
             continue
         which = saved.get("board") or ""
         if not which:
@@ -70,6 +96,15 @@ def route(config: board_config.Config, dry_run: bool = False, folders: list | No
         verdicts.report(applied, skipped, dry_run)
         if not dry_run and which not in changed:
             changed.append(which)
+        if saved.get("tasks"):
+            applied, skipped, asked = task_actions.apply_entries(
+                config.task_store, saved["tasks"], saved.get("savedAt") or "", dry_run)
+            verdicts.report(applied, skipped, dry_run)
+            now_list += asked
+            tasks_changed = tasks_changed or bool(applied)
+    if tasks_changed and not dry_run:
+        changed += [b for b in boards if b not in changed]
+    task_actions.report_now(now_list)
     return changed
 
 

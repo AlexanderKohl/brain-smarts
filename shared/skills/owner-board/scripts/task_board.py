@@ -3,8 +3,10 @@
 The task record under `/memory/tasks/` is the single source (CONTRACT section 9). A board never
 copies a task into a card: this module reads the records each time a page is generated and
 draws them, so a status changed in the record is what the board shows at the next regeneration.
-Tasks carry no verdict; the owner changes a task by changing its record, and every task on a
-board links to its file.
+Every task on a board links to its file. An open task card also carries two toggles, *Do now*
+and *Done*, and a note box that takes pasted screenshots (`page_js.py`); the page only records
+the owner's choice in the browser, and saving hands it to the agent, who applies it to the record
+through the tasks skill (`apply_verdicts.py`). The page itself never changes a record.
 
 Routing, in one place so every page gives the same answer:
 
@@ -48,6 +50,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tasks" / "scripts"))
 
 import board_config  # noqa: E402
+import page_js  # noqa: E402
 import tasks as task_store  # noqa: E402
 
 # Left to right is the way a task travels. The action columns come first; `completed` shows
@@ -122,7 +125,7 @@ __TOKENS__
 * { box-sizing:border-box; }
 body { margin:0; background:var(--bg); color:var(--ink);
   font:14px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-.wrap { padding:20px 16px 60px; max-width:1800px; margin:0 auto; }
+.wrap { padding:20px 16px 110px; max-width:1800px; margin:0 auto; }
 h1 { font-size:20px; margin:0 0 4px; letter-spacing:-.01em; }
 .sub { color:var(--muted); font-size:12.5px; }
 .sub a { color:var(--accent); }
@@ -133,9 +136,16 @@ __CSS__
 <div class="sub">updated __GENERATED__ &middot; <a href="__INDEX__">every board</a></div>
 __SECTION__
 </div>
+__BAR__
+__SCRIPTS__
 <script>
-// The page is regenerated whenever a task or a board changes; a page left open reloads itself.
-setInterval(function () { location.reload(); }, 60000);
+// The page is regenerated whenever a task or a board changes; a page left open reloads itself,
+// except while a note is being typed or a picture is open. Unsaved actions live in storage.
+setInterval(function () {
+  var a = document.activeElement;
+  if ((a && (a.tagName === 'TEXTAREA' || a.tagName === 'INPUT')) || document.querySelector('.lb')) return;
+  location.reload();
+}, 60000);
 </script>
 </body></html>
 """
@@ -347,7 +357,16 @@ def _task_html(task: task_store.Task, ref: str | None, board: dict, page_dir: Pa
             + ('<div class="tmeta">' + "".join(tags) + "</div>" if tags else "")
             + '<p class="ask"><a href="' + esc(_href(page_dir, task.path)) + '">'
             + esc(task.get("title") or task.tid) + "</a></p>"
-            + '<p class="tid">' + esc(task.tid) + "</p>" + wait + "</article>")
+            + '<p class="tid">' + esc(task.tid) + "</p>" + wait
+            + (CONTROLS if column != "completed" else "") + "</article>")
+
+
+# What the owner can do with an open task, wired by `page_js.TASKS_JS`. Buttons and a text box,
+# never a form: nothing here submits anything or follows the title's link.
+CONTROLS = ('<div class="tact"><button type="button" class="now" data-action="do_now" aria-pressed="false">Do now</button>'
+            '<button type="button" class="done" data-action="done" aria-pressed="false">Done</button></div>'
+            '<textarea class="tnote-in" rows="1" aria-label="Note for the agent" placeholder="'
+            + html.escape(page_js.NOTE_PLACEHOLDER) + '"></textarea><div class="shots"></div>')
 
 
 def section(board: dict, page_dir: Path, today: datetime.date | None = None) -> str:
@@ -373,8 +392,8 @@ def section(board: dict, page_dir: Path, today: datetime.date | None = None) -> 
                     + (body or '<div class="tempty">Nothing here.</div>') + "</div>")
     return ('<section class="tasks" id="tasks" data-board="' + html.escape(board["key"]) + '">'
             '<h2>Tasks<span class="n">' + str(open_count) + " open</span></h2>"
-            '<p class="tnote">Shown from the task records in /memory/tasks/; a task changes in its record, '
-            "not here. Click a title to open it.</p>"
+            '<p class="tnote">Shown from the task records in /memory/tasks/. Click a title to open the record. '
+            "Mark a task Do now or Done, or leave a note, and save it for the agent with the bar below.</p>"
             '<div class="tboard">' + "".join(cols) + "</div></section>")
 
 
@@ -399,7 +418,9 @@ def _write_page(config: board_config.Config, board: dict, now: str, today: datet
     page = Path(board["page"])
     page.parent.mkdir(parents=True, exist_ok=True)
     index = _href(page.parent, config.directory_folder / "index.html")
-    text = (PAGE.replace("__TOKENS__", TOKENS).replace("__CSS__", CSS)
+    text = (PAGE.replace("__TOKENS__", TOKENS).replace("__CSS__", CSS + page_js.CSS)
+            .replace("__BAR__", page_js.TASK_BAR)
+            .replace("__SCRIPTS__", page_js.SHARED_JS + "\n" + page_js.TASKS_JS + "\n" + page_js.TASK_SAVE_JS)
             .replace("__FAVICON__", board_config.favicon_link(config))
             .replace("__TITLE__", html.escape(board["label"]))
             .replace("__GENERATED__", html.escape(now))

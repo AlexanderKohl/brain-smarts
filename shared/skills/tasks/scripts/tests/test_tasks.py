@@ -233,6 +233,92 @@ class TasksTest(unittest.TestCase):
         if machine != "+13:45":
             self.assertIn("Example/Nowhere from OWNER.md cannot be resolved", note)
 
+    # ------------------------------------------------ done, do-now, note
+
+    STATE_WITH_RECENT = (
+        "# State\n\n## Open tasks (3, ordered by task number ascending)\n\n"
+        "| Task | Status | Priority | Review / waiting on | Title |\n|---|---|---|---|---|\n"
+        "| `TASK-2026-0001` | **waiting** | normal | review 2026-03-09 | Send a quote |\n"
+        "| `TASK-2026-0002` | **ready** | normal | - | Renew the example.org domain |\n"
+        "| `TASK-2026-0003` | **ready** | normal | - | File the quarterly report |\n\n"
+        "## Recently completed\n\n- `TASK-2026-0006` Order business cards (2026-03-01)\n")
+    NOW = "2026-03-10T09:00:00+10:00"
+
+    def record(self, folder: str, stem: str) -> str:
+        return (self.store / folder / f"{stem}.md").read_text(encoding="utf-8")
+
+    def test_done_completes_moves_and_takes_the_state_row_out(self) -> None:
+        (self.store / "STATE.md").write_text(self.STATE_WITH_RECENT, encoding="utf-8")
+        code, out = run("done", "TASK-2026-0002", "--note", "Renewed for two years.\nReceipt filed.",
+                        "--now", self.NOW, "--no-board", cwd=self.root)
+        self.assertEqual(code, 0, out)
+        self.assertFalse((self.store / "open" / "TASK-2026-0002-renew-domain.md").exists())
+        text = self.record("completed", "TASK-2026-0002-renew-domain")
+        meta = tasks.parse_front_matter(text)
+        self.assertEqual((meta["status"], meta["updated"]), ("completed", self.NOW))
+        self.assertIn(f"## History\n\n- {self.NOW} – done, marked by the owner on the board.\n"
+                      "  The owner's note: Renewed for two years.\n  Receipt filed.\n", text)
+        state = self.state()
+        self.assertNotIn("TASK-2026-0002", state.split("## Recently completed")[0])
+        self.assertIn("## Open tasks (2, ordered", state)
+        self.assertIn("## Recently completed\n\n- `TASK-2026-0002` Renew the example.org domain (2026-03-10)\n"
+                      "- `TASK-2026-0006` Order business cards", state)
+        self.assertEqual(run("check", cwd=self.root)[0], 0)
+
+    def test_done_without_a_recently_completed_section_adds_none(self) -> None:
+        (self.store / "STATE.md").write_text(self.STATE_WITH_RECENT.split("## Recently")[0], encoding="utf-8")
+        path, said = tasks.complete(self.store, "TASK-2026-0003", now=self.NOW)
+        self.assertEqual(path.parent.name, "completed")
+        self.assertNotIn("Recently completed", self.state())
+        self.assertIn("## Open tasks (2,", self.state())
+        with self.assertRaises(ValueError):          # already completed
+            tasks.complete(self.store, "TASK-2026-0003", now=self.NOW)
+
+    def test_do_now_raises_priority_and_sets_ready_unless_in_progress(self) -> None:
+        (self.store / "STATE.md").write_text(self.STATE_WITH_RECENT, encoding="utf-8")
+        tasks.do_now(self.store, "TASK-2026-0001", note="Before Friday, please.", now=self.NOW)
+        meta = tasks.parse_front_matter(self.record("open", "TASK-2026-0001-quote-for-example-plumbing"))
+        self.assertEqual((meta["status"], meta["priority"]), ("ready", "high"))
+        self.assertIn("Asked for now by the owner (priority high, ready).\n  The owner's note: Before Friday, please.",
+                      self.record("open", "TASK-2026-0001-quote-for-example-plumbing"))
+        self.assertIn("| `TASK-2026-0001` | **ready** | high |", self.state())
+        self.add("open", "TASK-2026-0009-going", task("TASK-2026-0009", "Paint the fence", "in_progress"))
+        tasks.do_now(self.store, "TASK-2026-0009", now=self.NOW)
+        meta = tasks.parse_front_matter(self.record("open", "TASK-2026-0009-going"))
+        self.assertEqual((meta["status"], meta["priority"]), ("in_progress", "high"))
+        # An inbox task becomes ready, so it moves to open/ and gains its row.
+        tasks.do_now(self.store, "TASK-2026-0007", now=self.NOW)
+        self.assertTrue((self.store / "open" / "TASK-2026-0007-sort-receipts.md").is_file())
+        self.assertFalse((self.store / "inbox" / "TASK-2026-0007-sort-receipts.md").exists())
+        self.assertIn("| `TASK-2026-0007` | **ready** | high |", self.state())
+        with self.assertRaises(ValueError):
+            tasks.do_now(self.store, "TASK-2026-0006", now=self.NOW)
+        self.assertEqual(run("check", cwd=self.root)[0], 0)
+
+    def test_note_adds_history_only(self) -> None:
+        before = tasks.parse_front_matter(self.record("open", "TASK-2026-0005-stuck"))
+        code, out = run("note", "TASK-2026-0005", "--note", "The new host is Example Mail.", "--now", self.NOW,
+                        "--no-board", cwd=self.root)
+        self.assertEqual(code, 0, out)
+        text = self.record("open", "TASK-2026-0005-stuck")
+        self.assertIn(f"- {self.NOW} – Note from the owner.\n  The owner's note: The new host is Example Mail.", text)
+        self.assertEqual(tasks.parse_front_matter(text)["status"], before["status"])
+
+    def test_an_unknown_task_id_is_an_error(self) -> None:
+        code, out = run("done", "TASK-2026-0999", "--no-board", cwd=self.root)
+        self.assertEqual(code, 1)
+        self.assertIn("no task TASK-2026-0999", out)
+
+    def test_only_plain_images_are_kept_and_linked(self) -> None:
+        png = "data:image/png;base64," + __import__("base64").b64encode(b"\x89PNG fictional").decode()
+        shots = [png, "data:text/html;base64,PHA+", "data:image/svg+xml;base64,PHN2Zz4=", "data:image/png;base64,@@"]
+        tasks.add_note(self.store, "TASK-2026-0004", note="", shots=shots, now=self.NOW)
+        found = sorted(p.name for p in (self.store / "img").iterdir())
+        self.assertEqual(found, ["TASK-2026-0004-20260310090000-1.png"])
+        self.assertIn("![Screenshot 1](../img/TASK-2026-0004-20260310090000-1.png)", self.record("open", "TASK-2026-0004-later"))
+        with self.assertRaises(ValueError):          # nothing to note
+            tasks.add_note(self.store, "TASK-2026-0004", note=" ", shots=shots[1:], now=self.NOW)
+
     def test_missing_store_exits_2(self) -> None:
         code, out = run("--tasks", "/memory/nowhere", "check", cwd=self.root)
         self.assertEqual(code, 2)

@@ -36,6 +36,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import board_config  # noqa: E402
 import build_boards  # noqa: E402
 import cards  # noqa: E402
+import page_js  # noqa: E402
 import reconcile  # noqa: E402
 import task_board  # noqa: E402
 
@@ -130,17 +131,7 @@ textarea.why {
 .adrift ul { margin:0; padding-left:18px; font-size:13px; }
 .adrift li { margin:2px 0; }
 .shot { display:block; margin:0 0 6px; border:1px solid var(--line); border-radius:6px; overflow:hidden; cursor:zoom-in; }
-.shots { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 0; }
-.shots span { position:relative; }
-.shots img { display:block; height:64px; border:1px solid var(--line); border-radius:4px; cursor:zoom-in; }
-.shots button { position:absolute; top:-7px; right:-7px; padding:0 6px; font-size:12px; border-radius:10px; line-height:18px; }
 .sentshots img { display:block; width:100%; height:auto; margin:6px 0 0; border:1px solid var(--line); border-radius:6px; cursor:zoom-in; }
-.lb {
-  position:fixed; inset:0; background:rgba(8,12,16,.86); z-index:50; cursor:zoom-out;
-  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; padding:28px;
-}
-.lb img { max-width:100%; max-height:84vh; border-radius:6px; background:#fff; }
-.lb p { color:#e7edf2; font-size:13px; margin:0; text-align:center; }
 .shot img { display:block; width:100%; height:auto; }
 .cap { color:var(--muted); font-size:11.5px; margin:0 0 8px; }
 .where { font-size:13px; margin:0 0 8px; }
@@ -154,20 +145,6 @@ textarea.why {
 .blocked { color:var(--muted); font-size:11.5px; margin:5px 0 0; }
 .free { color:var(--accent); font-size:11.5px; font-weight:600; margin:5px 0 0; }
 .alarm { border-left-color:var(--warn); }
-
-.bar {
-  position:fixed; left:0; right:0; bottom:0; background:var(--surface);
-  border-top:1px solid var(--line); padding:10px 16px;
-  display:flex; flex-wrap:wrap; gap:10px; align-items:center; box-shadow:0 -2px 10px rgba(16,32,42,.10);
-}
-.bar span { color:var(--muted); font-size:12.5px; flex:1 1 220px; }
-#savenote:empty { display:none; }
-button {
-  font:inherit; font-size:13.5px; border-radius:6px; padding:7px 13px; cursor:pointer;
-  border:1px solid var(--line); background:var(--surface-2); color:var(--ink);
-}
-button.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
-button:hover { filter:brightness(.97); }
 
 __TASKCSS__
 @media (max-width:900px) {
@@ -196,6 +173,7 @@ __TASKCSS__
 </div>
 <script id="config" type="application/json">__CONFIG__</script>
 <script id="data" type="application/json">__DATA__</script>
+__SHAREDJS__
 <script>
 (function () {
   // One source for a line break: a backslash escape here has to survive Python's parsing of
@@ -250,31 +228,10 @@ __TASKCSS__
   }
   function placeOf(item) { return handedTo(item) || item.state; }
 
-  function el(tag, cls, text) {
-    var n = document.createElement(tag);
-    if (cls) n.className = cls;
-    if (text != null) n.textContent = text;
-    return n;
-  }
+  // Shared with the task pages (page_js.py): one copy of each.
+  var P = window.BoardPage, TASKS = window.BoardTasks;
+  var el = P.el, lightbox = P.lightbox;
   function store(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
-  function shrink(file) {
-    return new Promise(function (ok) {
-      var r = new FileReader();
-      r.onload = function () {
-        var im = new Image();
-        im.onload = function () {
-          var scale = Math.min(1, 1600 / im.width);
-          var cv = document.createElement('canvas');
-          cv.width = Math.round(im.width * scale);
-          cv.height = Math.round(im.height * scale);
-          cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height);
-          ok(cv.toDataURL('image/jpeg', 0.88));
-        };
-        im.src = r.result;
-      };
-      r.readAsDataURL(file);
-    });
-  }
 
   var tracks = document.getElementById('tracks');
   Object.keys(DATA.tracks || {}).forEach(function (k) {
@@ -511,52 +468,14 @@ __TASKCSS__
          1600px wide so a handful fit in the browser's storage, shown as a thumbnail with a
          remove button, and saved beside the card when the verdict is applied. */
       var shots = el('div', 'shots');
-      var drawShots = function () {
-        shots.innerHTML = '';
-        ((saved[item.id] || {}).shots || []).forEach(function (src, i) {
-          var holder = el('span');
-          var im = document.createElement('img');
-          im.src = src;
-          im.alt = 'Screenshot ' + (i + 1);
-          im.addEventListener('click', function (ev) { ev.stopPropagation(); lightbox({ image: src, imageAlt: im.alt }); });
-          var x = el('button', null, '\u00d7');
-          x.title = 'Remove this screenshot';
-          x.addEventListener('click', function (ev) {
-            ev.stopPropagation();
-            saved[item.id].shots.splice(i, 1);
-            store(KEY, saved);
-            drawShots();
-          });
-          holder.appendChild(im);
-          holder.appendChild(x);
-          shots.appendChild(holder);
+      P.attachShots(why, shots,
+        function () { return ((saved[item.id] || {}).shots || []).slice(); },
+        function (list) {
+          saved[item.id] = saved[item.id] || {};
+          saved[item.id].title = item.title;
+          saved[item.id].shots = list;
+          localStorage.setItem(KEY, JSON.stringify(saved));
         });
-      };
-      why.addEventListener('paste', function (ev) {
-        var items = (ev.clipboardData && ev.clipboardData.items) || [];
-        var files = [];
-        for (var i = 0; i < items.length; i++) {
-          if (items[i].kind === 'file' && /^image\\//.test(items[i].type)) files.push(items[i].getAsFile());
-        }
-        if (!files.length) return;
-        ev.preventDefault();
-        files.forEach(function (f) {
-          shrink(f).then(function (src) {
-            saved[item.id] = saved[item.id] || {};
-            saved[item.id].title = item.title;
-            (saved[item.id].shots = saved[item.id].shots || []).push(src);
-            try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (e) {
-              // Storage refused outright (a preview, a private window) keeps it for this visit.
-              if (!e || e.name !== 'QuotaExceededError') { drawShots(); return; }
-              saved[item.id].shots.pop();
-              window.alert('That screenshot does not fit in this browser' + String.fromCharCode(39) + 's storage. Save your verdicts first, then paste it on its own.');
-            }
-            drawShots();
-          });
-        });
-      });
-      shots.addEventListener('click', function (ev) { ev.stopPropagation(); });
-      drawShots();
       c.appendChild(shots);
     }
 
@@ -591,21 +510,6 @@ __TASKCSS__
     return c;
   }
 
-  /* Full size, over the page: browsers refuse to navigate to a `data:` URI at the top level. */
-  function lightbox(item) {
-    var back = el('div', 'lb');
-    var im = document.createElement('img');
-    im.src = item.image;
-    im.alt = item.imageAlt || '';
-    back.appendChild(im);
-    if (item.imageAlt) back.appendChild(el('p', null, item.imageAlt));
-    function shut() { back.remove(); document.removeEventListener('keydown', key); }
-    function key(ev) { if (ev.key === 'Escape') shut(); }
-    back.addEventListener('click', shut);
-    document.addEventListener('keydown', key);
-    document.body.appendChild(back);
-  }
-
   function lines() {
     return Object.keys(saved).filter(function (k) { return saved[k].verdict; }).map(function (k) {
       var v = saved[k];
@@ -616,12 +520,18 @@ __TASKCSS__
     });
   }
 
+  /* Task actions (Do now, Done, a note) travel with the verdicts: they are the owner's word too.
+     They are kept under one key for every page, so whatever is pending is saved from here. */
   function tally() {
-    var n = lines().length;
+    var n = lines().length, t = TASKS.entries().length;
+    var parts = [];
+    if (n) parts.push(n + ' decision' + (n === 1 ? '' : 's'));
+    if (t) parts.push(t + ' task action' + (t === 1 ? '' : 's'));
     document.getElementById('tally').textContent =
-      n ? n + ' decision' + (n === 1 ? '' : 's') + ' ready. Saving writes them to a file for the conductor and clears this column.'
-        : 'Decide on a card, then save. One message in the thread is enough to make the conductor read it.';
+      parts.length ? parts.join(' and ') + ' ready. Saving writes them to a file for the conductor and clears them here.'
+        : 'Decide on a card or a task, then save. One message in the thread is enough to make the conductor read it.';
   }
+  TASKS.onChange(tally);
 
   /* Handing over moves only what was actually saved or copied: a card that left the review
      column without the verdict reaching the conductor is a decision silently lost. */
@@ -649,20 +559,12 @@ __TASKCSS__
   function note(text) {
     document.getElementById('savenote').textContent = text;
   }
-  function download(name, text) {
-    var url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
-    var a = el('a');
-    a.href = url;
-    a.download = name;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
-  }
+  function taskIds(list) { return list.map(function (a) { return a.id; }); }
 
   document.getElementById('save').addEventListener('click', function () {
     var decided = Object.keys(saved).filter(function (k) { return saved[k].verdict; });
-    if (!decided.length) { window.alert('Nothing decided yet.'); return; }
+    var tasks = TASKS.entries();
+    if (!decided.length && !tasks.length) { window.alert('Nothing decided yet.'); return; }
     var byId = {};
     DATA.items.forEach(function (i) { byId[i.id] = i; });
     var out = {
@@ -679,42 +581,48 @@ __TASKCSS__
           version: (byId[id] || {}).version || '',
           shots: saved[id].shots || []
         };
-      })
+      }),
+      // Every pending task action, whichever page it was given on: {id, action, note, shots, title}.
+      tasks: tasks
     };
     var name = CONFIG.prefix + (out.board ? out.board + '-' : '')
       + out.savedAt.slice(0, 19).replace(/[:T]/g, '-') + '.json';
     var text = JSON.stringify(out, null, 2);
     var btn = this;
-    download(name, text);
+    P.download(name, text);
     note('Downloaded ' + name + '. Save it in any folder inside Downloads, then tell the conductor.');
     btn.textContent = 'Saved - tell the conductor';
     setTimeout(function () { btn.textContent = 'Save my verdicts'; }, 2600);
+    TASKS.forget(taskIds(tasks));
     handOver(decided);
   });
 
   document.getElementById('copy').addEventListener('click', function () {
     var decided = Object.keys(saved).filter(function (k) { return saved[k].verdict; });
-    var l = lines();
+    var tasks = TASKS.entries();
+    var l = lines().concat(TASKS.lines());
     if (!l.length) { window.alert('Nothing decided yet.'); return; }
     var text = [CONFIG.label + ' review, ' + new Date().toISOString().slice(0, 10), '', l.join(NL)].join(NL);
     var btn = this;
+    function over() { TASKS.forget(taskIds(tasks)); handOver(decided); }
     function done() {
       btn.textContent = 'Copied';
-      setTimeout(function () { btn.textContent = 'Copy my verdicts'; }, 1400);
-      handOver(decided);
+      setTimeout(function () { btn.textContent = 'Copy instead'; }, 1400);
+      over();
     }
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(done, function () {
         // null means the prompt was cancelled, and a cancelled copy has handed nothing over.
-        if (window.prompt('Copy this:', text) !== null) handOver(decided);
+        if (window.prompt('Copy this:', text) !== null) over();
       });
-    } else if (window.prompt('Copy this:', text) !== null) { handOver(decided); }
+    } else if (window.prompt('Copy this:', text) !== null) { over(); }
   });
 
   document.getElementById('reset').addEventListener('click', function () {
-    if (!window.confirm('Clear every verdict, including the ones you have handed over?')) return;
+    if (!window.confirm('Clear every verdict, including the ones you have handed over, and every unsaved task action?')) return;
     saved = {};
     handed = {};
+    TASKS.forget(taskIds(TASKS.entries()));
     try { localStorage.removeItem(KEY); localStorage.removeItem(HANDKEY); } catch (e) {}
     location.reload();
   });
@@ -854,7 +762,8 @@ def build(config: board_config.Config, board: dict, directory: bool = True) -> d
     out = os.path.join(str(board["folder"]), "status.html")
     page = (
         PAGE.replace("__TOKENS__", task_board.TOKENS)
-        .replace("__TASKCSS__", task_board.CSS)
+        .replace("__TASKCSS__", task_board.CSS + page_js.CSS)
+        .replace("__SHAREDJS__", page_js.SHARED_JS + "\n" + page_js.TASKS_JS)
         .replace("__FAVICON__", board_config.favicon_link(config, board))
         .replace("__TITLE__", html.escape(board["title"]))
         .replace("__MAIN__", html.escape(board.get("main") or "main"))

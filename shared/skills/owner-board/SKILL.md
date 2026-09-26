@@ -13,11 +13,13 @@ script_paths:
   - /shared/skills/owner-board/scripts/build_status.py
   - /shared/skills/owner-board/scripts/card.py
   - /shared/skills/owner-board/scripts/cards.py
+  - /shared/skills/owner-board/scripts/page_js.py
   - /shared/skills/owner-board/scripts/reconcile.py
+  - /shared/skills/owner-board/scripts/task_actions.py
   - /shared/skills/owner-board/scripts/task_board.py
   - /shared/skills/owner-board/scripts/verdicts.py
 created: 2026-09-18T11:05:00+10:00
-updated: 2026-09-26T15:13:25+10:00
+updated: 2026-09-26T16:00:00+10:00
 owner: brain-owner
 project_refs:
   - /memory/projects/brain-development
@@ -312,9 +314,39 @@ the top. Waiting and scheduled run by `next_review`, nearest first, because that
 come back; each shows `waiting_on` and the review date. Completed runs newest first. A status no
 column draws is shown first, in the warning colour, rather than vanishing.
 
-**No verdicts on tasks.** A task card has no accept or send-back control: the owner changes a
-task by changing its record, and the title links to the file. Verdicts on request cards work
-exactly as before.
+**Do now, Done and a note on every task.** Every open task card, on a board's *Tasks* section
+and on the personal and automatic pages, carries two toggles, **Do now** and **Done** (pressing
+the chosen one again clears it), and a note box, *Note for the agent – you can paste a
+screenshot here*. The title still links to the record, and a click on the controls never follows
+that link. The page changes no record: pending actions are kept in the browser under one key
+shared by every page (`owner-board-task-actions`; a task is the same task wherever it is drawn),
+as `{action: do_now | done | "", note, shots, title}`, and a card with something pending shows a
+tag. Completed tasks carry no controls.
+
+Saving hands them to the agent. On a board, **Save my verdicts** adds a `tasks` array
+(`{id, action, note, shots, title}`) to the verdicts file, and the tally and *Copy instead*
+include them. The personal and automatic pages have the same bar and save
+`task-actions-<savedAt>.json` (schema `owner-board/task-actions/v1`, board `tasks`). Whatever was
+saved or copied leaves the browser's storage. `apply_verdicts.py` finds both kinds of file in the
+same folders and applies each task through the tasks skill (`tasks.complete`, `tasks.do_now`,
+`tasks.add_note` – the one way a task changes):
+
+- **done** – status `completed`, `updated` stamped, a History entry with the owner's note, the
+  record moved to `completed/`, its `STATE.md` row removed and the open-task count corrected, and
+  a line at the top of `STATE.md`'s *Recently completed* where that section exists;
+- **do now** – priority `high`, status `ready` unless already `in_progress` (an inbox task moves
+  to `open/` and gains its row), a History entry *Asked for now* with the note;
+- **a note alone** – a History entry with the note.
+
+Screenshots are written to `/memory/tasks/img/<task>-<saved>-<n>.<ext>` and linked in the History
+entry; only PNG, JPEG, WebP or GIF data is kept. An unknown task id is reported and skipped.
+`apply_verdicts.py` ends with a **Do now** list: act on it first. Applied task-actions files
+move to `/memory/tasks/actions-applied/`; the task actions inside a verdicts file are filed with
+it under `verdicts-applied/`. Verdicts on request cards work exactly as before.
+
+The browser code both page kinds share – shrinking a pasted screenshot, the thumbnails and
+lightbox, the download, the task controls and the task pages' save bar – is written once, in
+`page_js.py`, and inlined into each page.
 
 **A new task appears at once.** `tasks.py new` (the tasks skill) creates the record and runs
 `task_board.py build --for <task>`, which rebuilds the one board the task lands on and the
@@ -358,13 +390,15 @@ Run from the brain root. Alphabetical.
 
 | Script | Job |
 | --- | --- |
-| `apply_verdicts.py` | Route every saved verdicts file to the board it names, apply it, rebuild. |
+| `apply_verdicts.py` | Route every saved verdicts file to the board it names, apply it and its task actions, apply every task-actions file, print the Do now list, rebuild. |
 | `board_config.py` | Find the brain root and memory, read and validate `boards.json`. Imported by the others. |
 | `build_boards.py` | Generate `/memory/boards/index.html` from the registry. |
 | `build_status.py` | Generate a board's `status.html` (`--all` for every board), then the directory. |
 | `card.py` | Create, change, show, list or drop one card, then rebuild and reconcile. |
 | `cards.py` | Read and write card records; owns the signature. Imported by the others. |
+| `page_js.py` | The browser code every board page shares: screenshots, lightbox, download, task controls, the task pages' save bar. Imported by the builders. |
 | `reconcile.py` | Compare a board with git and the task records. Called by every build. |
+| `task_actions.py` | Apply the owner's saved task actions through the tasks skill. Imported by `apply_verdicts.py` and `verdicts.py`. |
 | `task_board.py` | Route task records to boards and draw them: `route`, `build [--for <task>]`, `check`. |
 | `verdicts.py` | Apply one saved verdicts file to one board. |
 

@@ -17,7 +17,7 @@ metadata:
     - /shared/skills/owner-board
     - /shared/skills/repository-preflight
   created: 2026-09-23T13:10:00+10:00
-  updated: 2026-09-23T15:38:35+10:00
+  updated: 2026-09-26T16:00:00+10:00
 ---
 
 # Tasks
@@ -38,7 +38,8 @@ anyone holding it in their head.
   `completed/`, `recurring/`), and keep `/memory/tasks/STATE.md` in step.
 - Update the state of a node a task references when its completion changes that node's reality.
 - Run `scripts/tasks.py`: `review`, `check` and `next-id` only read; `new` writes one record,
-  its `STATE.md` row and the generated board pages.
+  its `STATE.md` row and the generated board pages; `done`, `do-now` and `note` change one
+  record, its `STATE.md` row and screenshots under `/memory/tasks/img/`.
 
 Not allowed: deleting a task record (cancel it and move it to `completed/`), creating a task for
 work finished in the same turn, or giving a task a second owner.
@@ -133,14 +134,39 @@ changed.
    and update the state of each referenced node when reality changed.
 3. A task that gains several dependent actions, contributors or real risks becomes a project
    (CONTRACT §9.4); link the task to the new node and close or narrow it.
+4. Three changes have one command each, and the owner board applies the owner's saved task
+   actions through the same functions (`complete`, `do_now`, `add_note`), so a task changes one
+   way only:
+
+   ```powershell
+   python shared/skills/tasks/scripts/tasks.py done TASK-YYYY-NNNN [--note "..."]
+   python shared/skills/tasks/scripts/tasks.py do-now TASK-YYYY-NNNN [--note "..."]
+   python shared/skills/tasks/scripts/tasks.py note TASK-YYYY-NNNN --note "..."
+   ```
+
+   - `done`: status `completed`, `updated` stamped (owner's timezone), a History entry with the
+     note, the record moved to `completed/`, its `STATE.md` row removed and the open-task count
+     corrected, and a line at the top of `STATE.md`'s *Recently completed* when that section
+     exists. A completed task is refused.
+   - `do-now`: priority `high`, status `ready` unless it is `in_progress`, a History entry
+     *Asked for now* with the note; an inbox task moves to `open/` and gains its row. A completed
+     task is refused: reopen it by hand.
+   - `note`: a History entry with the owner's words, nothing else.
+
+   The note is kept verbatim. Screenshots (only through the owner board) are written to
+   `/memory/tasks/img/<task>-<stamp>-<n>.<ext>` and linked from the entry; only PNG, JPEG, WebP
+   and GIF data is kept. An unknown id is an error. Each command refreshes the board unless
+   `--no-board`.
 
 ### Boards
 
 When `owner-board` is active, every open task is shown on exactly one board, drawn from its
 record – never copied – with columns by status (inbox, ready, in progress, waiting with what it
 waits on and its review date, scheduled, blocked, completed recently). The routing and the
-pages belong to `/shared/skills/owner-board/SKILL.md` (**Tasks on the boards**). Tasks carry no
-verdict: a status changes in the record. `tasks.py new` refreshes the board itself; after
+pages belong to `/shared/skills/owner-board/SKILL.md` (**Tasks on the boards**). An open task
+card carries *Do now*, *Done* and a note box for the owner; the page changes nothing itself, and
+`apply_verdicts.py` applies what the owner saved through procedure 4.4, then prints the owner's
+*Do now* list. `tasks.py new`, `done`, `do-now` and `note` refresh the board themselves; after
 changing a record by hand (a status, `project_refs`, a move to `completed/`), run
 
 ```powershell
@@ -166,10 +192,13 @@ that `STATE.md` lists every open task with its status word.
 | `tasks.py review [--today YYYY-MM-DD] [--horizon N]` | What needs attention, as a Markdown table |
 | `tasks.py check` | Record validation; exit code 1 on errors |
 | `tasks.py new --title ... [--status] [--priority] [--project ...] [--due] [--next-review] [--waiting-on] [--no-board]` | Create a record from the template with the next number, add its `STATE.md` row, refresh its board |
+| `tasks.py done <id> [--note] [--now] [--no-board]` | Complete a task: History, move to `completed/`, `STATE.md` row out |
+| `tasks.py do-now <id> [--note] [--now] [--no-board]` | Priority high, status ready unless in progress, History |
+| `tasks.py note <id> --note ... [--now] [--no-board]` | A History entry with the owner's note |
 | `tasks.py next-id [--year YYYY]` | The next free task number across all folders |
 
 Common options: `--tasks <path>` (repository-root or absolute; default `/memory/tasks`) and
-`--json`. Standard library only; only `new` writes.
+`--json`. Standard library only; `new`, `done`, `do-now` and `note` write.
 
 Tests: `python -m unittest discover -s shared/skills/tasks/scripts/tests -v`.
 
