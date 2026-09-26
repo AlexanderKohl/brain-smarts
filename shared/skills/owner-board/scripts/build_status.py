@@ -542,7 +542,7 @@ __TASKCSS__
         var items = (ev.clipboardData && ev.clipboardData.items) || [];
         var files = [];
         for (var i = 0; i < items.length; i++) {
-          if (items[i].kind === 'file' && /^image\//.test(items[i].type)) files.push(items[i].getAsFile());
+          if (items[i].kind === 'file' && /^image\\//.test(items[i].type)) files.push(items[i].getAsFile());
         }
         if (!files.length) return;
         ev.preventDefault();
