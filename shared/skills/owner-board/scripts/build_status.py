@@ -168,6 +168,8 @@ textarea.why {
   display:flex; flex-wrap:wrap; gap:10px; align-items:center; box-shadow:0 -2px 10px rgba(16,32,42,.10);
 }
 .bar span { color:var(--muted); font-size:12.5px; flex:1 1 220px; }
+#savenote:empty { display:none; }
+#savenote.bad { color:#b42318; }
 button {
   font:inherit; font-size:13.5px; border-radius:6px; padding:7px 13px; cursor:pointer;
   border:1px solid var(--line); background:var(--surface-2); color:var(--ink);
@@ -195,6 +197,7 @@ __TASKCSS__
 </div>
 <div class="bar">
   <span id="tally"></span>
+  <span id="savenote" role="status"></span>
   <button id="save" class="primary">Save my verdicts</button>
   <button id="folder" hidden>Change folder</button>
   <button id="copy">Copy instead</button>
@@ -662,6 +665,19 @@ __TASKCSS__
       req.onerror = function () { fail(req.error); };
     });
   }
+  function within(ms, what, promise) {
+    return new Promise(function (ok, fail) {
+      var t = setTimeout(function () { fail(new Error(what + ' did not answer in ' + (ms / 1000) + 's')); }, ms);
+      promise.then(function (v) { clearTimeout(t); ok(v); }, function (e) { clearTimeout(t); fail(e); });
+    });
+  }
+  function why(err) { return err ? ((err.name && err.name !== 'Error' ? err.name + ': ' : '') + (err.message || String(err))) : 'unknown'; }
+  function note(text, bad) {
+    var n = document.getElementById('savenote');
+    n.textContent = text;
+    n.className = bad ? 'bad' : '';
+    if (window.console) (bad ? console.error : console.log)('Save my verdicts: ' + text);
+  }
   function folderGet() {
     return folderDb().then(function (db) {
       return new Promise(function (ok) {
@@ -721,18 +737,25 @@ __TASKCSS__
               + CONFIG.inboxName + '". Save there anyway?')) return;
           box.remove();
           // Trust the choice only once it has been read back.
-          return folderPut(handle).then(folderGet).then(function (back) {
+          return within(5000, 'Remembering the folder', folderPut(handle).then(folderGet)).then(function (back) {
             if (!back) throw new Error('not kept');
             showFolder(back);
             ok(back);
-          }).catch(function () {
+          }).catch(function (err) {
+            note('The folder could not be remembered (' + why(err) + ').', true);
             try { localStorage.setItem(NOFOLDER, '1'); } catch (e) {}
             canPick = false;
             window.alert('This browser will not remember a folder for a page opened from disk, so it will not ask again. '
               + 'Verdicts are saved as a download instead, and any folder inside Downloads is fine.');
             fail(new Error('later'));
           });
-        }, function () { /* the folder dialog was closed: the question stays open */ });
+        }, function (err) {
+          // Closing the dialog leaves the question open; anything else is said, not swallowed.
+          if (err && err.name === 'AbortError') return;
+          box.remove();
+          note('The folder dialog failed (' + why(err) + ').', true);
+          fail(err);
+        });
       });
     });
   }
@@ -791,19 +814,32 @@ __TASKCSS__
     var text = JSON.stringify(out, null, 2);
     var btn = this;
     function done(where) {
-      btn.textContent = 'Saved' + where + ' - tell the conductor';
+      btn.textContent = 'Saved - tell the conductor';
       setTimeout(function () { btn.textContent = 'Save my verdicts'; }, 2600);
       handOver(decided);
     }
-    if (!canPick) { download(name, text); done(''); return; }
-    folderGet().then(function (handle) { return handle || askFolder(); })
+    function downloaded(reason) {
+      download(name, text);
+      note((reason ? reason + ' ' : '') + 'Downloaded ' + name + ' instead: it is found anywhere inside Downloads.', !!reason);
+      done('');
+    }
+    if (!canPick) { downloaded(''); return; }
+    var folder = null;
+    within(5000, 'Reading the remembered folder', folderGet())
+      .catch(function () { return null; })
+      .then(function (handle) { return handle || askFolder(); })
       .then(function (handle) {
-        return writeInto(handle, name, text).then(function () { done(' to ' + handle.name); });
+        folder = handle;
+        return within(15000, 'Writing into ' + handle.name, writeInto(handle, name, text));
       })
-      .catch(function () {
-        // Not now, a folder that was not kept, or a failed write: save as a download.
-        download(name, text);
+      .then(function () {
+        note('Saved ' + name + ' into ' + folder.name + '.');
         done('');
+      })
+      .catch(function (err) {
+        // Not now, a folder that was not kept, or a failed write: save as a download, and say why.
+        if (err && err.message === 'later') { downloaded(''); return; }
+        downloaded('Could not save into the folder (' + why(err) + ').');
       });
   });
 
