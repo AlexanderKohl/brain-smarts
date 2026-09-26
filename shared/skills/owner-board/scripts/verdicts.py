@@ -22,7 +22,6 @@ Applied files move to `status/verdicts-applied/`, which is the record of what wa
 from __future__ import annotations
 
 import argparse
-import base64
 import glob
 import re
 import json
@@ -34,6 +33,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import board_config  # noqa: E402
 import cards  # noqa: E402
+import task_actions  # noqa: E402
 
 
 def downloads() -> str:
@@ -77,23 +77,20 @@ def read(board: dict, path: str) -> dict:
     return saved
 
 
-SHOT = re.compile(r"^data:image/(png|jpeg|webp|gif);base64,([A-Za-z0-9+/=]+)$")
-
-
 def save_shots(board: dict, card_id: str, saved_at: str, shots: list, dry_run: bool) -> list:
     """Write the screenshots pasted with a verdict into the board's `img/` and return their
-    paths relative to the board folder. Anything that is not a plain image is dropped."""
+    paths relative to the board folder. Anything that is not a plain image is dropped, by the
+    tasks skill's own test (`tasks.decode_image`), so cards and tasks keep the same images."""
     stamp = re.sub(r"[^0-9]", "", saved_at)[:14] or "undated"
     paths = []
     for n, shot in enumerate(shots, 1):
-        found = SHOT.match(str(shot))
-        if not found:
+        image = task_actions.task_store.decode_image(shot)
+        if not image:
             continue
-        ext = "jpg" if found.group(1) == "jpeg" else found.group(1)
-        rel = "img/" + card_id + "-" + stamp + "-" + str(n) + "." + ext
+        rel = "img/" + card_id + "-" + stamp + "-" + str(n) + "." + image[0]
         if not dry_run:
             os.makedirs(os.path.join(str(board["folder"]), "img"), exist_ok=True)
-            Path(os.path.join(str(board["folder"]), rel)).write_bytes(base64.b64decode(found.group(2)))
+            Path(os.path.join(str(board["folder"]), rel)).write_bytes(image[1])
         paths.append(rel)
     return paths
 
@@ -162,11 +159,18 @@ def main(argv=None) -> int:
             return 1
         path = files[-1]
     try:
+        saved = read(board, path)
         applied, skipped = apply(board, path, args.dry_run)
     except Refused as err:
         print(str(err))
         return 1
     report(applied, skipped, args.dry_run)
+    if saved.get("tasks"):
+        # Task actions saved with the verdicts go the one way a task changes (task_actions.py).
+        t_applied, t_skipped, now_list = task_actions.apply_entries(
+            config.task_store, saved["tasks"], saved.get("savedAt") or "", args.dry_run)
+        report(t_applied, t_skipped, args.dry_run)
+        task_actions.report_now(now_list)
     if not args.dry_run:
         print("  filed under " + os.path.join(str(board["folder"]), "verdicts-applied"))
         import build_status

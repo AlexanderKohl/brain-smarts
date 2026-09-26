@@ -6,12 +6,16 @@ Commands:
     next-id  the next free TASK-YYYY-NNNN number
     new      create a task record from the store's template with the next number, add its
              STATE.md row, and refresh the owner board that shows it
+    done     complete a task: status, History, move to completed/, STATE.md row out
+    do-now   ask for a task now: priority high, status ready (unless in progress), History
+    note     add the owner's note to a task's History
 
 The store is `--tasks` (a repository-root path such as /memory/tasks, or an absolute path),
-default /memory/tasks. Standard library only. Only `new` writes: one record, one STATE.md row
-(and the open-task count in that table's heading), and (through
-/shared/skills/owner-board/scripts/task_board.py, when the owner board is set up) the generated
-board pages.
+default /memory/tasks. Standard library only. `new`, `done`, `do-now` and `note` write: the
+record, its STATE.md row (and the open-task count in that table's heading), screenshots under
+<store>/img/, and (through /shared/skills/owner-board/scripts/task_board.py, when the owner board
+is set up) the generated board pages. `complete`, `do_now` and `add_note` are also the functions
+the owner board applies the owner's saved task actions through, so a task changes one way only.
 
 Timestamps from `new` are in the owner's timezone, the IANA name in `timezone` in
 /memory/OWNER.md. Python resolves that name only where the operating system or the `tzdata`
@@ -343,6 +347,106 @@ def render_new(template: str, fields: dict[str, Any]) -> str:
     return f"---\n{front}\n---\n{body}"
 
 
+def _row_text(cells: list[str], fields: dict[str, Any]) -> str:
+    """One STATE.md row, its cells in the order of the table's own header."""
+    review = []
+    if fields.get("next_review"):
+        review.append(f"review {fields['next_review']}")
+    if fields.get("waiting_on"):
+        review.append(f"waiting on {fields['waiting_on']}")
+    row = []
+    for name in cells:
+        if name == "task":
+            row.append(f"`{fields['id']}`")
+        elif name == "status":
+            row.append(f"**{fields['status']}**")
+        elif name == "priority":
+            row.append(str(fields.get("priority") or "-"))
+        elif "review" in name or "waiting" in name:
+            row.append("; ".join(review) or "-")
+        elif name == "title":
+            row.append(str(fields["title"]))
+        else:
+            row.append("-")
+    return "| " + " | ".join(cell.replace("|", "/") for cell in row) + " |"
+
+
+def _recount(lines: list[str], header: int, end: int) -> None:
+    """Set the count in the nearest `Open tasks (N` heading above a table to its row count."""
+    rows = sum(1 for line in lines[header + 2:end] if line.lstrip().startswith("|"))
+    for j in range(header - 1, -1, -1):
+        if lines[j].startswith("#"):
+            lines[j] = re.sub(r"^(#+ Open tasks \()\d+", lambda m: f"{m.group(1)}{rows}", lines[j], count=1)
+            break
+
+
+def _state_table(lines: list[str]) -> tuple[int, int, list[str]] | None:
+    """The first `| Task | Status |` table: (header line, first line after it, header cells)."""
+    for i, line in enumerate(lines):
+        cells = [c.strip().lower() for c in line.strip().strip("|").split("|")]
+        if len(cells) < 2 or cells[0] != "task" or cells[1] != "status":
+            continue
+        end = i + 1
+        while end < len(lines) and lines[end].lstrip().startswith("|"):
+            end += 1
+        return i, end, cells
+    return None
+
+
+def _row_index(lines: list[str], start: int, end: int, tid: str) -> int | None:
+    for k in range(start, end):
+        if lines[k].strip().strip("|").split("|")[0].strip().strip("`") == tid:
+            return k
+    return None
+
+
+def state_remove(state_text: str, tid: str) -> tuple[str, bool]:
+    """Remove a task's row from the STATE.md table and correct the open-task count above it."""
+    lines = state_text.split("\n")
+    found = _state_table(lines)
+    if not found:
+        return state_text, False
+    i, end, _ = found
+    k = _row_index(lines, i + 2, end, tid)
+    if k is None:
+        return state_text, False
+    del lines[k]
+    _recount(lines, i, end - 1)
+    return "\n".join(lines), True
+
+
+def state_update(state_text: str, fields: dict[str, Any]) -> tuple[str, bool]:
+    """Rewrite a task's row in place (its status or priority changed); add it when missing."""
+    lines = state_text.split("\n")
+    found = _state_table(lines)
+    if not found:
+        return state_text, False
+    i, end, cells = found
+    k = _row_index(lines, i + 2, end, str(fields["id"]))
+    if k is None:
+        return state_row(state_text, fields)
+    lines[k] = _row_text(cells, fields)
+    return "\n".join(lines), True
+
+
+def state_recently_completed(state_text: str, tid: str, title: str, day: str) -> tuple[str, bool]:
+    """Put a line at the top of a `Recently completed` section (newest first), where one exists."""
+    lines = state_text.split("\n")
+    for i, line in enumerate(lines):
+        if not re.match(r"^#+ Recently completed\b", line):
+            continue
+        at = i + 1
+        while at < len(lines) and not lines[at].strip():
+            at += 1
+        entry = f"- `{tid}` {title} ({day})"
+        if at >= len(lines) or not lines[at].lstrip().startswith("- "):
+            lines[i + 1:at] = ["", entry, ""] if at < len(lines) else ["", entry]
+        else:
+            lines.insert(at, entry)
+        return "\n".join(lines), True
+    return state_text, False
+
+
 def state_row(state_text: str, fields: dict[str, Any]) -> tuple[str, bool]:
     """Add the open task's row to the first table in STATE.md headed `| Task | Status |`.
 
@@ -353,38 +457,11 @@ def state_row(state_text: str, fields: dict[str, Any]) -> tuple[str, bool]:
     `Next free number:` line, where a store still keeps one, is moved on.
     """
     lines = state_text.split("\n")
-    for i, line in enumerate(lines):
-        cells = [c.strip().lower() for c in line.strip().strip("|").split("|")]
-        if len(cells) < 2 or cells[0] != "task" or cells[1] != "status":
-            continue
-        end = i + 1
-        while end < len(lines) and lines[end].lstrip().startswith("|"):
-            end += 1
-        review = []
-        if fields.get("next_review"):
-            review.append(f"review {fields['next_review']}")
-        if fields.get("waiting_on"):
-            review.append(f"waiting on {fields['waiting_on']}")
-        row = []
-        for name in cells:
-            if name == "task":
-                row.append(f"`{fields['id']}`")
-            elif name == "status":
-                row.append(f"**{fields['status']}**")
-            elif name == "priority":
-                row.append(str(fields.get("priority") or "-"))
-            elif "review" in name or "waiting" in name:
-                row.append("; ".join(review) or "-")
-            elif name == "title":
-                row.append(str(fields["title"]))
-            else:
-                row.append("-")
-        lines.insert(end, "| " + " | ".join(cell.replace("|", "/") for cell in row) + " |")
-        rows = sum(1 for line in lines[i + 2:end + 1] if line.lstrip().startswith("|"))
-        for j in range(i - 1, -1, -1):
-            if lines[j].startswith("#"):
-                lines[j] = re.sub(r"^(#+ Open tasks \()\d+", lambda m: f"{m.group(1)}{rows}", lines[j], count=1)
-                break
+    found = _state_table(lines)
+    if found:
+        i, end, cells = found
+        lines.insert(end, _row_text(cells, fields))
+        _recount(lines, i, end + 1)
         text = "\n".join(lines)
         if fields.get("_next_free"):
             text = re.sub(r"(Next free number: `)TASK-[0-9Y]{4}-\d{4}(`)",
@@ -482,6 +559,174 @@ def create(store: Path, title: str, status: str = "inbox", priority: str = "norm
     return path, said
 
 
+# ---------------------------------------------------------------- done, do-now, note
+
+# A screenshot is kept only when it is plainly one of these images; anything else is dropped.
+IMAGE_RE = re.compile(r"^data:image/(png|jpeg|webp|gif);base64,([A-Za-z0-9+/=]+)$")
+
+
+def decode_image(data_uri: str) -> tuple[str, bytes] | None:
+    """A pasted screenshot as (file extension, bytes), or None when it is not a plain image."""
+    import base64
+    import binascii
+    found = IMAGE_RE.match(str(data_uri))
+    if not found:
+        return None
+    try:
+        raw = base64.b64decode(found.group(2), validate=True)
+    except (binascii.Error, ValueError):
+        return None
+    return ("jpg" if found.group(1) == "jpeg" else found.group(1)), raw
+
+
+def find_task(store: Path, tid: str) -> Task:
+    for task in load_tasks(store):
+        if task.tid == tid:
+            return task
+    raise LookupError(f"no task {tid} in {store}")
+
+
+def set_fields(text: str, fields: dict[str, str]) -> str:
+    """Replace top-level front-matter scalars in place; keys not yet there are added at the end."""
+    match = FRONT_MATTER_RE.match(text)
+    if not match:
+        raise ValueError("the record has no front matter")
+    lines = match.group(1).splitlines()
+    done: set[str] = set()
+    for n, raw in enumerate(lines):
+        key = raw.split(":", 1)[0].strip() if raw and not raw[0].isspace() and ":" in raw else None
+        if key in fields:
+            lines[n] = f"{key}: {_yaml_scalar(fields[key])}"
+            done.add(key)
+    lines += [f"{k}: {_yaml_scalar(v)}" for k, v in fields.items() if k not in done]
+    return "---\n" + "\n".join(lines) + "\n---\n" + text[match.end():]
+
+
+def add_history(text: str, entry: str) -> str:
+    """Append one entry at the end of the History section (made when the record has none)."""
+    found = re.search(r"^## History[ \t]*$", text, flags=re.M)
+    if not found:
+        return text.rstrip("\n") + f"\n\n## History\n\n{entry}\n"
+    after = re.search(r"^## ", text[found.end():], flags=re.M)
+    end = found.end() + after.start() if after else len(text)
+    section = text[found.end():end].rstrip("\n")
+    tail = text[end:]
+    return text[:found.end()] + section + ("\n" if section.strip() else "\n\n") + entry + "\n" + ("\n" + tail if tail else "")
+
+
+def save_images(store: Path, tid: str, stamp: str, shots: list[str] | None) -> list[str]:
+    """Write pasted screenshots to <store>/img/<TID>-<stamp>-<n>.<ext>; returns store-relative paths."""
+    digits = re.sub(r"[^0-9]", "", stamp)[:14] or "undated"
+    paths = []
+    for n, shot in enumerate(shots or [], 1):
+        image = decode_image(shot)
+        if not image:
+            continue
+        rel = f"img/{tid}-{digits}-{n}.{image[0]}"
+        (store / "img").mkdir(parents=True, exist_ok=True)
+        (store / rel).write_bytes(image[1])
+        paths.append(rel)
+    return paths
+
+
+def _entry(stamp: str, what: str, note: str | None, images: list[str]) -> str:
+    """One History line: what happened, then the owner's note verbatim and the screenshots."""
+    parts = [f"- {stamp} – {what}"]
+    text = (note or "").strip()
+    if text:
+        parts.append("  The owner's note: " + text.replace("\n", "\n  "))
+    for n, rel in enumerate(images, 1):
+        parts.append(f"  ![Screenshot {n}](../{rel})")
+    return "\n".join(parts)
+
+
+def _stamp(store: Path, now: str | None) -> tuple[str, list[str]]:
+    if now:
+        return now, []
+    stamp, note = owner_now(store)
+    return stamp, [note] if note else []
+
+
+def _write_state(store: Path, change) -> str | None:
+    state = store / "STATE.md"
+    if not state.is_file():
+        return None
+    updated, changed = change(state.read_text(encoding="utf-8"))
+    if changed:
+        state.write_text(updated, encoding="utf-8", newline="\n")
+    return updated if changed else None
+
+
+def complete(store: Path, tid: str, note: str | None = None, shots: list[str] | None = None,
+             now: str | None = None, shot_stamp: str | None = None) -> tuple[Path, list[str]]:
+    """Mark a task completed: status and `updated`, a History entry with the owner's note, the
+    record moved to completed/, its STATE.md row removed (and the count corrected), and a line
+    under STATE.md's `Recently completed` when that section exists."""
+    task = find_task(store, tid)
+    if task.folder == "completed":
+        raise ValueError(f"{tid} is already {task.get('status') or 'completed'}")
+    stamp, said = _stamp(store, now)
+    images = save_images(store, tid, shot_stamp or stamp, shots)
+    text = task.path.read_text(encoding="utf-8")
+    text = add_history(set_fields(text, {"status": "completed", "updated": stamp}),
+                       _entry(stamp, "done, marked by the owner on the board.", note, images))
+    target = store / "completed" / task.path.name
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(text, encoding="utf-8", newline="\n")
+    if target != task.path:
+        task.path.unlink()
+    said.append(f"completed {tid}: {target}")
+    if _write_state(store, lambda t: state_remove(t, tid)) is not None:
+        said.append(f"STATE.md: row removed for {tid}")
+    title = task.get("title") or tid
+    if _write_state(store, lambda t: state_recently_completed(t, tid, title, stamp[:10])) is not None:
+        said.append(f"STATE.md: {tid} listed under Recently completed")
+    return target, said
+
+
+def do_now(store: Path, tid: str, note: str | None = None, shots: list[str] | None = None,
+           now: str | None = None, shot_stamp: str | None = None) -> tuple[Path, list[str]]:
+    """The owner asks for a task now: priority high; status ready unless already in progress
+    (an inbox task moves to open/ and gains its STATE.md row); a History entry with the note."""
+    task = find_task(store, tid)
+    if task.folder == "completed":
+        raise ValueError(f"{tid} is already {task.get('status') or 'completed'}; reopen it by hand")
+    stamp, said = _stamp(store, now)
+    images = save_images(store, tid, shot_stamp or stamp, shots)
+    status = "in_progress" if task.get("status") == "in_progress" else "ready"
+    text = task.path.read_text(encoding="utf-8")
+    text = add_history(set_fields(text, {"priority": "high", "status": status, "updated": stamp}),
+                       _entry(stamp, f"Asked for now by the owner (priority high, {status}).", note, images))
+    target = store / "open" / task.path.name
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(text, encoding="utf-8", newline="\n")
+    if target != task.path:
+        task.path.unlink()
+    said.append(f"do now {tid}: {target}")
+    fields = dict(task.meta, id=tid, status=status, priority="high", title=task.get("title") or tid)
+    if _write_state(store, lambda t: state_update(t, fields)) is not None:
+        said.append(f"STATE.md: row for {tid} is {status}, high")
+    return target, said
+
+
+def add_note(store: Path, tid: str, note: str | None = None, shots: list[str] | None = None,
+             now: str | None = None, shot_stamp: str | None = None) -> tuple[Path, list[str]]:
+    """Add the owner's note (and screenshots) to a task's History; nothing else changes."""
+    task = find_task(store, tid)
+    stamp, said = _stamp(store, now)
+    images = save_images(store, tid, shot_stamp or stamp, shots)
+    if not (note or "").strip() and not images:
+        raise ValueError(f"{tid}: an empty note")
+    text = task.path.read_text(encoding="utf-8")
+    text = add_history(set_fields(text, {"updated": stamp}), _entry(stamp, "Note from the owner.", note, images))
+    task.path.write_text(text, encoding="utf-8", newline="\n")
+    said.append(f"note on {tid}: {task.path}")
+    return task.path, said
+
+
+ACTIONS = {"done": complete, "do_now": do_now, "note": add_note}
+
+
 def refresh_board(path: Path, store: Path) -> list[str]:
     """Regenerate the owner board that shows the new task, when the owner board is set up.
 
@@ -533,6 +778,14 @@ def main(argv: list[str] | None = None, cwd: Path | None = None) -> int:
     c.add_argument("--now", help="the creation timestamp, ISO 8601 with offset; default now")
     c.add_argument("--no-state", action="store_true", help="do not add the STATE.md row")
     c.add_argument("--no-board", action="store_true", help="do not refresh the owner board")
+    for name, text in (("done", "complete a task and move it to completed/"),
+                       ("do-now", "ask for a task now: priority high, status ready unless in progress"),
+                       ("note", "add the owner's note to a task's History")):
+        a = sub.add_parser(name, help=text)
+        a.add_argument("task", help="the task id, TASK-YYYY-NNNN")
+        a.add_argument("--note", required=name == "note", help="the owner's words, kept verbatim in History")
+        a.add_argument("--now", help="the timestamp, ISO 8601 with offset; default now")
+        a.add_argument("--no-board", action="store_true", help="do not refresh the owner board")
     args = parser.parse_args(argv)
 
     store = resolve_store(args.tasks, cwd or Path.cwd())
@@ -567,6 +820,20 @@ def main(argv: list[str] | None = None, cwd: Path | None = None) -> int:
                                 update_state=not args.no_state)
         except ValueError as err:
             print(f"ERROR: {err}")
+            return 1
+        if not args.no_board:
+            said += refresh_board(path, store)
+        if args.json:
+            print(json.dumps({"path": path.as_posix(), "notes": said}, indent=2))
+        else:
+            print("\n".join(said))
+        return 0
+
+    if args.command in ("done", "do-now", "note"):
+        try:
+            path, said = ACTIONS[args.command.replace("-", "_")](store, args.task, note=args.note, now=args.now)
+        except (LookupError, ValueError) as err:
+            print(f"ERROR: {str(err).strip(chr(39))}")
             return 1
         if not args.no_board:
             said += refresh_board(path, store)
