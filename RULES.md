@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-28T08:21:13+10:00
+updated: 2026-09-28T08:36:50+10:00
 owner: brain-owner
 ---
 
@@ -467,6 +467,11 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
   and `/memory/` resolve inside it. `python shared/skills/repository-preflight/scripts/session.py
   start <name>` makes it and prints its path; the session reads and writes only there. A session
   that only reads may use the shared checkout.
+- Inside a session copy, the copy is the brain root: an agent bootstraps from the copy's
+  `/CONTRACT.md` and reads and writes the copy's files, never the shared checkout's by absolute
+  path. A location hint that names the shared checkout (a host pointer file, `brain_root` in
+  `/memory/OWNER.md`) is satisfied by a copy of the same repositories and is not a competing
+  contract (CONTRACT §1).
 - Claim work, not files. What a session is doing is recorded on the task it serves, never as a
   lock or a list of files. Overlap between sessions is found when their work is merged, where Git
   shows it as a conflict.
