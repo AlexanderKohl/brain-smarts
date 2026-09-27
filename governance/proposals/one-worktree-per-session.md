@@ -4,10 +4,10 @@ title: One working copy per session
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: draft
+status: proposed
 owner: brain-owner
 created: 2026-09-27T20:41:55+10:00
-updated: 2026-09-28T07:52:34+10:00
+updated: 2026-09-28T08:02:36+10:00
 rule_id: null
 accepted_by: null
 accepted_at: null
@@ -24,8 +24,8 @@ target_files:
 
 # One working copy per session
 
-Draft. Not offered for acceptance: it is to be decided after any evaluation the owner is already
-running on related concurrency changes, so the two do not confound each other.
+Proposed and offered for acceptance. It overlaps an evaluation of hooks at session start and
+before commit; see *Risks and conflicts*.
 
 ## Current problem
 
@@ -246,8 +246,10 @@ where locks and claims do worst and optimistic concurrency does best.
 - `SMART-RULE-0014`'s third bullet ("in a shared worktree, the primary agent commits") still
   applies within one session's copy, to its subagents. `SMART-RULE-0034` is unchanged; it now
   mostly finds a clean shared checkout.
-- **Conflicts with other proposals** on hooks, task-number claims or session start should be
-  checked when this is decided.
+- **Overlap with hooks.** `session.py start` and the wrong-folder check are, in effect, a
+  session-start hook and a pre-commit hook. Where the owner is evaluating hooks generated from one
+  host-neutral list, these two are implemented in the form that evaluation keeps, and not as a
+  second mechanism beside it (`SMART-RULE-0018`).
 
 ## Migration
 
