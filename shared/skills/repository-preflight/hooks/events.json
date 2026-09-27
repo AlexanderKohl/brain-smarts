@@ -1,0 +1,23 @@
+{
+ "about": "One list of hook events for every host. The commands are the brain's own scripts; a host file only triggers them (SMART-RULE-0007). Regenerate .claude/settings.json with: hooks.py host-settings",
+ "events": [
+  {
+   "event": "session start",
+   "claude_code": "SessionStart",
+   "git": null,
+   "command": "shared/skills/repository-preflight/scripts/hooks.py session-start"
+  },
+  {
+   "event": "before commit",
+   "claude_code": null,
+   "git": "pre-commit",
+   "command": "shared/skills/repository-preflight/scripts/hooks.py pre-commit"
+  },
+  {
+   "event": "before compaction",
+   "claude_code": "PreCompact",
+   "git": null,
+   "command": "shared/skills/repository-preflight/scripts/hooks.py pre-compact"
+  }
+ ]
+}
