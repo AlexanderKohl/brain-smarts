@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-26T09:16:13+10:00
+updated: 2026-09-28T08:21:13+10:00
 owner: brain-owner
 ---
 
@@ -60,6 +60,7 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 | `SMART-RULE-0035` | Offer a board when a project outgrows the personal board | this file; `/shared/skills/owner-board/` |
 | `SMART-RULE-0036` | Raise a rule that gets in the way | this file |
 | `SMART-RULE-0037` | Size parallel work to the machine and the merge | this file; the machine's hardware and session footprint in `/memory/OWNER.md` |
+| `SMART-RULE-0038` | One working copy per session | this file; `/shared/skills/repository-preflight/` |
 
 ## SMART-RULE-0010 – Communication efficiency
 
@@ -313,10 +314,14 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
   results are ephemeral instrumentation under `/temp/delegation/`, not task records. Work that
   must outlive the session is an ordinary `/memory/tasks/` record with `waiting_on` and `next_review`.
 - Workers start isolated by default. A packet that forks the conductor's context states why.
-- Workers do not write canonical repository files and do not commit. They return findings,
-  artifacts inside their run folder, and every changed path with its validation result. A
-  worker that must change code works in an isolated worktree or branch (`SMART-RULE-0014`); the
-  conductor merges, commits and reports.
+- Workers do not commit, and do not write the files every task shares – logs, state, task lists,
+  indexes, version fields, build output. A worker writes only the paths its packet names, in the
+  conductor's copy and branch (`SMART-RULE-0038`), and returns findings, artifacts inside its run
+  folder, and every changed path with its validation result. The conductor keeps the paths of one
+  run disjoint, reviews each worker's diff before staging it, and commits and reports. A worker
+  whose work cannot be kept apart – it builds or tests code, it must change a file another worker
+  also changes, or it is one of several alternative attempts – works in its own worktree, branched
+  from the conductor's branch; the conductor merges it back (`SMART-RULE-0014`).
 - Workers use no credentials and take no external side effect unless the packet names a target
   the owner confirmed for this operation under CONTRACT §10.5. The default is none. A worker
   that needs an owner decision stops with status `blocked` and the question; it does not guess.
@@ -453,6 +458,36 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
   - Workers that change files count against the conductor's integration budget in `SMART-RULE-0024`, which is raised only by a measured trial.
 - When the owner asks for more than this allows, the agent says so before starting, with the figures and the number it would use, and proceeds only on the owner's answer.
 - When the hardware or the footprint is not recorded for the computer in use, the agent reads and records it before any parallel work.
+
+## SMART-RULE-0038 – One working copy per session
+
+- A session that will write to a brain repository works in its own working copy of the brain,
+  never in the shared checkout: a Git worktree of the mechanics, the skill library and the memory,
+  each on its own branch made from the latest `origin`, nested as the brain is, so the brain root
+  and `/memory/` resolve inside it. `python shared/skills/repository-preflight/scripts/session.py
+  start <name>` makes it and prints its path; the session reads and writes only there. A session
+  that only reads may use the shared checkout.
+- Claim work, not files. What a session is doing is recorded on the task it serves, never as a
+  lock or a list of files. Overlap between sessions is found when their work is merged, where Git
+  shows it as a conflict.
+- Merge back at every unit of work (`SMART-RULE-0009`): bring the branch up to date with
+  `origin/main`, resolve any conflict, validate, push to `main`, and fast-forward the shared
+  checkout. `session.py finish` does this and removes the worktrees once their branches are
+  merged. A conflict is reconciled, never overwritten: a generated file (a board, an index, a
+  task list) is taken from `main` and rebuilt by its generator; an append-only log keeps both
+  entries; any other conflict whose right resolution is not obvious from the two changes goes to
+  the owner.
+- The shared checkout holds only merged work. It is where the owner reads and runs things, it is
+  fast-forwarded under `SMART-RULE-0034`, and no session leaves uncommitted changes in it.
+- A session's delegated workers share its copy and branch by default. Each packet names the paths
+  its worker may change (`writes: paths`); the conductor keeps them disjoint across the run and
+  keeps shared files – logs, state, task lists, indexes, version fields, build output – for
+  itself. Only the conductor stages and commits. A worker gets its own worktree, branched from the
+  session's branch and merged back by the conductor, only when its work cannot be kept apart: it
+  builds or tests code, it must change a file another worker also changes, or it is one of
+  several alternative attempts.
+- A host that cannot work in a separate folder says so at the start, works in the shared
+  checkout, re-reads each file immediately before changing it, and stages only its own paths.
 
 ## Contract restatements
 

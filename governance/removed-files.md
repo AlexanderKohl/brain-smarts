@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-28T07:43:53+10:00
-updated: 2026-09-28T07:43:53+10:00
+updated: 2026-09-28T08:26:36+10:00
 owner: brain-owner
 ---
 
@@ -21,3 +21,4 @@ listed here, so every old link still leads somewhere. Rows are in removal order.
 
 | File | Removed | Where its content went |
 |---|---|---|
+| `/governance/proposals/one-worktree-per-session.md` | 2026-09-28 | Implemented as `SMART-RULE-0038` in `/RULES.md` and the skills it names; the decision record went to the owner's memory, `/memory/governance/proposals/` |

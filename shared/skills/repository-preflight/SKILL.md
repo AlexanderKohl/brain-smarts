@@ -9,8 +9,10 @@ scope: shared
 script_paths:
   - /shared/skills/repository-preflight/scripts/preflight.py
   - /shared/skills/repository-preflight/tests/test_preflight.py
+  - /shared/skills/repository-preflight/scripts/session.py
+  - /shared/skills/repository-preflight/tests/test_session.py
 created: 2026-08-04T23:16:08+10:00
-updated: 2026-09-24T10:47:45+10:00
+updated: 2026-09-28T08:21:33+10:00
 owner: brain-owner
 ---
 
@@ -66,6 +68,38 @@ read: for the mechanics, the library, the memory and any `--also` project reposi
 diverged branch and an unreachable `origin` are reported and left untouched; it never merges,
 rebases, resets, stashes, discards or pushes. Exit code 1 means a repository needs the owner.
 
+## One working copy per session
+
+`scripts/session.py` implements `SMART-RULE-0038`. A session that will write runs it after
+`sync.py` and then works only in the copy it prints:
+
+```bash
+python shared/skills/repository-preflight/scripts/session.py start <name>
+python shared/skills/repository-preflight/scripts/session.py finish <name> [--keep]
+python shared/skills/repository-preflight/scripts/session.py list
+```
+
+- `start` makes `<sessions folder>/<name>/`: a worktree of the mechanics on branch
+  `session/<name>` from the latest `origin`, with `library/` and `memory/` inside it as worktrees
+  of those repositories on the same branch. The sessions folder is `<brain root>-sessions` beside
+  the shared checkout, unless `--sessions` or a `sessions_root` field in `/memory/OWNER.md` names
+  another. A name already used as a branch or folder is refused.
+- `finish` refuses a copy with uncommitted changes, then in each repository merges `origin/main`
+  into the session branch. A conflict in a generated file (the owner boards and status pages) is
+  resolved by taking `main`'s version and rerunning its generator; any other conflict stops
+  `finish` with the merge in progress, for the session to reconcile. It runs preflight on the
+  copy, pushes `HEAD:main` (never forced; a refused push is merged again by running `finish`
+  again), fast-forwards the shared checkout with `sync.py`, and removes each worktree and its
+  branch only once `main` contains it. `--keep` merges and pushes but keeps the copy for the next
+  unit of work.
+- `list` shows every session copy, the commits not yet in `main` and its uncommitted files, so
+  work left by a session that ended is found and finished rather than lost.
+- Append-only logs merge by union (`LOG.md merge=union` in `.gitattributes`), so two sessions'
+  entries both survive.
+- Not yet built: a check that refuses a commit made in the shared checkout while session copies
+  are live. It waits for the owner's evaluation of hooks at session start and before commit, so it
+  is built in the form that evaluation keeps.
+
 ## Outputs
 
 - pass or fail result
@@ -77,7 +111,8 @@ rebases, resets, stashes, discards or pushes. Exit code 1 means a repository nee
 
 - read access to the repository
 - write access to the two repository manifests only with `--write-manifest`
-- read-only Git commands; no commits, staging or configuration changes
+- `preflight.py` and `sync.py`: read-only Git commands, except `sync.py`'s fast-forward of a branch that is only behind; no commits, staging or configuration changes
+- `session.py`: makes and removes worktrees and `session/<name>` branches, commits the merge of `origin/main` into a session branch, and pushes a session branch to `main`; never forces a push, and never removes a worktree with unmerged commits or uncommitted changes
 
 ## Failure behaviour
 
