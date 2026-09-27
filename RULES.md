@@ -58,6 +58,8 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 | `SMART-RULE-0033` | A name means one thing, everywhere | this file |
 | `SMART-RULE-0034` | Start from the latest | this file; `/shared/skills/repository-preflight/` |
 | `SMART-RULE-0035` | Offer a board when a project outgrows the personal board | this file; `/shared/skills/owner-board/` |
+| `SMART-RULE-0036` | Raise a rule that gets in the way | this file |
+| `SMART-RULE-0037` | Stay within the machine | this file; the owner's hardware in `/memory/OWNER.md` |
 
 ## SMART-RULE-0010 – Communication efficiency
 
@@ -435,6 +437,18 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 - The board build (`build_boards.py`) prints the same suggestion for any project over that threshold, so the check does not rely on memory.
 - A "no" is recorded in the board configuration (`board_declined`) and the agent does not ask again unless the owner raises it.
 - A board is created only after a "yes": the agent registers it in `boards.json`, rebuilds the boards and gives the owner the link.
+
+## SMART-RULE-0036 – Raise a rule that gets in the way
+
+- When a rule blocks work that serves the owner's goals, or two rules conflict, the agent stops and puts it to the owner: the rule, what it blocks, the options and a recommendation. It never works around a rule quietly, in words or in code; changing what a validator accepts is changing a rule.
+- Rules exist to support good outcomes. A rule that hinders them is changed deliberately, through a proposal the owner accepts (CONTRACT §13.2), not bent case by case.
+- Continue with every part of the task the question does not block, so it arrives with the rest of the work done.
+
+## SMART-RULE-0037 – Stay within the machine
+
+- Before starting parallel sessions, builds or other heavy work, the agent checks the hardware recorded for the owner's computer in `/memory/OWNER.md` (processor, memory, free disk and the limit on concurrent agent sessions) and the machine's current free memory.
+- When a request would exceed what the machine can carry, the agent says so before starting, with the figures and a safe alternative, even when the owner asked for it. The owner may still choose; the warning comes first.
+- When no hardware is recorded for the computer in use, the agent reads it (processor, memory, disk) and records it in `/memory/OWNER.md` before any heavy work.
 
 ## Contract restatements
 

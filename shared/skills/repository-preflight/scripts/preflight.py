@@ -455,6 +455,22 @@ def heading_exists(target: Path, anchor: str) -> bool:
     return pattern.search(text) is not None
 
 
+CLOSED_PROPOSAL = {"accepted", "implemented", "verified", "withdrawn", "superseded", "rejected"}
+
+
+def removed_files(root: Path) -> set[str]:
+    """Paths listed in /governance/removed-files.md (first column of its table)."""
+    register = root / "governance" / "removed-files.md"
+    if not register.is_file():
+        return set()
+    found = set()
+    for line in register.read_text(encoding="utf-8").splitlines():
+        cells = [c.strip().strip("`") for c in line.strip().strip("|").split("|")]
+        if line.startswith("|") and cells and cells[0].startswith("/"):
+            found.add(cells[0])
+    return found
+
+
 def validate_declared_references(
     root: Path, records: dict[Path, dict[str, Any]], result: Result
 ) -> None:
@@ -485,6 +501,16 @@ def validate_declared_references(
                     )
                     continue
                 if not target.exists():
+                    if key == "target_files" and str(metadata.get("status", "")) in CLOSED_PROPOSAL:
+                        # A closed proposal's target_files record history, never rewritten
+                        # (CONTRACT 13.2). A file removed since is accepted only when the register
+                        # of removed files says where its content went.
+                        if path_part in removed_files(root):
+                            continue
+                        result.errors.append(
+                            f"{display}: {key} names {value}, which is gone and not in /governance/removed-files.md"
+                        )
+                        continue
                     if is_local_only(root, target):
                         result.warnings.append(
                             f"{display}: {key} reference {value} not checked: "
