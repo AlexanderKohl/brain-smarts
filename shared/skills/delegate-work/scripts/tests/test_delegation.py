@@ -8,11 +8,13 @@ from __future__ import annotations
 
 import io
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 SCRIPTS = Path(__file__).resolve().parents[1]
 SKILL = SCRIPTS.parent
@@ -354,6 +356,94 @@ class DelegationTestCase(unittest.TestCase):
         self.assertEqual(meta["status"], "synthesised")
         self.assertEqual(meta["host"], "Claude Code")
         self.assertEqual(meta["parallel"], "false")
+
+    # ------------------------------------------------------------ workers stay apart (SMART-RULE-0038)
+    # Each check is also run switched off, and the fault must then get through: that shows the
+    # test depends on the check rather than passing on its own.
+
+    def test_two_packets_cannot_name_the_same_file_or_a_folder_around_it(self) -> None:
+        run = self.new_run()
+        code, out = self.new_packet(run, "--writes", "paths", "--path", "/notes/a.md")
+        self.assertEqual(code, 0, out)
+        code, out = self.new_packet(run, "--writes", "paths", "--path", "/notes/a.md")
+        self.assertNotEqual(code, 0)
+        self.assertIn("overlaps /notes/a.md, already named by W01", out)
+        code, out = self.new_packet(run, "--writes", "paths", "--path", "/notes")
+        self.assertNotEqual(code, 0)
+        self.assertIn("overlaps", out)
+        code, out = self.new_packet(run, "--writes", "paths", "--path", "/notes/b.md")
+        self.assertEqual(code, 0, out)
+
+    def test_overlap_gets_through_with_the_check_switched_off(self) -> None:
+        run = self.new_run()
+        self.new_packet(run, "--writes", "paths", "--path", "/notes/a.md")
+        with mock.patch.object(delegation, "within", lambda path, scope: False):
+            code, out = self.new_packet(run, "--writes", "paths", "--path", "/notes/a.md")
+        self.assertEqual(code, 0, out)
+
+    def test_a_result_outside_its_write_paths_fails(self) -> None:
+        (self.root / "OTHER.md").write_text("x\n", encoding="utf-8")
+        run = self.new_run()
+        self.new_packet(run, "--writes", "paths", "--path", "/RULES.md")
+        self.fill_result(run, "W01", changed_paths=["/OTHER.md"], validation=["ran"])
+        code, out = run_cli(*self.common, "validate-result", "--run", run)
+        self.assertEqual(code, 1)
+        self.assertIn("outside the packet's write_paths: /OTHER.md", out)
+        self.fill_result(run, "W01", changed_paths=["/RULES.md"], validation=["ran"])
+        code, out = run_cli(*self.common, "validate-result", "--run", run)
+        self.assertEqual(code, 0, out)
+
+    def test_outside_write_paths_gets_through_with_the_check_switched_off(self) -> None:
+        (self.root / "OTHER.md").write_text("x\n", encoding="utf-8")
+        run = self.new_run()
+        self.new_packet(run, "--writes", "paths", "--path", "/RULES.md")
+        self.fill_result(run, "W01", changed_paths=["/OTHER.md"], validation=["ran"])
+        with mock.patch.object(delegation, "within", lambda path, scope: True):
+            code, out = run_cli(*self.common, "validate-result", "--run", run)
+        self.assertEqual(code, 0, out)
+
+    def git_brain(self) -> None:
+        """Make the temporary brain a Git repository with everything committed."""
+        def git(*args: str) -> None:
+            subprocess.run(["git", "-c", "user.name=Example Tester", "-c", "user.email=tester@example.com",
+                            "-c", "commit.gpgsign=false", "-C", str(self.root), *args],
+                           capture_output=True, text=True, check=True)
+        for name in ("a.md", "b.md", "before.md", "mine.md"):
+            (self.root / name).write_text("first\n", encoding="utf-8")
+        git("init", "-q", "-b", "main")
+        git("add", "-A")
+        git("commit", "-q", "-m", "start")
+
+    @unittest.skipUnless(shutil.which("git"), "git is not installed")
+    def test_check_writes_reports_changes_no_packet_named(self) -> None:
+        self.git_brain()
+        (self.root / "before.md").write_text("changed before the run\n", encoding="utf-8")
+        run = self.new_run()
+        self.new_packet(run, "--writes", "paths", "--path", "/a.md")
+        (self.root / "a.md").write_text("the worker's change\n", encoding="utf-8")
+        (self.root / "b.md").write_text("a stray change\n", encoding="utf-8")
+        (self.root / "c.md").write_text("a stray new file\n", encoding="utf-8")
+        (self.root / "mine.md").write_text("the conductor's change\n", encoding="utf-8")
+        code, out = run_cli(*self.common, "check-writes", "--run", run, "--mine", "/mine.md")
+        self.assertEqual(code, 1, out)
+        self.assertIn("named by no packet: /b.md", out)
+        self.assertIn("named by no packet: /c.md", out)
+        for fine in ("/a.md", "/mine.md", "/before.md", "/temp/"):
+            self.assertNotIn(f"named by no packet: {fine}", out)
+        (self.root / "b.md").write_text("first\n", encoding="utf-8")
+        (self.root / "c.md").unlink()
+        code, out = run_cli(*self.common, "check-writes", "--run", run, "--mine", "/mine.md")
+        self.assertEqual(code, 0, out)
+
+    @unittest.skipUnless(shutil.which("git"), "git is not installed")
+    def test_stray_change_gets_through_with_the_check_switched_off(self) -> None:
+        self.git_brain()
+        run = self.new_run()
+        self.new_packet(run, "--writes", "paths", "--path", "/a.md")
+        (self.root / "b.md").write_text("a stray change\n", encoding="utf-8")
+        with mock.patch.object(delegation, "brain_changes", lambda root: []):
+            code, out = run_cli(*self.common, "check-writes", "--run", run)
+        self.assertEqual(code, 0, out)
 
 
 if __name__ == "__main__":

@@ -15,6 +15,7 @@ Commands
                    [--acceptance TEXT ...] [--exclude TEXT ...]
   dispatch-prompt  --run RUN --packet W01
   validate-result  --run RUN [--packet W01]
+  check-writes     --run RUN [--mine PATH ...]
   summarise        --run RUN
   close-run        --run RUN --status synthesised|abandoned --host TEXT --parallel yes|no
 
@@ -192,6 +193,42 @@ def has_content(text: str, template_text: str = "") -> bool:
     return False
 
 
+def within(path: Path, scope: Path) -> bool:
+    """True when `path` is `scope` or lies inside it (both already resolved)."""
+    return path == scope or scope in path.parents
+
+
+def brain_changes(root: Path) -> list[str]:
+    """Every changed or untracked file in the brain's repositories, as repository-root paths.
+
+    Read from Git rather than from any worker's report (SMART-RULE-0038): the mechanics at the
+    root, and the library and memory beneath it when they are repositories. Local scratch under
+    /temp/ is not a repository write.
+    """
+    found: list[str] = []
+    for repo in (root, root / "library", root / "memory"):
+        if not (repo / ".git").exists():
+            continue
+        done = subprocess.run(["git", "-C", str(repo), "status", "--porcelain", "-z", "--untracked-files=all"],
+                              capture_output=True, text=True, encoding="utf-8")
+        if done.returncode:
+            continue
+        entries = done.stdout.split("\0")
+        skip_next = False
+        for entry in entries:
+            if skip_next:          # the source path of a rename or copy
+                skip_next = False
+                continue
+            if len(entry) < 4:
+                continue
+            skip_next = entry[0] in "RC"
+            path = (repo / entry[3:]).resolve()
+            if within(path, (root / "temp").resolve()):
+                continue
+            found.append(root_path(path, root))
+    return sorted(set(found))
+
+
 def run_dir(root: Path, run_id: str) -> Path:
     path = root / RUNS_SUBDIR / run_id
     if not (path / "RUN.md").exists():
@@ -288,6 +325,9 @@ def cmd_new_run(args) -> int:
         "max_depth": 1,
         "host": None,
         "parallel": None,
+        # What was already changed before any worker started, so check-writes does not blame
+        # a worker for it.
+        "dirty_at_start": brain_changes(root),
         "created": stamp,
         "updated": stamp,
     }
@@ -357,6 +397,20 @@ def cmd_new_packet(args) -> int:
         raise SystemExit(f"error: writes must be one of {sorted(WRITE_MODES)}")
     if args.writes == "paths" and not args.path:
         raise SystemExit("error: --path is required when --writes paths")
+    if args.writes == "paths":
+        # Workers of one run share the conductor's copy, so no two may name the same file
+        # (SMART-RULE-0038). A folder overlaps every file inside it.
+        for other in existing:
+            other_meta, _ = load(other)
+            if other_meta.get("writes") != "paths":
+                continue
+            for mine in args.path:
+                for theirs in other_meta.get("write_paths") or []:
+                    a, b = resolve(root, mine).resolve(), resolve(root, theirs).resolve()
+                    if within(a, b) or within(b, a):
+                        raise SystemExit(f"error: {mine} overlaps {theirs}, already named by {other.stem}; "
+                                         "split the work so no two packets change the same file, or give "
+                                         "one worker its own worktree")
     if args.external not in EXTERNAL_MODES:
         raise SystemExit(f"error: external must be one of {sorted(EXTERNAL_MODES)}")
     if args.external == "write" and not args.target:
@@ -502,6 +556,11 @@ def validate_one(root: Path, run: Path, short: str, warnings: list[str] | None =
     ]
     if packet.get("writes") == "none" and outside_run:
         errors.append(f"{display}: packet allows no writes but changed_paths is not empty")
+    if packet.get("writes") == "paths":
+        allowed = [resolve(root, scope).resolve() for scope in packet.get("write_paths") or []]
+        for changed in outside_run:
+            if not any(within(resolve(root, changed).resolve(), scope) for scope in allowed):
+                errors.append(f"{display}: changed path is outside the packet's write_paths: {changed}")
     for changed in result["changed_paths"]:
         if resolve(root, changed).exists():
             continue
@@ -562,6 +621,33 @@ def cmd_validate_result(args) -> int:
         print(f"FAIL: {len(errors)} error(s)")
         return 1
     print(f"PASS: {len(shorts)} result(s) valid" + (f", {len(warnings)} warning(s)" if warnings else ""))
+    return 0
+
+
+def cmd_check_writes(args) -> int:
+    """Every file changed in the brain since the run started that no `writes: paths` packet named.
+
+    Git cannot say which worker changed a file, so this names the path and the conductor finds
+    out. The conductor's own changes are passed with --mine.
+    """
+    root = discover_root(args.root)
+    run = run_dir(root, args.run)
+    run_meta, _ = load(run / "RUN.md")
+    before = set(run_meta.get("dirty_at_start") or [])
+    scopes = [resolve(root, p).resolve() for p in args.mine or []]
+    for packet_path in packet_files(run):
+        packet, _ = load(packet_path)
+        if packet.get("writes") == "paths":
+            scopes += [resolve(root, p).resolve() for p in packet.get("write_paths") or []]
+    stray = [changed for changed in brain_changes(root)
+             if changed not in before
+             and not any(within(resolve(root, changed).resolve(), scope) for scope in scopes)]
+    for changed in stray:
+        print(f"ERROR changed but named by no packet: {changed}")
+    if stray:
+        print(f"FAIL: {len(stray)} changed path(s) named by no packet")
+        return 1
+    print("PASS: every change since the run started was named by a packet")
     return 0
 
 
@@ -665,6 +751,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--run", required=True)
     p.add_argument("--packet")
     p.set_defaults(func=cmd_validate_result)
+
+    p = sub.add_parser("check-writes")
+    p.add_argument("--run", required=True)
+    p.add_argument("--mine", action="append", help="repository-root path the conductor changed itself")
+    p.set_defaults(func=cmd_check_writes)
 
     p = sub.add_parser("summarise")
     p.add_argument("--run", required=True)

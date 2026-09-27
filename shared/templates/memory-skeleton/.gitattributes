@@ -1,0 +1,2 @@
+# Append-only logs keep both sides when two sessions add entries (SMART-RULE-0038).
+LOG.md merge=union

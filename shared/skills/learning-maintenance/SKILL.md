@@ -5,7 +5,7 @@ type: skill
 schema_version: 0.2
 contract: /CONTRACT.md
 created: 2026-09-17T17:14:19+10:00
-updated: 2026-09-23T14:12:51+10:00
+updated: 2026-09-28T08:21:13+10:00
 status: active
 owner: brain-owner
 scope: shared
@@ -44,15 +44,13 @@ shared index or the board, it must be the only writer; when the write is done th
 Nothing about it outlives the process that took it, so no designation can go stale and no work waits
 on a session that has ended.
 
-Take an exclusive OS lock for the duration of the write: `msvcrt.locking` on Windows,
-`fcntl.flock` on POSIX, on a lock file beside the records. The kernel releases it if the holder dies,
-which is the property that matters and the reason no lease, expiry, heartbeat or fencing token is
-needed. Verify this on your own host before relying on it; an owner may record that measurement, including
-where it does not hold, under `/memory/projects/brain-development/data/learnings/`.
-
-**It does not hold across separate synced checkouts.** Two clones joined by OneDrive, Dropbox, SMB or
-Git share no kernel, so no lock serialises them. There Git is the backstop: a concurrent write is a
-merge conflict, which is visible and recoverable. That is the weaker guarantee and the honest one.
+Work in the session's own copy of the brain (`SMART-RULE-0038`). Inside it the session is the only
+writer for as long as it lives, so no lock is needed. Two sessions' integrations meet when their
+branches merge, and Git shows any overlap as a conflict. A derived view (`index.md`, `board.md`)
+that conflicts is taken from `main` and regenerated from the merged records. A host that must
+work in the shared checkout re-reads the target immediately before writing and stages only its
+own paths; it takes no lock, because a lock that no other session is known to take excludes
+nobody.
 
 Each integration batch, inside that window:
 

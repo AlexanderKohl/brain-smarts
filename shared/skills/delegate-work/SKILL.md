@@ -9,7 +9,7 @@ scope: shared
 script_paths:
   - /shared/skills/delegate-work/scripts/delegation.py
 created: 2026-09-15T07:45:00+10:00
-updated: 2026-09-23T14:12:51+10:00
+updated: 2026-09-28T08:22:07+10:00
 owner: brain-owner
 project_refs:
   - /memory/projects/brain-development
@@ -25,8 +25,8 @@ weaken that rule.
 
 Let one agent (the **conductor**) hand bounded, independent pieces of work to one or more
 **worker** agents that run in parallel, and get back compressed results it can route under the
-contract, without copying its conversation into every worker and without any worker touching
-canonical files or Git.
+contract, without copying its conversation into every worker, without any worker committing or
+touching Git, and without two workers changing the same file (`SMART-RULE-0024`, `SMART-RULE-0038`).
 
 The design principle: share state through the brain, share work through packets, share large
 outputs through artifacts, share only summaries through agent messages.
@@ -109,6 +109,8 @@ python shared/skills/delegate-work/scripts/delegation.py dispatch-prompt \
 
 # 4. after the workers report
 python shared/skills/delegate-work/scripts/delegation.py validate-result --run RUN-20990101-090000
+python shared/skills/delegate-work/scripts/delegation.py check-writes --run RUN-20990101-090000 \
+  [--mine /memory/projects/example/LOG.md]
 python shared/skills/delegate-work/scripts/delegation.py summarise --run RUN-20990101-090000
 python shared/skills/delegate-work/scripts/delegation.py close-run \
   --run RUN-20990101-090000 --status synthesised --host "Claude Code" --parallel yes
@@ -165,7 +167,11 @@ packet that allows writes tells the worker to complete the full bootstrap first.
 
 ## Conductor obligations after the workers report
 
-1. Run `validate-result`. Treat a failing result as a failed worker, not as data.
+1. Run `validate-result`. Treat a failing result as a failed worker, not as data. When any
+   packet wrote (`writes: paths`), run `check-writes` too, before making your own changes or
+   naming them with `--mine`, and review each worker's diff before staging it: workers of one
+   run share the conductor's copy and branch (`SMART-RULE-0038`), so a stray change is found
+   from Git, not only from the worker's report.
 2. Treat every worker claim as unverified until checked against the file or system it cites
    (CONTRACT section 13.1). Spot-check at least one verified fact per worker.
 
@@ -247,13 +253,17 @@ fix is one more theory, and the symptom can survive all of them.
 ## Failure behaviour
 
 - `new-packet` refuses a fifth packet, a fork without a reason, a `paths` write mode without
-  paths, an external write without a confirmed target, and a context reference that does not
-  exist.
+  paths, a `paths` packet naming a file (or a folder around a file) another packet of the run
+  already names, an external write without a confirmed target, and a context reference that
+  does not exist.
 - `validate-result` fails on a pending status, a missing section, a missing `host` or `model`,
   changed paths under a `writes: none` packet, changed paths without validation results, a
-  changed path that does not exist under a `writes: paths` packet, an artifact written as a path that does not exist (a branch,
+  changed path that does not exist or lies outside its `write_paths` under a `writes: paths` packet, an artifact written as a path that does not exist (a branch,
   a commit or a URL is free text and is not checked), a `blocked` result with no question, and
   any secret-shaped content.
+- `check-writes` fails when Git shows a file in the brain's repositories changed since the run
+  started (`new-run` records what was already changed) that no `writes: paths` packet and no
+  `--mine` path names. Git cannot say which worker made it; the conductor finds out.
 - A `writes: worktree` packet almost always works in **another repository**, so its changed
   paths belong to that repository and cannot be resolved here. The validator says so as a
   warning rather than an error: reporting real files as missing teaches the conductor to read
