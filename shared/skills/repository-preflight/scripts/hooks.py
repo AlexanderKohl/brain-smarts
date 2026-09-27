@@ -121,6 +121,9 @@ def pre_compact() -> str:
 
 
 def main(argv: list[str]) -> int:
+    # A Windows console defaults to cp1252; the brain's text is UTF-8.
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     command = argv[0] if argv else ""
     if command == "install":
         print("\n".join(install()))
