@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 status: draft
 owner: brain-owner
 created: 2026-09-27T20:41:55+10:00
-updated: 2026-09-27T20:47:07+10:00
+updated: 2026-09-28T07:52:34+10:00
 rule_id: null
 accepted_by: null
 accepted_at: null
@@ -18,6 +18,8 @@ target_files:
   - /RULES.md
   - /shared/skills/learning-maintenance/SKILL.md
   - /shared/skills/repository-preflight/SKILL.md
+  - /shared/skills/delegate-work/SKILL.md
+  - /shared/skills/delegate-work/scripts/delegation.py
 ---
 
 # One working copy per session
@@ -63,8 +65,17 @@ exclusive OS lock held for the duration of a write (`/shared/skills/learning-mai
 > write is a merge conflict, which is visible and recoverable. That is the weaker guarantee and
 > the honest one.
 
-`SMART-RULE-0014` (third bullet) and `SMART-RULE-0024` already give delegated workers an isolated
-worktree or branch; they are unchanged.
+Delegated workers are governed by `SMART-RULE-0024` in `/RULES.md`, whose fourth bullet reads:
+
+> - Workers do not write canonical repository files and do not commit. They return findings,
+>   artifacts inside their run folder, and every changed path with its validation result. A
+>   worker that must change code works in an isolated worktree or branch (`SMART-RULE-0014`); the
+>   conductor merges, commits and reports.
+
+`/shared/skills/delegate-work/` already offers a `writes: paths` mode ("writes only to the listed
+`write_paths`"), but nothing checks that a worker stayed inside its paths or that two packets in
+one run do not name the same file: `validate-result` only checks that reported paths exist and
+that a `writes: none` worker reported none, and it trusts the worker's own report rather than Git.
 
 ## Proposed wording or exact diff
 
@@ -97,8 +108,31 @@ Add a row to the identifier table, `| SMART-RULE-NNNN | One working copy per ses
   the owner.
 - The shared checkout holds only merged work. It is where the owner reads and runs things, it is
   fast-forwarded under `SMART-RULE-0034`, and no session leaves uncommitted changes in it.
+- A session's delegated workers share its copy and branch by default. Each packet names the paths
+  its worker may change (`writes: paths`); the conductor keeps them disjoint across the run and
+  keeps shared files – logs, state, task lists, indexes, version fields, build output – for
+  itself. Only the conductor stages and commits. A worker gets its own worktree, branched from the
+  session's branch and merged back by the conductor, only when its work cannot be kept apart: it
+  builds or tests code, it must change a file another worker also changes, or it is one of
+  several alternative attempts.
 - A host that cannot work in a separate folder says so at the start, works in the shared
   checkout, re-reads each file immediately before changing it, and stages only its own paths.
+```
+
+### 1a. Amendment to `SMART-RULE-0024` in `/RULES.md` (keeps its identifier)
+
+The new rule lets a worker write the paths its packet names in the conductor's copy, which the
+fourth bullet of `SMART-RULE-0024` currently forbids. Replace that bullet with:
+
+```markdown
+- Workers do not commit, and do not write the files every task shares – logs, state, task lists,
+  indexes, version fields, build output. A worker writes only the paths its packet names, in the
+  conductor's copy and branch (`SMART-RULE-NNNN`), and returns findings, artifacts inside its run
+  folder, and every changed path with its validation result. The conductor keeps the paths of one
+  run disjoint, reviews each worker's diff before staging it, and commits and reports. A worker
+  whose work cannot be kept apart – it builds or tests code, it must change a file another worker
+  also changes, or it is one of several alternative attempts – works in its own worktree, branched
+  from the conductor's branch; the conductor merges it back (`SMART-RULE-0014`).
 ```
 
 ### 2. `/shared/skills/learning-maintenance/SKILL.md`, section *Integration*
@@ -140,6 +174,19 @@ Add `LOG.md merge=union` to `/.gitattributes` in the mechanics and to
 `/shared/templates/memory-skeleton/.gitattributes`, so two sessions appending to the same log keep
 both entries.
 
+### 5. `/shared/skills/delegate-work/`: check that workers stay apart
+
+In `scripts/delegation.py`, documented in `SKILL.md`:
+
+- `new-packet` refuses a `writes: paths` packet that names a path already named by another
+  packet in the same run.
+- `validate-result` fails a `writes: paths` result that reports a changed path outside its
+  `write_paths`.
+- A run-level check compares `git status` in the conductor's copy with the union of the run's
+  `write_paths` and reports every changed path that no packet named, so a worker's stray change
+  is found from Git, not only from its own report. Git cannot say which worker made a stray
+  change; the check names the path and the conductor finds out.
+
 ## Reason
 
 This is how people who share a codebase work. Each developer has their own copy; nobody locks
@@ -163,6 +210,9 @@ where locks and claims do worst and optimistic concurrency does best.
 - A concurrent change to the same file becomes a visible conflict at `finish` instead of a silent
   loss.
 - The owner keeps using the shared checkout; it changes only by fast-forward.
+- A conductor's workers work in the conductor's copy on disjoint paths instead of never writing
+  canonical files; most brain work (text records) stays in one copy, and a worker on code that is
+  built or tested still gets its own worktree, as today.
 - A host's built-in worktree feature, where one exists, usually makes a worktree of the repository
   it opened, not of the nested memory and library repositories, so it is not enough by itself.
 
@@ -183,6 +233,16 @@ where locks and claims do worst and optimistic concurrency does best.
   never use the same branch; `start` refuses a name already in use.
 - **Longer sessions mean bigger conflicts.** The merge-at-every-unit-of-work bullet is the
   counterweight.
+- **Workers sharing one copy.** Files every task touches are easily left out when the work is
+  split; commands that act on the whole folder (a formatter, `git stash` or `checkout`, a package
+  install, a build into a shared output folder) touch other workers' files; and a worker's tests
+  also run the others' half-finished changes, so a failure cannot be attributed. The shared-files
+  clause, the own-worktree exceptions and the checks in section 5 are the counterweights; workers
+  still never run Git commands that change the index, the branch or the working files.
+- **Workers now write canonical files.** Today the conductor writes every canonical change from a
+  worker's result. Under the amendment a worker writes its named paths directly, so the conductor
+  reviews each worker's diff before staging it, which keeps `SMART-RULE-0024`'s "treat worker
+  claims as unverified until checked".
 - `SMART-RULE-0014`'s third bullet ("in a shared worktree, the primary agent commits") still
   applies within one session's copy, to its subagents. `SMART-RULE-0034` is unchanged; it now
   mostly finds a clean shared checkout.
@@ -198,9 +258,10 @@ where locks and claims do worst and optimistic concurrency does best.
 
 ## Rollback
 
-Remove the rule and its index row, restore the two quoted paragraphs in the learning-maintenance
-skill, delete `session.py` and its documentation, and remove the `.gitattributes` lines. Finish or
-merge any session worktrees first; nothing else depends on them.
+Remove the rule and its index row, restore the quoted fourth bullet of `SMART-RULE-0024`, restore
+the two quoted paragraphs in the learning-maintenance skill, delete `session.py` and its
+documentation, remove the three delegate-work checks, and remove the `.gitattributes` lines.
+Finish or merge any session worktrees first; nothing else depends on them.
 
 ## Validation
 
@@ -212,6 +273,13 @@ merge any session worktrees first; nothing else depends on them.
   derived view at the same time. In the shared checkout (control) one change is lost silently;
   with one copy per session the second `finish` reports a conflict and both changes survive
   resolution. The control must show the loss, or the trial proves nothing.
+- `delegation.py` tests: a second packet naming a path already in the run is refused; a result
+  reporting a path outside its `write_paths` fails; a file changed in the copy that no packet
+  named is reported by the run check. Each test also runs with its check disabled and must then
+  pass the fault through, so the tests are shown to depend on the checks.
+- **A worker trial.** Two workers in one session copy change two different records at once: both
+  changes survive and the conductor commits them as one change. The run check reports a third
+  file one worker touched outside its packet.
 - Measure start and finish time and disk use, and count wrong-folder writes over the first week.
 - Repository preflight passes.
 
