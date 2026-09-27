@@ -20,6 +20,6 @@ Then:
 
 1. Root [`/RULES.md`](./RULES.md), the owner profile `/memory/OWNER.md`, the owner-layer rules `/memory/RULES.md`, and inherited `RULES.md` down to the active node
 2. Active node `README.md`, `STATE.md`, and relevant dependencies
-3. Skill/index notes in [`/ONBOARDING_AGENT.md`](./ONBOARDING_AGENT.md), and the owner's own notes in `/memory/ONBOARDING_OWNER.md`
+3. The owner's own notes in `/memory/ONBOARDING_OWNER.md`; the skill indexes are `/shared/skills/README.md` and `/library/skills/README.md`
 
 This file is a cross-tool pointer. It does not replace the contract.

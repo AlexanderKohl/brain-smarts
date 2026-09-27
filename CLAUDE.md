@@ -27,6 +27,6 @@ Follow the sequence `/CONTRACT.md` itself defines (Section 1; see also `/BOOTSTR
 1. Read `/CONTRACT.md`
 2. Read root `/RULES.md`, then `/memory/OWNER.md` and `/memory/RULES.md`, then any inherited `RULES.md` down to the active node
 3. Read the active node's `README.md` and `STATE.md`
-4. Read `/ONBOARDING_AGENT.md` for the current shared-skill index and operating notes, and `/memory/ONBOARDING_OWNER.md` for the owner's own
+4. Read `/memory/ONBOARDING_OWNER.md` for the owner's own notes; the skill indexes are `/shared/skills/README.md` and `/library/skills/README.md`
 
 If given a nested path, walk upward until `CONTRACT.md` is found. If location hints resolve to different contracts, stop and report the ambiguity rather than guessing.
