@@ -23,3 +23,32 @@ def validate_pointer_files(root: Path, errors: list[str]) -> None:
             errors.append(f"/{shown}: a pointer file names a rule; point to the rule file instead (SMART-RULE-0007)")
         if len(text.splitlines()) > POINTER_MAX_LINES:
             errors.append(f"/{shown}: longer than a pointer ({POINTER_MAX_LINES} lines) (SMART-RULE-0007)")
+
+
+SOURCE_CITE = re.compile(r"(?:/memory/)?(?:raw|sources)/[A-Za-z0-9]")
+STATUS = re.compile(r"\bunverified\b|\bverified by\b", re.I)
+
+
+def added_knowledge_lines(memory: Path) -> list[tuple[str, str]]:
+    """Lines being added to KNOWLEDGE.md files: uncommitted changes, as a pre-commit run sees them."""
+    import subprocess
+    diff = subprocess.run(["git", "diff", "HEAD", "--unified=0", "--", "*KNOWLEDGE.md"], cwd=memory,
+                          capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
+    current, found = "", []
+    for line in diff.splitlines():
+        if line.startswith("+++ b/"):
+            current = line[6:]
+        elif line.startswith("+") and not line.startswith("+++"):
+            found.append((current, line[1:]))
+    return found
+
+
+def validate_knowledge_provenance(root: Path, errors: list[str]) -> None:
+    """CONTRACT 11.6 rule 3: knowledge from outside content names its source and evidence status."""
+    memory = root / "memory"
+    if not (memory / ".git").exists():
+        return
+    for path, line in added_knowledge_lines(memory):
+        if SOURCE_CITE.search(line) and not STATUS.search(line):
+            errors.append(f"/memory/{path}: new knowledge cites a source without an evidence status "
+                          f"(unverified, or verified by ...) (CONTRACT 11.6)")
