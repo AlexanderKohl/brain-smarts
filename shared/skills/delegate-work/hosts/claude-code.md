@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-15T07:45:00+10:00
-updated: 2026-09-23T14:12:51+10:00
+updated: 2026-09-27T15:32:32+10:00
 owner: brain-owner
 ---
 
@@ -47,6 +47,12 @@ Verified with a trial run of several read-only workers launched in one turn.
   transcript logger is in use, it should read those files from the first line and attribute
   each record to its agent. The Agent tool's completion notifications, which report tokens, tool uses and duration per worker,
   remain the quickest cross-check of a run's cost.
+- **The notification's token figure is the worker's final context size, not what it processed.**
+  Measured on 28 read-only workers: it equals the last API call's input, cache and output tokens.
+  Each worker also re-read its cached context between steps, 9 to 28 times that figure, which
+  the notification does not show. Say which of the two a reported cost means; the per-call
+  `usage` in the transcript under `<session>/subagents/` holds both. The `output_file` the
+  launch result names was empty for workers that handed back.
 - Workers name the model inconsistently (a model id in one result, a display name in another). Both are honest;
   the conductor normalises when logging.
 - In a trial of three read-only workers in parallel, all returned `completed` and passed
