@@ -59,7 +59,7 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 | `SMART-RULE-0034` | Start from the latest | this file; `/shared/skills/repository-preflight/` |
 | `SMART-RULE-0035` | Offer a board when a project outgrows the personal board | this file; `/shared/skills/owner-board/` |
 | `SMART-RULE-0036` | Raise a rule that gets in the way | this file |
-| `SMART-RULE-0037` | Stay within the machine | this file; the owner's hardware in `/memory/OWNER.md` |
+| `SMART-RULE-0037` | Size parallel work to the machine and the merge | this file; the machine's hardware and session footprint in `/memory/OWNER.md` |
 
 ## SMART-RULE-0010 – Communication efficiency
 
@@ -444,11 +444,15 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 - Rules exist to support good outcomes. A rule that hinders them is changed deliberately, through a proposal the owner accepts (CONTRACT §13.2), not bent case by case.
 - Continue with every part of the task the question does not block, so it arrives with the rest of the work done.
 
-## SMART-RULE-0037 – Stay within the machine
+## SMART-RULE-0037 – Size parallel work to the machine and the merge
 
-- Before starting parallel sessions, builds or other heavy work, the agent checks the hardware recorded for the owner's computer in `/memory/OWNER.md` (processor, memory, free disk and the limit on concurrent agent sessions) and the machine's current free memory.
-- When a request would exceed what the machine can carry, the agent says so before starting, with the figures and a safe alternative, even when the owner asked for it. The owner may still choose; the warning comes first.
-- When no hardware is recorded for the computer in use, the agent reads it (processor, memory, disk) and records it in `/memory/OWNER.md` before any heavy work.
+- The number of agent sessions or workers run at once is worked out for each batch, never fixed: the lower of what the machine can carry and what the conductor can merge back.
+- **What the machine can carry:** free memory at the start, less a reserve of 1.5 GB for the owner's own work, divided by the measured memory of one session. The same limit applies to processor cores: at most one session per two logical processors. The agent measures a session's footprint on the first run of a batch, records it with the machine's hardware in `/memory/OWNER.md`, and re-checks free memory before starting each further session, never starting one that would take free memory below the reserve.
+- **What the conductor can merge back:**
+  - Workers that only return results (read-only research, isolated test runs) add nothing to merge, so only the machine limits them.
+  - Workers that change files count against the conductor's integration budget in `SMART-RULE-0024`, which is raised only by a measured trial.
+- When the owner asks for more than this allows, the agent says so before starting, with the figures and the number it would use, and proceeds only on the owner's answer.
+- When the hardware or the footprint is not recorded for the computer in use, the agent reads and records it before any parallel work.
 
 ## Contract restatements
 
