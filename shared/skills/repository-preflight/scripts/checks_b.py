@@ -52,3 +52,25 @@ def validate_knowledge_provenance(root: Path, errors: list[str]) -> None:
         if SOURCE_CITE.search(line) and not STATUS.search(line):
             errors.append(f"/memory/{path}: new knowledge cites a source without an evidence status "
                           f"(unverified, or verified by ...) (CONTRACT 11.6)")
+
+
+REVIEW_BY = re.compile(r"review by (\d{4}-\d{2}-\d{2})")
+
+
+def validate_knowledge_review_dates(root: Path, errors: list[str], today: date | None = None) -> None:
+    """CONTRACT section 4, KNOWLEDGE.md: a claim past its review date surfaces as an error."""
+    today = today or date.today()
+    for base in (root, root / "memory"):
+        for path in base.rglob("KNOWLEDGE.md"):
+            if "raw" in path.parts or ".git" in path.parts:
+                continue
+            if base == root and "memory" in path.relative_to(root).parts[:1]:
+                continue
+            for number, line in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+                if line.lstrip().startswith("~~"):
+                    continue
+                for when in REVIEW_BY.findall(line):
+                    if date.fromisoformat(when) < today:
+                        shown = str(path.relative_to(root)).replace("\\", "/")
+                        errors.append(f"/{shown}:{number}: knowledge past its review date {when}; confirm, "
+                                      f"re-date or supersede it (RULE-2026-0045)")

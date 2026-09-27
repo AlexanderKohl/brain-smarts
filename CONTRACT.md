@@ -233,6 +233,14 @@ Contains durable facts, principles, definitions and established understanding ow
 
 Do not use it for temporary instructions, current status or unverified claims.
 
+A claim that can change carries the date it was true as of, and may carry a date to check it by:
+`(as of 2026-09-20)` or `(as of 2026-09-20; review by 2026-12-31)`. When a claim is replaced, the
+old one is kept and marked, never overwritten or silently deleted:
+`~~Agreed price: $500,000~~ (superseded 2026-09-20 by the line below)`, followed by the new claim
+with its own date. A timeless fact needs no date. The repository preflight fails on a claim whose
+review date has passed, so stale knowledge surfaces instead of being served as current
+(proposal `RULE-2026-0045`).
+
 ### `skills/`
 
 Contains local capabilities, instructions and executable scripts specific to the node.
