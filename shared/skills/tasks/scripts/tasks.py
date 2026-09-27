@@ -259,13 +259,44 @@ def check(store: Path) -> Report:
     return report
 
 
+CLAIMS = ".claims"
+
+
 def next_id(store: Path, year: int) -> str:
     highest = 0
     for task in load_tasks(store):
         match = ID_RE.match(task.tid)
         if match and int(match.group(1)) == year:
             highest = max(highest, int(match.group(2)))
+    claims = store / CLAIMS
+    if claims.is_dir():
+        for claim in claims.glob(f"TASK-{year}-*"):
+            match = ID_RE.match(claim.name)
+            if match:
+                highest = max(highest, int(match.group(2)))
     return f"TASK-{year}-{highest + 1:04d}"
+
+
+def claim_id(store: Path, year: int) -> str:
+    """Take the next number atomically: an exclusive create of a claim file, retried on a clash.
+
+    Reading the highest number and then writing is a check-then-act race: concurrent sessions in
+    one checkout took the same number four times before this existed. The claim folder is
+    ignored by Git; a claim only has to outlive the moment between choosing and writing.
+    """
+    claims = store / CLAIMS
+    claims.mkdir(exist_ok=True)
+    ignore = claims / ".gitignore"
+    if not ignore.exists():
+        ignore.write_text("*\n", encoding="utf-8")
+    for _ in range(1000):
+        tid = next_id(store, year)
+        try:
+            os.close(os.open(claims / tid, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+            return tid
+        except FileExistsError:
+            continue
+    raise RuntimeError("could not claim a task number after 1000 attempts")
 
 
 # ---------------------------------------------------------------- new
@@ -528,7 +559,7 @@ def create(store: Path, title: str, status: str = "inbox", priority: str = "norm
         stamp = now
     else:
         stamp, note = owner_now(store)
-    tid = next_id(store, year or int(stamp[:4]))
+    tid = claim_id(store, year or int(stamp[:4]))
     template_meta = parse_front_matter(template) or {}
     fields: dict[str, Any] = {
         "id": tid, "title": title, "status": status,
