@@ -4,9 +4,12 @@ title: Commit checks that work in every set-up
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: proposed
+status: implemented
 created: 2026-09-28T14:40:32+10:00
-updated: 2026-09-28T14:40:32+10:00
+updated: 2026-09-28T15:01:51+10:00
+accepted_by: brain-owner
+accepted_at: 2026-09-28T15:01:51+10:00
+implemented_at: 2026-09-28T15:01:51+10:00
 owner: brain-owner
 previous_contract_version: 2.1.0
 new_contract_version: 2.2.0
