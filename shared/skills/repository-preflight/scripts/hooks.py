@@ -57,7 +57,9 @@ def install() -> list[str]:
     done = []
     script = Path(__file__).resolve().as_posix()
     for repo in repositories(ROOT):
-        hooks = git_dir(repo) / "hooks"
+        # Git reads hooks from the common directory, shared by every worktree of the repository.
+        common = Path(git(repo, "rev-parse", "--git-common-dir").strip())
+        hooks = (common if common.is_absolute() else repo / common) / "hooks"
         hooks.mkdir(exist_ok=True)
         hook = hooks / "pre-commit"
         if hook.exists() and MARK not in hook.read_text(encoding="utf-8", errors="replace"):
