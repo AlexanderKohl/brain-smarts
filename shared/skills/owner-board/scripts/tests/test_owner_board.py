@@ -725,6 +725,32 @@ class TaskBoardTests(unittest.TestCase):
         for copy in ("function shrink", "function lightbox", "createObjectURL", "clipboardData"):
             self.assertNotIn(copy, source)
 
+    @unittest.skipUnless(shutil.which("node"), "needs node to run the page's own script")
+    def test_a_note_without_an_action_is_neither_sent_nor_cleared(self):
+        # The owner's rule: a note alone means they are still deciding, so it stays on its card.
+        script = re.search(r"<script>(.*)</script>", task_board.page_js.TASKS_JS, re.S).group(1)
+        key = task_board.page_js.TASK_KEY
+        stored = {"TASK-2099-0001": {"action": "", "note": "still thinking", "shots": [], "title": "a"},
+                  "TASK-2099-0002": {"action": "done", "note": "finished", "shots": [], "title": "b"},
+                  "TASK-2099-0003": {"action": "do_now", "note": "", "shots": [], "title": "c"}}
+        harness = (
+            "var store = {}; store[" + json.dumps(key) + "] = " + json.dumps(json.dumps(stored)) + ";"
+            "var localStorage = { getItem: function (k) { return store[k] || null; },"
+            " setItem: function (k, v) { store[k] = v; } };"
+            "var document = { querySelectorAll: function () { return []; } };"
+            "var window = { BoardPage: { el: function () { return {}; } } };"
+            + script +
+            "; var T = window.BoardTasks; var sent = T.entries().map(function (a) { return a.id; });"
+            " var lines = T.lines(); T.forget(sent);"
+            " console.log(JSON.stringify({ sent: sent, lines: lines.length,"
+            " left: Object.keys(JSON.parse(store[" + json.dumps(key) + "])) }));")
+        out = subprocess.run(["node", "-e", harness], capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        result = json.loads(out.stdout.strip().splitlines()[-1])
+        self.assertEqual(result["sent"], ["TASK-2099-0002", "TASK-2099-0003"])
+        self.assertEqual(result["lines"], 2)
+        self.assertEqual(result["left"], ["TASK-2099-0001"])
+
     def downloads(self) -> Path:
         folder = self.brain.root / "fake-downloads" / "Board saves"
         folder.mkdir(parents=True, exist_ok=True)

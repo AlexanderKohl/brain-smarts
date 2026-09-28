@@ -19,7 +19,7 @@ script_paths:
   - /shared/skills/owner-board/scripts/task_board.py
   - /shared/skills/owner-board/scripts/verdicts.py
 created: 2026-09-18T11:05:00+10:00
-updated: 2026-09-26T16:00:00+10:00
+updated: 2026-09-28T11:00:10+10:00
 owner: brain-owner
 project_refs:
   - /memory/projects/brain-development
@@ -322,6 +322,11 @@ that link. The page changes no record: pending actions are kept in the browser u
 shared by every page (`owner-board-task-actions`; a task is the same task wherever it is drawn),
 as `{action: do_now | done | "", note, shots, title}`, and a card with something pending shows a
 tag. Completed tasks carry no controls.
+
+Only a task with an action chosen is sent. A note with no action means the owner is still
+deciding: it stays on its card and in the browser, tagged *Note only · stays until you choose*,
+and no save, copy or clear takes it away until **Do now** or **Done** is picked (the owner's
+rule, 26 September 2026).
 
 Saving hands them to the agent. On a board, **Save my verdicts** adds a `tasks` array
 (`{id, action, note, shots, title}`) to the verdicts file, and the tally and *Copy instead*

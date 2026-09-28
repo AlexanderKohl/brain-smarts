@@ -227,8 +227,9 @@ TASKS_JS = r"""<script>
         buttons[i].setAttribute('aria-pressed', String(e.action === buttons[i].getAttribute('data-action')));
       }
       if (area && document.activeElement !== area) area.value = e.note || '';
-      var words = LABEL[e.action] || (pending(e) ? 'Note' : '');
-      tag.textContent = words ? words + ' · not saved' : '';
+      // A note with no action is the owner still deciding: it stays here and is not saved.
+      var words = LABEL[e.action] ? LABEL[e.action] + ' · not saved' : (pending(e) ? 'Note only · stays until you choose' : '');
+      tag.textContent = words;
       if (words && !tag.parentNode) meta.appendChild(tag);
       if (!words && tag.parentNode) tag.remove();
       card.classList.toggle('pending', !!words);
@@ -259,9 +260,11 @@ TASKS_JS = r"""<script>
     painters[id] = function () { paint(); redraw(); };
     painters[id]();
   });
+  /* What a save or a copy sends: only tasks with an action chosen. A note on its own is the
+     owner still deciding, so it stays on its card, in storage, until an action is picked. */
   function entries() {
     var all = read();
-    return Object.keys(all).filter(function (k) { return pending(all[k]); }).sort().map(function (k) {
+    return Object.keys(all).filter(function (k) { return !!(all[k] && all[k].action); }).sort().map(function (k) {
       var a = all[k];
       return { id: k, action: a.action || '', note: a.note || '', shots: a.shots || [], title: a.title || '' };
     });
@@ -272,7 +275,7 @@ TASKS_JS = r"""<script>
     lines: function () {
       var NL = String.fromCharCode(10);
       return entries().map(function (a) {
-        var s = (a.action === 'done' ? 'DONE' : a.action === 'do_now' ? 'DO NOW' : 'NOTE') + ' · ' + a.id + ' ' + a.title;
+        var s = (a.action === 'done' ? 'DONE' : 'DO NOW') + ' · ' + a.id + ' ' + a.title;
         if (a.note.trim()) s += NL + '    ' + a.note.split(NL).join(NL + '    ');
         if (a.shots.length) s += NL + '    (' + a.shots.length + ' screenshot(s): use Save to send them)';
         return s;
