@@ -9,7 +9,7 @@ scope: shared
 script_paths:
   - /shared/skills/delegate-work/scripts/delegation.py
 created: 2026-09-15T07:45:00+10:00
-updated: 2026-09-28T08:22:07+10:00
+updated: 2026-09-28T13:44:41+10:00
 owner: brain-owner
 project_refs:
   - /memory/projects/brain-development
@@ -39,6 +39,12 @@ outputs through artifacts, share only summaries through agent messages.
   that must outlive the session is an ordinary `/memory/tasks/` record with `waiting_on` and
   `next_review` (CONTRACT section 9.1).
 - Not cross-session or asynchronous. A run starts and ends inside one conductor session.
+
+## Independent review suggestions
+
+Every conductor applies `SMART-RULE-0016` at worthwhile stage boundaries, including research, marketing, scoping, design and implementation. Before dispatching an independent review, use `/shared/skills/product-development/references/multi-model-review.md` for the stage-specific brief, owner approval, one-reviewer requirement and bounded clarification procedure. A sole agent coordinating work has the same duty to suggest a useful review. Read the canonical project record first so a new conductor preserves prior approvals, declines, scope and unresolved questions.
+
+Independent review does not require parallel execution. A reviewer performs a bounded initial pass and returns findings; the conductor relays evidence and the authorised clarification exchange, including questions to an author worker where relevant. Workers do not debate directly with siblings or delegate further. Use a different underlying model from the author rather than blindly inheriting the conductor's model. Preserve packet permissions, provider/data restrictions and existing write boundaries; a review approval is not permission to merge, release or take unrelated external actions.
 
 ## The independence test
 

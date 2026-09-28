@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-03T14:05:35+10:00
-updated: 2026-09-23T14:40:00+10:00
+updated: 2026-09-28T13:44:41+10:00
 ---
 
 # Adapted Product Development Process
@@ -27,7 +27,7 @@ The default for material features and ordinary software products. Produce enough
 
 ### High-assurance
 
-Use when failure could cause significant financial, legal, safety, privacy, security, reputational or operational harm; investment is substantial; decisions are difficult to reverse; architecture is novel; or many users and systems are affected. Require deeper evidence, explicit traceability, stronger testing and independent reviews at all specified checkpoints.
+Use when failure could cause significant financial, legal, safety, privacy, security, reputational or operational harm; investment is substantial; decisions are difficult to reverse; architecture is novel; or many users and systems are affected. Require deeper evidence, explicit traceability and stronger testing. Suggest independent reviews at each material opportunity, design and release checkpoint, with relevant specialist coverage; the owner decides whether each review runs. Record an omitted review and its residual uncertainty without treating it as completed or waiving other gate requirements.
 
 Depth may vary by workstream. For example, a commercially modest internal tool can still require high-assurance privacy and security work.
 
@@ -202,7 +202,7 @@ Each gate records:
 - evidence and freshness
 - internal and commercial route disposition
 - assumptions, confidence and unresolved risks
-- independent reviews required and completed
+- independent reviews suggested, owner-authorised, declined, deferred and completed, with scope and unresolved findings
 - decision: `proceed`, `revise`, `pause` or `stop`
 - rationale and conditions
 - exact next investment authorised

@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-03T14:05:35+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-28T13:44:41+10:00
 ---
 
 # Product Development Project Record Specification
@@ -75,7 +75,9 @@ Use the common gate record from the adapted process. Never overwrite history; ad
 
 ### Independent reviews
 
-Link review records and summarize material agreement, disagreement and adopted changes.
+Record each worthwhile review suggestion, its rationale, scope, proposed reviewer, time/token estimate or uncertainty, and the owner's decision (`approved`, `declined` or `deferred`); an unanswered suggestion is pending, not approved. Retain decisions across handovers and re-suggest only when material new evidence changes the case.
+
+For an approved review, link the brief, artifact revision and evidence, actual author/reviewer model identities, coverage and access limits, findings, clarification answers and final dispositions (`adopted`, `rejected`, `deferred` or `unresolved`) with reasons. Include remaining owner questions, authorised discussion boundary, and actual time/tokens when available; never invent usage. Update the canonical specification or artifact to reflect accepted changes. Use a compact entry in the existing plan for small work rather than duplicate records.
 
 ### Delivery and validation
 

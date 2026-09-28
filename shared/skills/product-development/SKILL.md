@@ -10,7 +10,7 @@ status: active
 scope: shared
 owner: brain-owner
 created: 2026-09-03T14:05:35+10:00
-updated: 2026-09-23T14:45:16+10:00
+updated: 2026-09-28T13:44:41+10:00
 ---
 
 # Product Development
@@ -40,7 +40,7 @@ Clearly non-material work needs ordinary engineering discipline, not a ceremonia
 
 - Classify the entry, choose the depth, and create or update the product-development record.
 - Research, test, prototype and prepare evidence and gate decision packs for the owner.
-- Run independent-model reviews within the permissions of the models available.
+- Suggest independent-model reviews and run them only when authorised by the owner, within the approved scope and the permissions of the models available.
 - Record decisions, state, tasks and log entries under the contract. Nothing here authorises an external write, purchase, deployment or publication.
 
 ## Data sources
@@ -63,7 +63,7 @@ None. This skill is a process. It uses the project's own tooling and the shared 
 6. The agent owns evidence gathering and presentation. The owner owns each gate decision unless an accepted active rule explicitly authorises autonomous passage for that gate and risk class.
 7. A gate decision must be explicit and recorded. Do not interpret silence, implementation momentum or previous spending as approval.
 8. Keep the process record current rather than generating disconnected planning documents. A low-risk light change may use a compact entry in an existing canonical plan, feature specification or task instead of creating a dedicated lifecycle document. Read [the project record specification](references/project-record.md) when creating or updating it.
-9. Use independent model reviews at the stages and depth defined in [the multi-model review protocol](references/multi-model-review.md). Different prompts to one model are useful lenses but are not represented as independent-model review.
+9. Proactively suggest independent review at worthwhile stage boundaries using [the multi-model review protocol](references/multi-model-review.md); the owner decides whether to run it at every depth. One reviewer using a different underlying model from the author is sufficient. An approved review normally includes one clarification exchange through the conductor. Different prompts to one model are useful lenses but are not independent-model review.
 10. Preserve authorization boundaries. Research and recommendations do not authorise external writes, purchases, deployments, publication or production access.
 11. **Hand over a decided specification, never an open one.** A research or design increment settles every outstanding decision with the owner before the work passes to whoever builds it, and records the answers in the canonical specification with the date. Say which answers changed the design rather than confirming it, correct the spec's own prose where they did, and flag any decision the owner deliberately left open with who decides it and when. The task record carries the signal: `ready` with `waiting_on: null` means dispatchable. Procedure in `/shared/skills/delegate-work/SKILL.md`, *Research and design threads: clarify, then hand back*.
 
@@ -148,9 +148,9 @@ Work through the adapted phases and gates at the selected depth. The agent shoul
 - expose uncertainty, contradictory evidence and assumptions
 - maintain tasks and project state under the contract
 
-### 5. Run stage reviews
+### 5. Suggest and conduct stage reviews
 
-At required checkpoints, obtain independent reviews using the multi-model protocol. Synthesize agreements and disagreements; never substitute a vote count for evidence or the owner's decision.
+At useful stage boundaries, assess whether an independent review could change a consequential decision or avoid expensive later correction. Suggest its scope and cost to the owner using the multi-model protocol. Run only an approved review; record a decline or deferral and do not repeat the suggestion without new evidence. Resolve factual clarifications through the conductor, record adopted, rejected, deferred and unresolved findings, and update the canonical artifact within existing authority. Never substitute model agreement for evidence or the owner's decision.
 
 ### 6. Present a gate decision pack
 
@@ -180,7 +180,7 @@ After the owner decides, record the decision, rationale, conditions and authoris
 - evidence and source references
 - prototypes, plans, designs, tests or implementation appropriate to the stage
 - gate decision packs and recorded decisions
-- independent-model review records when required
+- independent-review suggestions, owner decisions and review records when authorised
 - updated project state, tasks and significant-event log entries
 
 ## Permissions and failure behaviour
