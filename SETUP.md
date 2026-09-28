@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-23T13:00:00+10:00
-updated: 2026-09-24T09:15:50+10:00
+updated: 2026-09-29T08:50:29+10:00
 owner: brain-owner
 skill_refs:
   - /shared/skills/manage-credentials
@@ -1266,10 +1266,11 @@ Offer each; each is `skipped` unless the person says yes.
 
 > **Ask:** Which extras do you want?
 > 1. A project board (recommended when you already have a project – see G.1)
-> 2. A scheduled task (see G.2)
-> 3. None now
+> 2. The daily due check (recommended on every computer – see G.2)
+> 3. Another scheduled task (see G.3)
+> 4. None now
 >
-> **Suggested reply:** `1` when the person named a project, otherwise `3`
+> **Suggested reply:** `1 and 2` when the person named a project, otherwise `2`
 
 Show the person only the suggestion that applies to them.
 
@@ -1311,17 +1312,49 @@ python shared/skills/owner-board/scripts/build_status.py --board brain
 **Done when:** that command prints `wrote ...status.html` and `wrote ...index.html`, and the
 owner has opened and bookmarked `/memory/boards/index.html`.
 
-### G.2 Scheduled tasks
+### G.2 Daily due check
 
-The contract forbids claiming future follow-up unless a scheduler is actually configured
-(CONTRACT §14). Candidates, alphabetical:
+A small script checks every morning, with no AI model and no AI host, what needs the owner: tasks
+whose review date or deadline has come, blocked tasks, the weekly learning review when it is due,
+a failing brain check, and whether this computer's copies are behind GitHub. It writes the list to
+`/temp/due.md` and shows a desktop notification when anything needs attention. It changes nothing
+the repositories track. The contract forbids claiming future follow-up unless a scheduler is
+actually configured (CONTRACT §14); this is that scheduler. It is per machine: register it on each
+computer the owner works on.
+
+The operating system's own scheduler runs it daily at 07:00, and a run missed while the computer
+was off or asleep starts when it is next on:
+
+| System | Scheduler it uses | Notification |
+|---|---|---|
+| Windows | Task Scheduler, task `BrainScheduledReview`, start when available | tray notification |
+| macOS | launchd agent `local.brain.scheduled-review` in `~/Library/LaunchAgents/` | Notification Centre |
+| Linux with systemd | user timer `brain-scheduled-review.timer`, persistent | `notify-send` |
+| Linux without systemd | cron; a run missed while off is skipped, and the notification may not reach the desktop | the report only |
+
+Register it from the brain root. It always registers the shared checkout named as `brain_root` in
+`/memory/OWNER.md`, never a session copy:
+
+```bash
+cd <brain_root>
+python shared/skills/tasks/scripts/scheduled_review.py --register
+```
+
+Then prove it once: run `python shared/skills/tasks/scripts/scheduled_review.py`, confirm that
+`/temp/due.md` was written and a notification appeared, and check the registration with
+`--status`. `--unregister` removes it.
+
+**Done when:** `--status` shows the daily run on this computer, a manual run wrote `/temp/due.md`,
+and the owner saw the notification. Record the row `G daily due check` with the scheduler in
+`Note`, and the schedule in `/memory/STATE.md`.
+
+### G.3 Other scheduled tasks
+
+Candidates, alphabetical:
 
 - **Google local sync worker** (`google_sync_ctl.py worker`), when `google-workspace-access`
   local sync is wanted – runs under `vault_credentials.py run`, so the Vault Agent must be
   unlocked.
-- **Task review**, surfacing waiting tasks at `next_review` (CONTRACT §9.1) – through the host's
-  own scheduler (for example Claude Code scheduled tasks or routines), started from the brain
-  root.
 - **Vault Agent tray at sign-in** – created in D.1 when a skill that needs the vault was chosen;
   otherwise not needed yet.
 
