@@ -126,3 +126,17 @@ test('the command line fails on new findings and passes after adoption', () => {
   assert.match(execFileSync(process.execPath, [CLI, '--version']).toString(), /^code-map \d+\.\d+\.\d+/);
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test('a folder inside another repository is still mapped, not silently emptied', () => {
+  // The fixture itself sits inside the brain's repository, below a folder that repository tracks;
+  // a copy under an ignored folder must be walked directly rather than asked of the outer Git.
+  const dir = copyFixture();
+  const inner = path.join(dir, 'ignored', 'copy');
+  fs.mkdirSync(inner, { recursive: true });
+  fs.cpSync(FIXTURE, inner, { recursive: true });
+  execFileSync('git', ['init', '-q', dir]);
+  fs.writeFileSync(path.join(dir, '.gitignore'), 'ignored/\n');
+  const m = buildMap(inner);
+  assert.ok(m.ctx.routes.length === 3, `expected the three routes, got ${m.ctx.routes.length}`);
+  fs.rmSync(dir, { recursive: true, force: true });
+});

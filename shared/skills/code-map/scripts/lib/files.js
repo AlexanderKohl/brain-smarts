@@ -22,11 +22,17 @@ function extOf(file) {
   return m ? m[1].toLowerCase() : '';
 }
 
+// Git's own list of files, honouring .gitignore – but only when the folder is the top of its own
+// work tree. A folder inside another repository (a copy, a scratch folder, an ignored path) is walked
+// instead: asking the outer repository would list nothing and map nothing, silently.
 function gitFiles(root) {
   try {
+    const top = execFileSync('git', ['-C', root, 'rev-parse', '--show-toplevel'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    if (path.resolve(top).toLowerCase() !== path.resolve(root).toLowerCase()) return null;
     const out = execFileSync('git', ['-C', root, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'],
       { encoding: 'utf8', maxBuffer: 256 << 20, stdio: ['ignore', 'pipe', 'ignore'] });
-    return out.split('\0').filter(Boolean);
+    const list = out.split('\0').filter(Boolean);
+    return list.length ? list : null;
   } catch {
     return null;
   }
