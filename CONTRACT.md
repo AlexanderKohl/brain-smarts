@@ -825,7 +825,7 @@ Before requesting acceptance, present:
 
 Ask one direct acceptance question. Silence, lack of objection, approval of adjacent work, or general encouragement does not constitute acceptance. Acceptance must unambiguously identify the proposal or exact change set.
 
-An agent may create or revise a proposal without activating it. Store proposals outside the inherited rule path, in the layer whose governance they change:
+An agent may create or revise a proposal without activating it. A protected-governance change is checked for an accepted proposal where it becomes active: on `main` and in the branches that merge into it. On a `proposal/*` branch whose open proposal lists the file in `target_files`, preflight reports it as a warning, so a proposal's exact diff can be committed before the owner decides on it. Store proposals outside the inherited rule path, in the layer whose governance they change:
 
 - a change to the contract, `/RULES.md`, shared governance schemas or templates, bootstrap files or the preflight validator: `/governance/proposals/` in the mechanics repository while it is under review, offered upstream as a pull request when it should reach everyone who uses the mechanics. The mechanics repository keeps no decision history: the owner's record of accepting and applying the change is kept in `/memory/governance/proposals/`
 - a change to `/memory/RULES.md` or a node `RULES.md` in memory: `/memory/governance/proposals/`

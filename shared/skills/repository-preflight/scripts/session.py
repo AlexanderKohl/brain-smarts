@@ -145,6 +145,9 @@ def cmd_start(root: Path, name: str, folder: Path) -> int:
             remove_copy(root, copy, branch, made)
             return 1
         made.append(repo_name)
+    # The brain checks (CONTRACT §15) on every commit in the copy (hooks.py install; relative, so moves are safe).
+    subprocess.run([sys.executable, str(copy / "shared/skills/repository-preflight/scripts/hooks.py"),
+                    "install"], cwd=copy, capture_output=True)
     print(f"session copy: {copy}")
     print("work only there; finish with: python shared/skills/repository-preflight/scripts/session.py "
           f"finish {name}")

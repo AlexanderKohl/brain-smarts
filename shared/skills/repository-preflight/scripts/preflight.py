@@ -733,7 +733,23 @@ def validate_governance(
         if isinstance(targets, list):
             covered.update(str(target) for target in targets)
 
+    # CONTRACT 13.2: acceptance is enforced where a change becomes active. On a proposal/*
+    # branch, a file an open proposal lists is that proposal's draft diff, reported as a warning.
+    branch = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=root, capture_output=True,
+                            text=True).stdout.strip()
+    drafted: set[str] = set()
+    if branch.startswith("proposal/"):
+        for path, metadata in records.items():
+            if (any(proposals in path.parents for proposals in proposal_roots)
+                    and metadata.get("type") == "governance_proposal"
+                    and metadata.get("status") in ("proposed", "draft")
+                    and isinstance(metadata.get("target_files"), list)):
+                drafted.update(str(target) for target in metadata["target_files"])
+
     for path in sorted(protected - covered):
+        if path in drafted:
+            result.warnings.append(f"{path}: protected governance drafted on {branch}; not active until accepted and merged")
+            continue
         result.errors.append(
             f"{path}: changed protected governance is not covered by an accepted proposal"
         )
@@ -873,6 +889,8 @@ def main() -> int:
     parser.add_argument("--root", type=Path, default=Path.cwd())
     parser.add_argument("--write-manifest", action="store_true")
     parser.add_argument("--json", action="store_true", dest="as_json")
+    parser.add_argument("--layer", choices=("mechanics", "library", "memory"),
+                        help="report only this repository's errors and warnings (the pre-commit hook)")
     args = parser.parse_args()
 
     try:
@@ -882,6 +900,11 @@ def main() -> int:
         return 1
 
     result = run(root, args.write_manifest)
+    if args.layer:
+        # A commit is judged on its own repository: another repository's problem, or another
+        # session's, never blocks it.
+        result.errors = [e for e in result.errors if message_layer(e) == args.layer]
+        result.warnings = [w for w in result.warnings if message_layer(w) == args.layer]
     payload = {
         "status": "pass" if result.passed else "fail",
         "root": str(root),

@@ -53,23 +53,23 @@ def run(*args: str) -> str:
 
 
 def install() -> list[str]:
-    """Write a pre-commit hook in every brain repository; keep any hook already there as pre-commit.local."""
+    """Switch on each present repository's own versioned hooks: core.hooksPath = .githooks (relative).
+
+    Relative, so it survives moves, worktrees and session copies; per repository, so a repository
+    cloned on its own keeps working. Git never copies this setting with a clone, so it is run once
+    per checkout (session.py start runs it for every session copy).
+    """
     done = []
-    script = Path(__file__).resolve().as_posix()
     for repo in repositories(ROOT):
-        # Git reads hooks from the common directory, shared by every worktree of the repository.
-        common = Path(git(repo, "rev-parse", "--git-common-dir").strip())
-        hooks = (common if common.is_absolute() else repo / common) / "hooks"
-        hooks.mkdir(exist_ok=True)
-        hook = hooks / "pre-commit"
-        if hook.exists() and MARK not in hook.read_text(encoding="utf-8", errors="replace"):
-            hook.replace(hooks / "pre-commit.local")
-        hook.write_text(f'#!/bin/sh\n# {MARK}: generated from hooks/events.json; do not edit\n'
-                        f'if [ -x "$(dirname "$0")/pre-commit.local" ]; then "$(dirname "$0")/pre-commit.local" || exit 1; fi\n'
-                        f'exec "{Path(sys.executable).as_posix()}" "{script}" pre-commit\n', encoding="utf-8", newline="\n")
-        os.chmod(hook, 0o755)
-        done.append(str(repo))
+        if (repo / ".githooks" / "pre-commit").is_file():
+            git(repo, "config", "core.hooksPath", ".githooks")
+            done.append(str(repo))
     return done
+
+
+def layer_of(repo: Path, root: Path) -> str:
+    return "memory" if repo.name == "memory" and repo.parent == root else (
+        "library" if repo.name == "library" and repo.parent == root else "mechanics")
 
 
 def session_start() -> str:
@@ -89,6 +89,7 @@ def session_start() -> str:
 
 
 def pre_commit(repo: Path) -> int:
+    """The brain's checks for one commit, scoped to the repository being committed."""
     staged = git(repo, "diff", "--cached", "--name-only").split("\n")
     record = git_dir(repo) / UNTRACKED
     foreign = set(record.read_text(encoding="utf-8").splitlines()) if record.is_file() else set()
@@ -97,13 +98,26 @@ def pre_commit(repo: Path) -> int:
         print("pre-commit: these files were untracked when the session started and are not this session's "
               "to commit:\n  " + "\n  ".join(swept) + "\nUnstage them: git restore --staged <path>", file=sys.stderr)
         return 1
-    check = subprocess.run([sys.executable, str(HERE / "preflight.py")], cwd=ROOT, capture_output=True, text=True,
+    root = brain_root_above(repo)
+    if root is None:
+        print("pre-commit: no brain above this repository; brain checks skipped", file=sys.stderr)
+        return 0
+    layer = layer_of(repo, root)
+    check = subprocess.run([sys.executable, str(root / "shared/skills/repository-preflight/scripts/preflight.py"),
+                            "--root", str(root), "--layer", layer], cwd=root, capture_output=True, text=True,
                            encoding="utf-8", errors="replace")
     if check.returncode:
-        print("pre-commit: the repository preflight fails; fix it before committing:\n" + check.stdout[-3000:],
-              file=sys.stderr)
+        print(f"pre-commit: the repository preflight fails for {layer}; fix it before committing:\n"
+              + check.stdout[-3000:], file=sys.stderr)
         return 1
     return 0
+
+
+def brain_root_above(start: Path) -> Path | None:
+    for folder in [start, *start.parents]:
+        if (folder / "CONTRACT.md").is_file() and (folder / "shared").is_dir():
+            return folder
+    return None
 
 
 def host_settings() -> dict:

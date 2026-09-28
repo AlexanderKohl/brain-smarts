@@ -11,7 +11,7 @@
   {
    "event": "before commit",
    "claude_code": null,
-   "git": "pre-commit",
+   "git": ".githooks/pre-commit in each repository (core.hooksPath .githooks)",
    "command": "shared/skills/repository-preflight/scripts/hooks.py pre-commit"
   },
   {
