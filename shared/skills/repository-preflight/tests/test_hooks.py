@@ -13,8 +13,11 @@ import hooks  # noqa: E402
 
 class HooksTest(unittest.TestCase):
     def test_committed_settings_are_generated_from_the_list(self):
-        committed = json.loads((hooks.ROOT / ".claude" / "settings.json").read_text(encoding="utf-8"))
-        self.assertEqual(committed, hooks.host_settings())
+        settings = hooks.ROOT / ".claude" / "settings.json"
+        if settings.is_file():
+            self.assertEqual(json.loads(settings.read_text(encoding="utf-8")), hooks.host_settings())
+        else:
+            self.assertEqual(hooks.host_settings(), {"hooks": {}})
         self.assertEqual(hooks.host_settings(), hooks.host_settings())
 
     def test_a_file_untracked_at_session_start_cannot_be_committed(self):

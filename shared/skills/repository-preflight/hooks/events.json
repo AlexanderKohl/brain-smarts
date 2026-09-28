@@ -3,9 +3,10 @@
  "events": [
   {
    "event": "session start",
-   "claude_code": "SessionStart",
+   "claude_code": null,
    "git": null,
-   "command": "shared/skills/repository-preflight/scripts/hooks.py session-start"
+   "command": "shared/skills/repository-preflight/scripts/hooks.py session-start",
+   "held_back": "the host session hooks cost tokens on every light session (brain-eval, 28 September 2026); the pre-commit hook is proposed alone"
   },
   {
    "event": "before commit",
@@ -15,9 +16,10 @@
   },
   {
    "event": "before compaction",
-   "claude_code": "PreCompact",
+   "claude_code": null,
    "git": null,
-   "command": "shared/skills/repository-preflight/scripts/hooks.py pre-compact"
+   "command": "shared/skills/repository-preflight/scripts/hooks.py pre-compact",
+   "held_back": "the host session hooks cost tokens on every light session (brain-eval, 28 September 2026); the pre-commit hook is proposed alone"
   }
  ]
 }
