@@ -12,6 +12,8 @@ const { analyse } = require('../sql');
 const READ_OPS = new Set(['findAll', 'findOne', 'findByPk', 'findAndCountAll', 'findOrCreate', 'findCreateFind', 'count', 'max', 'min', 'sum', 'aggregate']);
 const WRITE_OPS = new Set(['create', 'bulkCreate', 'update', 'destroy', 'upsert', 'increment', 'decrement', 'restore', 'truncate']);
 const ASSOCIATIONS = new Set(['hasMany', 'belongsTo', 'hasOne', 'belongsToMany']);
+// Calls whose result is one record of the model.
+const RECORD_OPS = new Set(['findOne', 'findByPk', 'create', 'build']);
 
 const snake = (s) => s.replace(/([a-z0-9])([A-Z])/g, '$1_$2').replace(/([A-Z])([A-Z][a-z])/g, '$1_$2').toLowerCase();
 
@@ -191,6 +193,7 @@ function sequelizeAdapter(ctx) {
       if (!model || !db.models.has(model) || rest.length !== 1) continue;
       const op = rest[0];
       if (!READ_OPS.has(op) && !WRITE_OPS.has(op)) continue;
+      if (RECORD_OPS.has(op)) { if (!db.recordCalls) db.recordCalls = new Map(); db.recordCalls.set(site.node, model); }
       calls++;
       modelCall(ctx, facts, site, model, op);
     }

@@ -6,7 +6,8 @@
 //   code-map build   [repo] [--out FILE]              write the whole map as JSON
 //   code-map check   [repo] [--records DIR] [--json]  run the checks; exit 1 when a new finding fails
 //   code-map record  [repo] [--records DIR] [--adopt] write the committed records
-//   code-map show    <name> [--repo DIR]              everything the map knows about a name
+//   code-map show    <name> [--repo DIR]              everything the map knows about a name or field
+//   code-map find    <words…> [--repo DIR]            functions whose text holds the most of the words
 //   code-map report  [repo] [--out FILE]              the generated inventory, as Markdown
 //   code-map --version [--verbose]
 // Common options: --config FILE (instead of <repo>/code-map.config.json).
@@ -64,7 +65,7 @@ function main(argv) {
 
   const { runChecks } = require('./lib/checks');
   const { loadRecords, writeRecords, recordDir } = require('./lib/records');
-  const repoArg = cmd === 'show' ? (flags.repo || '.') : (args[1] || '.');
+  const repoArg = cmd === 'show' || cmd === 'find' ? (flags.repo || '.') : (args[1] || '.');
   const repo = path.resolve(repoArg);
   if (!fs.existsSync(repo)) { console.error(`code-map: no such folder ${repo}`); return 2; }
   const map = load(repo, flags);
@@ -104,6 +105,12 @@ function main(argv) {
     const { show } = require('./lib/query');
     if (!args[1]) { console.error('code-map show: name what to show'); return 2; }
     console.log(show(map, args.slice(1).join(' '), { limit: flags.limit ? Number(flags.limit) : undefined }));
+    return 0;
+  }
+  if (cmd === 'find') {
+    const { findWords } = require('./lib/query');
+    if (!args[1]) { console.error('code-map find: name the words to look for'); return 2; }
+    console.log(findWords(map, args.slice(1).join(' '), { top: flags.limit ? Number(flags.limit) : undefined }));
     return 0;
   }
   if (cmd === 'report') {

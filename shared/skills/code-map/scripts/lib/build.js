@@ -21,6 +21,7 @@ const { prismaAdapter } = require('./adapters/prisma');
 const { dexieAdapter } = require('./adapters/dexie');
 const { messagingAdapter } = require('./adapters/messaging');
 const { envAdapter, settingsAdapter } = require('./adapters/config-reads');
+const { fieldsAdapter } = require('./adapters/fields');
 const { analyse, placeholder } = require('./sql');
 
 const JS_LANGS = new Set(['javascript', 'typescript', 'vue', 'html']);
@@ -201,6 +202,7 @@ function buildMap(root, { configFile = null } = {}) {
   messagingAdapter(ctx);
   envAdapter(ctx);
   settingsAdapter(ctx);
+  fieldsAdapter(ctx);
 
   for (const [lang, s] of langStats) {
     graph.cover(`language:${lang}`, s.parsed ? (s.failed.length ? 'mapped with parse errors' : 'mapped') : s.sizeOnly ? 'sizes only' : 'not used',

@@ -28,7 +28,7 @@ function segmentsFor(entry, text) {
       const ts = /^tsx?$/.test(block.lang || '');
       segments.push({ text: block.content, startLine: block.loc.start.line, typescript: ts });
     }
-    return { segments };
+    return { segments, templateExprs: templateExpressions(descriptor.template) };
   }
   if (entry.language === 'html') {
     const segments = [];
@@ -47,10 +47,27 @@ function segmentsFor(entry, text) {
   return { segments: [{ text, startLine: 1, typescript: null }] };
 }
 
+// Expressions in a Vue template: {{ interpolations }} and directive values (v-if, :prop, @event).
+function templateExpressions(template) {
+  const out = [];
+  if (!template || !template.ast) return out;
+  const visit = (node) => {
+    if (!node) return;
+    if (node.type === 5 && node.content && typeof node.content.content === 'string') out.push({ text: node.content.content, line: node.content.loc.start.line });
+    for (const p of node.props || []) if (p.type === 7 && p.exp && typeof p.exp.content === 'string') out.push({ text: p.exp.content, line: p.exp.loc.start.line });
+    for (const c of node.children || []) visit(c);
+    if (node.branches) for (const b of node.branches) visit(b);
+  };
+  visit(template.ast);
+  return out;
+}
+
 function loadJs(entry, text, hints) {
-  const { segments, missing } = segmentsFor(entry, text);
+  const { segments, missing, templateExprs } = segmentsFor(entry, text);
   if (missing) return { facts: null, missing };
-  return { facts: extractJs(entry.file, entry.language, entry.lines, segments, hints) };
+  const facts = extractJs(entry.file, entry.language, entry.lines, segments, hints);
+  facts.templateExprs = templateExprs || [];
+  return { facts };
 }
 
 // ---------- aliases ----------

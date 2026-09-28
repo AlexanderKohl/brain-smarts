@@ -5,6 +5,13 @@
 
 const A = require('./ast');
 
+// Roots whose members are language or runtime APIs, not data: never recorded as fields.
+const GLOBALS = new Set(['Math', 'JSON', 'Object', 'Array', 'Number', 'String', 'Boolean', 'Promise', 'Date',
+  'console', 'window', 'document', 'globalThis', 'self', 'navigator', 'location', 'history', 'localStorage',
+  'sessionStorage', 'Symbol', 'Reflect', 'Intl', 'Buffer', 'module', 'exports', 'require', 'process', 'Error',
+  'RegExp', 'Map', 'Set', 'URL', 'crypto', 'performance']);
+const LITERAL = new Set(['StringLiteral', 'NumericLiteral', 'BooleanLiteral']);
+
 const MUTATORS = new Set(['push', 'pop', 'shift', 'unshift', 'splice', 'sort', 'reverse', 'fill',
   'copyWithin', 'set', 'delete', 'clear', 'add']);
 
@@ -12,7 +19,7 @@ function newFacts(file, language, lines) {
   return {
     file, language, lines, errors: [], functions: [], classes: [], variables: [], imports: [],
     exports: { named: new Map(), default: null, cjsDefault: null, starFrom: [] },
-    callSites: [], newSites: [], tagged: [], varRefs: [], env: [], assignments: [], jsx: [], memberReads: [],
+    callSites: [], newSites: [], tagged: [], varRefs: [], env: [], assignments: [], jsx: [], memberReads: [], fields: [],
     moduleScope: new Map(), programs: [], functionsByName: new Map(), callCount: 0,
   };
 }
@@ -54,6 +61,16 @@ function extractJs(file, language, lines, segments, hints = {}) {
 }
 
 // ---------- declarations and scopes ----------
+
+// Where the value a field hangs off comes from, as the code states it: a parameter, or the text of
+// the expression that initialised it. Never a guess at its type.
+function originOf(b, text) {
+  if (!b) return null;
+  if (b.kind === 'param') return { kind: 'parameter', name: b.name };
+  if (b.import) return { kind: 'import', name: b.name };
+  if (b.init) return { kind: 'value', name: b.name, text: A.snippet(text, b.init, 70), line: b.line };
+  return { kind: b.kind, name: b.name };
+}
 
 function binding(name, kind, node, extra = {}) {
   return { name, kind, line: A.lineOf(node), init: null, import: null, pattern: null, assignments: [], ...extra };
@@ -265,7 +282,14 @@ class Walker {
       case 'ObjectProperty': {
         if (node.computed) this.visit(node.key, node, 'key', ctx);
         const name = A.keyName(node.key, node.computed);
-        return this.visit(node.value, node, 'value', { ...ctx, propName: name });
+        const objPath = name ? [...(ctx.objPath || []), name] : null;
+        const value = A.unwrap(node.value);
+        // An object literal sets its keys: { contactDetails: { entity_type: 'x' } } sets contactDetails.entity_type.
+        if (objPath && parent && parent.type === 'ObjectExpression') {
+          this.facts.fields.push({ path: objPath, root: null, line: A.lineOf(node), owner: ctx.owner && ctx.owner.id, write: true, literal: true,
+            compared: value && LITERAL.has(value.type) ? [value.value] : null, fallback: null, origin: null, initNode: null });
+        }
+        return this.visit(node.value, node, 'value', { ...ctx, propName: name, objPath: value && value.type === 'ObjectExpression' ? objPath : undefined });
       }
       case 'JSXElement': return this.jsxElement(node, ctx);
       case 'LabeledStatement': return this.visit(node.body, node, 'body', ctx);
@@ -431,6 +455,28 @@ class Walker {
         if (inner) inner.__requireRecorded = true;
       }
     }
+    // Destructured fields: const { a, b: { c } } = obj.x reads obj.x.a and obj.x.b.c.
+    if (node.id.type === 'ObjectPattern' && init && !req && !isEnvObject(init)) {
+      const chain = A.memberChain(init);
+      if (chain.root && chain.root.type === 'Identifier' && !chain.path.includes(null)) {
+        const b = lookup(ctx.scopes, chain.root.name);
+        if (!(b && b.import) && !(!b && GLOBALS.has(chain.root.name))) {
+          const walkPattern = (pat, prefix) => {
+            for (const p of pat.properties) {
+              if (p.type !== 'ObjectProperty') continue;
+              const k = A.keyName(p.key, p.computed);
+              if (!k) continue;
+              const dflt = p.value.type === 'AssignmentPattern' ? A.unwrap(p.value.right) : null;
+              this.facts.fields.push({ path: [...prefix, k], root: chain.root.name, line: A.lineOf(p), owner: ctx.owner && ctx.owner.id, write: false, compared: null,
+                fallback: dflt && LITERAL.has(dflt.type) ? dflt.value : null,
+                origin: originOf(b, this.text), initNode: b && b.init ? A.unwrap(b.init) : null });
+              if (p.value.type === 'ObjectPattern') walkPattern(p.value, [...prefix, k]);
+            }
+          };
+          walkPattern(node.id, chain.path);
+        }
+      }
+    }
     // Env destructuring: const { A, B } = process.env
     if (node.id.type === 'ObjectPattern' && init && isEnvObject(init)) {
       for (const p of node.id.properties) {
@@ -516,6 +562,7 @@ class Walker {
       const name = A.keyName(node.property, node.computed);
       this.facts.env.push({ name, line: A.lineOf(node), owner: ctx.owner && ctx.owner.id, dynamic: name === null, text: name === null ? A.snippet(this.text, node) : undefined });
     }
+    if (!(A.isMember(parent) && parent.object === node)) this.field(node, parent, key, ctx);
     // Outermost member chain rooted at a possible settings object.
     const hints = this.facts.hints;
     if ((!hints.roots.size && !hints.loaders.size) || (A.isMember(parent) && parent.object === node)) return;
@@ -532,6 +579,44 @@ class Walker {
     this.facts.memberReads.push({
       rootName: chain.root.name, binding: b, path: chain.path, line: A.lineOf(node), owner: ctx.owner && ctx.owner.id,
       isCallee: A.isCall(parent) && parent.callee === node,
+    });
+  }
+
+  // A data field: the outermost property path read or written on a value that is not a module API,
+  // with the literal it is compared with and the default it falls back to, when the syntax says so.
+  field(node, parent, key, ctx) {
+    const chain = A.memberChain(node);
+    const root = chain.root;
+    if (!root || root.type !== 'Identifier') return;
+    const b = lookup(ctx.scopes, root.name);
+    if ((!b && GLOBALS.has(root.name)) || (b && b.import) || isEnvObject(A.unwrap(node.object))) return;
+    const path = [];
+    for (const k of chain.path) { if (k === null || k.startsWith('#')) break; path.push(k); }
+    if (A.isCall(parent) && parent.callee === node && path.length === chain.path.length) path.pop();
+    if (!path.length) return;
+    let base = [];
+    let origin = b;
+    if (b && b.pattern && b.initBinding && b.pattern.every((p) => p && !p.startsWith('[') && p !== '...')) { base = b.pattern; origin = b.initBinding; }
+    const s = this.stack;
+    const up = s[s.length - 2];
+    let compared = null;
+    let fallback = null;
+    if (up && up.type === 'BinaryExpression' && /^[!=]==?$/.test(up.operator)) {
+      const other = A.unwrap(up.left === node ? up.right : up.left);
+      if (other && LITERAL.has(other.type)) compared = [other.value];
+    } else if (up && up.type === 'LogicalExpression' && (up.operator === '||' || up.operator === '??') && up.left === node) {
+      const r = A.unwrap(up.right);
+      if (r && LITERAL.has(r.type)) fallback = r.value;
+    } else if (up && up.type === 'SwitchStatement' && up.discriminant === node) {
+      compared = up.cases.map((c) => c.test && A.unwrap(c.test)).filter((t) => t && LITERAL.has(t.type)).map((t) => t.value);
+    } else if (up && A.isCall(up) && up.arguments[0] === node && A.isMember(up.callee) && A.keyName(up.callee.property, up.callee.computed) === 'includes') {
+      const arr = A.unwrap(up.callee.object);
+      if (arr && arr.type === 'ArrayExpression') compared = arr.elements.map((e) => e && A.unwrap(e)).filter((e) => e && LITERAL.has(e.type)).map((e) => e.value);
+    }
+    this.facts.fields.push({
+      path: [...base, ...path], root: root.name, line: A.lineOf(node), owner: ctx.owner && ctx.owner.id,
+      write: this.isWrite(node, parent, key), compared, fallback,
+      origin: originOf(origin, this.text), initNode: origin && origin.init ? A.unwrap(origin.init) : null,
     });
   }
 
