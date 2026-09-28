@@ -17,7 +17,7 @@ metadata:
     - /shared/skills/owner-board
     - /shared/skills/repository-preflight
   created: 2026-09-23T13:10:00+10:00
-  updated: 2026-09-26T16:00:00+10:00
+  updated: 2026-09-29T06:34:15+10:00
 ---
 
 # Tasks
@@ -196,7 +196,7 @@ that `STATE.md` lists every open task with its status word.
 | `tasks.py do-now <id> [--note] [--now] [--no-board]` | Priority high, status ready unless in progress, History |
 | `tasks.py note <id> --note ... [--now] [--no-board]` | A History entry with the owner's note |
 | `tasks.py next-id [--year YYYY]` | The next free task number across all folders and live claims |
-| `scheduled_review.py [--register]` | Read-only review with no model: writes the ignored `/temp/due.md` (tasks due, skill-exchange, preflight); `--register` adds a daily 07:00 Windows task. Once registered, follow-up is real under CONTRACT §14 |
+| `scheduled_review.py [--register] [--no-notify]` | Read-only review with no model: writes the ignored `/temp/due.md` (each repository compared with origin, the weekly learning digest when due, tasks due, skill exchange, preflight) and shows a desktop notification when something needs attention. `--register` runs it daily at 07:00 from the operating system's scheduler (Windows Task Scheduler, catching up after the computer was off; cron elsewhere), always from the shared checkout named in `/memory/OWNER.md`. Once registered, follow-up is real under CONTRACT §14 |
 
 Common options: `--tasks <path>` (repository-root or absolute; default `/memory/tasks`) and
 `--json`. Standard library only; `new`, `done`, `do-now` and `note` write.
