@@ -51,3 +51,6 @@ outbox/
 # The skill library repository is checked out here as a separate repository (CONTRACT §3.5).
 # It must never be committed to this mechanics repository.
 library/
+
+# Node packages a skill installs for its own scripts (for example /shared/skills/code-map/)
+node_modules/
