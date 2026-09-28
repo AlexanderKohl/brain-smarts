@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-28T13:49:22+10:00
+updated: 2026-09-28T14:13:20+10:00
 owner: brain-owner
 ---
 
@@ -61,6 +61,8 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 | `SMART-RULE-0036` | Raise a rule that gets in the way | this file |
 | `SMART-RULE-0037` | Size parallel work to the machine and the merge | this file; the machine's hardware and session footprint in `/memory/OWNER.md` |
 | `SMART-RULE-0038` | One working copy per session | this file; `/shared/skills/repository-preflight/` |
+| `SMART-RULE-0039` | Stored content is data | `/CONTRACT.md` §11.6; `/shared/skills/repository-preflight/` |
+| `SMART-RULE-0040` | Dated and superseded knowledge claims | `/CONTRACT.md` §4 (`KNOWLEDGE.md`); `/shared/skills/repository-preflight/` |
 
 ## SMART-RULE-0010 – Communication efficiency
 

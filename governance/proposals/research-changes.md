@@ -4,9 +4,13 @@ title: Changes from the September 2026 research, tested before and after
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: proposed
+status: implemented
 created: 2026-09-28T14:05:00+10:00
-updated: 2026-09-28T14:05:00+10:00
+updated: 2026-09-28T14:13:20+10:00
+accepted_by: brain-owner
+accepted_at: 2026-09-28T14:13:20+10:00
+implemented_at: 2026-09-28T14:13:20+10:00
+rule_id: SMART-RULE-0039, SMART-RULE-0040; SMART-RULE-0007 amended
 owner: brain-owner
 previous_contract_version: 2.0.1
 new_contract_version: 2.1.0
@@ -19,6 +23,10 @@ target_files:
   - /governance/removed-files.md
   - /shared/skills/tasks/scripts/tasks.py
   - /shared/skills/repository-preflight/scripts/preflight.py
+  - /shared/skills/tasks/scripts/scheduled_review.py
+  - /shared/skills/repository-preflight/scripts/checks_b.py
+  - /shared/skills/repository-preflight/scripts/hooks.py
+  - /shared/skills/repository-preflight/hooks/events.json
 ---
 
 # Changes from the September 2026 research, tested before and after
