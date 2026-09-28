@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 node_type: skill_library
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-23T19:34:24+10:00
+updated: 2026-09-28T17:00:17+10:00
 ---
 
 # Core Skills
@@ -25,6 +25,10 @@ Plaintext credentials and recovery material must remain outside the repository. 
 #### Folders
 
 Folders are alphabetical.
+
+##### `code-map/`
+
+Contains the code map: a deterministic map of a code repository (files, functions, imports, routes, UI calls, database columns, data fields, templates, settings and environment variables) built from the code by fixed rules, `show` and `find` for agents, a generated inventory, and checks that fail when a link breaks. Node scripts with their own pinned parser packages (`npm ci` in the folder; `node_modules/` is ignored). A candidate core skill: it becomes core when a rule requires it, and moves to the skill library if none does. Tests in `tests/` run on a fictional fixture.
 
 ##### `delegate-work/`
 

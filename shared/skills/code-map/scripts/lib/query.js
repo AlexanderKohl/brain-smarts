@@ -62,10 +62,13 @@ function show(map, term, { limit = LIMIT } = {}) {
     if (!byTo.has(e.to)) byTo.set(e.to, []);
     byTo.get(e.to).push(e);
   }
+  // Fields get their own summary; anything else the name matches is listed with its links first.
   const fields = hits.filter((n) => n.type === 'field');
-  if (fields.length && fields.length === hits.length) return fieldSummary(map, fields, byFrom, byTo, limit);
-  const shown = hits.slice(0, 12);
-  if (hits.length > shown.length) out.push(`${hits.length} matches; the first ${shown.length} are shown. Use a fuller name to narrow.`);
+  const tail = fields.length ? fieldSummary(map, fields, byFrom, byTo, limit) : '';
+  const others = hits.filter((n) => n.type !== 'field');
+  if (!others.length) return tail;
+  const shown = others.slice(0, 12);
+  if (others.length > shown.length) out.push(`${others.length} matches; the first ${shown.length} are shown. Use a fuller name to narrow.`);
   for (const n of shown) {
     out.push('', `== ${label(n)}`);
     const groups = new Map();
@@ -96,7 +99,7 @@ function show(map, term, { limit = LIMIT } = {}) {
     }
     if (n.type === 'route' && !(byTo.get(n.id) || []).some((e) => e.type === 'requests')) out.push('  no UI call in the map reaches this route (calls through variables are listed as unresolved)');
   }
-  return out.join('\n');
+  return out.join('\n') + (tail ? `\n${tail}` : '');
 }
 
 // A field: where it is read and set, the values it is compared with, its defaults, where the object
