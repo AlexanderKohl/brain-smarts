@@ -46,12 +46,13 @@ function merge(base, extra) {
   return extra === undefined ? base : extra;
 }
 
-function loadConfig(root) {
-  const file = path.join(root, CONFIG_FILE);
+// `configFile` overrides the repository's own file (for running on a copy that has none).
+function loadConfig(root, configFile = null) {
+  const file = configFile ? path.resolve(configFile) : path.join(root, CONFIG_FILE);
   let own = {};
   if (fs.existsSync(file)) {
     try { own = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (err) {
-      throw new Error(`${CONFIG_FILE} is not valid JSON: ${err.message}`);
+      throw new Error(`${path.basename(file)} is not valid JSON: ${err.message}`);
     }
   }
   const config = merge(DEFAULTS, own);

@@ -58,9 +58,9 @@ function detectDialect(config, files, root) {
   return null;
 }
 
-function buildMap(root) {
+function buildMap(root, { configFile = null } = {}) {
   root = path.resolve(root);
-  const config = loadConfig(root);
+  const config = loadConfig(root, configFile);
   const files = listFiles(root, config);
   const fileIndex = new Map(files.map((e) => [e.file, e]));
   const graph = new Graph();
