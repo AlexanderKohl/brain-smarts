@@ -9,7 +9,7 @@ scope: shared
 script_paths:
   - /shared/skills/delegate-work/scripts/delegation.py
 created: 2026-09-15T07:45:00+10:00
-updated: 2026-09-28T13:44:41+10:00
+updated: 2026-09-29T08:00:43+10:00
 owner: brain-owner
 project_refs:
   - /memory/projects/brain-development
@@ -441,7 +441,7 @@ The prompt is a pointer; the files are the substance. Ten minutes, not an hour.
 
 **Arriving in a thread (the successor):**
 
-1. Read `/CONTRACT.md`, `/RULES.md`, then the `## Handover` of
+1. Read `/CORE.md`, `/memory/OWNER.md`, `/memory/RULES.md`, then the `## Handover` of
    `/memory/projects/brain-development/STATE.md` and the `## Handover` sections it points to. That is
    the whole bootstrap; do not re-derive the position from logs, transcripts or git.
 2. Check the live facts the Handover cannot promise: `git log -1` on the branches it names,
