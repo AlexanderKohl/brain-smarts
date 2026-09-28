@@ -263,5 +263,27 @@ class SessionTests(unittest.TestCase):
         self.assertIn("| alpha | mechanics | 0 | 0 |", out)
 
 
+class ChildOutputTests(unittest.TestCase):
+    """A helper script's output reaches session.py intact, whatever encoding the child writes."""
+
+    def test_python_child_non_ascii_output_is_captured(self):
+        # Before run_child: a "§" written by a Windows Python child arrived as byte 0xA7, the
+        # UTF-8 reader failed silently, stdout was None and finish crashed on .splitlines()
+        child = [sys.executable, "-c", "print('FAIL: 1 error'); print('ERROR: x is ahead (CONTRACT §8.2)')"]
+        done = session.run_child(child, Path.cwd())
+        self.assertIsNotNone(done.stdout)
+        self.assertIn("CONTRACT §8.2", done.stdout)
+
+    def test_undecodable_bytes_are_replaced_not_lost(self):
+        # A non-Python child that writes a byte UTF-8 cannot decode
+        child = [sys.executable, "-c", r"import sys; sys.stdout.buffer.write(b'FAIL: \xa7 bad\n')"]
+        done = session.run_child(child, Path.cwd())
+        self.assertTrue(done.stdout.startswith("FAIL: "))
+
+    def test_last_line_with_no_output(self):
+        done = subprocess.CompletedProcess(["x"], 1, stdout=None, stderr=None)
+        self.assertEqual(session.last_line(done), "?")
+
+
 if __name__ == "__main__":
     unittest.main()

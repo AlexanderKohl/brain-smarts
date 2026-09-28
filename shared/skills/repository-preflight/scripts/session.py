@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import os
 import re
 import subprocess
 import sys
@@ -55,7 +56,19 @@ def git(repo: Path, *args: str) -> subprocess.CompletedProcess:
 
 
 def last_line(done: subprocess.CompletedProcess) -> str:
-    return ((done.stderr or done.stdout).strip().splitlines() or ["?"])[-1]
+    return (((done.stderr or done.stdout) or "").strip().splitlines() or ["?"])[-1]
+
+
+def run_child(command: list[str], cwd: Path) -> subprocess.CompletedProcess:
+    """Run a helper script and capture its output as text that is never lost.
+
+    A Python child on Windows writes to a pipe in the console code page, not UTF-8, so a
+    character such as "§" arrives as one byte that UTF-8 cannot decode; the reader thread then
+    dies silently and stdout comes back as None. PYTHONIOENCODING makes a Python child write
+    UTF-8, and errors="replace" keeps any other child's output readable.
+    """
+    return subprocess.run(command, cwd=cwd, capture_output=True, text=True, encoding="utf-8",
+                          errors="replace", env={**os.environ, "PYTHONIOENCODING": "utf-8"})
 
 
 def shared_root(start: Path) -> Path | None:
@@ -157,8 +170,7 @@ def rebuild(copy: Path, repo_name: str, repo: Path, files: list[str]) -> list[st
     if left:
         return left
     for command in commands:
-        done = subprocess.run([sys.executable if command[0] == "python" else command[0], *command[1:]],
-                              cwd=copy, capture_output=True, text=True, encoding="utf-8")
+        done = run_child([sys.executable if command[0] == "python" else command[0], *command[1:]], copy)
         if done.returncode:
             return [f"{' '.join(command)} failed: {last_line(done)}"]
     # A generator may rewrite more than the conflicted file (every board, say); stage all it made.
@@ -223,12 +235,17 @@ def cmd_finish(root: Path, name: str, folder: Path, keep: bool, preflight: bool)
             return 1
         ahead[repo_name] = git(path, "merge-base", "--is-ancestor", "HEAD", base[repo_name]).returncode != 0
     if preflight and any(ahead.values()):
-        checked = subprocess.run([sys.executable, str(copy / "shared/skills/repository-preflight/scripts/preflight.py"),
-                                  "--root", str(copy)], cwd=copy, capture_output=True, text=True, encoding="utf-8")
-        summary = next((line for line in checked.stdout.splitlines() if line.startswith(("PASS", "FAIL"))),
-                       last_line(checked))
+        checked = run_child([sys.executable, str(copy / "shared/skills/repository-preflight/scripts/preflight.py"),
+                             "--root", str(copy)], copy)
+        lines = checked.stdout.splitlines()
+        summary = next((line for line in lines if line.startswith(("PASS", "FAIL"))), last_line(checked))
         print(f"preflight: {summary}")
         if checked.returncode:
+            # Say why, so the fix is visible without re-running the check by hand
+            for line in lines:
+                if line.startswith("ERROR"):
+                    print(f"  {line}")
+            print("preflight failed: nothing was pushed; fix the errors in the session copy and finish again")
             return 1
     for repo_name, _, path in repos:
         if not ahead[repo_name]:
