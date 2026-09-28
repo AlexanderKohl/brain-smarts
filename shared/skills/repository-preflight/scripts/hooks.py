@@ -120,6 +120,32 @@ def brain_root_above(start: Path) -> Path | None:
     return None
 
 
+def commit_msg(repo: Path, message_file: Path) -> int:
+    """SMART-RULE-0008: a commit message in a shareable repository holds no personal data.
+
+    Uses the preflight's own personal-data patterns and the owner's terms read from memory. The
+    Co-Authored-By trailer names the tool, not the owner, and is skipped.
+    """
+    root = brain_root_above(repo)
+    if root is None or layer_of(repo, root) == "memory":
+        return 0
+    import tempfile
+    sys.path.insert(0, str(root / "shared/skills/repository-preflight/scripts"))
+    import personal_data
+    lines = [l for l in message_file.read_text(encoding="utf-8", errors="replace").splitlines()
+             if not l.startswith(("Co-Authored-By:", "#"))]
+    with tempfile.TemporaryDirectory() as d:
+        probe = Path(d) / "message.md"
+        probe.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        hits = personal_data.scan([probe], personal_data.owner_terms(root))
+    if hits:
+        kinds = ", ".join(sorted({kind for _f, _l, kind, _v in hits}))
+        print(f"commit-msg: the message holds personal data ({kinds}); say \"the owner\" and keep "
+              f"names, addresses and identifiers out of shareable repositories (SMART-RULE-0008)", file=sys.stderr)
+        return 1
+    return 0
+
+
 def host_settings() -> dict:
     """The Claude Code project settings generated from the event list."""
     events = json.loads(EVENTS.read_text(encoding="utf-8"))
@@ -145,6 +171,8 @@ def main(argv: list[str]) -> int:
         print("\n".join(install()))
     elif command == "session-start":
         print(session_start())
+    elif command == "commit-msg":
+        return commit_msg(Path(git(Path.cwd(), "rev-parse", "--show-toplevel").strip() or "."), Path(argv[1]))
     elif command == "pre-commit":
         return pre_commit(Path(git(Path.cwd(), "rev-parse", "--show-toplevel").strip() or "."))
     elif command == "host-settings":
