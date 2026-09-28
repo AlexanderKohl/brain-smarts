@@ -191,11 +191,12 @@ that `STATE.md` lists every open task with its status word.
 |---|---|
 | `tasks.py review [--today YYYY-MM-DD] [--horizon N]` | What needs attention, as a Markdown table |
 | `tasks.py check` | Record validation; exit code 1 on errors |
-| `tasks.py new --title ... [--status] [--priority] [--project ...] [--due] [--next-review] [--waiting-on] [--no-board]` | Create a record from the template with the next number, add its `STATE.md` row, refresh its board |
+| `tasks.py new --title ... [--status] [--priority] [--project ...] [--due] [--next-review] [--waiting-on] [--no-board]` | Create a record from the template with the next number, claimed atomically under `.claims/` so concurrent sessions never share one, add its `STATE.md` row, refresh its board |
 | `tasks.py done <id> [--note] [--now] [--no-board]` | Complete a task: History, move to `completed/`, `STATE.md` row out |
 | `tasks.py do-now <id> [--note] [--now] [--no-board]` | Priority high, status ready unless in progress, History |
 | `tasks.py note <id> --note ... [--now] [--no-board]` | A History entry with the owner's note |
-| `tasks.py next-id [--year YYYY]` | The next free task number across all folders |
+| `tasks.py next-id [--year YYYY]` | The next free task number across all folders and live claims |
+| `scheduled_review.py [--register]` | Read-only review with no model: writes the ignored `/temp/due.md` (tasks due, skill-exchange, preflight); `--register` adds a daily 07:00 Windows task. Once registered, follow-up is real under CONTRACT §14 |
 
 Common options: `--tasks <path>` (repository-root or absolute; default `/memory/tasks`) and
 `--json`. Standard library only; `new`, `done`, `do-now` and `note` write.

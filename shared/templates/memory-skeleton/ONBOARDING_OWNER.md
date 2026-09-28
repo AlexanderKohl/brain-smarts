@@ -13,7 +13,7 @@ owner: OWNER_SHORT_NAME
 # Owner Onboarding
 
 Read `/CONTRACT.md`, `/RULES.md`, `/memory/OWNER.md` and `/memory/RULES.md` first, then the
-generic mechanics in `/ONBOARDING_AGENT.md`.
+generic mechanics in `/CONTRACT.md`, `/RULES.md` and the skills' own files.
 
 Record here the operating notes specific to this owner: which accounts and organisations the
 shared skills act for, where the non-secret registries live in memory, and any local tools.
