@@ -15,6 +15,13 @@ owner: brain-owner
 
 **A file-based working memory and rulebook that any AI coding agent can read, so your work keeps its context from one session, and one model, to the next.**
 
+**What this is, and who it is for.** This repository is the shareable half of a personal AI
+brain: the operating contract, the rules and the core skills, with no personal data in them. It is
+for people who work with AI coding agents (Claude Code, Codex, Cursor and others) across many
+sessions and projects and want those agents to keep context, follow the same rules and act safely
+on outside systems. You add your own private memory repository beside it; the setup guide walks you
+through it. MIT-licensed (`/LICENSE`); contributions welcome (`/CONTRIBUTING.md`).
+
 Most AI sessions start from nothing: you explain your projects, your preferences and your accounts again, and whatever the agent learnt disappears when the chat closes. The Portable AI Brain is a pair of ordinary Git repositories that the agent reads at the start of every session. They hold an operating contract, rules, your tasks and projects, what has been decided and why, and reusable skills for the systems you work with. The agent reads them, does the work, and writes back what changed – so the next session, in any host, starts where the last one stopped.
 
 Agents: read [`/CONTRACT.md`](CONTRACT.md) before using this repository.
