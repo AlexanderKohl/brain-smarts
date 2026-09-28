@@ -28,7 +28,7 @@ Folders are alphabetical.
 
 ##### `code-map/`
 
-Contains the code map: a deterministic map of a code repository (files, functions, imports, routes, UI calls, database columns, data fields, templates, settings and environment variables) built from the code by fixed rules, `show` and `find` for agents, a generated inventory, and checks that fail when a link breaks. Node scripts with their own pinned parser packages (`npm ci` in the folder; `node_modules/` is ignored). A candidate core skill: it becomes core when a rule requires it, and moves to the skill library if none does. Tests in `tests/` run on a fictional fixture.
+Contains the code map: a deterministic map of a code repository (files, functions, imports, routes, UI calls, database columns, data fields, templates, settings and environment variables) built from the code by fixed rules, `show` and `find` for agents, a generated inventory, checks that fail when a link breaks, and a report-only list of code no longer used. Node scripts with their own pinned parser packages (`npm ci` in the folder; `node_modules/` is ignored). A candidate core skill: it becomes core when a rule requires it, and moves to the skill library if none does. Tests in `tests/` run on a fictional fixture.
 
 ##### `delegate-work/`
 

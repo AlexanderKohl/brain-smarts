@@ -36,7 +36,8 @@ function envAdapter(ctx) {
     if (ignored(r.name)) continue;
     graph.node(`env:${r.name}`, 'env', { name: r.name, declared: declared.has(r.name) });
     graph.edge('reads-env', (r.owner ? `fn:${r.owner}` : `file:${r.file}`), `env:${r.name}`, { file: r.file, line: r.line });
-    ctx.envReads.push({ name: r.name, file: r.file, line: r.line, test: !!(ctx.fileIndex.get(r.file) || {}).test });
+    // A retired fallback name read from a list (via 'helper-list') is not required in the example file.
+    if (r.via !== 'helper-list') ctx.envReads.push({ name: r.name, file: r.file, line: r.line, test: !!(ctx.fileIndex.get(r.file) || {}).test });
     count++;
   }
   graph.cover('config:env', reads.length ? 'mapped' : 'not used', { reads: count, exampleFiles: ctx.envFiles });

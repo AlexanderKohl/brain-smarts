@@ -154,3 +154,47 @@ test('a UI call under a router with computed route paths is left unresolved, not
   assert.ok(!r.byCheck.http.findings.some((f) => f.key.includes('/api/jobs')), 'no http finding for /api/jobs');
   assert.ok(m.graph.unresolved.some((u) => u.kind === 'http-call' && /\/api\/jobs/.test(u.text)), 'listed as unresolved');
 });
+
+// ---------- the unused report ----------
+
+const { unusedReport } = require('../scripts/lib/unused');
+const unused = unusedReport(map);
+const unusedNames = (kind) => unused.kinds.find((k) => k.id === kind).items.map((i) => `${i.file} ${i.name}`);
+
+test('unused files: a file nothing reaches is listed; one started as a script, or loaded by an HTML page, is not', () => {
+  const files = unusedNames('files');
+  assert.ok(files.includes('backend/lib/unusedHelper.js unusedHelper.js'));
+  for (const f of ['backend/jobs/nightly.js', 'backend/lib/runner.js', 'backend/app.js', 'frontend/main.js', 'frontend/Counter.vue']) {
+    assert.ok(!files.some((x) => x.startsWith(`${f} `)), `${f} is reached`);
+  }
+});
+
+test('unused exports: a name read from a whole module (runner.runNightly) is used; one nobody reads is listed', () => {
+  const exps = unusedNames('exports');
+  assert.ok(exps.includes('backend/lib/runner.js runWeekly'));
+  assert.ok(!exps.includes('backend/lib/runner.js runNightly'));
+  assert.ok(!exps.some((x) => x.startsWith('backend/lib/unusedHelper.js ')), 'an unreached file is listed once, as a file');
+});
+
+test('unused declarations: never used and set but never read', () => {
+  assert.deepStrictEqual(unusedNames('declarations'), ['backend/lib/runner.js LEGACY_LIMIT', 'backend/lib/runner.js lastRun']);
+  assert.match(unused.kinds.find((k) => k.id === 'declarations').items[1].message, /set but never read/);
+});
+
+test('Vue state: template uses, template refs, used increments and defineProps count; a comment does not', () => {
+  assert.deepStrictEqual(unusedNames('vue-state'), ['frontend/Counter.vue unusedLabel', 'frontend/Counter.vue hiddenNote',
+    'frontend/Counter.vue draft', 'frontend/Counter.vue reset']);
+});
+
+test('env: a variable read through a helper counts as read; a listed one nobody reads is reported', () => {
+  assert.deepStrictEqual(unusedNames('env'), ['env.example LEGACY_TOKEN']);
+  assert.ok(map.ctx.envReads.some((r) => r.name === 'SHOP_REGION' && r.file === 'backend/lib/runner.js'));
+  // A retired fallback read from a list is not required in env.example.
+  assert.ok(!keys('env').includes('env:SHOP_ZONE_OLD'));
+});
+
+test('the unused command reports and never fails', () => {
+  const out = execFileSync(process.execPath, [CLI, 'unused', FIXTURE, '--only', 'files']).toString();
+  assert.match(out, /Files no entry point reaches: 2/);
+  assert.doesNotMatch(out, /Exports no file uses/);
+});

@@ -10,6 +10,7 @@
 //   code-map find    <words…> [--repo DIR]            functions whose text holds the most of the words
 //   (show and find take --map FILE: a map saved by build --out, used instead of rebuilding)
 //   code-map report  [repo] [--out FILE]              the generated inventory, as Markdown
+//   code-map unused  [repo] [--json] [--only KINDS]   code no longer used (report only; never fails)
 //   code-map --version [--verbose]
 // Common options: --config FILE (instead of <repo>/code-map.config.json).
 
@@ -98,6 +99,14 @@ function main(argv) {
     const files = map.files.map((e) => ({ file: e.file, ext: e.ext, language: e.language, lines: e.lines, code: e.code, test: e.test, sizeExempt: e.sizeExempt }));
     const json = JSON.stringify({ tool: { name: 'code-map', ...id }, root: path.basename(repo), files, ...map.graph.toJSON() }, null, 1);
     if (flags.out) { fs.mkdirSync(path.dirname(path.resolve(flags.out)), { recursive: true }); fs.writeFileSync(flags.out, json); console.log(`wrote ${flags.out}`); } else process.stdout.write(json);
+    return 0;
+  }
+  if (cmd === 'unused') {
+    const { unusedReport, formatUnused } = require('./lib/unused');
+    const r = unusedReport(map);
+    const only = flags.only ? String(flags.only).split(',') : null;
+    if (flags.json) console.log(JSON.stringify({ kinds: r.kinds.filter((k) => !only || only.includes(k.id)), notes: r.notes }, null, 1));
+    else console.log(formatUnused(r, { limit: flags.limit ? Number(flags.limit) : 30, only }));
     return 0;
   }
   const dir = recordDir(map, flags.records);

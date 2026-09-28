@@ -6,11 +6,11 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 scope: shared
-version: 0.4.3
+version: 0.5.0
 script_paths:
   - /shared/skills/code-map/scripts/code-map.js
 created: 2026-09-28T17:00:17+10:00
-updated: 2026-09-28T17:42:35+10:00
+updated: 2026-09-28T21:39:50+10:00
 owner: brain-owner
 ---
 
@@ -31,7 +31,9 @@ guessed, and fail a check when a link between its parts breaks. It answers:
 - which UI calls reach which backend routes, which code reads which columns, settings and environment
   variables, and which data fields are read, compared, defaulted or set, including in templates;
 - whether a value is produced anywhere in the repository at all, or comes from outside it;
-- what the project's structure is today, as a generated inventory that cannot go stale (`report`).
+- what the project's structure is today, as a generated inventory that cannot go stale (`report`);
+- what code is no longer used: files, exports, declarations, Vue state and example env lines (`unused`,
+  report only).
 
 What it was measured to do (trial of 28 September 2026, one repository of about 480 code files, 28 agent
 runs and 156 replayed commits; evidence in the owner's brain-development records): agents with the map
@@ -54,8 +56,10 @@ checks – not a large saving for agents.
 - A repository folder.
 - Optionally `code-map.config.json` at its root, or `--config FILE`: declarations the project makes
   about itself – ignore and size-exempt patterns, the size limits, import aliases, URL-building
-  functions for HTTP calls, settings loaders and settings files, the database dialect. Anything not
-  declared is not guessed; the report lists what was not covered.
+  functions for HTTP calls, settings loaders and settings files, the database dialect, and for the
+  unused report the files the project starts in ways the map cannot see (`unused.entries`) and files
+  to leave out (`unused.ignore`). Anything not declared is not guessed; the report lists what was not
+  covered.
 
 ## Data sources
 
@@ -82,6 +86,7 @@ node scripts/code-map.js check <repo>                  # exit 1 on a new failing
 node scripts/code-map.js record <repo> --adopt         # first run: accept what exists today
 node scripts/code-map.js record <repo>                 # after an intended interface change
 node scripts/code-map.js report <repo> --out <file>    # the generated inventory, Markdown
+node scripts/code-map.js unused <repo> [--only files,exports] [--json]   # code no longer used; never fails
 node scripts/code-map.js build <repo> --out <file>     # the whole map, JSON
 node scripts/code-map.js --version --verbose
 npm test                                 # the skill's own tests
@@ -101,7 +106,8 @@ question's own words when no name is known.
   recorded size, which only goes down), `interface.json` (exports, class methods, routes and middleware in
   order), `known-findings.json` (findings accepted at adoption).
 - `report`: backend routes with handlers and callers, UI routes, environment variables, settings keys,
-  models, tables and columns, oversized files, what was not resolved, and coverage.
+  models, tables and columns, oversized files, unused code, what was not resolved, and coverage.
+- `unused`: each kind with its items (file, line, name, why) and what the report leaves out; exit 0.
 
 ## The checks
 
@@ -111,11 +117,42 @@ question's own words when no name is known.
 | `cycles` | yes | files that load each other at startup (a require inside a function is not one) |
 | `interface` | yes | exports, class methods or routes changed without updating the record in the same commit |
 | `http` | yes | a UI call whose URL matches no backend route |
-| `env` | yes | an environment variable read but missing from every example env file |
+| `env` | yes | an environment variable read but missing from every example env file; reads through helper functions such as `readEnv('X')` count, and retired fallback names passed as a list need not be listed |
 | `settings` | reports only (unless `settings.enforce`) | a settings key read with no default and no declaration |
 | `columns` | yes | code naming a column its model or table does not define (migrations excluded) |
 
 Unresolved items – a URL held in a variable, a computed key – never fail a check; they are listed.
+
+## The unused report
+
+`unused` lists code the repository no longer uses. It never fails a run: each kind has blind spots,
+listed below and printed with the report.
+
+| Kind | Listed when | Counts as used, so not listed |
+|---|---|---|
+| `files` | no entry point reaches the file through imports | entry points: package `scripts` (paths, globs, folders), `main`, `bin` and `exports`; tests; tool configuration (`*.config.*`); migrations and seeders; `<script src>` in HTML pages; browser-extension manifests; Next.js route files; `unused.entries`. Reached by: imports of any kind, scripts started by file name (`execFileSync(node, [path.join(__dirname, 'x.js')])`, `fork`, `spawn`, `importScripts`, `new Worker`), and a loader that requires every file of its folder (`readdirSync(__dirname)`) |
+| `exports` | no file imports the name, reads it from the whole module (`m.name`) or re-exports it | a module passed on whole counts as fully used; exports of entry points, Vue components and unreached files are not listed |
+| `declarations` | a module-level function, class or variable its own file never reads (or only sets) | exported names, imports, names starting with `_`, and scripts with no import or export (their names are globals) |
+| `vue-state` | a `<script setup>` binding neither the script nor the template uses | template expressions, component tags, template `ref`s, `defineProps` and the other compiler macros; commented-out markup does not count |
+| `env` | an example env line no code reads and no other file mentions | reads through `process.env`, `import.meta.env` and helper functions (`readEnv('X')`, including names passed as a list) |
+
+Not covered: imports never used, TypeScript types, Vue options-API state, packages, Python.
+
+Measured on extract-bill-api (`testing` `44e7b8a`, 28 September 2026), every finding or a sample checked
+by hand:
+
+| Kind | Found | Real |
+|---|---|---|
+| `files` | 14; 5 with one `unused.entries` line for extension scripts loaded by name at run time | 5 of 5 |
+| `exports` | 157 | a random 20 of 20; on the Knip trial's hand-checked 20, it found 10 of the 11 real and none of the 9 false alarms |
+| `declarations` | 4 | 4 of 4 (one a latent bug: an expiry time that is set and never read) |
+| `vue-state` | 32 | 32 of 32 |
+| `env` | 1 | 1 of 1 (was 31 before helper reads were recognised) |
+
+Knip 6.38.0 on the same code reached 5 of 8 for files, 6 of 13 for packages and 11 of 20 for exports. The
+three ideas taken from it – entry points instead of "nobody imports it", member reads of whole modules,
+scripts started by name – are what make the difference here. Evidence: the owner's
+brain-development records (Knip trial of 28 September 2026).
 
 ## What is generated and what is written
 

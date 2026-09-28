@@ -33,6 +33,8 @@ const DEFAULTS = {
   settings: { loaders: [], names: [], files: [], open: [], enforce: false },
   notes: ['brain/**/*.md'],
   python: { command: null, roots: [] },
+  // The unused report: files the project starts in ways the code map cannot see, and files to leave out.
+  unused: { entries: [], ignore: [] },
   checks: {},
 };
 

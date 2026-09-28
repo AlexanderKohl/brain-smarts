@@ -10,6 +10,7 @@ const { Graph } = require('./graph');
 const { Resolver } = require('./resolve');
 const { loadJs, tsconfigAliases, viteAliases } = require('./js/load');
 const { JsProject } = require('./js/project');
+const { envHelperReads } = require('./js/env-helpers');
 const { extractPython, resolvePy } = require('./python');
 const { expressAdapter } = require('./adapters/express');
 const { nextAdapter, addRoute } = require('./adapters/next');
@@ -200,6 +201,8 @@ function buildMap(root, { configFile = null } = {}) {
   graph.cover('database:raw-sql', ctx.db.sqlMissing ? 'not checked' : ctx.db.sqlCount ? 'mapped' : 'not used', { statements: ctx.db.sqlCount, unparsed: ctx.db.sqlErrors, dialect: ctx.dialect });
 
   messagingAdapter(ctx);
+  // Variables read through helper functions (readEnv('X')) count as reads like process.env.X.
+  for (const r of envHelperReads(project)) project.facts.get(r.file).env.push({ name: r.name, line: r.line, owner: r.owner, via: r.via });
   envAdapter(ctx);
   settingsAdapter(ctx);
   fieldsAdapter(ctx);

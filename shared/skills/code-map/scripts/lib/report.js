@@ -68,6 +68,20 @@ function report(map, result, meta) {
   lines.push(`## Code files over ${limit} lines`, '', 'Largest first.', '');
   lines.push(...table(['File', 'Lines'], big.map((e) => [e.file, e.lines])));
 
+  if (map.project) {
+    const { unusedReport } = require('./unused');
+    const unused = unusedReport(map);
+    lines.push('## Unused code', '', 'Reports only; nothing here fails a run. `code-map unused` lists every item and what each kind leaves out.', '');
+    lines.push(...table(['Kind', 'Items'], unused.kinds.map((k) => [k.title, k.items.length])));
+    for (const k of unused.kinds) {
+      if (!k.items.length) continue;
+      lines.push(`**${k.title}:**`, '');
+      for (const it of k.items.slice(0, 50)) lines.push(`- \`${it.file}${it.line ? `:${it.line}` : ''}\` ${it.message}`);
+      if (k.items.length > 50) lines.push(`- … ${k.items.length - 50} more`);
+      lines.push('');
+    }
+  }
+
   const unresolved = new Map();
   for (const u of g.unresolved) unresolved.set(u.kind, (unresolved.get(u.kind) || 0) + 1);
   lines.push('## Not resolved', '', 'Listed, never guessed: each is something only known at run time. `code-map show` names them per file.', '');

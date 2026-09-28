@@ -28,7 +28,8 @@ function segmentsFor(entry, text) {
       const ts = /^tsx?$/.test(block.lang || '');
       segments.push({ text: block.content, startLine: block.loc.start.line, typescript: ts });
     }
-    return { segments, templateExprs: templateExpressions(descriptor.template) };
+    const setup = descriptor.scriptSetup ? { start: descriptor.scriptSetup.loc.start.line, end: descriptor.scriptSetup.loc.end.line } : null;
+    return { segments, templateExprs: templateExpressions(descriptor.template), templateNames: templateNames(descriptor.template), setup };
   }
   if (entry.language === 'html') {
     const segments = [];
@@ -62,11 +63,38 @@ function templateExpressions(template) {
   return out;
 }
 
+// Every name a Vue template may use from its script: identifiers in its expressions (read lexically,
+// so a word in a string counts too – the report errs towards "used"), and component tags, as
+// written and in PascalCase.
+function templateNames(template) {
+  const out = new Set();
+  if (!template || !template.ast) return out;
+  for (const { text } of templateExpressions(template)) {
+    const code = text.replace(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g, ' ');
+    for (const m of code.matchAll(/(?<![\w$.])[A-Za-z_$][\w$]*/g)) out.add(m[0]);
+  }
+  const visit = (node) => {
+    if (!node) return;
+    if (node.type === 1 && node.tag) {
+      out.add(node.tag);
+      out.add(node.tag.replace(/(^|-)([a-z])/g, (_, __, c) => c.toUpperCase()));
+      // A template ref (ref="box") fills the script variable of that name.
+      for (const p of node.props || []) if (p.type === 6 && p.name === 'ref' && p.value) out.add(p.value.content);
+    }
+    for (const c of node.children || []) visit(c);
+    if (node.branches) for (const b of node.branches) visit(b);
+  };
+  visit(template.ast);
+  return out;
+}
+
 function loadJs(entry, text, hints) {
-  const { segments, missing, templateExprs } = segmentsFor(entry, text);
+  const { segments, missing, templateExprs, templateNames: names, setup } = segmentsFor(entry, text);
   if (missing) return { facts: null, missing };
   const facts = extractJs(entry.file, entry.language, entry.lines, segments, hints);
   facts.templateExprs = templateExprs || [];
+  facts.templateNames = names || new Set();
+  facts.vueSetup = setup || null;
   return { facts };
 }
 

@@ -21,8 +21,16 @@ function newFacts(file, language, lines) {
     exports: { named: new Map(), default: null, cjsDefault: null, starFrom: [] },
     callSites: [], newSites: [], tagged: [], varRefs: [], env: [], assignments: [], jsx: [], memberReads: [], fields: [],
     moduleScope: new Map(), programs: [], functionsByName: new Map(), callCount: 0,
+    // For the unused report: what this file uses of the modules it imports ({ source, name }, name
+    // '*' when the whole module is passed on), scripts it starts by file name, and parameters a
+    // function uses as an environment variable name.
+    importUses: [], scriptRefs: [], envParamReads: [],
   };
 }
+
+// Functions that start another script by its file name.
+const SCRIPT_RUNNERS = new Set(['execFile', 'execFileSync', 'spawn', 'spawnSync', 'fork', 'exec', 'execSync', 'importScripts']);
+const SCRIPT_FILE = /\.(c|m)?[jt]sx?$/;
 
 // segments: [{ text, startLine, typescript }] – one for a plain file, one per script block otherwise.
 // hints.roots: names whose member reads are recorded (settings objects); hints.loaders: functions
@@ -257,6 +265,7 @@ class Walker {
       case 'ExportAllDeclaration':
         this.facts.exports.starFrom.push({ source: node.source.value, as: node.exported ? A.keyName(node.exported, false) || node.exported.value : null });
         this.addImport(node.source.value, [], 'startup', 're-export', node, ctx, node.exportKind === 'type');
+        this.facts.importUses.push({ source: node.source.value, name: '*', line: A.lineOf(node) });
         return;
       case 'TSExportAssignment': this.facts.exports.cjsDefault = { node: node.expression, line: A.lineOf(node) }; return this.visitChildren(node, ctx);
       case 'TSImportEqualsDeclaration': {
@@ -266,7 +275,10 @@ class Walker {
       }
       case 'CallExpression':
       case 'OptionalCallExpression': this.call(node, ctx); return this.visitChildren(node, ctx);
-      case 'NewExpression': this.record(this.facts.newSites, node, node.callee, ctx); return this.visitChildren(node, ctx);
+      case 'NewExpression':
+        if (A.unwrap(node.callee).type === 'Identifier' && A.unwrap(node.callee).name === 'Worker') this.scriptRefs(node.arguments.slice(0, 1), ctx, A.lineOf(node));
+        this.record(this.facts.newSites, node, node.callee, ctx);
+        return this.visitChildren(node, ctx);
       case 'TaggedTemplateExpression': {
         const chain = A.memberChain(node.tag);
         this.facts.tagged.push({ node, quasi: node.quasi, root: chain.root, path: chain.path, rootName: chain.root && chain.root.type === 'Identifier' ? chain.root.name : null, line: A.lineOf(node), owner: ctx.owner && ctx.owner.id, scopes: ctx.scopes, text: this.text });
@@ -353,6 +365,14 @@ class Walker {
     if (selfName) scope.set(selfName, binding(selfName, 'function', node, { init: node }));
     node.params.forEach((p, index) => declarePattern(p, scope, (name, n, path) => binding(name, 'param', n, { param: { fn: node, index }, pattern: path.length ? path : null })));
     const inner = { ...ctx, owner, fnDepth: ctx.fnDepth + 1, scopes: [...ctx.scopes, scope], objName: null, propName: null };
+    // Default values of parameters are code too: `function f(env = process.env)`, `(x = LIMIT)`.
+    const defaults = (p) => {
+      if (!p) return;
+      if (p.type === 'AssignmentPattern') { this.visit(p.right, p, 'right', inner); defaults(p.left); } else if (p.type === 'ObjectPattern') p.properties.forEach((q) => defaults(q.type === 'RestElement' ? q.argument : q.value));
+      else if (p.type === 'ArrayPattern') p.elements.forEach(defaults);
+      else if (p.type === 'TSParameterProperty') defaults(p.parameter);
+    };
+    node.params.forEach(defaults);
     if (node.body && node.body.type === 'BlockStatement') {
       declareStatements(node.body.body, scope, false, true);
       for (const stmt of node.body.body) this.visit(stmt, node.body, 'body', inner);
@@ -427,6 +447,7 @@ class Walker {
       if (node.source) {
         const imported = spec.type === 'ExportNamespaceSpecifier' ? '*' : (spec.local ? (A.keyName(spec.local, false) || spec.local.value) : 'default');
         named.set(exported, { fromSource: node.source.value, imported, line: A.lineOf(spec) });
+        this.facts.importUses.push({ source: node.source.value, name: imported, line: A.lineOf(spec) });
       } else {
         named.set(exported, { local: spec.local.name, line: A.lineOf(spec) });
       }
@@ -528,11 +549,98 @@ class Walker {
   identifier(node, parent, key, ctx) {
     if (!isReference(node, parent, key)) return;
     const b = lookup(ctx.scopes, node.name);
+    if (b) {
+      // Uses of a module-level declaration, for the unused report.
+      if (b.module) {
+        const write = this.isWrite(node, parent, key);
+        if (write) b.writes = (b.writes || 0) + 1;
+        // `row: next++` reads next as well as setting it; `next++;` on its own only sets it.
+        const gp = this.stack[this.stack.length - 3];
+        const updateUsed = parent.type === 'UpdateExpression' && gp && gp.type !== 'ExpressionStatement'
+          && !(gp.type === 'ForStatement' && gp.update === parent) && gp.type !== 'SequenceExpression';
+        if (!write || updateUsed) b.reads = (b.reads || 0) + 1;
+      }
+      if (wholeImport(b)) this.wholeImportUse(b, node, parent, key);
+    }
     if (!b || !ctx.owner || !b.module) return;
     if (!['var', 'let', 'const'].includes(b.kind) || b.import) return;
     const init = A.unwrap(b.init);
     if (init && (A.isFunction(init) || init.type === 'ClassExpression')) return;
     this.facts.varRefs.push({ owner: ctx.owner.id, name: node.name, write: this.isWrite(node, parent, key), line: A.lineOf(node) });
+  }
+
+  // A reference to a whole imported module (`const m = require('./m')`, `import * as m`, a default
+  // import): `m.name` uses one export (recorded in member()), `const { a } = m` uses a, and anything
+  // else passes the module on, which uses all of it (or, for a default import, its default).
+  wholeImportUse(b, node, parent, key) {
+    if (A.isMember(parent) && key === 'object') return;
+    const line = A.lineOf(node);
+    if (parent.type === 'VariableDeclarator' && key === 'init' && parent.id.type === 'ObjectPattern') {
+      for (const p of parent.id.properties) {
+        const name = p.type === 'RestElement' ? '*' : A.keyName(p.key, p.computed) || '*';
+        this.facts.importUses.push({ source: b.import.source, name, line });
+      }
+      return;
+    }
+    this.facts.importUses.push({ source: b.import.source, name: b.import.imported === 'default' ? 'default' : '*', line });
+  }
+
+  // process.env, a parameter that defaults to it, or a variable set to it.
+  isEnvSource(obj, ctx) {
+    if (!obj) return false;
+    if (isEnvObject(obj)) return true;
+    if (obj.type !== 'Identifier') return false;
+    const b = lookup(ctx.scopes, obj.name);
+    if (!b) return false;
+    if (b.kind === 'param' && b.param) {
+      const p = b.param.fn.params[b.param.index];
+      return !!p && p.type === 'AssignmentPattern' && isEnvObject(A.unwrap(p.right));
+    }
+    return !!b.init && isEnvObject(A.unwrap(b.init));
+  }
+
+  // A path a script is started with: 'x.js', path.join(__dirname, 'x.js'), or a constant holding one.
+  scriptPath(node, ctx, depth = 0) {
+    node = A.unwrap(node);
+    if (!node || depth > 3) return null;
+    const s = A.staticString(node);
+    if (s !== null) {
+      const token = s.split(/\s+/).find((t) => SCRIPT_FILE.test(t));
+      return token ? { base: 'plain', value: token.replace(/^["']|["']$/g, '') } : null;
+    }
+    if (A.isCall(node)) {
+      const chain = A.memberChain(node.callee);
+      if (chain.root && chain.root.type === 'Identifier' && chain.root.name === 'path' && /^(join|resolve)$/.test(chain.path[0])) {
+        const [first, ...rest] = node.arguments;
+        const parts = rest.map((a) => A.staticString(a));
+        if (first && first.type === 'Identifier' && first.name === '__dirname' && parts.every((p) => p !== null)) {
+          const value = parts.join('/');
+          return SCRIPT_FILE.test(value) ? { base: 'dir', value } : null;
+        }
+      }
+      return null;
+    }
+    if (node.type === 'Identifier') {
+      const b = lookup(ctx.scopes, node.name);
+      if (b && b.kind === 'const' && b.init) return this.scriptPath(b.init, ctx, depth + 1);
+    }
+    return null;
+  }
+
+  scriptRefs(args, ctx, line) {
+    const each = (a) => {
+      a = A.unwrap(a);
+      if (!a) return;
+      if (a.type === 'ArrayExpression') { a.elements.forEach(each); return; }
+      if (a.type === 'ObjectExpression') {
+        // chrome.scripting.executeScript({ files: ['x.js'] })
+        for (const p of a.properties) if (p.type === 'ObjectProperty' && A.keyName(p.key, p.computed) === 'files') each(p.value);
+        return;
+      }
+      const ref = this.scriptPath(a, ctx);
+      if (ref) this.facts.scriptRefs.push({ ...ref, line });
+    };
+    args.forEach(each);
   }
 
   isWrite(node, parent, key) {
@@ -558,6 +666,22 @@ class Walker {
 
   member(node, parent, key, ctx) {
     const obj = A.unwrap(node.object);
+    // One export of a whole imported module: m.name, require('./m').name.
+    const prop = A.keyName(node.property, node.computed);
+    if (obj.type === 'Identifier') {
+      const ob = lookup(ctx.scopes, obj.name);
+      if (wholeImport(ob)) this.facts.importUses.push({ source: ob.import.source, name: prop === null ? '*' : prop, line: A.lineOf(node) });
+    } else if (A.isCall(obj) && isRequireCall(obj) && !lookup(ctx.scopes, 'require')) {
+      const src = obj.arguments[0] ? A.staticString(obj.arguments[0]) : null;
+      if (src !== null) this.facts.importUses.push({ source: src, name: prop === null ? '*' : prop, line: A.lineOf(node) });
+    }
+    // A parameter used as an environment variable name: env[name], process.env[name].
+    if (node.computed && ctx.owner && node.property.type === 'Identifier') {
+      const pb = lookup(ctx.scopes, node.property.name);
+      if (pb && pb.kind === 'param' && pb.param && pb.param.fn === ctx.owner.node && this.isEnvSource(obj, ctx)) {
+        this.facts.envParamReads.push({ owner: ctx.owner.id, index: pb.param.index, line: A.lineOf(node) });
+      }
+    }
     if (isEnvObject(obj)) {
       const name = A.keyName(node.property, node.computed);
       this.facts.env.push({ name, line: A.lineOf(node), owner: ctx.owner && ctx.owner.id, dynamic: name === null, text: name === null ? A.snippet(this.text, node) : undefined });
@@ -625,17 +749,28 @@ class Walker {
     const callee = A.unwrap(node.callee);
     if (callee.type === 'Import') {
       const source = node.arguments[0] ? A.staticString(node.arguments[0]) : null;
-      if (source !== null) this.addImport(source, [], 'deferred', 'dynamic-import', node, ctx);
-      else this.facts.imports.push({ source: null, names: [], load: 'deferred', kind: 'dynamic-import', unresolved: A.snippet(this.text, node), line: A.lineOf(node), owner: ctx.owner && ctx.owner.id });
+      if (source !== null) {
+        this.addImport(source, [], 'deferred', 'dynamic-import', node, ctx);
+        this.facts.importUses.push({ source, name: '*', line: A.lineOf(node) });
+      } else this.facts.imports.push({ source: null, names: [], load: 'deferred', kind: 'dynamic-import', unresolved: A.snippet(this.text, node), line: A.lineOf(node), owner: ctx.owner && ctx.owner.id });
       return;
     }
     if (callee.type === 'Identifier' && callee.name === 'require' && !lookup(ctx.scopes, 'require')) {
       if (node.__requireRecorded) return;
       const source = node.arguments[0] ? A.staticString(node.arguments[0]) : null;
-      if (source !== null) this.addImport(source, [], ctx.fnDepth ? 'deferred' : 'startup', 'require', node, ctx);
-      else this.facts.imports.push({ source: null, names: [], load: ctx.fnDepth ? 'deferred' : 'startup', kind: 'require', unresolved: A.snippet(this.text, node), line: A.lineOf(node), owner: ctx.owner && ctx.owner.id });
+      if (source !== null) {
+        this.addImport(source, [], ctx.fnDepth ? 'deferred' : 'startup', 'require', node, ctx);
+        // require('./m').name is recorded in member(); a bare require('./m') only runs the module;
+        // anything else passes the whole module on.
+        const parent = this.stack[this.stack.length - 2];
+        const asObject = parent && A.isMember(parent) && A.unwrap(parent.object) === node;
+        if (!asObject && !(parent && parent.type === 'ExpressionStatement')) this.facts.importUses.push({ source, name: '*', line: A.lineOf(node) });
+      } else this.facts.imports.push({ source: null, names: [], load: ctx.fnDepth ? 'deferred' : 'startup', kind: 'require', unresolved: A.snippet(this.text, node), line: A.lineOf(node), owner: ctx.owner && ctx.owner.id });
       return;
     }
+    const chain = A.memberChain(callee);
+    const last = chain.path.length ? chain.path[chain.path.length - 1] : (chain.root && chain.root.type === 'Identifier' ? chain.root.name : null);
+    if (last && (SCRIPT_RUNNERS.has(last) || last === 'executeScript')) this.scriptRefs(node.arguments, ctx, A.lineOf(node));
     this.record(this.facts.callSites, node, callee, ctx);
   }
 
@@ -656,6 +791,17 @@ class Walker {
   jsxElement(node, ctx) {
     const nameNode = node.openingElement.name;
     const name = jsxName(nameNode);
+    // <Component /> and <ns.Component /> use the binding they name.
+    let root = nameNode;
+    while (root && root.type === 'JSXMemberExpression') root = root.object;
+    if (root && root.type === 'JSXIdentifier' && (/^[A-Z]/.test(root.name) || root !== nameNode)) {
+      const b = lookup(ctx.scopes, root.name);
+      if (b && b.module) b.reads = (b.reads || 0) + 1;
+      if (wholeImport(b)) {
+        const prop = nameNode.type === 'JSXMemberExpression' && nameNode.object === root ? nameNode.property.name : null;
+        this.facts.importUses.push({ source: b.import.source, name: prop || (b.import.imported === 'default' ? 'default' : '*'), line: A.lineOf(node) });
+      }
+    }
     if (name && /(^|\.)Route$/.test(name)) {
       const attrs = {};
       for (const attr of node.openingElement.attributes) {
@@ -678,6 +824,11 @@ function jsxName(node) {
   if (node.type === 'JSXIdentifier') return node.name;
   if (node.type === 'JSXMemberExpression') return `${jsxName(node.object)}.${node.property.name}`;
   return null;
+}
+
+// A binding that holds a whole imported module: require('./m'), import * as m, or a default import.
+function wholeImport(b) {
+  return !!b && !!b.import && !b.import.member && (b.import.imported === '*' || b.import.imported === 'default');
 }
 
 function isEnvObject(node) {
