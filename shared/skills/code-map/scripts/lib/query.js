@@ -132,7 +132,26 @@ function fieldSummary(map, fields, byFrom, byTo, limit) {
     if (defaults.size) out.push(`  defaults to: ${[...defaults.entries()].map(([v, w]) => `${v} at ${w}`).join('; ')}`);
     list('the object it is read from', [...origins.entries()].map(([o, w]) => `${o}   (${w})`));
     list('declared in', declared.map((e) => e.file));
-    if (!writes.some((e) => !e.test) && !declared.length) out.push('  NOT SET anywhere in this repository: its value comes from outside the code (stored data, a request, another system). Look where the object above is loaded.');
+    if (!writes.some((e) => !e.test) && !declared.length) {
+      // Not set under this path. Before saying it comes from outside, look for the same name set under
+      // another path (updates.role for user.role) and for a column of that name: matching names, listed
+      // as such, never merged into one field.
+      const sameName = [...map.graph.nodes.values()].filter((x) => x.type === 'field' && x.id !== n.id && x.name === n.name);
+      const setElsewhere = sameName.flatMap((x) => (byTo.get(x.id) || []).filter((e) => e.type === 'writes-field' && !e.test).map((e) => `${x.path} at ${at(e)}`));
+      const columns = [...map.graph.nodes.values()].filter((x) => x.type === 'column' && x.name === n.name);
+      if (!setElsewhere.length && !columns.length) {
+        out.push('  NOT SET anywhere in this repository: its value comes from outside the code (stored data, a request, another system). Look where the object above is loaded.');
+      } else {
+        out.push('  not set under this path; the same name is set or stored elsewhere (matching names, not proven to be the same value):');
+        for (const c of columns) {
+          const cw = (byTo.get(c.id) || []).filter((e) => e.type === 'writes-column').length;
+          out.push(`    column ${c.table}.${c.name}${cw ? ` (written at ${cw} place(s))` : ''}`);
+        }
+        const uniq = [...new Set(setElsewhere)].sort(natural);
+        for (const x of uniq.slice(0, limit)) out.push(`    set as ${x}`);
+        if (uniq.length > limit) out.push(`    … ${uniq.length - limit} more`);
+      }
+    }
   }
   if (fields.length > 8) out.push('', `${fields.length - 8} more fields share this name; use a fuller path.`);
   return out.join('\n');

@@ -140,3 +140,10 @@ test('a folder inside another repository is still mapped, not silently emptied',
   assert.ok(m.ctx.routes.length === 3, `expected the three routes, got ${m.ctx.routes.length}`);
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test('a field set only under another path is not reported as coming from outside the code', () => {
+  const m = buildMap(FIXTURE);
+  const text = show(m, 'user.role');
+  assert.doesNotMatch(text, /NOT SET anywhere/);
+  assert.match(text, /set as role at backend\/lib\/staff\.js:\d+/);
+});

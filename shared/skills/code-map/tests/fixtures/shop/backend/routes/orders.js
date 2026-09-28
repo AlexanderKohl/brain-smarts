@@ -8,7 +8,7 @@ router.get('/orders/:id', async (req, res) => {
   const label = order.total_cents > 0 ? 'paid' : 'free';
   const kind = order.contact.kind || 'person';
   if (order.contact.kind === 'business') res.set('X-Tax', 'included');
-  res.json({ order, label, kind });
+  res.json({ order, label, customerKind: kind });
 });
 
 router.post('/orders', async (req, res) => {
