@@ -128,11 +128,30 @@ function interfaceCheck(map, records) {
   return out;
 }
 
-// 4. UI calls that match no backend route. Calls from tests are not the product's own UI.
+// 4. UI calls that match no backend route. Calls from tests are not the product's own UI. A call under
+// the mount prefix of a router whose own route paths are computed (router.post(`/${name}`)) cannot be
+// checked: it is left unresolved rather than reported as broken.
+function prefixMatches(prefix, url) {
+  const p = prefix.split('/').filter(Boolean);
+  const u = url.split('/').filter(Boolean);
+  if (u.length < p.length) return false;
+  return p.every((seg, i) => seg === u[i] || seg.startsWith(':') || u[i].startsWith(':'));
+}
+
 function httpCheck(map) {
   if (!map.ctx.routes.length) return [];
-  return map.ctx.httpCalls.filter((c) => !c.test && c.url !== undefined && !c.matches.length)
-    .map((c) => finding('http', `${c.method} ${c.url} @${c.file}`, c.file, c.line, `${c.method} ${c.url} matches no backend route`));
+  const computedFiles = new Set(map.graph.unresolved.filter((u) => u.kind === 'route-path').map((u) => u.file));
+  const computedPrefixes = map.graph.ofType('router')
+    .filter((r) => computedFiles.has(r.file) && !(map.fileIndex.get(r.file) || {}).test)
+    .flatMap((r) => (r.mountedAt || []).filter(Boolean));
+  const out = [];
+  for (const c of map.ctx.httpCalls) {
+    if (c.test || c.url === undefined || c.matches.length) continue;
+    const under = computedPrefixes.find((p) => prefixMatches(p, c.url));
+    if (under) { map.graph.unresolvedItem('http-call', c.file, c.line, `${c.method} ${c.url}`, `under ${under}, whose route paths are computed`); continue; }
+    out.push(finding('http', `${c.method} ${c.url} @${c.file}`, c.file, c.line, `${c.method} ${c.url} matches no backend route`));
+  }
+  return out;
 }
 
 // 5. Environment variables read by the product that no example env file lists.

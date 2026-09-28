@@ -147,3 +147,10 @@ test('a field set only under another path is not reported as coming from outside
   assert.doesNotMatch(text, /NOT SET anywhere/);
   assert.match(text, /set as role at backend\/lib\/staff\.js:\d+/);
 });
+
+test('a UI call under a router with computed route paths is left unresolved, not reported as broken', () => {
+  const m = buildMap(FIXTURE);
+  const r = runChecks(m, noRecords);
+  assert.ok(!r.byCheck.http.findings.some((f) => f.key.includes('/api/jobs')), 'no http finding for /api/jobs');
+  assert.ok(m.graph.unresolved.some((u) => u.kind === 'http-call' && /\/api\/jobs/.test(u.text)), 'listed as unresolved');
+});

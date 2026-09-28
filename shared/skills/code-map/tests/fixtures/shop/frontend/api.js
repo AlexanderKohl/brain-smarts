@@ -17,3 +17,8 @@ export function getInvoice(id) {
 export function invoiceTotalWithTax(order) {
   return order.total_cents * 1.1;
 }
+
+// Reaches a route whose path the backend computes: unresolved, not broken.
+export function runJob(name) {
+  return axios.post(`/api/jobs/${name}`);
+}

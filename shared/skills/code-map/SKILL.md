@@ -6,11 +6,11 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 scope: shared
-version: 0.4.2
+version: 0.4.3
 script_paths:
   - /shared/skills/code-map/scripts/code-map.js
 created: 2026-09-28T17:00:17+10:00
-updated: 2026-09-28T17:00:17+10:00
+updated: 2026-09-28T17:42:35+10:00
 owner: brain-owner
 ---
 
@@ -33,9 +33,14 @@ guessed, and fail a check when a link between its parts breaks. It answers:
 - whether a value is produced anywhere in the repository at all, or comes from outside it;
 - what the project's structure is today, as a generated inventory that cannot go stale (`report`).
 
-It does not make agents noticeably cheaper at finding files: in a measured trial, reading and searching
-code was about a fifth of an agent's context. Its gains are exact answers to cross-boundary and data
-questions, and checks that catch broken links before release.
+What it was measured to do (trial of 28 September 2026, one repository of about 480 code files, 28 agent
+runs and 156 replayed commits; evidence in the owner's brain-development records): agents with the map
+were as accurate as without it and used a median 11% fewer tokens and 8% less time, inside the run-to-run
+noise on most questions; the largest saving was on a data question (38% fewer tokens). Replayed over six
+weeks of commits, the checks raised 13 new findings: 8 real but minor (environment variables missing from
+the example file), 4 false alarms, 1 harmless, and no functional broken link. The size check would have
+stopped 72 of 155 commits. So its value is exact answers to cross-boundary and data questions, and cheap
+checks – not a large saving for agents.
 
 ## Allowed operations
 
