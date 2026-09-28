@@ -8,6 +8,7 @@
 //   code-map record  [repo] [--records DIR] [--adopt] write the committed records
 //   code-map show    <name> [--repo DIR]              everything the map knows about a name or field
 //   code-map find    <words…> [--repo DIR]            functions whose text holds the most of the words
+//   (show and find take --map FILE: a map saved by build --out, used instead of rebuilding)
 //   code-map report  [repo] [--out FILE]              the generated inventory, as Markdown
 //   code-map --version [--verbose]
 // Common options: --config FILE (instead of <repo>/code-map.config.json).
@@ -36,7 +37,7 @@ function parseArgs(argv) {
     if (a.startsWith('--')) {
       const [k, v] = a.slice(2).split('=');
       if (v !== undefined) out.flags[k] = v;
-      else if (['out', 'records', 'config', 'repo', 'only', 'limit'].includes(k)) out.flags[k] = argv[++i];
+      else if (['out', 'records', 'config', 'repo', 'only', 'limit', 'map'].includes(k)) out.flags[k] = argv[++i];
       else out.flags[k] = true;
     } else out._.push(a);
   }
@@ -51,6 +52,19 @@ function usage() {
 function load(repo, flags) {
   const { buildMap } = require('./lib/build');
   return buildMap(repo, { configFile: flags.config || null });
+}
+
+// A map saved by `build --out`, for `show` and `find` without rebuilding. It must have been built
+// from the same repository folder; the saved file names it.
+function loadSaved(file, repo) {
+  const { Graph } = require('./lib/graph');
+  const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const graph = new Graph();
+  for (const n of saved.nodes) graph.nodes.set(n.id, n);
+  graph.edges = saved.edges;
+  graph.unresolved = saved.unresolved;
+  graph.coverage = saved.coverage;
+  return { root: repo, graph, files: saved.files || [], config: { limits: { fileLines: 800 } } };
 }
 
 function main(argv) {
@@ -68,11 +82,21 @@ function main(argv) {
   const repoArg = cmd === 'show' || cmd === 'find' ? (flags.repo || '.') : (args[1] || '.');
   const repo = path.resolve(repoArg);
   if (!fs.existsSync(repo)) { console.error(`code-map: no such folder ${repo}`); return 2; }
+  if (flags.map && (cmd === 'show' || cmd === 'find')) {
+    const saved = loadSaved(flags.map, repo);
+    const q = require('./lib/query');
+    if (!args[1]) { console.error(`code-map ${cmd}: name what to look for`); return 2; }
+    const term = args.slice(1).join(' ');
+    const limit = flags.limit ? Number(flags.limit) : undefined;
+    console.log(cmd === 'show' ? q.show(saved, term, { limit }) : q.findWords(saved, term, { top: limit }));
+    return 0;
+  }
   const map = load(repo, flags);
   const id = identity();
 
   if (cmd === 'build') {
-    const json = JSON.stringify({ tool: { name: 'code-map', ...id }, root: path.basename(repo), ...map.graph.toJSON() }, null, 1);
+    const files = map.files.map((e) => ({ file: e.file, ext: e.ext, language: e.language, lines: e.lines, code: e.code, test: e.test, sizeExempt: e.sizeExempt }));
+    const json = JSON.stringify({ tool: { name: 'code-map', ...id }, root: path.basename(repo), files, ...map.graph.toJSON() }, null, 1);
     if (flags.out) { fs.mkdirSync(path.dirname(path.resolve(flags.out)), { recursive: true }); fs.writeFileSync(flags.out, json); console.log(`wrote ${flags.out}`); } else process.stdout.write(json);
     return 0;
   }

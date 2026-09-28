@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 scope: shared
-version: 0.3.0
+version: 0.4.0
 script_paths:
   - /shared/skills/code-map/scripts/code-map.js
 created: 2026-09-28T17:00:17+10:00
