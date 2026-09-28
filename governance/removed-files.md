@@ -22,3 +22,4 @@ listed here, so every old link still leads somewhere. Rows are in removal order.
 | File | Removed | Where its content went |
 |---|---|---|
 | `/governance/proposals/one-worktree-per-session.md` | 2026-09-28 | Implemented as `SMART-RULE-0038` in `/RULES.md` and the skills it names; the decision record went to the owner's memory, `/memory/governance/proposals/` |
+| `/ONBOARDING_AGENT.md` | 2026-09-28 | Nothing was lost: its skill tables are the folder summaries in `/shared/skills/README.md` and `/library/skills/README.md`; its bootstrap steps are CONTRACT §1 and `/BOOTSTRAP.md`; its operating notes are the rules in `/RULES.md`; ports and vault names are in the skills that use them |
