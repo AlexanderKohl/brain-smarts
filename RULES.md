@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-28T08:36:50+10:00
+updated: 2026-09-28T10:55:50+10:00
 owner: brain-owner
 ---
 
@@ -278,8 +278,16 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 - Scope every query, write and external call by the tenant, account or location it belongs to.
   Do not let a request for one tenant read or change another's data through a missing filter or
   an inferred identifier.
+- Before an agent writes to a client's live external system – its records, configuration or
+  structure, directly or by running code that writes – get the owner's explicit approval for
+  that write, naming the system and the target account or location (CONTRACT §10.5). An account
+  the project's own rules name as a test or sandbox account is not live.
 - Never log or return secrets, tokens, credentials or more personal data than the caller is
   entitled to. Treat a leaked identifier that grants access as a credential.
+- Keep credentials out of every tracked file, including application configuration such as
+  settings, company or fixture files; load them from the environment or a secret manager at run
+  time. A credential that reaches Git history is rotated at its issuer, not only deleted from
+  the file.
 - When a change materially widens an externally reachable surface, adds an authentication or
   payment path, or handles sensitive data for the first time, escalate to at least standard depth
   under `SMART-RULE-0016` and say so in the change.
