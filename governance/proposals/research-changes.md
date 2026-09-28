@@ -18,10 +18,7 @@ target_files:
   - /README.md
   - /governance/removed-files.md
   - /shared/skills/tasks/scripts/tasks.py
-  - /shared/skills/tasks/scripts/scheduled_review.py
   - /shared/skills/repository-preflight/scripts/preflight.py
-  - /shared/skills/repository-preflight/scripts/checks_b.py
-  - /shared/skills/repository-preflight/scripts/hooks.py
 ---
 
 # Changes from the September 2026 research, tested before and after
@@ -40,6 +37,8 @@ accepted or declined on its own; parts in the order they were numbered.
 | 8 | Knowledge claims carry as-of and review-by dates; superseded claims kept and marked; preflight fails on a claim past review (`RULE-2026-0045`) | no regression; no measured gain yet |
 
 Set aside for rework: part 6 (rules load where they apply) – no token saving on light sessions.
+
+**New files** (not listed in `target_files`, which preflight requires to exist): `/shared/skills/tasks/scripts/scheduled_review.py`, `/shared/skills/repository-preflight/scripts/checks_b.py`, `/shared/skills/repository-preflight/scripts/hooks.py` and `/shared/skills/repository-preflight/hooks/events.json`.
 
 **Risks.** Part 3 adds a preflight error for new knowledge lines citing a source without a status.
 Part 8 makes preflight fail on stale claims, which can block an unrelated commit until the claim is
