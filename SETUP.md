@@ -362,6 +362,16 @@ original `upstream` itself), then the same `set-url --push` and `core.hooksPath`
 option 3: the person clicks **Use this template** on the original's GitHub page, chooses
 **Private**, and the agent clones the new repository and adds `upstream` by hand.
 
+### B3b. Switch on the brain's commit checks
+
+Once the smarts (and, when you have them, the library and memory) are in place, run from the brain root:
+
+```bash
+python shared/skills/repository-preflight/scripts/hooks.py install
+```
+
+It points each repository at its own `.githooks/` folder. Before every commit Git then runs the brain's preflight for that repository alone. A repository cloned on its own still commits: its hook finds no brain above it and steps aside with a note. Session copies switch it on themselves.
+
 ### B3a. Your skill library
 
 **Done when:** `<brain_root>/library/skills/README.md` exists, and `git remote -v` in
