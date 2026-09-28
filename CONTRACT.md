@@ -4,11 +4,11 @@ title: Portable AI Brain Contract
 type: contract
 status: active
 schema_version: 0.2
-contract_version: 2.2.0
+contract_version: 2.3.0
 contract: /CONTRACT.md
 canonical: true
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-28T15:01:51+10:00
+updated: 2026-09-29T08:00:43+10:00
 owner: brain-owner
 ---
 
@@ -21,11 +21,13 @@ This file is the canonical operating contract for the entire brain: the mechanic
 Every AI agent, script or person working anywhere in the brain must:
 
 1. Locate the brain root by moving upwards from the supplied path until `CONTRACT.md` is found. A path inside `/memory/` finds the contract one level above the memory checkout.
-2. Treat a bootstrap reference to a repository directory as an instruction to read the `CONTRACT.md` inside that directory.
+2. Treat a bootstrap reference to a repository directory as an instruction to locate the `CONTRACT.md` inside that directory and bootstrap from it.
 3. Treat an absolute bootstrap path as a location hint, not repository authority. Verify that the path exists and contains this contract.
-4. Choose a bootstrap tier for the current turn:
-   - **Full bootstrap** (required when creating, changing or deleting brain content, changing governance, using a skill with side effects, or when applicable policy is unclear): read the discovered `/CONTRACT.md`, then `/RULES.md`, then the owner profile `/memory/OWNER.md` and the owner-layer rules `/memory/RULES.md`, then inherited node `RULES.md` files down to the active node, then the active node's `README.md`, `STATE.md` and relevant dependencies before acting.
-   - **Scoped bootstrap** (allowed only for answer-only / read-only fact retrieval with no durable writes): if the needed fact is already available from injected host context, a file already read in this session, or one targeted read of a known path, do not re-read the full contract tree. Escalate immediately to full bootstrap when a durable write, governance change, credential/side-effecting skill use, or policy uncertainty appears.
+4. Choose a bootstrap tier for the current turn, before reading further:
+   - **Scoped bootstrap** (allowed only for answer-only / read-only fact retrieval with no durable writes): read what the answer needs – injected host context, a file already read in this session, or targeted reads of known paths – and nothing else.
+   - **Full bootstrap** (required before the first creation, change or deletion of brain content, a governance change, use of a skill with side effects, or when applicable policy is unclear): read `/CORE.md`, then the owner profile `/memory/OWNER.md` and the owner-layer rules `/memory/RULES.md`, then inherited node `RULES.md` files down to the active node, then the active node's `README.md`, `STATE.md` and relevant dependencies before acting. `/CORE.md` is generated from this contract and `/RULES.md`: it holds, verbatim, the sections and rules that always apply, and the tables that say when every other section and rule applies.
+   - **Read by situation.** Before acting in a situation named under `Applies when` in those tables, read that section of this contract, or that rule in its canonical home, in full. When it is unclear whether a row applies, read it.
+   - **Escalation.** A turn that began scoped escalates to full bootstrap the moment it is about to write, take a side effect, use a credential or meet policy doubt: before that first action, never after it. A write to a brain repository begins with `session.py start` (`SMART-RULE-0038`), which prints the full-bootstrap reading list, so every agent in every host meets the escalation at the same step.
 5. Stop and report the problem if the contract cannot be found or read, or if competing location hints identify different contracts.
 6. When `/memory/` is absent, work only on the mechanics layer and say so; do not create owner content anywhere else to compensate. A fresh memory is set up from `/shared/templates/memory-skeleton/`.
 
@@ -35,7 +37,7 @@ Every Markdown file must contain YAML front matter with:
 contract: /CONTRACT.md
 ```
 
-This reference means: if the contract has not been read in the current working session, read it before using the file.
+This reference means: if the bootstrap of the tier the work needs (item 4 above) has not been done in the current working session, do it before using the file.
 
 Local rules may add constraints. They may not override this contract.
 
@@ -872,10 +874,10 @@ Every accepted contract change must identify its previous and new contract versi
 
 When an agent starts work:
 
-1. read this contract
+1. choose the bootstrap tier; for full bootstrap read `/CORE.md` (section 1)
 2. read `/memory/OWNER.md` when memory is present
 3. establish the active node
-4. read inherited rules (`/RULES.md`, `/memory/RULES.md`, then node rules) and active state
+4. read inherited rules (`/memory/RULES.md`, then node rules; a section of this contract or a `/RULES.md` rule when its `Applies when` fits the work) and active state
 5. inspect relevant open tasks
 6. inspect declared dependencies
 7. classify the user's input
@@ -907,6 +909,7 @@ Before finishing a substantive update, verify:
 - protected governance changes have an accepted proposal
 - the active `contract_version` is recorded in the repository manifest of each brain repository changed (`/repository-manifest.json`, `/library/repository-manifest.json` and `/memory/repository-manifest.json`)
 - no personal data has entered the mechanics repository or the skill library (section 3.4)
+- `/CORE.md` is current with this contract and `/RULES.md` (`core.py check`)
 - the repository preflight validator passes
 - every separable, validated, agent-owned durable change has been committed at the required logical checkpoint
 - the final report identifies each resulting commit and push status, or gives the exact permitted reason no commit was created

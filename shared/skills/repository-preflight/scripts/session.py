@@ -149,6 +149,9 @@ def cmd_start(root: Path, name: str, folder: Path) -> int:
     subprocess.run([sys.executable, str(copy / "shared/skills/repository-preflight/scripts/hooks.py"),
                     "install"], cwd=copy, capture_output=True)
     print(f"session copy: {copy}")
+    # CONTRACT §1: the escalation from a scoped to a full bootstrap happens here, before the first write.
+    print("before the first write, do the full bootstrap (CONTRACT §1): read /CORE.md, /memory/OWNER.md, "
+          "/memory/RULES.md and node RULES.md files down to the active node, then its README.md and STATE.md")
     print("work only there; finish with: python shared/skills/repository-preflight/scripts/session.py "
           f"finish {name}")
     return 0

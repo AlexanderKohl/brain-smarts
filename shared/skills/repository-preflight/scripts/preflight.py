@@ -858,6 +858,26 @@ def validate_personal_data(root: Path, result: Result) -> None:
             result.errors.append(f"{display}:{line}: personal data ({kind}); value withheld")
 
 
+def validate_core(root: Path, errors: list[str]) -> None:
+    """CONTRACT §1 and §15: /CORE.md is current, and every index row says when it applies."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import core
+
+    rules = root / "RULES.md"
+    # A brain whose rule index has no `Applies when` column reads the contract whole and has no core.
+    if not rules.is_file() or not (root / "CONTRACT.md").is_file() or "| Applies when |" not in rules.read_text(encoding="utf-8"):
+        return
+    errors.extend(core.problems(rules.read_text(encoding="utf-8")))
+    target = root / core.CORE
+    try:
+        current = target.is_file() and target.read_text(encoding="utf-8") == core.render(root)
+    except ValueError as exc:
+        errors.append(f"/{core.CORE}: {exc}")
+        return
+    if not current:
+        errors.append(f"/{core.CORE}: out of date with /CONTRACT.md and /RULES.md; run core.py build")
+
+
 def run(root: Path, writing: bool) -> Result:
     result = Result()
     result.memory_present = memory_root(root) is not None
@@ -878,6 +898,7 @@ def run(root: Path, writing: bool) -> Result:
     validate_pointer_files(root, result.errors)
     validate_knowledge_provenance(root, result.errors)
     validate_knowledge_review_dates(root, result.errors)
+    validate_core(root, result.errors)
     validate_manifest(root, result, writing)
     if writing:
         write_manifests(root, result)

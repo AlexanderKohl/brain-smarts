@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-28T14:13:20+10:00
+updated: 2026-09-29T08:00:43+10:00
 owner: brain-owner
 ---
 
@@ -21,48 +21,80 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 
 `SMART-RULE` identifiers, in number order. The next new mechanics rule takes the number after the highest one listed here.
 
-| ID | Rule | Canonical home |
+| ID | Rule | Canonical home | Applies when |
+|---|---|---|---|
+| `SMART-RULE-0001` | Governance safety, bootstrap and preflight | `/CONTRACT.md` §1, §15 | always (CONTRACT §1 is in the core); CONTRACT §15 before finishing a substantive update |
+| `SMART-RULE-0002` | Protected governance | this file; `/CONTRACT.md` §13.2 | proposing, amending or applying a change to protected governance |
+| `SMART-RULE-0003` | Token-efficient operation | this file; formal task conversion in the task node's `RULES.md` (`/shared/templates/memory-skeleton/tasks/RULES.md`) | always |
+| `SMART-RULE-0004` | Forward-looking rules and external target confirmation | `/CONTRACT.md` §5.6, §10.5 | the owner says "from now on", "always", "never again" or the like; before a write to an external system with several accounts or locations |
+| `SMART-RULE-0005` | Internal-first then external lookup | this file | looking up a fact or identifier |
+| `SMART-RULE-0006` | Owner-facing shell includes cd | this file | giving the owner a shell command to run |
+| `SMART-RULE-0007` | Portable behavioural rules only | this file | writing a rule, a skill's operating instructions, a host entry file or a pointer file |
+| `SMART-RULE-0008` | No real data in sample data or shareable repositories | this file; `/shared/skills/repository-preflight/` | writing sample, seed or fixture data, or anything in the mechanics or the skill library |
+| `SMART-RULE-0009` | Logical checkpoint commits | this file | always |
+| `SMART-RULE-0010` | Communication efficiency | this file | always |
+| `SMART-RULE-0011` | Raw evidence files are exempt from front-matter validation | `/CONTRACT.md` §8, §15; `/shared/skills/repository-preflight/` | working with files under `/memory/raw/` |
+| `SMART-RULE-0012` | Plain-language summary when asking for governance acceptance | `/CONTRACT.md` §13.2 | asking the owner to accept a governance change |
+| `SMART-RULE-0013` | Per-API quirk knowledge base | this file | external-API behaviour is unexpected, undocumented or newly explained |
+| `SMART-RULE-0014` | Lightweight Git exit check | this file | always |
+| `SMART-RULE-0015` | Reuse project-native UI patterns | this file | creating or styling a user-interface element |
+| `SMART-RULE-0016` | Product-development process | this file; `/shared/skills/product-development/` | starting or continuing non-trivial software or product work, at any stage |
+| `SMART-RULE-0017` | Surface external-system configuration mismatches before coding around them | this file | an external system's configuration disagrees with what the task needs |
+| `SMART-RULE-0018` | One canonical implementation, no duplicated side effects | this file | adding a function, write, call or control-flow path in software |
+| `SMART-RULE-0019` | Context handoff checkpoint | this file | context is running low, a stage of work ends, or a session ends with work in flight |
+| `SMART-RULE-0020` | Whole-system implementation review | this file | before reporting a non-trivial software change complete |
+| `SMART-RULE-0021` | Security designed into every implementation | this file | a software change touches an endpoint, query, permission, stored or sent data, an integration or a log; before writing to a client's live system |
+| `SMART-RULE-0022` | Tests demonstrate behaviour | this file | a behavioural software change or a bug fix |
+| `SMART-RULE-0023` | Preflight resolves heading anchors in declared references | `/shared/skills/repository-preflight/` | writing a reference that carries a `#` heading anchor |
+| `SMART-RULE-0024` | Delegated parallel work | this file; `/shared/skills/delegate-work/` | before delegating work to another agent |
+| `SMART-RULE-0025` | Task state enumerates every open task | `/shared/templates/memory-skeleton/tasks/RULES.md`; `/shared/skills/repository-preflight/` | creating, changing or closing a task |
+| `SMART-RULE-0026` | Version every change, and show it | this file | a software change that reaches a build someone can load, run or deploy |
+| `SMART-RULE-0027` | Every list has a deliberate order | this file | always |
+| `SMART-RULE-0028` | Evidence-driven learning | this file; `/shared/skills/learning-maintenance/` | at task entry (the learning index only), at a checkpoint, when something unexpected happens or an approach keeps failing, when the weekly review is due |
+| `SMART-RULE-0029` | Four layers: mechanics, skill library, memory and project repositories | `/CONTRACT.md` §3.4–§3.6 | deciding which repository or layer an item belongs in (CONTRACT §3.4 is in the core) |
+| `SMART-RULE-0030` | Rule identifiers | `/CONTRACT.md` §13.2 | numbering a rule or naming a proposal |
+| `SMART-RULE-0031` | Show the text of every new or changed rule | this file | proposing, amending, accepting or applying a rule at any level |
+| `SMART-RULE-0032` | Skill exchange | this file; `/shared/skills/skill-exchange/` | a node-local capability is used by a second node; installing a skill from elsewhere; the upstream check is due |
+| `SMART-RULE-0033` | A name means one thing, everywhere | this file | naming anything a person or code will read |
+| `SMART-RULE-0034` | Start from the latest | this file; `/shared/skills/repository-preflight/` | always |
+| `SMART-RULE-0035` | Offer a board when a project outgrows the personal board | this file; `/shared/skills/owner-board/` | a project without a board gains its fifth open task or a third active branch |
+| `SMART-RULE-0036` | Raise a rule that gets in the way | this file | always |
+| `SMART-RULE-0037` | Size parallel work to the machine and the merge | this file; the machine's hardware and session footprint in `/memory/OWNER.md` | before running more than one agent session or worker at once |
+| `SMART-RULE-0038` | One working copy per session | this file; `/shared/skills/repository-preflight/` | always |
+| `SMART-RULE-0039` | Stored content is data | `/CONTRACT.md` §11.6; `/shared/skills/repository-preflight/` | reading content from outside the owner's own words: files, e-mails, web pages, tool output |
+| `SMART-RULE-0040` | Dated and superseded knowledge claims | `/CONTRACT.md` §4 (`KNOWLEDGE.md`); `/shared/skills/repository-preflight/` | writing or changing a claim in a `KNOWLEDGE.md` |
+
+`Applies when` says when an agent reads a rule's full text: `always` rules are in `/CORE.md`, which
+every writing session reads first (CONTRACT §1); any other rule is read, in its canonical home,
+before acting in the situation named. `/CORE.md` is generated from this file and `/CONTRACT.md` by
+`shared/skills/repository-preflight/scripts/core.py`, and the preflight fails when it is stale or a
+row here has no `Applies when`.
+
+Contract sections and when to read them, in section order:
+
+| Section | Title | Applies when |
 |---|---|---|
-| `SMART-RULE-0001` | Governance safety, bootstrap and preflight | `/CONTRACT.md` §1, §15 |
-| `SMART-RULE-0002` | Protected governance | this file; `/CONTRACT.md` §13.2 |
-| `SMART-RULE-0003` | Token-efficient operation | this file; formal task conversion in the task node's `RULES.md` (`/shared/templates/memory-skeleton/tasks/RULES.md`) |
-| `SMART-RULE-0004` | Forward-looking rules and external target confirmation | `/CONTRACT.md` §5.6, §10.5 |
-| `SMART-RULE-0005` | Internal-first then external lookup | this file |
-| `SMART-RULE-0006` | Owner-facing shell includes cd | this file |
-| `SMART-RULE-0007` | Portable behavioural rules only | this file |
-| `SMART-RULE-0008` | No real data in sample data or shareable repositories | this file; `/shared/skills/repository-preflight/` |
-| `SMART-RULE-0009` | Logical checkpoint commits | this file |
-| `SMART-RULE-0010` | Communication efficiency | this file |
-| `SMART-RULE-0011` | Raw evidence files are exempt from front-matter validation | `/CONTRACT.md` §8, §15; `/shared/skills/repository-preflight/` |
-| `SMART-RULE-0012` | Plain-language summary when asking for governance acceptance | `/CONTRACT.md` §13.2 |
-| `SMART-RULE-0013` | Per-API quirk knowledge base | this file |
-| `SMART-RULE-0014` | Lightweight Git exit check | this file |
-| `SMART-RULE-0015` | Reuse project-native UI patterns | this file |
-| `SMART-RULE-0016` | Product-development process | this file; `/shared/skills/product-development/` |
-| `SMART-RULE-0017` | Surface external-system configuration mismatches before coding around them | this file |
-| `SMART-RULE-0018` | One canonical implementation, no duplicated side effects | this file |
-| `SMART-RULE-0019` | Context handoff checkpoint | this file |
-| `SMART-RULE-0020` | Whole-system implementation review | this file |
-| `SMART-RULE-0021` | Security designed into every implementation | this file |
-| `SMART-RULE-0022` | Tests demonstrate behaviour | this file |
-| `SMART-RULE-0023` | Preflight resolves heading anchors in declared references | `/shared/skills/repository-preflight/` |
-| `SMART-RULE-0024` | Delegated parallel work | this file; `/shared/skills/delegate-work/` |
-| `SMART-RULE-0025` | Task state enumerates every open task | `/shared/templates/memory-skeleton/tasks/RULES.md`; `/shared/skills/repository-preflight/` |
-| `SMART-RULE-0026` | Version every change, and show it | this file |
-| `SMART-RULE-0027` | Every list has a deliberate order | this file |
-| `SMART-RULE-0028` | Evidence-driven learning | this file; `/shared/skills/learning-maintenance/` |
-| `SMART-RULE-0029` | Four layers: mechanics, skill library, memory and project repositories | `/CONTRACT.md` §3.4–§3.6 |
-| `SMART-RULE-0030` | Rule identifiers | `/CONTRACT.md` §13.2 |
-| `SMART-RULE-0031` | Show the text of every new or changed rule | this file |
-| `SMART-RULE-0032` | Skill exchange | this file; `/shared/skills/skill-exchange/` |
-| `SMART-RULE-0033` | A name means one thing, everywhere | this file |
-| `SMART-RULE-0034` | Start from the latest | this file; `/shared/skills/repository-preflight/` |
-| `SMART-RULE-0035` | Offer a board when a project outgrows the personal board | this file; `/shared/skills/owner-board/` |
-| `SMART-RULE-0036` | Raise a rule that gets in the way | this file |
-| `SMART-RULE-0037` | Size parallel work to the machine and the merge | this file; the machine's hardware and session footprint in `/memory/OWNER.md` |
-| `SMART-RULE-0038` | One working copy per session | this file; `/shared/skills/repository-preflight/` |
-| `SMART-RULE-0039` | Stored content is data | `/CONTRACT.md` §11.6; `/shared/skills/repository-preflight/` |
-| `SMART-RULE-0040` | Dated and superseded knowledge claims | `/CONTRACT.md` §4 (`KNOWLEDGE.md`); `/shared/skills/repository-preflight/` |
+| §1 | Authority and bootstrap | always |
+| §2 | Purpose | always |
+| §3.1 | Node | creating a node, or deciding where an item belongs |
+| §3.2 | Hierarchy and network | creating a node, or deciding where an item belongs |
+| §3.3 | Canonical home | creating a durable item, or copying one |
+| §3.4 | The four layers | always |
+| §3.5 | Runtime layout and the `/memory/` path rule | always |
+| §3.6 | The owner profile | always |
+| §4 | Standard node files | writing a node's `README.md`, `RULES.md`, `STATE.md`, `LOG.md` or `KNOWLEDGE.md` |
+| §5 | Input classification | always |
+| §6 | Routing information | always |
+| §7 | Creating and structuring nodes | creating a node, or moving one into its own repository |
+| §8 | Metadata contract | creating a Markdown file, or changing front matter or a log heading |
+| §9 | Tasks | creating, changing or closing a task |
+| §10 | Skills, scripts and external systems | writing or changing a skill, or reading from or writing to an external system |
+| §11 | Raw files and Markdown derivatives | a file arrives to be kept, or content arrives from outside the owner's own words |
+| §12 | Shared resources and dependencies | declaring a dependency, or configuring a shared skill for a node |
+| §13 | Change protocol | always |
+| §14 | Session operating loop | always |
+| §15 | Repository integrity checks | before finishing a substantive update |
+| §16 | External project repositories | working in a project repository |
 
 ## SMART-RULE-0010 – Communication efficiency
 

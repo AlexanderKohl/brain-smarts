@@ -2,13 +2,16 @@
   "name": "Portable AI Brain – mechanics",
   "layer": "mechanics",
   "created": "2026-08-04T03:31:56+10:00",
-  "updated": "2026-09-28T13:49:26+10:00",
-  "validated_at": "2026-09-28T13:49:26+10:00",
-  "contract_version": "2.2.0",
-  "markdown_files": 105,
-  "unique_ids": 105,
+  "updated": "2026-09-29T08:21:13+10:00",
+  "validated_at": "2026-09-29T08:21:13+10:00",
+  "contract_version": "2.3.0",
+  "markdown_files": 112,
+  "unique_ids": 112,
   "validation_errors": [],
-  "validation_warnings": [],
+  "validation_warnings": [
+    "/shared/skills/repository-preflight/scripts/core.py: protected governance drafted on proposal/tiered-bootstrap; not active until accepted and merged",
+    "/shared/skills/repository-preflight/tests/test_core.py: protected governance drafted on proposal/tiered-bootstrap; not active until accepted and merged"
+  ],
   "root_contract": "/CONTRACT.md",
   "validator": "/shared/skills/repository-preflight/scripts/preflight.py"
 }
