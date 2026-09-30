@@ -3,7 +3,9 @@
 Every brain here is invented, in a temporary folder: a mechanics, a library and a memory, each with
 a local bare `origin`, checked out nested as the brain is. The two-session tests are the proposal's
 trial: the control shows an edit silently lost in one shared folder; with a copy per session the
-same overlap becomes a conflict and nothing is lost.
+same overlap becomes a conflict and nothing is lost. The diverged-history tests (SMART-RULE-0034)
+show `sync.py` merging a shared checkout's diverged branch in a copy, and `finish` merging again
+when its push is refused.
 Run from the brain root:
     python -m unittest discover -s shared/skills/repository-preflight/tests -v
 """
@@ -36,6 +38,15 @@ memory = pathlib.Path("memory")
 notes = sorted(p.name for p in memory.glob("*.md"))
 (memory / "boards").mkdir(exist_ok=True)
 (memory / "boards" / "index.html").write_text("built from " + ", ".join(notes) + "\\n", encoding="utf-8")
+"""
+
+# A stand-in for the repository preflight: fails while the memory holds BROKEN.md.
+FAKE_PREFLIGHT = """import pathlib, sys
+broken = pathlib.Path("memory", "BROKEN.md").exists()
+print("FAIL: 1 error" if broken else "PASS: invented brain")
+if broken:
+    print("ERROR: /memory/BROKEN.md: broken on purpose")
+sys.exit(1 if broken else 0)
 """
 
 
@@ -73,7 +84,8 @@ class SessionTests(unittest.TestCase):
         seeds = {
             "mechanics": {"CONTRACT.md": "# contract\n", ".gitignore": "library/\nmemory/\n__pycache__/\n",
                           ".gitattributes": "LOG.md merge=union\n",
-                          "shared/skills/owner-board/scripts/build_boards.py": FAKE_BUILDER},
+                          "shared/skills/owner-board/scripts/build_boards.py": FAKE_BUILDER,
+                          "shared/skills/repository-preflight/scripts/preflight.py": FAKE_PREFLIGHT},
             "library": {"README.md": "# library\n"},
             "memory": {"notes.md": "a line everyone edits\n", "LOG.md": "# Log\n",
                        ".gitattributes": "LOG.md merge=union\n", "boards/index.html": "built from LOG.md, notes.md\n"},
@@ -250,6 +262,130 @@ class SessionTests(unittest.TestCase):
             code, out = self.finish("beta")
         self.assertEqual(code, 1)
         self.assertIn("boards/index.html", out)
+
+    # ------------------------------------------------------------ diverged history (SMART-RULE-0034)
+
+    def push_elsewhere(self, files: dict[str, str]) -> str:
+        """Another session's memory work reaches origin first; returns origin's new main."""
+        seed = self.base / "seed-memory"
+        git(seed, "pull", "-q")
+        for path, text in files.items():
+            write(seed / path, text)
+        commit_all(seed, "another session's work")
+        git(seed, "push", "-q", "origin", "main")
+        return git(self.base / "memory.git", "rev-parse", "main")
+
+    def diverge(self, local: dict[str, str], remote: dict[str, str]) -> tuple[str, str]:
+        """Work committed in the shared checkout's memory while origin moved on: (local, remote)."""
+        remote_head = self.push_elsewhere(remote)
+        memory = self.shared / "memory"
+        for path, text in local.items():
+            write(memory / path, text)
+        commit_all(memory, "work committed in the shared checkout")
+        return git(memory, "rev-parse", "HEAD"), remote_head
+
+    def sync_memory(self) -> dict:
+        return sync.sync_one("memory", self.shared / "memory", merge_from=self.shared)
+
+    def copies(self) -> list[Path]:
+        folder = self.base / "brain-sessions"
+        return sorted(folder.iterdir()) if folder.is_dir() else []
+
+    def test_sync_merges_clean_diverged_history_and_pushes(self):
+        local, remote = self.diverge({"mine.md": "mine\n"}, {"theirs.md": "theirs\n"})
+        r = self.sync_memory()
+        self.assertEqual((r["state"], r["ok"]), ("merged", True), r["detail"])
+        head = git(self.base / "memory.git", "rev-parse", "main")
+        # A merge commit whose parents are both commits as they were: nothing rebased, nothing forced.
+        parents = git(self.base / "memory.git", "rev-list", "--parents", "-n", "1", "main").split()[1:]
+        self.assertEqual(sorted(parents), sorted([local, remote]))
+        self.assertEqual(self.on_origin("memory", "mine.md"), "mine")
+        self.assertEqual(self.on_origin("memory", "theirs.md"), "theirs")
+        # The shared checkout was only fast-forwarded to the pushed merge, never merged into.
+        memory = self.shared / "memory"
+        self.assertEqual(git(memory, "rev-parse", "HEAD"), head)
+        self.assertIn("Fast-forward", git(memory, "reflog", "-1"))
+        self.assertEqual(git(memory, "status", "--porcelain"), "")
+        self.assertEqual(self.copies(), [])
+        self.assertEqual(git(memory, "branch", "--list", "session/*"), "")
+
+    def test_sync_stops_on_a_hand_written_conflict_and_changes_nothing_shared(self):
+        local, remote = self.diverge({"notes.md": "the shared checkout's version\n"},
+                                     {"notes.md": "another session's version\n"})
+        r = self.sync_memory()
+        self.assertEqual((r["state"], r["ok"]), ("diverged, merge stopped", False))
+        self.assertIn("notes.md", r["detail"])
+        self.assertIn("the shared checkout is unchanged", r["detail"])
+        self.assertEqual(git(self.shared / "memory", "rev-parse", "HEAD"), local)
+        self.assertEqual(git(self.base / "memory.git", "rev-parse", "main"), remote)
+        # Both sides wait in the kept copy, for the owner to say how they combine.
+        [copy] = self.copies()
+        self.assertIn(str(copy), r["detail"])
+        waiting = (copy / "memory" / "notes.md").read_text(encoding="utf-8")
+        self.assertIn("the shared checkout's version", waiting)
+        self.assertIn("another session's version", waiting)
+
+    def test_sync_rebuilds_a_conflicting_generated_file(self):
+        self.diverge({"boards/index.html": "a local hand edit\n", "mine.md": "m\n"},
+                     {"boards/index.html": "a remote hand edit\n", "theirs.md": "t\n"})
+        r = self.sync_memory()
+        self.assertEqual((r["state"], r["ok"]), ("merged", True), r["detail"])
+        self.assertEqual(self.on_origin("memory", "boards/index.html"),
+                         "built from LOG.md, mine.md, notes.md, theirs.md")
+
+    def test_sync_pushes_nothing_when_preflight_fails_after_the_merge(self):
+        local, remote = self.diverge({"BROKEN.md": "x\n"}, {"theirs.md": "t\n"})
+        r = self.sync_memory()
+        self.assertEqual((r["state"], r["ok"]), ("diverged, merge stopped", False))
+        self.assertIn("broken on purpose", r["detail"])
+        self.assertIn("nothing was pushed", r["detail"])
+        self.assertEqual(git(self.base / "memory.git", "rev-parse", "main"), remote)
+        self.assertEqual(git(self.shared / "memory", "rev-parse", "HEAD"), local)
+
+    def test_sync_leaves_a_diverged_session_copy_to_finish(self):
+        copy = self.start("alpha")
+        write(copy / "memory" / "alpha.md", "a\n")
+        commit_all(copy / "memory", "alpha")
+        self.push_elsewhere({"theirs.md": "t\n"})
+        before = git(copy / "memory", "rev-parse", "HEAD")
+        r = sync.sync_one("memory", copy / "memory", merge_from=copy)
+        self.assertEqual((r["state"], r["ok"]), ("diverged", False))
+        self.assertIn("session.py finish", r["detail"])
+        self.assertEqual(git(copy / "memory", "rev-parse", "HEAD"), before)
+
+    def racing_push(self, races: int):
+        """session.git, but the next `races` pushes each lose a race to another session's push."""
+        real, left = session.git, [races]
+
+        def racing(repo: Path, *args: str):
+            if args[:1] == ("push",) and left[0]:
+                left[0] -= 1
+                self.push_elsewhere({f"race-{left[0]}.md": "r\n"})
+            return real(repo, *args)
+        return mock.patch.object(session, "git", racing)
+
+    def test_finish_merges_again_when_its_push_is_refused(self):
+        copy = self.start("alpha")
+        write(copy / "memory" / "alpha.md", "a\n")
+        commit_all(copy / "memory", "alpha")
+        with self.racing_push(1):
+            code, out = self.finish("alpha")
+        self.assertEqual(code, 0, out)
+        self.assertIn("push refused – origin moved on; merging again (attempt 2 of 3)", out)
+        self.assertEqual(self.on_origin("memory", "alpha.md"), "a")
+        self.assertEqual(self.on_origin("memory", "race-0.md"), "r")
+        self.assertFalse(copy.exists())
+
+    def test_finish_reports_after_three_refused_pushes(self):
+        copy = self.start("alpha")
+        write(copy / "memory" / "alpha.md", "a\n")
+        commit_all(copy / "memory", "alpha")
+        with self.racing_push(5):
+            code, out = self.finish("alpha")
+        self.assertEqual(code, 1)
+        self.assertIn("push refused 3 times", out)
+        self.assertNotIn("alpha.md", git(self.base / "memory.git", "ls-tree", "--name-only", "main"))
+        self.assertTrue(copy.exists())
 
     # ------------------------------------------------------------ list
 
