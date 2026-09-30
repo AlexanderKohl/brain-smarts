@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 node_type: skill_library
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-10-01T07:50:51+10:00
+updated: 2026-09-30T23:00:32+00:00
 ---
 
 # Core Skills
@@ -56,7 +56,7 @@ Contains the investment-proportionate product-development process for new and ex
 
 ##### `raw-file-ingestion/`
 
-Contains the canonical shared executable skill for preserving raw files under `/memory/raw/` and creating traceable Markdown source records under `/memory/sources/`. It must never modify or delete an existing raw file.
+Contains the canonical shared executable skill for preserving raw files under `/memory/raw/` and creating traceable Markdown source records under `/memory/sources/`. It converts text, CSV, JSON, Markdown, Word and Excel files with the standard library, and PDF through `pdftotext` or `pypdf` where installed, and says in each record what was left out. It must never modify or delete an existing raw file. Tests in `tests/` run on fictional files.
 
 ##### `repository-preflight/`
 
