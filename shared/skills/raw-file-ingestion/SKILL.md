@@ -6,10 +6,12 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 scope: shared
+version: 0.1.1
 script_paths:
   - /shared/skills/raw-file-ingestion/scripts/ingest_raw.py
+  - /shared/skills/raw-file-ingestion/tests/test_ingest_raw.py
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-09-30T22:44:08+00:00
 ---
 
 # Raw File Ingestion
@@ -28,6 +30,10 @@ Preserve an uploaded or imported file unchanged, calculate its identity, create 
 - append an ingestion event to the relevant log
 
 The skill must not modify or delete an existing raw file.
+
+An identical file ingested again (same SHA-256) reuses the raw file and keeps the source record it
+already has, whatever title it arrives with: nothing in it is rewritten, so a manual or specialised
+conversion made there since is never lost. Only a node reference that does not exist yet is added.
 
 ## Inputs
 
@@ -56,6 +62,12 @@ python shared/skills/raw-file-ingestion/scripts/ingest_raw.py FILE --node memory
 ```
 
 The script supports direct text extraction for common text formats. Other formats receive a source record marked `pending_conversion` until a suitable converter is run.
+
+```bash
+python -m unittest discover -s shared/skills/raw-file-ingestion/tests -v
+```
+
+The tests build a fictional brain in a temporary folder and ingest fictional files.
 
 ## Outputs
 
