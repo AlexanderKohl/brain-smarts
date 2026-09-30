@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 scope: shared
-version: 0.1.0
+version: 0.1.1
 script_paths:
   - /shared/skills/split-file/scripts/js/move.js
   - /shared/skills/split-file/scripts/js/move-methods.js

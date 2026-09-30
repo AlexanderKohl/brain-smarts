@@ -300,8 +300,15 @@ def narrowed_import(stmt: Stmt, needed: set[str], line_text: str) -> str:
 
 
 def name_list(prefix: str, names: list[str], limit: int = 100) -> str:
-    """`from x import a, b`, in parentheses over several lines when it would pass the limit."""
+    """`from x import a, b`, in parentheses over several filled lines when it would pass the limit."""
     one = f"{prefix}{', '.join(names)}"
     if len(one) <= limit:
         return one
-    return "\n".join([f"{prefix}(", *[f"    {n}," for n in names], ")"])
+    out = [f"{prefix}("]
+    line = "   "
+    for n in names:
+        if len(line) + len(n) + 2 > limit:
+            out.append(line)
+            line = "   "
+        line += f" {n},"
+    return "\n".join([*out, line, ")"])

@@ -120,7 +120,7 @@ class Describer:
         if inspect.isbuiltin(value):
             return f"builtin {getattr(value, '__module__', '')}.{value.__name__}"
         try:
-            text = repr(value)
+            text = repr(sorted(value, key=repr)) if isinstance(value, (set, frozenset)) else repr(value)
         except Exception:  # noqa: BLE001 - a repr that fails is still a shape
             text = "<repr failed>"
         return f"{type(value).__name__} {digest(self.normalise(text))}"
@@ -182,7 +182,9 @@ def run_describe(file: str, root: Path, config_args: list[str], tests: bool, col
     args = [sys.executable, __file__, "--describe", file, "--root", str(root), *config_args]
     if tests:
         args.append("--tests")
-    result = subprocess.run(args, cwd=root, capture_output=True, text=True, encoding="utf-8")
+    # A fixed hash seed, so sets list their members in the same order in every process.
+    env = {**os.environ, "PYTHONHASHSEED": "0"}
+    result = subprocess.run(args, cwd=root, capture_output=True, text=True, encoding="utf-8", env=env)
     line = next((l for l in result.stdout.splitlines() if l.startswith("SHAPE-PY ")), None)
     if result.returncode != 0 or not line:
         error = (result.stderr.strip().splitlines() or [f"exit {result.returncode}"])[-1][:300]

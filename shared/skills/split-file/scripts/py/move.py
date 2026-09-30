@@ -198,9 +198,14 @@ def build(args: argparse.Namespace) -> tuple[str, str, Path, str]:
     if from_source:
         rest.append(S.name_list(f"from {source.stem} import ", from_source))
     head = future + ([""] if future and rest else []) + rest
+    # Statements that were next to each other keep the lines between them (blank lines, comments);
+    # others are two blank lines apart.
     body: list[str] = []
-    for s in moving:
-        if body:
+    adjacent = {id(b) for a, b in zip(stmts, stmts[1:]) if a in moving and b in moving}
+    for i, s in enumerate(moving):
+        if i and id(s) in adjacent:
+            body += lines[moving[i - 1].end:s.first - 1]
+        elif i:
             body += ["", ""]
         body += lines[s.first - 1:s.end]
     module_text = "\n".join(doc + [""] + head + ["", ""] + body) + "\n"
@@ -208,6 +213,9 @@ def build(args: argparse.Namespace) -> tuple[str, str, Path, str]:
     drop: set[int] = set()
     for s in moving:
         drop.update(range(s.first, s.end + 1))
+        if id(s) in adjacent:
+            prev = stmts[stmts.index(s) - 1]
+            drop.update(range(prev.end + 1, s.first))
         n = s.end + 1
         while n <= len(lines) and lines[n - 1].strip() == "":
             drop.add(n)
