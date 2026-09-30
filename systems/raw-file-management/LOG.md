@@ -5,7 +5,7 @@ type: log
 schema_version: 0.2
 contract: /CONTRACT.md
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-30T23:00:19+00:00
+updated: 2026-09-30T23:02:25+00:00
 ---
 
 # Activity Log
@@ -67,4 +67,12 @@ updated: 2026-09-30T23:00:19+00:00
 
 - Re-ingesting all eight under another title reused every raw file and record. The repository
   preflight over the resulting fictional memory reported no error in anything the skill wrote.
+
+## 2026-09-30T23:02:25+00:00
+
+- 0.4.2, from reviewing 0.4.1 (TASK-2026-0004): an Excel string escape for half a surrogate pair
+  stopped the run while the record was being written, leaving the raw file with a truncated record
+  and no log line. Now that escape stays as written, any unexpected converter error becomes a
+  `failed` record naming it, and records are written whole or not at all. The eight fictional
+  samples give the same results as at 0.4.1.
 
