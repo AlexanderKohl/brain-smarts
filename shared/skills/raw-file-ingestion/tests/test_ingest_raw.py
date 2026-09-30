@@ -9,6 +9,8 @@ from __future__ import annotations
 import codecs
 import hashlib
 import re
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -120,6 +122,38 @@ class NodeReferenceTests(IngestTestCase):
                                               "--node", form)
                 record = self.brain.file(result["canonical_markdown"]).read_text(encoding="utf-8")
                 self.assertIn("project_refs:\n  - /memory/projects/orchard-club\n", record)
+
+
+class SafetyNetTests(unittest.TestCase):
+    """A converter defect still leaves the raw file with a record that says what went wrong."""
+
+    def setUp(self) -> None:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+        import ingest_raw
+        self.module = ingest_raw
+        self.original = ingest_raw.convert
+
+    def tearDown(self) -> None:
+        self.module.convert = self.original
+
+    def test_an_error_in_a_converter_becomes_a_failed_conversion(self):
+        def broken(path):
+            raise RuntimeError("fictional converter defect")
+        self.module.convert = broken
+        conversion = self.module.safe_convert(Path("plots.xlsx"))
+        self.assertEqual((conversion.status, conversion.markdown), ("failed", ""))
+        self.assertIn("RuntimeError: fictional converter defect", conversion.notes[0])
+
+    def test_text_that_cannot_be_written_as_utf8_becomes_a_failed_conversion(self):
+        self.module.convert = lambda path: self.module.Conversion("complete", "half \ud800 pair", [])
+        self.assertEqual(self.module.safe_convert(Path("plots.xlsx")).status, "failed")
+
+    def test_a_file_is_written_whole_and_nothing_is_left_beside_it(self):
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder) / "record.md"
+            self.module.write_lf(target, "one\ntwo\n")
+            self.assertEqual(target.read_bytes(), b"one\ntwo\n")
+            self.assertEqual([p.name for p in Path(folder).iterdir()], ["record.md"])
 
 
 class ReingestTests(IngestTestCase):

@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 scope: shared
-version: 0.4.1
+version: 0.4.2
 script_paths:
   - /shared/skills/raw-file-ingestion/scripts/ingest_raw.py
   - /shared/skills/raw-file-ingestion/scripts/convert.py
@@ -18,7 +18,7 @@ script_paths:
   - /shared/skills/raw-file-ingestion/tests/test_office_formats.py
   - /shared/skills/raw-file-ingestion/tests/test_pdf.py
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-30T22:59:39+00:00
+updated: 2026-09-30T23:02:09+00:00
 ---
 
 # Raw File Ingestion
@@ -116,7 +116,8 @@ can be converted.
 - check the brain root, the memory checkout and the target node before anything is written, so a refused run leaves no raw copy, record or log line (exit 6: no brain or memory; 4: node outside `/memory/`; 5: node missing)
 - do not overwrite conflicting raw files
 - report unsupported conversion
-- preserve the raw file even when conversion fails
+- preserve the raw file even when conversion fails; an unexpected error in a converter becomes a `failed` record that names the error, so the raw file never stays without its record and log line
+- write records, references and manifests through a temporary file moved into place, so a failure never leaves half a file
 - the script does not create tasks: when `conversion_status` is not `complete`, the calling agent creates one (CONTRACT §11.2 step 8) naming the source record and the note in it that says why – OCR, a missing PDF extractor, an unprotected copy, a formula value to save
 
 ## Repository updates

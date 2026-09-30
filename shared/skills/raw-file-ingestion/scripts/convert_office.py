@@ -345,7 +345,13 @@ def rich_text(element: Optional[ET.Element]) -> str:
         return ""
     parts = [element.findtext(S + "t") or ""] + [run.findtext(S + "t") or "" for run in element.findall(S + "r")]
     text = "".join(parts)
-    return re.sub(r"_x([0-9A-Fa-f]{4})_", lambda m: chr(int(m.group(1), 16)), text).replace("\r\n", "\n")
+    return re.sub(r"_x([0-9A-Fa-f]{4})_", unescape, text).replace("\r\n", "\n")
+
+
+def unescape(found: re.Match) -> str:
+    """An `_xHHHH_` escape as its character; half a surrogate pair is no character and stays as written."""
+    code = int(found.group(1), 16)
+    return found.group(0) if 0xD800 <= code <= 0xDFFF else chr(code)
 
 
 def is_date_format(code: str) -> bool:

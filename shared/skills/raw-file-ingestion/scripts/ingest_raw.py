@@ -25,6 +25,7 @@ import datetime as dt
 import hashlib
 import json
 import mimetypes
+import os
 from pathlib import Path
 import re
 import shutil
@@ -130,8 +131,29 @@ def recorded_status(record: Path) -> str:
 
 
 def write_lf(path: Path, text: str) -> None:
-    """Write with LF line ends on every platform, as the brain's other generated files are."""
-    path.write_text(text, encoding="utf-8", newline="\n")
+    """Write with LF line ends on every platform, as the brain's other generated files are.
+
+    Written beside the target and moved into place, so a failure never leaves half a file.
+    """
+    partial = path.with_name(path.name + ".tmp")
+    partial.write_text(text, encoding="utf-8", newline="\n")
+    os.replace(partial, path)
+
+
+def safe_convert(path: Path) -> Conversion:
+    """convert(), with an unexpected error turned into a failed conversion.
+
+    The raw file is already stored when conversion runs, so a stopped run would leave it without a
+    record or a log line; this way it always gets both, and the record says what went wrong.
+    """
+    try:
+        conversion = convert(path)
+        conversion.markdown.encode("utf-8")               # a record must be writable as UTF-8
+        return conversion
+    except Exception as err:
+        return Conversion("failed", "", [
+            f"Conversion stopped with an unexpected error ({type(err).__name__}: {err}). The raw file is "
+            "preserved; the error is a defect of the converter."])
 
 
 def append_log(log_path: Path, line: str, timestamp: str) -> None:
@@ -268,7 +290,7 @@ def main() -> int:
         conversion_status = recorded_status(existing)
     else:
         canonical = memory_root(root) / "sources" / f"{source_id}-{slugify(title)}.md"
-        conversion = convert(raw_path)
+        conversion = safe_convert(raw_path)
         conversion_status = conversion.status
         write_source_record(
             canonical, source_id=source_id, title=title, timestamp=timestamp,

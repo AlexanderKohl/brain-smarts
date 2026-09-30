@@ -164,6 +164,12 @@ class ExcelTests(IngestTestCase):
         self.assertIn("2 formula cell(s) show the value last calculated", record)
         self.assertIn("1 merged range(s)", record)
 
+    def test_an_escaped_half_surrogate_is_kept_as_written_and_the_record_is_made(self):
+        book = xlsx([("Codes", "visible", sheet({1: [cell("A1", "0", "s")]}))], ["tab_x0009_here, half _xD800_ pair"])
+        result, record = self.brain.converted("codes.xlsx", book)
+        self.assertEqual(result["conversion_status"], "complete")
+        self.assertIn("| 1 | tab\there, half _xD800_ pair |", record)
+
     def test_dates_in_a_1904_workbook(self):
         book = xlsx([("Dates", "visible", sheet({1: [cell("A1", "44196", style="1")]}))], [], date1904=True)
         result, record = self.brain.converted("mac.xlsx", book)
