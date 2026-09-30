@@ -216,6 +216,32 @@ function backRequireLine(staying, movedNames) {
   return after;
 }
 
+// The lines to drop for moved ranges [from, to]. Ranges with only blank lines between them are one
+// run; of the blank lines around a run, the wider side stays, so the code on either side keeps the
+// spacing it had.
+function dropRanges(lines, ranges) {
+  const blank = (n) => lines[n - 1] !== undefined && lines[n - 1].trim() === '';
+  const runs = [];
+  for (const [from, to] of [...ranges].sort((a, b) => a[0] - b[0])) {
+    const last = runs[runs.length - 1];
+    let between = true;
+    if (last) for (let l = last[1] + 1; l < from; l += 1) if (!blank(l)) between = false;
+    if (last && between) last[1] = to; else runs.push([from, to]);
+  }
+  const drop = new Set();
+  for (const [from, to] of runs) {
+    for (let l = from; l <= to; l += 1) drop.add(l);
+    const before = [];
+    for (let k = from - 1; k >= 1 && !drop.has(k) && blank(k); k -= 1) before.push(k);
+    const after = [];
+    let n = to + 1;
+    for (; n <= lines.length && blank(n); n += 1) after.push(n);
+    const atEnd = n > lines.length;
+    for (const l of (atEnd || after.length > before.length ? before : after)) drop.add(l);
+  }
+  return drop;
+}
+
 // Lines as the code map counts them: a final line ending does not start another line.
 function countLines(text) {
   if (!text) return 0;
@@ -225,5 +251,5 @@ function countLines(text) {
 
 module.exports = {
   readSource, writeText, parse, declared, uses, usesPrivate, fileBound, isPure, requireOf, statements, importsFor,
-  braceList, backRequireLine, countLines,
+  braceList, backRequireLine, countLines, dropRanges,
 };

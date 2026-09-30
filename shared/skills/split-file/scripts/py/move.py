@@ -220,21 +220,29 @@ def build(args: argparse.Namespace) -> tuple[str, str, Path, str]:
         body += lines[s.first - 1:s.end]
     module_text = "\n".join(doc + [""] + head + ["", ""] + body) + "\n"
 
+    # Each run of moved statements goes with the lines between them. Of the blank lines around a run,
+    # the wider side stays, so the code on either side keeps the spacing it had.
     drop: set[int] = set()
+    runs: list[list[S.Stmt]] = []
     for s in moving:
-        drop.update(range(s.first, s.end + 1))
-        if id(s) in adjacent:
-            prev = stmts[stmts.index(s) - 1]
-            drop.update(range(prev.end + 1, s.first))
-        n = s.end + 1
+        if runs and id(s) in adjacent:
+            runs[-1].append(s)
+        else:
+            runs.append([s])
+    for run in runs:
+        drop.update(range(run[0].first, run[-1].end + 1))
+        before = []
+        k = run[0].first - 1
+        while k >= 1 and lines[k - 1].strip() == "" and k not in drop:
+            before.append(k)
+            k -= 1
+        after = []
+        n = run[-1].end + 1
         while n <= len(lines) and lines[n - 1].strip() == "":
-            drop.add(n)
+            after.append(n)
             n += 1
-        if n > len(lines):  # the last statement: drop the blank lines before it instead
-            k = s.first - 1
-            while k >= 1 and lines[k - 1].strip() == "" and k not in drop:
-                drop.add(k)
-                k -= 1
+        at_end = n > len(lines)
+        drop.update(before if at_end or len(after) > len(before) else after)
     out: list[str] = []
     insert_after = 0
     if not args.no_load_back:

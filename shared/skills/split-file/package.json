@@ -1,6 +1,6 @@
 {
   "name": "split-file",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "description": "Split a large code file by moving whole parts of it into new files, unedited, with checks that the rest of the program sees the same thing.",
   "license": "UNLICENSED",

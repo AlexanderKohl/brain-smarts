@@ -87,11 +87,7 @@ function main() {
     '',
   ].join('\n');
 
-  const drop = new Set();
-  for (const m of moving) {
-    for (let l = m.from; l <= m.end; l += 1) drop.add(l);
-    if (lines[m.end] !== undefined && lines[m.end].trim() === '') drop.add(m.end + 1);
-  }
+  const drop = A.dropRanges(lines, moving.map((m) => [m.from, m.end]));
   const requireLine = `  require('./${moduleName}'),`;
   // A loop from an earlier move: the new module joins its list.
   const loopAt = lines.findIndex((l, i) => i >= cls.loc.end.line && l === LOOP_START);

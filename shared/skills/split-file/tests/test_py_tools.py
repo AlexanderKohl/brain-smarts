@@ -125,6 +125,8 @@ class MoveTests(Base):
         r = self.move("--to", "json", "--names", "describe")
         self.assertIn("standard-library module", r.stderr)
         self.assertEqual(self.move("--to", "moved", "--names", "started", "--allow-load-order").returncode, 0)
+        # It sat directly under another statement: the two blank lines after it stay.
+        self.assertIn("_cache = None\n\n\n@dataclass", self.read("garden.py").replace("\r\n", "\n"))
 
 
 class TestFileSplitTests(Base):

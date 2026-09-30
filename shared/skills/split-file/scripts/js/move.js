@@ -95,12 +95,8 @@ function main() {
     '',
   ].join('\n');
 
-  // Remove the moved statements, with their leading comments and one blank line after each.
-  const drop = new Set();
-  for (const s of moving) {
-    for (let l = s.from; l <= s.end; l += 1) drop.add(l);
-    if (lines[s.end] !== undefined && lines[s.end].trim() === '') drop.add(s.end + 1);
-  }
+  // Remove the moved statements, with their leading comments.
+  const drop = A.dropRanges(lines, moving.map((s) => [s.from, s.end]));
   const after = A.backRequireLine(staying, movedNames);
   const insert = [];
   if (!text.includes(MARKER)) insert.push(MARKER, '// exports stay the same.');

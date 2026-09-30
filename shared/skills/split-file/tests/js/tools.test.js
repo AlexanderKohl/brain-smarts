@@ -12,9 +12,14 @@ const { spawnSync } = require('child_process');
 const TOOLS = path.join(__dirname, '..', '..', 'scripts', 'js');
 const FIXTURE = path.join(__dirname, '..', 'fixtures', 'js-app');
 
+// A copy of the fixture app with LF line endings, whatever the checkout wrote.
 function copyApp() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'split-js-'));
   fs.cpSync(FIXTURE, dir, { recursive: true });
+  for (const file of fs.readdirSync(path.join(dir, 'src'))) {
+    const full = path.join(dir, 'src', file);
+    fs.writeFileSync(full, fs.readFileSync(full, 'utf8').replace(/\r\n/g, '\n'));
+  }
   return dir;
 }
 
@@ -105,6 +110,8 @@ test('move.js refuses what would change behaviour', () => {
   }
   const dir = copyApp();
   assert.strictEqual(tool('move.js', ['src/garden.js', '--to', 'moved', '--names', 'started', '--allow-load-order'], dir).code, 0);
+  // It sat directly under another statement: the blank line after it stays.
+  assert.match(read(dir, 'src/garden.js'), /let visits = 0;\n\nclass Greenhouse/);
 });
 
 test('move-methods.js moves methods onto a holder class the original takes back', () => {
