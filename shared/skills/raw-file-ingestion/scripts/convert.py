@@ -13,6 +13,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from convert_office import docx_to_markdown, xlsx_to_markdown
 from markdown_blocks import fence, table
 
 # Text shown verbatim in a fenced block, with the block's language: the text can then add no
@@ -25,6 +26,11 @@ FENCED = {
 MARKDOWN = {".markdown", ".md"}
 DELIMITED = {".csv", ".tsv"}
 TEXT_EXTENSIONS = set(FENCED) | MARKDOWN | DELIMITED
+# Formats read by a converter of their own, which returns (status, markdown, notes).
+CONVERTERS = {
+    ".docm": docx_to_markdown, ".docx": docx_to_markdown,
+    ".xlsm": xlsx_to_markdown, ".xlsx": xlsx_to_markdown,
+}
 FRONT_MATTER = re.compile(r"\A---\n(.*?\n)(?:---|\.\.\.)(?:\n|\Z)", re.S)
 
 # Byte-order marks, longest first: a UTF-32 little-endian mark begins with the UTF-16 one.
@@ -125,6 +131,8 @@ def render(suffix: str, text: str) -> tuple[str, str]:
 
 def convert(path: Path) -> Conversion:
     suffix = path.suffix.lower()
+    if suffix in CONVERTERS:
+        return Conversion(*CONVERTERS[suffix](path))
     if suffix not in TEXT_EXTENSIONS:
         return Conversion("pending_conversion", "",
                           ["This format requires a specialised converter. The raw file has been preserved."])

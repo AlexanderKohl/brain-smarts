@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import codecs
 import hashlib
+import re
 import unittest
 from pathlib import Path
 
@@ -126,8 +127,8 @@ class ReingestTests(IngestTestCase):
         path = self.brain.sample("ledger.xlsx", b"PK\x03\x04 fictional workbook bytes")
         first = self.brain.ingest_ok(path)
         record = self.brain.file(first["canonical_markdown"])
-        converted = record.read_text(encoding="utf-8").replace(
-            "conversion_status: pending_conversion", "conversion_status: complete") + "\nConverted by a reviewer.\n"
+        converted = re.sub(r"conversion_status: \S+", "conversion_status: complete",
+                           record.read_text(encoding="utf-8")) + "\nConverted by a reviewer.\n"
         record.write_text(converted, encoding="utf-8")
 
         again = self.brain.ingest_ok(path)

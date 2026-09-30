@@ -6,15 +6,17 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 scope: shared
-version: 0.2.0
+version: 0.3.0
 script_paths:
   - /shared/skills/raw-file-ingestion/scripts/ingest_raw.py
   - /shared/skills/raw-file-ingestion/scripts/convert.py
+  - /shared/skills/raw-file-ingestion/scripts/convert_office.py
   - /shared/skills/raw-file-ingestion/scripts/markdown_blocks.py
   - /shared/skills/raw-file-ingestion/tests/test_ingest_raw.py
   - /shared/skills/raw-file-ingestion/tests/test_text_formats.py
+  - /shared/skills/raw-file-ingestion/tests/test_office_formats.py
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-30T22:49:51+00:00
+updated: 2026-09-30T22:55:54+00:00
 ---
 
 # Raw File Ingestion
@@ -85,8 +87,16 @@ How each format appears under `## Extracted content` in the source record. Every
 | CSV (`.csv`), TSV (`.tsv`) | a table, the first row as its header; the CSV delimiter is detected (comma, semicolon, tab or pipe) | blank lines; a pipe in a cell is escaped and a line break becomes `<br>`; a file that will not parse is shown as text |
 | JSON (`.json`) | verbatim in a `json` block, checked for validity | nothing: it is not reformatted, so numbers keep their written form |
 | Markdown (`.md`, `.markdown`) | as written | its front matter moves into a `yaml` block, so it does not read as part of the record |
+| Excel workbook (`.xlsx`, `.xlsm`) | one table per sheet, in workbook order, under `### Sheet N: name`; the columns are headed by their letters and each row starts with its row number, so every value keeps its cell reference | empty rows and columns; number display formats (a number is shown as stored, a date or time in ISO form); charts, images and cell comments. A formula shows the value saved with the file; one with no saved value (written by a program, not a spreadsheet application) shows its formula and makes the record `partial`. Merged ranges and hidden sheets are named |
+| Word document (`.docx`, `.docm`) | headings, paragraphs, bulleted and numbered lists, tables, links and footnotes, in document order; explicit page breaks as `_[Page break]_`, images as `_[image: alt text]_` | bold, italic, fonts and colours; headers, footers and comments (named when present); tracked changes are shown as if accepted. A document with no text at all is `pending_conversion` (it needs OCR) |
 | Plain text, logs, code and data (`.txt`, `.log`, `.css`, `.htm`, `.html`, `.js`, `.py`, `.sql`, `.ts`, `.xml`, `.yaml`, `.yml`) | verbatim in a fenced block with its language | nothing: in a block the text keeps its line breaks and cannot add a heading, list or HTML to the record |
 | anything else | nothing yet: `pending_conversion` | – |
+
+Word and Excel files are read with the Python standard library alone: they are ZIP packages of XML.
+A package part over 200 MB uncompressed, or one declaring a DOCTYPE (Office never writes one; entity
+tricks need one), is refused and the record marked `failed`. A password-protected file, or the older
+binary `.doc` and `.xls`, is `pending_conversion` with a note: an unprotected `.docx` or `.xlsx` copy
+can be converted.
 
 ## Outputs
 
