@@ -4,9 +4,12 @@ title: The validator checks the code-file size limit, and preflight.py is split 
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: proposed
+status: implemented
 created: 2026-10-01T08:26:14+10:00
-updated: 2026-10-01T08:26:14+10:00
+updated: 2026-10-01T08:50:17+10:00
+accepted_by: brain-owner
+accepted_at: 2026-10-01T08:50:17+10:00
+implemented_at: 2026-10-01T08:50:17+10:00
 owner: brain-owner
 rule_id: SMART-RULE-0041
 previous_contract_version: 2.2.0
@@ -113,4 +116,4 @@ Revert the proposal's commits. The size record stays; without the check it is on
 
 ## Acceptance
 
-Not yet accepted.
+Accepted by the owner and merged into `main`. The owner's record is kept in their memory.
