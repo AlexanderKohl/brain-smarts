@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 scope: shared
-version: 0.4.0
+version: 0.4.1
 script_paths:
   - /shared/skills/raw-file-ingestion/scripts/ingest_raw.py
   - /shared/skills/raw-file-ingestion/scripts/convert.py
@@ -18,10 +18,12 @@ script_paths:
   - /shared/skills/raw-file-ingestion/tests/test_office_formats.py
   - /shared/skills/raw-file-ingestion/tests/test_pdf.py
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-30T22:58:41+00:00
+updated: 2026-09-30T22:59:39+00:00
 ---
 
 # Raw File Ingestion
+
+Read `/CONTRACT.md` first.
 
 ## Purpose
 
@@ -47,7 +49,7 @@ conversion made there since is never lost. Only a node reference that does not e
 - source file path
 - optional target node path: a folder inside `/memory/`, written as `memory/projects/example`, `/memory/projects/example` or an absolute path inside the brain
 - optional title
-- optional tags
+- optional tags (not yet taken by the script)
 
 ## Data sources
 
@@ -70,7 +72,7 @@ conversion made there since is never lost. Only a node reference that does not e
 python shared/skills/raw-file-ingestion/scripts/ingest_raw.py FILE --node memory/projects/example
 ```
 
-The script supports direct text extraction for common text formats. Other formats receive a source record marked `pending_conversion` until a suitable converter is run. `scripts/convert.py` does the conversion; `ingest_raw.py` stores, records and logs.
+`ingest_raw.py` stores, records and logs; `scripts/convert.py` converts, as the Formats section below describes for each format. A format with no converter gets a record marked `pending_conversion`, and the raw file is kept as always. The script prints the source ID, the raw and record paths, the `conversion_status`, and whether the raw file and record were reused.
 
 Text is read as UTF-8, or in the encoding a byte-order mark names (UTF-8, UTF-16 or UTF-32, as Windows editors save it); the mark is left out. Text that is not UTF-8 is kept with replacement characters and marked `partial`; a file with NUL bytes and no mark (binary, or UTF-16 without a mark) is marked `failed` rather than written into the record. Records, references and manifests are written with LF line ends on every platform; an appended log entry keeps the log's own line ends.
 
@@ -92,7 +94,7 @@ How each format appears under `## Extracted content` in the source record. Every
 | Markdown (`.md`, `.markdown`) | as written | its front matter moves into a `yaml` block, so it does not read as part of the record |
 | Excel workbook (`.xlsx`, `.xlsm`) | one table per sheet, in workbook order, under `### Sheet N: name`; the columns are headed by their letters and each row starts with its row number, so every value keeps its cell reference | empty rows and columns; number display formats (a number is shown as stored, a date or time in ISO form); charts, images and cell comments. A formula shows the value saved with the file; one with no saved value (written by a program, not a spreadsheet application) shows its formula and makes the record `partial`. Merged ranges and hidden sheets are named |
 | Word document (`.docx`, `.docm`) | headings, paragraphs, bulleted and numbered lists, tables, links and footnotes, in document order; explicit page breaks as `_[Page break]_`, images as `_[image: alt text]_` | bold, italic, fonts and colours; headers, footers and comments (named when present); tracked changes are shown as if accepted. A document with no text at all is `pending_conversion` (it needs OCR) |
-| PDF (`.pdf`) | one section per page, `### Page N`, its text in a fenced block that keeps the layout's line breaks and spacing | images, and text drawn as images: a page with no text layer is marked, makes the record `partial`, or `pending_conversion` (needs OCR) when no page has text. Needs an extractor (below) |
+| PDF (`.pdf`) | one section per page, `### Page N`, its text in a fenced block that keeps the layout's line breaks and spacing | images, and text drawn as images: a page with no text layer is marked, makes the record `partial`, or `pending_conversion` (needs OCR) when no page has text. Needs an extractor (see Data sources) |
 | Plain text, logs, code and data (`.txt`, `.log`, `.css`, `.htm`, `.html`, `.js`, `.py`, `.sql`, `.ts`, `.xml`, `.yaml`, `.yml`) | verbatim in a fenced block with its language | nothing: in a block the text keeps its line breaks and cannot add a heading, list or HTML to the record |
 | anything else | nothing yet: `pending_conversion` | – |
 
@@ -115,7 +117,7 @@ can be converted.
 - do not overwrite conflicting raw files
 - report unsupported conversion
 - preserve the raw file even when conversion fails
-- create a task when manual or specialised conversion is required
+- the script does not create tasks: when `conversion_status` is not `complete`, the calling agent creates one (CONTRACT §11.2 step 8) naming the source record and the note in it that says why – OCR, a missing PDF extractor, an unprotected copy, a formula value to save
 
 ## Repository updates
 
