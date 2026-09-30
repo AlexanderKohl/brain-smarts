@@ -73,12 +73,33 @@ class SyncTests(unittest.TestCase):
         self.assertEqual((self.here / "notes.md").read_text(encoding="utf-8"), "edited here\n")
 
     def test_diverged_is_left_alone(self):
+        """Without a brain root to merge from (--no-merge), diverged history is only reported."""
         self.push_from_other()
         commit(self.here, "mine.md", "made here\n")
         before = git(self.here, "rev-parse", "HEAD")
         r = sync.sync_one("memory", self.here)
         self.assertEqual((r["state"], r["ok"]), ("diverged", False))
         self.assertEqual(git(self.here, "rev-parse", "HEAD"), before)
+
+    def test_a_diverged_project_repository_is_left_to_its_own_routine(self):
+        self.push_from_other()
+        commit(self.here, "mine.md", "made here\n")
+        before = git(self.here, "rev-parse", "HEAD")
+        r = sync.sync_one("example-project", self.here, merge_from=self.base, project=True)
+        self.assertEqual((r["state"], r["ok"]), ("diverged", False))
+        self.assertIn("the project's own merge routine applies", r["detail"])
+        self.assertEqual(git(self.here, "rev-parse", "HEAD"), before)
+
+    def test_diverged_with_uncommitted_changes_is_left_alone(self):
+        self.push_from_other()
+        commit(self.here, "mine.md", "made here\n")
+        (self.here / "notes.md").write_text("edited here, not committed\n", encoding="utf-8")
+        before = git(self.here, "rev-parse", "HEAD")
+        r = sync.sync_one("memory", self.here, merge_from=self.base)
+        self.assertEqual((r["state"], r["ok"]), ("diverged, with changes", False))
+        self.assertIn("commit your own changes", r["detail"])
+        self.assertEqual(git(self.here, "rev-parse", "HEAD"), before)
+        self.assertEqual((self.here / "notes.md").read_text(encoding="utf-8"), "edited here, not committed\n")
 
     def test_ahead_is_reported_not_pushed(self):
         commit(self.here, "mine.md", "made here\n")
