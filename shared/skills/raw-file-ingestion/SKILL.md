@@ -6,17 +6,19 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 scope: shared
-version: 0.3.0
+version: 0.4.0
 script_paths:
   - /shared/skills/raw-file-ingestion/scripts/ingest_raw.py
   - /shared/skills/raw-file-ingestion/scripts/convert.py
   - /shared/skills/raw-file-ingestion/scripts/convert_office.py
+  - /shared/skills/raw-file-ingestion/scripts/convert_pdf.py
   - /shared/skills/raw-file-ingestion/scripts/markdown_blocks.py
   - /shared/skills/raw-file-ingestion/tests/test_ingest_raw.py
   - /shared/skills/raw-file-ingestion/tests/test_text_formats.py
   - /shared/skills/raw-file-ingestion/tests/test_office_formats.py
+  - /shared/skills/raw-file-ingestion/tests/test_pdf.py
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-30T22:55:54+00:00
+updated: 2026-09-30T22:58:41+00:00
 ---
 
 # Raw File Ingestion
@@ -50,6 +52,7 @@ conversion made there since is never lost. Only a node reference that does not e
 ## Data sources
 
 - The supplied local file, read once and copied unchanged.
+- For a PDF, the first text extractor this computer has: poppler's `pdftotext` on PATH, then the `pypdf` Python package. Neither ships with Python; with neither, a PDF's record is `pending_conversion` with a note saying what to install, and the raw file is kept as always. Which extractor read a file, and its version, is in the record's notes.
 - `/memory/raw/` for an existing file with the same SHA-256, reused instead of duplicated.
 - `/shared/templates/source-document.template.md` for the source record.
 
@@ -59,7 +62,7 @@ conversion made there since is never lost. Only a node reference that does not e
 - The script finds the brain root by walking up to `CONTRACT.md` and stops with an error when `<brain root>/memory/` is missing.
 - A target node must be an existing folder inside `/memory/`: a source reference names an owner's file, so it never goes into the mechanics or the skill library (CONTRACT §3.4).
 - Never modify, overwrite, normalise or delete an existing raw file.
-- No credentials and no external systems.
+- No credentials and no external systems. For a PDF it may run `pdftotext` as a local child process (no network), limited to 300 seconds.
 
 ## Script
 
@@ -89,6 +92,7 @@ How each format appears under `## Extracted content` in the source record. Every
 | Markdown (`.md`, `.markdown`) | as written | its front matter moves into a `yaml` block, so it does not read as part of the record |
 | Excel workbook (`.xlsx`, `.xlsm`) | one table per sheet, in workbook order, under `### Sheet N: name`; the columns are headed by their letters and each row starts with its row number, so every value keeps its cell reference | empty rows and columns; number display formats (a number is shown as stored, a date or time in ISO form); charts, images and cell comments. A formula shows the value saved with the file; one with no saved value (written by a program, not a spreadsheet application) shows its formula and makes the record `partial`. Merged ranges and hidden sheets are named |
 | Word document (`.docx`, `.docm`) | headings, paragraphs, bulleted and numbered lists, tables, links and footnotes, in document order; explicit page breaks as `_[Page break]_`, images as `_[image: alt text]_` | bold, italic, fonts and colours; headers, footers and comments (named when present); tracked changes are shown as if accepted. A document with no text at all is `pending_conversion` (it needs OCR) |
+| PDF (`.pdf`) | one section per page, `### Page N`, its text in a fenced block that keeps the layout's line breaks and spacing | images, and text drawn as images: a page with no text layer is marked, makes the record `partial`, or `pending_conversion` (needs OCR) when no page has text. Needs an extractor (below) |
 | Plain text, logs, code and data (`.txt`, `.log`, `.css`, `.htm`, `.html`, `.js`, `.py`, `.sql`, `.ts`, `.xml`, `.yaml`, `.yml`) | verbatim in a fenced block with its language | nothing: in a block the text keeps its line breaks and cannot add a heading, list or HTML to the record |
 | anything else | nothing yet: `pending_conversion` | – |
 
