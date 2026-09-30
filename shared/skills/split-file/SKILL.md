@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 scope: shared
-version: 0.1.1
+version: 0.1.2
 script_paths:
   - /shared/skills/split-file/scripts/js/move.js
   - /shared/skills/split-file/scripts/js/move-methods.js
@@ -82,6 +82,9 @@ behaviour (characterisation tests), even if the tools would move it.
 
 - `shape.js --out before.json` / `shape.py --out before.json`, or compare to a git ref with
   `--compare-ref <ref>` after each move.
+- `--compare-ref` takes the base's snapshot in a temporary worktree elsewhere on disk. A value worked
+  out from where the checkout sits (a root found by walking up to a parent folder) then differs for
+  that reason alone: take `--out` before the move, in place, and `--compare` after.
 - Once per repository, before trusting the check: plant a fault in a copy (change a function body,
   swap two routes, drop an export) and see the check fail. The skill's own tests do this on fictional
   apps; a new kind of project needs its own planted faults.

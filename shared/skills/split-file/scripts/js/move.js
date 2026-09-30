@@ -114,8 +114,8 @@ function main() {
 
   A.writeText(target, moduleText, eol);
   A.writeText(sourceFile, result, eol);
-  console.log(`${moduleName}.js: ${moduleText.split('\n').length - 1} lines, ${moving.length} statements, exports ${exportsList.join(', ')}; ${importLines.length} imports`);
-  console.log(`${base}: now ${result.split('\n').length} lines`);
+  console.log(`${moduleName}.js: ${A.countLines(moduleText)} lines, ${moving.length} statements, exports ${exportsList.join(', ')}; ${importLines.length} imports`);
+  console.log(`${base}: now ${A.countLines(result)} lines`);
 }
 
 run(main);

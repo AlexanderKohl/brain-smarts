@@ -216,7 +216,14 @@ function backRequireLine(staying, movedNames) {
   return after;
 }
 
+// Lines as the code map counts them: a final line ending does not start another line.
+function countLines(text) {
+  if (!text) return 0;
+  const n = text.split('\n').length;
+  return text.endsWith('\n') ? n - 1 : n;
+}
+
 module.exports = {
   readSource, writeText, parse, declared, uses, usesPrivate, fileBound, isPure, requireOf, statements, importsFor,
-  braceList, backRequireLine,
+  braceList, backRequireLine, countLines,
 };

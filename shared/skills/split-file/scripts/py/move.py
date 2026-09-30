@@ -194,7 +194,17 @@ def build(args: argparse.Namespace) -> tuple[str, str, Path, str]:
     # A docstring comes first; `from __future__` must follow it directly, then the other copies in
     # the source's order.
     future = [text for _, text in copies if text.startswith("from __future__")]
-    rest = [text for _, text in copies if not text.startswith("from __future__")]
+    # A blank line between two copies where the source had one.
+    by_first = {s.first: s for s in stmts}
+    rest: list[str] = []
+    previous_end = None
+    for first, text in copies:
+        if text.startswith("from __future__"):
+            continue
+        if previous_end is not None and any(not lines[i].strip() for i in range(previous_end, first - 1)):
+            rest.append("")
+        rest.append(text)
+        previous_end = by_first[first].end
     if from_source:
         rest.append(S.name_list(f"from {source.stem} import ", from_source))
     head = future + ([""] if future and rest else []) + rest

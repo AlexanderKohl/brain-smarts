@@ -145,8 +145,8 @@ function main() {
 
   A.writeText(target, moduleText, eol);
   A.writeText(sourceFile, result, eol);
-  console.log(`${moduleName}.js: ${moduleText.split('\n').length - 1} lines, ${moving.length} statements (${firstMoved.from}-${moving[moving.length - 1].end}), ${depList.length} deps; kept in place: ${kept.map((k) => k.declares[0]).join(', ') || 'none'}`);
-  console.log(`${base}: now ${result.split('\n').length} lines`);
+  console.log(`${moduleName}.js: ${A.countLines(moduleText)} lines, ${moving.length} statements (${firstMoved.from}-${moving[moving.length - 1].end}), ${depList.length} deps; kept in place: ${kept.map((k) => k.declares[0]).join(', ') || 'none'}`);
+  console.log(`${base}: now ${A.countLines(result)} lines`);
 }
 
 run(main);
