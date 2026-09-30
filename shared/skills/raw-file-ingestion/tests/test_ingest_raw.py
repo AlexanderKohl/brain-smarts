@@ -7,6 +7,7 @@ Each test builds a fictional brain in a temporary folder and ingests fictional f
 """
 from __future__ import annotations
 
+import codecs
 import hashlib
 import json
 import subprocess
@@ -83,6 +84,60 @@ class RawStoreTests(IngestTestCase):
         record = self.brain.file(result["canonical_markdown"]).read_text(encoding="utf-8")
         self.assertIn(f"raw_sha256: {digest}", record)
         self.assertIn(f'raw_source: "{result["raw_file"]}"', record)
+
+
+class EncodingTests(IngestTestCase):
+    """Text files as other editors save them; the record is always clean UTF-8 text."""
+
+    def record_of(self, name: str, content: bytes) -> tuple[dict, str]:
+        result = self.brain.ingest_ok(self.brain.sample(name, content))
+        record = self.brain.file(result["canonical_markdown"]).read_bytes()
+        self.assertNotIn(b"\x00", record)
+        return result, record.decode("utf-8")
+
+    def test_a_byte_order_mark_names_the_encoding_and_is_left_out(self):
+        words = "Orchard café résumé\nSecond line\n"
+        for label, content in [("utf-8", codecs.BOM_UTF8 + words.encode("utf-8")),
+                               ("utf-16-le", codecs.BOM_UTF16_LE + words.encode("utf-16-le")),
+                               ("utf-16-be", codecs.BOM_UTF16_BE + words.encode("utf-16-be")),
+                               ("utf-32-le", codecs.BOM_UTF32_LE + words.encode("utf-32-le"))]:
+            with self.subTest(label):
+                result, record = self.record_of(f"note-{label}.txt", content)
+                self.assertEqual(result["conversion_status"], "complete")
+                self.assertIn("Orchard café résumé\nSecond line", record)
+                self.assertNotIn("﻿", record)
+
+    def test_utf16_without_a_mark_fails_instead_of_writing_binary_into_the_record(self):
+        result, record = self.record_of("unmarked.txt", "Orchard notes\n".encode("utf-16-le"))
+        self.assertEqual(result["conversion_status"], "failed")
+        self.assertIn("NUL bytes", record)
+
+    def test_text_that_is_not_utf8_is_partial_and_says_so(self):
+        result, record = self.record_of("latin.csv", "plot,holder\nD-01,Zoë Quillon\n".encode("cp1252"))
+        self.assertEqual(result["conversion_status"], "partial")
+        self.assertIn("Zo\N{REPLACEMENT CHARACTER} Quillon", record)
+        self.assertIn("not UTF-8", record)
+
+
+class LineEndingTests(IngestTestCase):
+    def test_a_log_with_crlf_line_ends_keeps_them(self):
+        log = self.brain.log
+        log.write_bytes(log.read_bytes().replace(b"\n", b"\r\n"))
+        self.brain.ingest_ok(self.brain.sample("notes.txt", "Orchard notes\r\n"))
+        data = log.read_bytes()
+        self.assertIn(b"- Ingested `notes.txt`", data)
+        self.assertEqual(data.count(b"\n"), data.count(b"\r\n"))
+
+    def test_records_references_and_manifests_are_written_with_lf(self):
+        # Proves the LF contract on every platform; only a Windows run could fail without newline="\n".
+        result = self.brain.ingest_ok(self.brain.sample("notes.txt", "Orchard notes\r\n"),
+                                      "--node", "memory/projects/orchard-club")
+        written = [self.brain.file(result["canonical_markdown"]),
+                   self.brain.node / "sources" / Path(result["canonical_markdown"]).name,
+                   self.brain.file(result["raw_file"]).parent / "manifest.json"]
+        for path in written:
+            with self.subTest(path.name):
+                self.assertNotIn(b"\r", path.read_bytes())
 
 
 class RefusalTests(IngestTestCase):

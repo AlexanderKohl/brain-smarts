@@ -6,12 +6,13 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 scope: shared
-version: 0.1.2
+version: 0.1.3
 script_paths:
   - /shared/skills/raw-file-ingestion/scripts/ingest_raw.py
+  - /shared/skills/raw-file-ingestion/scripts/convert.py
   - /shared/skills/raw-file-ingestion/tests/test_ingest_raw.py
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-30T22:45:14+00:00
+updated: 2026-09-30T22:47:07+00:00
 ---
 
 # Raw File Ingestion
@@ -62,7 +63,9 @@ conversion made there since is never lost. Only a node reference that does not e
 python shared/skills/raw-file-ingestion/scripts/ingest_raw.py FILE --node memory/projects/example
 ```
 
-The script supports direct text extraction for common text formats. Other formats receive a source record marked `pending_conversion` until a suitable converter is run.
+The script supports direct text extraction for common text formats. Other formats receive a source record marked `pending_conversion` until a suitable converter is run. `scripts/convert.py` does the conversion; `ingest_raw.py` stores, records and logs.
+
+Text is read as UTF-8, or in the encoding a byte-order mark names (UTF-8, UTF-16 or UTF-32, as Windows editors save it); the mark is left out. Text that is not UTF-8 is kept with replacement characters and marked `partial`; a file with NUL bytes and no mark (binary, or UTF-16 without a mark) is marked `failed` rather than written into the record. Records, references and manifests are written with LF line ends on every platform; an appended log entry keeps the log's own line ends.
 
 ```bash
 python -m unittest discover -s shared/skills/raw-file-ingestion/tests -v

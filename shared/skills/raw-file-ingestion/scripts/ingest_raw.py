@@ -14,8 +14,8 @@ This script:
 Raw files, source records and the ingestion log are owner data, so they live
 in the memory checkout at <brain root>/memory/.
 
-Direct extraction is supported for text-like formats. Other formats are
-preserved and marked pending_conversion.
+convert.py turns the raw file into the record's Markdown. Formats it cannot
+read are preserved and marked pending_conversion.
 """
 
 from __future__ import annotations
@@ -25,18 +25,15 @@ import datetime as dt
 import hashlib
 import json
 import mimetypes
-import os
 from pathlib import Path
 import re
 import shutil
 import sys
 from typing import Optional
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-TEXT_EXTENSIONS = {
-    ".txt", ".md", ".markdown", ".csv", ".tsv", ".json", ".yaml", ".yml",
-    ".xml", ".html", ".htm", ".log", ".py", ".js", ".ts", ".css", ".sql"
-}
+from convert import Conversion, convert  # noqa: E402
 
 
 def find_root(start: Path) -> Path:
@@ -132,22 +129,18 @@ def recorded_status(record: Path) -> str:
     return found.group(1) if found else "unknown"
 
 
-def extract_text(path: Path) -> tuple[str, str]:
-    if path.suffix.lower() not in TEXT_EXTENSIONS:
-        return "", "pending_conversion"
-    try:
-        return path.read_text(encoding="utf-8"), "complete"
-    except UnicodeDecodeError:
-        try:
-            return path.read_text(encoding="utf-8", errors="replace"), "partial"
-        except OSError:
-            return "", "failed"
+def write_lf(path: Path, text: str) -> None:
+    """Write with LF line ends on every platform, as the brain's other generated files are."""
+    path.write_text(text, encoding="utf-8", newline="\n")
 
 
 def append_log(log_path: Path, line: str, timestamp: str) -> None:
     if not log_path.is_file():
         return
-    text = log_path.read_text(encoding="utf-8")
+    data = log_path.read_bytes()
+    # Keep the log's own line ends, so an appended entry never rewrites every line of it.
+    newline = "\r\n" if b"\r\n" in data else "\n"
+    text = data.decode("utf-8").replace("\r\n", "\n")
     heading = f"## {timestamp}"
     if heading in text:
         text = text.rstrip() + "\n" + line + "\n"
@@ -159,12 +152,12 @@ def append_log(log_path: Path, line: str, timestamp: str) -> None:
         text,
         count=1,
     )
-    log_path.write_text(text, encoding="utf-8")
+    log_path.write_text(text, encoding="utf-8", newline=newline)
 
 
 def write_source_record(canonical: Path, *, source_id: str, title: str, timestamp: str,
                         raw_repo_path: str, file_hash: str, source_name: str,
-                        conversion_status: str, extracted: str, node_ref: Optional[str]) -> None:
+                        conversion: Conversion, node_ref: Optional[str]) -> None:
     body = [
         "---",
         f"id: {source_id}",
@@ -178,7 +171,7 @@ def write_source_record(canonical: Path, *, source_id: str, title: str, timestam
         f"raw_source: {yaml_quote(raw_repo_path)}",
         f"raw_sha256: {file_hash}",
         f"source_filename: {yaml_quote(source_name)}",
-        f"conversion_status: {conversion_status}",
+        f"conversion_status: {conversion.status}",
         "conversion_skill: /shared/skills/raw-file-ingestion",
         "project_refs:",
     ]
@@ -195,23 +188,16 @@ def write_source_record(canonical: Path, *, source_id: str, title: str, timestam
         "",
         f"- Raw file: `{raw_repo_path}`",
         f"- SHA-256: `{file_hash}`",
-        f"- Conversion status: `{conversion_status}`",
+        f"- Conversion status: `{conversion.status}`",
         "",
         "## Conversion notes",
         "",
     ]
-    if conversion_status == "pending_conversion":
-        body.append("This format requires a specialised converter. The raw file has been preserved.")
-    elif conversion_status == "partial":
-        body.append("Text was decoded with replacement characters. Review against the raw file.")
-    elif conversion_status == "failed":
-        body.append("Text extraction failed. Review and run a specialised converter.")
-    else:
-        body.append("Direct text extraction completed.")
-    body += ["", "## Extracted content", "", extracted if extracted else "_No extracted content yet._", ""]
+    body.append("\n\n".join(conversion.notes))
+    body += ["", "## Extracted content", "", conversion.markdown or "_No extracted content yet._", ""]
 
     canonical.parent.mkdir(parents=True, exist_ok=True)
-    canonical.write_text("\n".join(body), encoding="utf-8")
+    write_lf(canonical, "\n".join(body))
 
 
 def main() -> int:
@@ -270,10 +256,7 @@ def main() -> int:
             "original_path": str(source),
             "mime_type": mimetypes.guess_type(source.name)[0],
         }
-        (raw_path.parent / "manifest.json").write_text(
-            json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
-            encoding="utf-8",
-        )
+        write_lf(raw_path.parent / "manifest.json", json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
 
     # One canonical record per raw file (CONTRACT §3.3, §11.1): an identical file ingested
     # again keeps the record it already has, whatever title it arrives with, so a manual or
@@ -285,11 +268,12 @@ def main() -> int:
         conversion_status = recorded_status(existing)
     else:
         canonical = memory_root(root) / "sources" / f"{source_id}-{slugify(title)}.md"
-        extracted, conversion_status = extract_text(raw_path)
+        conversion = convert(raw_path)
+        conversion_status = conversion.status
         write_source_record(
             canonical, source_id=source_id, title=title, timestamp=timestamp,
             raw_repo_path=raw_repo_path, file_hash=file_hash, source_name=source.name,
-            conversion_status=conversion_status, extracted=extracted,
+            conversion=conversion,
             node_ref=root_path(root, node) if node else None,
         )
     canonical_repo_path = root_path(root, canonical)
@@ -323,7 +307,7 @@ Read `/CONTRACT.md` first.
 - Immutable raw file: `{raw_repo_path}`
 - SHA-256: `{file_hash}`
 """
-            local.write_text(local_text, encoding="utf-8")
+            write_lf(local, local_text)
             verb = "Referenced existing source" if existing else "Ingested source"
             append_log(node / "LOG.md", f"- {verb} `{source.name}` as `{source_id}`.", timestamp)
 
