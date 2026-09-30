@@ -194,7 +194,7 @@ def write_source_record(canonical: Path, *, source_id: str, title: str, timestam
         "",
     ]
     body.append("\n\n".join(conversion.notes))
-    body += ["", "## Extracted content", "", conversion.markdown or "_No extracted content yet._", ""]
+    body += ["", "## Extracted content", "", conversion.markdown.rstrip("\n") or "_No extracted content yet._", ""]
 
     canonical.parent.mkdir(parents=True, exist_ok=True)
     write_lf(canonical, "\n".join(body))

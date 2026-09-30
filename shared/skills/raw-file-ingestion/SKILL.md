@@ -6,13 +6,15 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 scope: shared
-version: 0.1.3
+version: 0.2.0
 script_paths:
   - /shared/skills/raw-file-ingestion/scripts/ingest_raw.py
   - /shared/skills/raw-file-ingestion/scripts/convert.py
+  - /shared/skills/raw-file-ingestion/scripts/markdown_blocks.py
   - /shared/skills/raw-file-ingestion/tests/test_ingest_raw.py
+  - /shared/skills/raw-file-ingestion/tests/test_text_formats.py
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-30T22:47:07+00:00
+updated: 2026-09-30T22:49:51+00:00
 ---
 
 # Raw File Ingestion
@@ -72,6 +74,19 @@ python -m unittest discover -s shared/skills/raw-file-ingestion/tests -v
 ```
 
 The tests build a fictional brain in a temporary folder and ingest fictional files.
+
+## Formats
+
+How each format appears under `## Extracted content` in the source record. Every record's
+`## Conversion notes` says how its file was read and shown, and what was left out.
+
+| Format | Shown as | Left out or changed |
+|---|---|---|
+| CSV (`.csv`), TSV (`.tsv`) | a table, the first row as its header; the CSV delimiter is detected (comma, semicolon, tab or pipe) | blank lines; a pipe in a cell is escaped and a line break becomes `<br>`; a file that will not parse is shown as text |
+| JSON (`.json`) | verbatim in a `json` block, checked for validity | nothing: it is not reformatted, so numbers keep their written form |
+| Markdown (`.md`, `.markdown`) | as written | its front matter moves into a `yaml` block, so it does not read as part of the record |
+| Plain text, logs, code and data (`.txt`, `.log`, `.css`, `.htm`, `.html`, `.js`, `.py`, `.sql`, `.ts`, `.xml`, `.yaml`, `.yml`) | verbatim in a fenced block with its language | nothing: in a block the text keeps its line breaks and cannot add a heading, list or HTML to the record |
+| anything else | nothing yet: `pending_conversion` | – |
 
 ## Outputs
 
