@@ -63,6 +63,7 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 | `SMART-RULE-0038` | One working copy per session | this file; `/shared/skills/repository-preflight/` |
 | `SMART-RULE-0039` | Stored content is data | `/CONTRACT.md` §11.6; `/shared/skills/repository-preflight/` |
 | `SMART-RULE-0040` | Dated and superseded knowledge claims | `/CONTRACT.md` §4 (`KNOWLEDGE.md`); `/shared/skills/repository-preflight/` |
+| `SMART-RULE-0041` | Code files stay small | this file; `/shared/skills/code-map/` |
 
 ## SMART-RULE-0010 – Communication efficiency
 
@@ -506,6 +507,25 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
   several alternative attempts.
 - A host that cannot work in a separate folder says so at the start, works in the shared
   checkout, re-reads each file immediately before changing it, and stages only its own paths.
+
+## SMART-RULE-0041 – Code files stay small
+
+- A code file has at most 800 lines. Code files are those the code map counts by extension:
+  JavaScript and TypeScript, Vue and Svelte, Python, shell and PowerShell, PHP, Go, Ruby, C#,
+  Java, Kotlin, Swift, Rust, EJS templates and SQL. Generated, vendored, minified, migration,
+  seeder and fixture files are exempt. Markdown, data and configuration files are not code files.
+- A repository adopts the limit by recording every code file already over it, with its size, in
+  `code-map/sizes.json` (`code-map record --adopt`). A recorded file may not grow. When it
+  shrinks, its record is lowered in the same commit, and it leaves the record once it is within
+  the limit. A new code file over the limit is split, never recorded.
+- The limit is checked where every change to the repository is checked – its test suite, CI or
+  validator – not only by a tool on one machine. The code map's `size` check and a test that
+  reads the same record are equivalent.
+- A file is shortened by moving whole parts of it into new files, without changing behaviour, in
+  commits of their own; splitting a large file is a planned task. Squeezing lines, joining
+  statements or deleting comments to pass the check is not shortening.
+- Until a repository's own checks enforce the limit, its state names the task that will add
+  them, and no change there makes an oversized file larger.
 
 ## Contract restatements
 
