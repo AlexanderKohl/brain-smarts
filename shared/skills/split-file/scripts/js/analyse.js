@@ -38,7 +38,7 @@ function topLevel(file) {
       end: s.end,
       declares: s.declares,
       import: Boolean(s.req),
-      refs: [...A.uses(s.node).read].filter((n) => topNames.has(n) && !s.declares.includes(n)).sort(),
+      refs: [...A.refs(s.node).read].filter((n) => topNames.has(n) && !s.declares.includes(n)).sort(),
       head: lines[s.start - 1].trim().slice(0, 90),
     })),
     topNames,
@@ -59,7 +59,7 @@ function classMembers(ast, topNames, className) {
       from,
       end: m.loc.end.line,
       lines: m.loc.end.line - from + 1,
-      refs: [...u.read].filter((n) => topNames.has(n)).sort(),
+      refs: [...A.refs(m).read].filter((n) => topNames.has(n)).sort(),
       thisMembers: [...u.thisMembers].sort(),
       usesSuper: u.usesSuper,
     };

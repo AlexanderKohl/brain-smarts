@@ -53,7 +53,7 @@ function main() {
     for (const n of A.fileBound(m)) if (n !== 'this') problems.push(`${name} uses ${n}, which means something else in another file`);
     if (A.usesPrivate(m)) problems.push(`${name} uses a private member`);
     const from = m.leadingComments && m.leadingComments.length ? m.leadingComments[0].loc.start.line : m.loc.start.line;
-    moving.push({ name, node: m, from, end: m.loc.end.line, read: u.read });
+    moving.push({ name, node: m, from, end: m.loc.end.line, read: A.refs(m).read });
   }
   moving.sort((a, b) => a.from - b.from);
 
@@ -74,9 +74,8 @@ function main() {
   const base = path.basename(sourceFile);
   const moduleText = [
     ...(strict ? ["'use strict';"] : []),
-    `// ${options.header || `Methods of ${className}, split out of ${base}.`}`,
-    `// ${movedFrom(base, options.ref)} ${className} takes these methods back onto its prototype with`,
-    '// their descriptors, so callers see the same class.',
+    ...A.commentLines(options.header || `Methods of ${className}, split out of ${base}.`),
+    ...A.commentLines(`${movedFrom(base, options.ref)} ${className} takes these methods back onto its prototype with their descriptors, so callers see the same class.`),
     ...importLines,
     '',
     `class ${holder} {`,

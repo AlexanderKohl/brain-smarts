@@ -219,3 +219,35 @@ test('the shape check against a git ref loads every changed file alone', { skip:
   assert.strictEqual(cmp.code, 1);
   assert.match(cmp.out, /PROBLEM loading alone failed: src\/plantText\.js/);
 });
+
+test('move-block.js tells a route\'s own variable from a reassigned top-level one of the same name', () => {
+  const dir = copyApp();
+  const at = (text) => read(dir, 'src/shadow.js').split('\n').findIndex((l) => l.startsWith(text)) + 1;
+  const behaviour = () => {
+    const script = `
+      const r = require('./src/shadow');
+      const out = [];
+      for (const theme of ['dark', 'light']) {
+        for (const layer of r.stack) {
+          const req = { query: { theme } };
+          const res = { json: (v) => out.push(v) };
+          if (layer.route) layer.route.stack.forEach((s) => s.handle(req, res, () => {}));
+          else layer.handle(req, res, () => {});
+        }
+      }
+      console.log(JSON.stringify(out));`;
+    const r = spawnSync(process.execPath, ['-e', script], { cwd: dir, encoding: 'utf8' });
+    assert.strictEqual(r.status, 0, r.stderr);
+    return r.stdout;
+  };
+  const was = behaviour();
+  // The route reading the file's settings cannot move: its value would be frozen at the call.
+  const shared = tool('move-block.js', ['src/shadow.js', '--to', 'sharedRoutes', '--register', 'registerShared', '--lines', `${at('// Reads the file')}-${at("router.get('/shared'") + 2}`], dir);
+  assert.strictEqual(shared.code, 1);
+  assert.match(shared.err, /settings \(line 7\) is reassigned/);
+  // The two that only use their own settings can.
+  const r = tool('move-block.js', ['src/shadow.js', '--to', 'ownRoutes', '--register', 'registerOwn', '--lines', `${at('// Reads its own')}-${at("router.get('/param'") + 3}`], dir);
+  assert.strictEqual(r.code, 0, r.err);
+  assert.match(read(dir, 'src/shadow.js'), /registerOwn\(router, \{\s*\}\);|registerOwn\(router, \{ {2}\}\);|registerOwn\(router, \{ \}\);/);
+  assert.strictEqual(behaviour(), was);
+});

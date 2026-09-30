@@ -54,7 +54,7 @@ function main() {
   const problems = [];
   const needed = new Set();
   for (const s of moving) {
-    const u = A.uses(s.node);
+    const u = A.refs(s.node);
     for (const n of u.read) if (!movedNames.has(n)) needed.add(n);
     for (const n of A.fileBound(s.node)) problems.push(`line ${s.start} uses ${n}, which means something else in another file`);
     for (const n of u.assigned) if (stayingNames.has(n)) problems.push(`line ${s.start} assigns ${n}, which stays in the source`);
@@ -64,8 +64,8 @@ function main() {
 
   const stillUsed = new Set();
   const assignedAnywhere = new Set();
-  for (const s of stmts) for (const n of A.uses(s.node).assigned) assignedAnywhere.add(n);
-  for (const s of staying) for (const n of A.uses(s.node).read) if (movedNames.has(n)) stillUsed.add(n);
+  for (const s of stmts) for (const n of A.refs(s.node).assigned) assignedAnywhere.add(n);
+  for (const s of staying) for (const n of A.refs(s.node).read) if (movedNames.has(n)) stillUsed.add(n);
   for (const s of moving) {
     for (const n of s.declares) if (stillUsed.has(n) && assignedAnywhere.has(n)) problems.push(`${n} (line ${s.start}) is assigned after it is declared; a loaded-back copy would not follow`);
     if (s.node.type === 'VariableDeclaration' && !options['allow-load-order']) {
@@ -85,8 +85,8 @@ function main() {
   }
   const moduleText = [
     ...(strict ? ["'use strict';"] : []),
-    `// ${options.header || `Split out of ${base}.`}`,
-    `// ${movedFrom(base, options.ref)} ${base} loads these names back, so its callers see the same names.`,
+    ...A.commentLines(options.header || `Split out of ${base}.`),
+    ...A.commentLines(`${movedFrom(base, options.ref)} ${base} loads these names back, so its callers see the same names.`),
     ...importLines,
     '',
     ...body,

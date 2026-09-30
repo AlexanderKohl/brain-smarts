@@ -57,7 +57,7 @@ function main() {
   for (let changed = true; changed;) {
     changed = false;
     const outsideReads = new Set();
-    for (const s of stmts) if (!moving.includes(s)) for (const n of A.uses(s.node).read) outsideReads.add(n);
+    for (const s of stmts) if (!moving.includes(s)) for (const n of A.refs(s.node).read) outsideReads.add(n);
     for (const s of [...moving]) {
       if (s.kind && s.declares.some((n) => outsideReads.has(n))) { moving.splice(moving.indexOf(s), 1); changed = true; }
     }
@@ -80,9 +80,9 @@ function main() {
   const declaredAt = new Map();
   for (const s of staying) for (const n of s.declares) declaredAt.set(n, s);
   const assignedAnywhere = new Set();
-  for (const s of stmts) for (const n of A.uses(s.node).assigned) assignedAnywhere.add(n);
+  for (const s of stmts) for (const n of A.refs(s.node).assigned) assignedAnywhere.add(n);
   const deps = new Set();
-  for (const s of moving) for (const n of A.uses(s.node).read) if (declaredAt.has(n) && !movedNames.has(n)) deps.add(n);
+  for (const s of moving) for (const n of A.refs(s.node).read) if (declaredAt.has(n) && !movedNames.has(n)) deps.add(n);
   if (!declaredAt.has(receiver)) problems.push(`${receiver} is not declared at the top level of the source`);
   for (const n of deps) {
     const s = declaredAt.get(n);
@@ -107,10 +107,8 @@ function main() {
   const base = path.basename(sourceFile);
   const moduleText = [
     ...(strict ? ["'use strict';"] : []),
-    `// ${options.header || `Routes split out of ${base}.`}`,
-    `// ${movedFrom(base, options.ref)} ${base} calls ${registerName} where this code was, on the same`,
-    `// ${receiver}, so everything registers in the same order; every name the code uses from ${base} is`,
-    '// passed in, so it sees the same values as before.',
+    ...A.commentLines(options.header || `Routes split out of ${base}.`),
+    ...A.commentLines(`${movedFrom(base, options.ref)} ${base} calls ${registerName} where this code was, on the same ${receiver}, so everything registers in the same order; every name the code uses from ${base} is passed in, so it sees the same values as before.`),
     '',
     `function ${registerName}(${receiver}, ${A.braceList(depList, 12 + registerName.length + receiver.length)}) {`,
     ...body,

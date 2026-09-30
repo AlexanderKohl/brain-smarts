@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 scope: shared
-version: 0.1.3
+version: 0.2.0
 script_paths:
   - /shared/skills/split-file/scripts/js/move.js
   - /shared/skills/split-file/scripts/js/move-methods.js
@@ -101,7 +101,10 @@ behaviour (characterisation tests), even if the tools would move it.
 
 `analyse.js <file> --range "start text" "end text"` finds a block's line range.
 
-Each tool refuses rather than guess. It refuses when:
+Each tool refuses rather than guess. Names are resolved through the moved code's own scopes
+(functions, blocks, loops, catch clauses, classes; the JavaScript tools since 0.2.0), so a local
+variable that shares a top-level name is not taken for it; a name the analysis cannot place counts as
+the top-level one. It refuses when:
 
 - moved code needs a name that stays behind (other than an import): the new module would have to load
   the source, a cycle – move that name too, or first;

@@ -1,12 +1,17 @@
 'use strict';
 // Shared parsing for the JavaScript split tools: the top-level statements of a CommonJS file, with
 // their line ranges, the names each declares, reads and assigns, and the import each one is.
-// Names read are over-counted on purpose (shadowing is ignored), so a move never loses a name it
-// needs; the cost is an occasional refusal that a person resolves by moving more.
+// `refs` gives the top-level names a statement uses, resolved through its own scopes (lib/scope.js),
+// so a local variable is not taken for a top-level one of the same name; `uses` over-counts (every
+// identifier) and is kept for what needs no scopes: `this.x` members and `super`.
 // Part of the split-file skill (canonical copy: /shared/skills/split-file/).
 
 const fs = require('fs');
 const parser = require('@babel/parser');
+const { freeNames } = require('./scope');
+
+/** { read, assigned }: the names a node uses that it does not declare itself (see lib/scope.js). */
+const refs = (node) => freeNames(node);
 
 const SKIP_KEYS = new Set(['loc', 'start', 'end', 'leadingComments', 'trailingComments', 'innerComments', 'extra']);
 
@@ -113,7 +118,11 @@ function fileBound(node) {
 // objects and Object.freeze of those.
 function isPure(n) {
   if (!n) return true;
-  if (['ArrowFunctionExpression', 'FunctionExpression', 'StringLiteral', 'NumericLiteral', 'BooleanLiteral', 'NullLiteral', 'RegExpLiteral'].includes(n.type)) return true;
+  if (['ArrowFunctionExpression', 'FunctionExpression', 'StringLiteral', 'NumericLiteral', 'BooleanLiteral', 'NullLiteral', 'RegExpLiteral', 'Identifier', 'ThisExpression'].includes(n.type)) return true;
+  // Reading a property (a getter aside) and combining values run nothing.
+  if (n.type === 'MemberExpression') return isPure(n.object) && (!n.computed || isPure(n.property));
+  if (n.type === 'ConditionalExpression') return isPure(n.test) && isPure(n.consequent) && isPure(n.alternate);
+  if (n.type === 'BinaryExpression' || n.type === 'LogicalExpression') return isPure(n.left) && isPure(n.right);
   if (n.type === 'TemplateLiteral') return n.expressions.length === 0;
   if (n.type === 'UnaryExpression' && ['-', '+', '!'].includes(n.operator)) return isPure(n.argument);
   if (n.type === 'NewExpression') return n.callee.type === 'Identifier' && /^(Map|Set|WeakMap|WeakSet)$/.test(n.callee.name) && n.arguments.length === 0;
@@ -185,8 +194,20 @@ function importsFor(needed, stmts, exclude) {
   }
   const lines = [...bySource.entries()].sort((a, b) => a[0] - b[0]).map(([, info]) => (info.whole
     ? `${info.req.kind} ${info.req.whole} = require(${info.req.source});`
-    : `${info.req.kind} { ${info.req.names.filter((x) => info.names.has(x)).join(', ')} } = require(${info.req.source});`));
+    : `${info.req.kind} ${braceList(info.req.names.filter((x) => info.names.has(x)), info.req.kind.length + info.req.source.length + 16)} = require(${info.req.source});`));
   return { lines, behind };
+}
+
+// A comment as `// ` lines of at most `width` characters.
+function commentLines(text, width = 100) {
+  const out = [];
+  let line = '//';
+  for (const word of String(text).split(/\s+/).filter(Boolean)) {
+    if (line.length + 1 + word.length > width && line !== '//') { out.push(line); line = '//'; }
+    line += ` ${word}`;
+  }
+  out.push(line);
+  return out;
 }
 
 // `{ a, b, c }`, over several lines when it would pass 100 characters.
@@ -208,7 +229,7 @@ function braceList(names, indent = 0) {
 // The line after which a new `require` of moved code goes: after the last top-level require that
 // comes before the first remaining statement using a moved name, so every use sees it loaded.
 function backRequireLine(staying, movedNames) {
-  const firstUse = staying.find((s) => [...uses(s.node).read].some((n) => movedNames.has(n)));
+  const firstUse = staying.find((s) => [...refs(s.node).read].some((n) => movedNames.has(n)));
   const limit = firstUse ? firstUse.start : Infinity;
   let after = 0;
   for (const s of staying) if (s.req && s.end < limit) after = Math.max(after, s.end);
@@ -250,6 +271,6 @@ function countLines(text) {
 }
 
 module.exports = {
-  readSource, writeText, parse, declared, uses, usesPrivate, fileBound, isPure, requireOf, statements, importsFor,
-  braceList, backRequireLine, countLines, dropRanges,
+  readSource, writeText, parse, declared, uses, refs, usesPrivate, fileBound, isPure, requireOf, statements, importsFor,
+  braceList, commentLines, backRequireLine, countLines, dropRanges,
 };
