@@ -4,14 +4,14 @@ title: Merge diverged history without asking; stop only for a hand-written confl
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: proposed
+status: implemented
 owner: brain-owner
 created: 2026-09-30T21:49:18+10:00
-updated: 2026-09-30T21:49:18+10:00
+updated: 2026-09-30T22:19:37+10:00
 rule_id: SMART-RULE-0034
-accepted_by: null
-accepted_at: null
-implemented_at: null
+accepted_by: brain-owner
+accepted_at: 2026-09-30T22:15:17+10:00
+implemented_at: 2026-09-30T22:19:37+10:00
 previous_contract_version: 2.2.0
 new_contract_version: 2.2.0
 target_files:
@@ -28,7 +28,7 @@ target_files:
 Read `/CONTRACT.md` first. This amends `SMART-RULE-0034` (*Start from the latest*) and keeps its
 identifier (CONTRACT §13.2: an amendment keeps the rule's number). The exact diff is the commit
 that adds this file on the branch `proposal/merge-diverged-history` in the mechanics; the library
-and the memory are not changed. Nothing here is active.
+and the memory are not changed. Accepted and implemented on 30 September 2026 (see the end).
 
 ## Plain-language summary
 
@@ -687,10 +687,22 @@ Planned after acceptance:
 
 ## Acceptance
 
-Not yet given. One direct question: accept `PROPOSAL-merge-diverged-history` – the amended
-`SMART-RULE-0034` and the `sync.py` and `session.py` change on `proposal/merge-diverged-history`,
-exactly as shown?
+Accepted by the owner on 30 September 2026, in answer to the one direct question: accept
+`PROPOSAL-merge-diverged-history` – the amended `SMART-RULE-0034` and the `sync.py`/`session.py`
+change on branch `proposal/merge-diverged-history` (commit `1c3bc0e`), exactly as shown? The
+acceptance time is when it was relayed to the implementing session. The owner's own record is
+Amendment A1 of `SMART-RULE-0034`'s proposal record in the owner's memory.
 
 ## Implementation record
 
-None.
+- Applied at 2026-09-30T22:19:37+10:00: `1c3bc0e` merged into `main` with the merge commit `910910c`
+  (`--no-ff`, so one revert undoes it). `main` had not moved, and the merged tree is identical to
+  `1c3bc0e`: only the accepted change set was applied.
+- Files changed: `/RULES.md` (`SMART-RULE-0034`), `/shared/skills/repository-preflight/SKILL.md`,
+  `scripts/sync.py`, `scripts/session.py`, `tests/test_sync.py`, `tests/test_session.py`, and this
+  file.
+- Effective contract version: 2.2.0, unchanged; no manifest changes.
+- Validation: preflight-skill tests 103 of 103 pass; `preflight.py` PASS, with only the two
+  existing warnings about git-ignored sources in the owner's memory.
+- Unresolved: the coverage gap under *Risks* is taken up by `PROPOSAL-protected-change-coverage`;
+  merge commit messages still lack the host and model.
