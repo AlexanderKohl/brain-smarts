@@ -26,8 +26,10 @@ target_files:
 Read `/CONTRACT.md` first. This changes how the repository preflight enforces CONTRACT §13.2 and
 `SMART-RULE-0002` (*Protected governance*). No rule text in the contract or `/RULES.md` changes, so
 the proposal carries no rule identifier. It adds one paragraph to the governance-proposal schema and
-one bullet to the preflight skill. The exact diff is the commit that adds this file on the branch
-`proposal/protected-change-coverage` in the mechanics. Nothing here is active.
+one bullet to the preflight skill. The exact diff is the branch `proposal/protected-change-coverage`
+in the mechanics against `main`: commit `0bbc804` (the preflight, its skill and tests, and this
+file) and `587c1a6` (the schema), split because the mechanics commit hook keeps the two territories
+apart. Nothing here is active.
 
 ## Plain-language summary
 
