@@ -6,12 +6,12 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 scope: shared
-version: 0.1.1
+version: 0.1.2
 script_paths:
   - /shared/skills/raw-file-ingestion/scripts/ingest_raw.py
   - /shared/skills/raw-file-ingestion/tests/test_ingest_raw.py
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-30T22:44:08+00:00
+updated: 2026-09-30T22:45:14+00:00
 ---
 
 # Raw File Ingestion
@@ -38,7 +38,7 @@ conversion made there since is never lost. Only a node reference that does not e
 ## Inputs
 
 - source file path
-- optional target node path
+- optional target node path: a folder inside `/memory/`, written as `memory/projects/example`, `/memory/projects/example` or an absolute path inside the brain
 - optional title
 - optional tags
 
@@ -52,6 +52,7 @@ conversion made there since is never lost. Only a node reference that does not e
 
 - Read the supplied file; write only new files under `/memory/raw/`, `/memory/sources/` and the target node's `sources/`, and append to the target node's `LOG.md` and `/memory/systems/raw-file-management/LOG.md`.
 - The script finds the brain root by walking up to `CONTRACT.md` and stops with an error when `<brain root>/memory/` is missing.
+- A target node must be an existing folder inside `/memory/`: a source reference names an owner's file, so it never goes into the mechanics or the skill library (CONTRACT §3.4).
 - Never modify, overwrite, normalise or delete an existing raw file.
 - No credentials and no external systems.
 
@@ -78,6 +79,7 @@ The tests build a fictional brain in a temporary folder and ingest fictional fil
 
 ## Failure behaviour
 
+- check the brain root, the memory checkout and the target node before anything is written, so a refused run leaves no raw copy, record or log line (exit 6: no brain or memory; 4: node outside `/memory/`; 5: node missing)
 - do not overwrite conflicting raw files
 - report unsupported conversion
 - preserve the raw file even when conversion fails

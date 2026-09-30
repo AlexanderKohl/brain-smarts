@@ -85,6 +85,47 @@ class RawStoreTests(IngestTestCase):
         self.assertIn(f'raw_source: "{result["raw_file"]}"', record)
 
 
+class RefusalTests(IngestTestCase):
+    """A refused run writes nothing: no raw copy, no record, no log line."""
+
+    def written(self) -> list[str]:
+        return sorted(str(p.relative_to(self.brain.root)) for p in self.brain.root.rglob("*") if p.is_file())
+
+    def assert_refused(self, code: int, *extra: str, cwd: Path | None = None) -> str:
+        before = self.written()
+        log = self.brain.log.read_text(encoding="utf-8")
+        done = self.brain.ingest(self.brain.sample("notes.txt", "Orchard notes\n"), *extra, cwd=cwd)
+        self.assertEqual(done.returncode, code, done.stderr)
+        self.assertNotIn("Traceback", done.stderr)
+        self.assertEqual(self.written(), before)
+        self.assertEqual(self.brain.log.read_text(encoding="utf-8"), log)
+        return done.stderr
+
+    def test_missing_node_is_refused_before_anything_is_written(self):
+        self.assertIn("does not exist", self.assert_refused(5, "--node", "memory/projects/no-such-node"))
+
+    def test_node_outside_the_memory_checkout_is_refused(self):
+        (self.brain.root / "systems" / "intake").mkdir(parents=True)
+        for outside in ("systems/intake", "memory/../systems/intake"):
+            with self.subTest(outside):
+                self.assertIn("inside the memory checkout", self.assert_refused(4, "--node", outside))
+
+    def test_running_outside_a_brain_is_a_plain_error(self):
+        self.assertIn("CONTRACT.md", self.assert_refused(6, cwd=self.brain.inbox))
+
+
+class NodeReferenceTests(IngestTestCase):
+    def test_every_form_of_the_node_path_gives_the_same_repository_root_reference(self):
+        forms = ["memory/projects/orchard-club", "./memory/projects/orchard-club/", "/memory/projects/orchard-club",
+                 "memory\\projects\\orchard-club", str(self.brain.node)]
+        for number, form in enumerate(forms):
+            with self.subTest(form):
+                result = self.brain.ingest_ok(self.brain.sample(f"note-{number}.txt", f"Note {number}\n"),
+                                              "--node", form)
+                record = self.brain.file(result["canonical_markdown"]).read_text(encoding="utf-8")
+                self.assertIn("project_refs:\n  - /memory/projects/orchard-club\n", record)
+
+
 class ReingestTests(IngestTestCase):
     def test_reingesting_keeps_a_record_converted_since(self):
         path = self.brain.sample("ledger.xlsx", b"PK\x03\x04 fictional workbook bytes")

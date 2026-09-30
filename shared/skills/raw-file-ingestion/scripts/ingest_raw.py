@@ -81,6 +81,27 @@ def root_path(root: Path, path: Path) -> str:
     return "/" + path.resolve().relative_to(root.resolve()).as_posix()
 
 
+def resolve_node(root: Path, value: str) -> Path:
+    """The target node folder for `--node`, checked before anything is written.
+
+    Accepts a path relative to the brain root, a repository-root path (`/memory/...`), an
+    absolute path inside the brain, and Windows separators. The node must be an existing
+    folder inside the memory checkout: a source reference names an owner's file, so it never
+    goes into the mechanics or the skill library (CONTRACT §3.4, §11.1).
+    """
+    text = value.strip().replace("\\", "/")
+    given = Path(text)
+    if given.is_absolute() and given.resolve().is_relative_to(root.resolve()):
+        node = given.resolve()
+    else:
+        node = (root / text.lstrip("/")).resolve()
+    if not node.is_relative_to(memory_root(root).resolve()):
+        raise ValueError(f"target node must be inside the memory checkout ({MEMORY_DIR}/): {value}")
+    if not node.is_dir():
+        raise FileNotFoundError(f"target node does not exist: {value}")
+    return node
+
+
 def find_duplicate(root: Path, file_hash: str) -> Optional[Path]:
     raw_root = memory_root(root) / "raw"
     if not raw_root.exists():
@@ -143,7 +164,7 @@ def append_log(log_path: Path, line: str, timestamp: str) -> None:
 
 def write_source_record(canonical: Path, *, source_id: str, title: str, timestamp: str,
                         raw_repo_path: str, file_hash: str, source_name: str,
-                        conversion_status: str, extracted: str, node_arg: Optional[str]) -> None:
+                        conversion_status: str, extracted: str, node_ref: Optional[str]) -> None:
     body = [
         "---",
         f"id: {source_id}",
@@ -161,9 +182,8 @@ def write_source_record(canonical: Path, *, source_id: str, title: str, timestam
         "conversion_skill: /shared/skills/raw-file-ingestion",
         "project_refs:",
     ]
-    if node_arg:
-        node_path = "/" + node_arg.strip("/")
-        body.append(f"  - {node_path}")
+    if node_ref:
+        body.append(f"  - {node_ref}")
     else:
         body.append("  []")
     body += [
@@ -197,7 +217,7 @@ def write_source_record(canonical: Path, *, source_id: str, title: str, timestam
 def main() -> int:
     parser = argparse.ArgumentParser(description="Ingest a file into the Portable AI Brain.")
     parser.add_argument("file", type=Path, help="File to ingest")
-    parser.add_argument("--node", type=str, help="Target node path relative to the brain root, e.g. memory/projects/example")
+    parser.add_argument("--node", type=str, help="Target node inside the memory checkout, e.g. memory/projects/example")
     parser.add_argument("--title", type=str, help="Human-readable title")
     args = parser.parse_args()
 
@@ -206,12 +226,23 @@ def main() -> int:
         print(f"Error: source file not found: {source}", file=sys.stderr)
         return 2
 
-    root = find_root(Path.cwd())
+    # Everything is checked before the first write, so a refused run leaves nothing behind.
     try:
+        root = find_root(Path.cwd())
         memory_root(root)
     except FileNotFoundError as err:
         print(f"Error: {err}", file=sys.stderr)
         return 6
+    node: Optional[Path] = None
+    if args.node:
+        try:
+            node = resolve_node(root, args.node)
+        except ValueError as err:
+            print(f"Error: {err}", file=sys.stderr)
+            return 4
+        except FileNotFoundError as err:
+            print(f"Error: {err}", file=sys.stderr)
+            return 5
     now = dt.datetime.now().astimezone().replace(microsecond=0)
     timestamp = now.isoformat()
     today_dt = now.date()
@@ -258,20 +289,12 @@ def main() -> int:
         write_source_record(
             canonical, source_id=source_id, title=title, timestamp=timestamp,
             raw_repo_path=raw_repo_path, file_hash=file_hash, source_name=source.name,
-            conversion_status=conversion_status, extracted=extracted, node_arg=args.node,
+            conversion_status=conversion_status, extracted=extracted,
+            node_ref=root_path(root, node) if node else None,
         )
     canonical_repo_path = root_path(root, canonical)
 
-    if args.node:
-        node = (root / args.node).resolve()
-        try:
-            node.relative_to(root.resolve())
-        except ValueError:
-            print("Error: target node must be inside the repository.", file=sys.stderr)
-            return 4
-        if not node.is_dir():
-            print(f"Error: target node does not exist: {node}", file=sys.stderr)
-            return 5
+    if node:
         local_dir = node / "sources"
         local_dir.mkdir(parents=True, exist_ok=True)
         local = local_dir / canonical.name
