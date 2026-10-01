@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-29T08:00:00+10:00
-updated: 2026-10-01T11:02:10+10:00
+updated: 2026-10-01T12:10:36+10:00
 owner: brain-owner
 generated_by: /shared/skills/repository-preflight/scripts/core.py
 canonical_sources:
@@ -148,8 +148,14 @@ that always apply, verbatim.
 ## SMART-RULE-0034 – Start from the latest
 
 - At the start of a session, before reading state or changing anything, bring every brain repository on this computer up to date with its `origin`: the mechanics, the skill library and the memory, and a project repository before working in it. Fetch; when the local branch is only behind, fast-forward it. `python shared/skills/repository-preflight/scripts/sync.py` does this for all of them (`--also <repo>` for a project repository).
-- When a repository has uncommitted changes, or has commits of its own that `origin` does not (the history has diverged), change nothing in it and tell the owner what differs before starting work there.
-- Never rewrite history or force a push to make a pull work. Diverged history is merged, and when files conflict, only after the owner says how.
+- **Diverged history between agents is routine, not an owner decision.** When a brain repository – the mechanics, the skill library or the memory – has commits of its own that `origin` does not, and `origin` has commits it does not (the history has diverged), and no tracked file has uncommitted changes, the agent merges `origin` into it without asking: a merge commit, never a rebase of commits already made, a reset or a forced push. A generated file that conflicts (a board, an index, a task list) is taken from `origin` and rebuilt by its generator; an append-only log keeps both entries. The merged result passes the repository preflight before it is pushed. `sync.py` does this for the shared checkout by merging in a session copy of its own and then fast-forwarding the shared checkout, which is never merged into (`SMART-RULE-0038`); `session.py finish` does it for a session copy.
+- **A refused push is the same case.** When a push is refused because `origin` has moved on, the agent fetches, merges, runs the preflight and pushes again, up to three attempts in all, then stops and reports. `session.py finish` does this itself.
+- **The agent stops and asks the owner only when:**
+  - a hand-written file conflicts: it reports the file, both sides and a suggested resolution, and leaves the merge unfinished in the session copy, never in the shared checkout;
+  - the repository preflight fails on the merged result: it reports the errors and pushes nothing;
+  - tracked files have uncommitted changes that are not its own: it changes nothing in that repository and tells the owner what differs before starting work there. Its own uncommitted work it commits first, then merges or fast-forwards as above.
+- Never rewrite history or force a push to make a pull or a push work.
+- **A project repository keeps its own merge routine.** The merging above covers the brain repositories only. In a project repository `sync.py` reports divergence and changes nothing; the merge routine in the project's own rules applies, and without one the agent tells the owner what differs before starting work there.
 - A computer that cannot reach `origin` says so, and works on only after the owner agrees.
 - Push at the end of each unit of work (`SMART-RULE-0009`), so the next computer starts from it.
 
@@ -191,5 +197,11 @@ that always apply, verbatim.
   session's branch and merged back by the conductor, only when its work cannot be kept apart: it
   builds or tests code, it must change a file another worker also changes, or it is one of
   several alternative attempts.
+- The pre-commit hook refuses a commit on `main` in a repository's own working tree – the
+  shared checkout – and names the command that makes a session copy. Session copies are linked
+  worktrees on their own branches, so their commits pass; so do a `proposal/*` branch and any
+  other branch.
 - A host that cannot work in a separate folder says so at the start, works in the shared
-  checkout, re-reads each file immediately before changing it, and stages only its own paths.
+  checkout with `BRAIN_SHARED_CHECKOUT=1` set for its commits, re-reads each file immediately
+  before changing it, and stages only its own paths. The owner uses the same variable for a
+  commit made by hand there.

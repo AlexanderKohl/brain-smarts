@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-29T08:00:00+10:00
-updated: 2026-10-01T11:02:10+10:00
+updated: 2026-10-01T12:10:36+10:00
 owner: brain-owner
 generated_by: /shared/skills/repository-preflight/scripts/core.py
 canonical_sources:
@@ -102,6 +102,7 @@ One working tree holds three repositories:
 - Everything owned by memory is addressed as `/memory/...`: for example `/memory/tasks/open/`, `/memory/projects/<node>/`, `/memory/raw/YYYY/MM/<source-id>/`, `/memory/sources/<source-id>.md`, `/memory/outbox/`, `/memory/boards/`, `/memory/STATE.md`.
 - **Path rule:** an item that belongs to memory keeps the path it would have in a single tree, prefixed with `/memory/`: `/X` becomes `/memory/X`. Moving content into memory applies this rule mechanically and does not rename the rest of the path.
 - Owner-specific configuration, data and notes for a shared or library skill live at `/memory/skills/<skill>/`, using the same inner layout as the skill (`config/`, `data/`, `knowledge/` and so on). A shared script finds them by locating the brain root (moving upwards to `CONTRACT.md`) and joining `memory/skills/<skill>/`, or by a path the owner profile names. It never hard-codes a machine path.
+- A system node in the mechanics, `/systems/<system>/`, holds the mechanism: its rules, its procedure and the state of the mechanism itself. The owner's records for that system – its log of use, the owner's state, decisions and configuration – live in memory at `/memory/systems/<system>/`, a node of the same name. An owner fact about a system is written there, never in the mechanics node.
 - `/temp/` is local scratch in the brain root working tree, ignored by every brain repository. Nothing durable belongs there.
 - The mechanics repository never commits anything under `/memory/` or `/library/`; the memory repository never carries a copy of a mechanics or library file; the library never carries a copy of a mechanics file. A file that must change in both layers is changed in each repository and committed in each.
 
