@@ -12,3 +12,5 @@ jobs:
           python-version: "3.12"
       - run: python shared/skills/repository-preflight/scripts/preflight.py
       - run: python -m unittest discover -s shared/skills/repository-preflight/tests
+      # The raw-file-ingestion skill (TASK-2026-0004): its 47 tests, each format and each defect fixed.
+      - run: python -m unittest discover -s shared/skills/raw-file-ingestion/tests
