@@ -63,7 +63,8 @@ DEFAULT_FAVICON = (
 # task whose projects have no registered board is shown on the personal board; on, such a
 # project gets a generated task-only board of its own under `<directory>/<auto_folder>/`.
 # `board_declined` lists the projects the owner said need no board of their own, so the build
-# stops suggesting one (SMART-RULE-0035).
+# stops suggesting one (SMART-RULE-0035). `wip_limit` is how many cards one team may hold in
+# progress at once; each board page says when a team exceeds it (`team_lanes.py`).
 TASKS_DEFAULTS: dict[str, Any] = {
     "auto_boards": False,
     "auto_folder": "projects",
@@ -72,6 +73,7 @@ TASKS_DEFAULTS: dict[str, Any] = {
     "completed_days": 14,
     "enabled": True,
     "store": "tasks",
+    "wip_limit": 2,
 }
 
 PERSONAL_DEFAULTS: dict[str, Any] = {

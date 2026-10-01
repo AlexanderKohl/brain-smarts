@@ -105,8 +105,14 @@ def find_task(store: Path, tid: str) -> Task:
     raise LookupError(f"no task {tid} in {store}")
 
 
-def set_fields(text: str, fields: dict[str, str]) -> str:
-    """Replace top-level front-matter scalars in place; keys not yet there are added at the end."""
+def _scalar_or_null(value: str | None) -> str:
+    return "null" if value is None else _yaml_scalar(value)
+
+
+def set_fields(text: str, fields: dict[str, str | None]) -> str:
+    """Replace top-level front-matter scalars in place; keys not yet there are added at the end.
+
+    A value of None writes a bare `null` (a cleared field), where the text "null" would be quoted."""
     match = FRONT_MATTER_RE.match(text)
     if not match:
         raise ValueError("the record has no front matter")
@@ -115,9 +121,9 @@ def set_fields(text: str, fields: dict[str, str]) -> str:
     for n, raw in enumerate(lines):
         key = raw.split(":", 1)[0].strip() if raw and not raw[0].isspace() and ":" in raw else None
         if key in fields:
-            lines[n] = f"{key}: {_yaml_scalar(fields[key])}"
+            lines[n] = f"{key}: {_scalar_or_null(fields[key])}"
             done.add(key)
-    lines += [f"{k}: {_yaml_scalar(v)}" for k, v in fields.items() if k not in done]
+    lines += [f"{k}: {_scalar_or_null(v)}" for k, v in fields.items() if k not in done]
     return "---\n" + "\n".join(lines) + "\n---\n" + text[match.end():]
 
 

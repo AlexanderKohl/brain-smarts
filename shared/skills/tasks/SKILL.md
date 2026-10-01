@@ -195,11 +195,14 @@ that `STATE.md` lists every open task with its status word.
 | `tasks.py done <id> [--note] [--now] [--no-board]` | Complete a task: History, move to `completed/`, `STATE.md` row out |
 | `tasks.py do-now <id> [--note] [--now] [--no-board]` | Priority high, status ready unless in progress, History |
 | `tasks.py note <id> --note ... [--now] [--no-board]` | A History entry with the owner's note |
+| `tasks.py claim <id> --by "SESSION NAME" [--team LABEL] [--now] [--no-board]` | A team thread takes a card: status `in_progress`, `claimed_by` and `claimed_at` (the clock) set together, History, `STATE.md` row. Refused when another session holds it |
+| `tasks.py release <id> [--note] [--now] [--no-board]` | The thread lets a card go: `claimed_by` and `claimed_at` cleared, status `ready`, History, `STATE.md` row |
 | `tasks.py next-id [--year YYYY]` | The next free task number across all folders and live claims |
 | `scheduled_review.py [--register \| --status \| --unregister] [--no-notify]` | Read-only review with no model: writes the ignored `/temp/due.md` (each repository compared with origin, the weekly learning digest when due, tasks due, skill exchange, preflight) and shows a desktop notification when something needs attention. `--register` runs it daily at 07:00 from the operating system's scheduler – Windows Task Scheduler, a launchd agent on macOS, a systemd user timer on Linux (cron without systemd) – catching up after the computer was off except under cron, always from the shared checkout named in `/memory/OWNER.md`; `--status` shows it and `--unregister` removes it. Set up per computer in `/SETUP.md` G.2. Once registered, follow-up is real under CONTRACT §14 |
 
 Common options: `--tasks <path>` (repository-root or absolute; default `/memory/tasks`) and
-`--json`. Standard library only; `new`, `done`, `do-now` and `note` write.
+`--json`. Standard library only; `new`, `done`, `do-now`, `note`, `claim` and `release` write.
+`new --team LABEL` names the team thread that works the card (`team` in the task schema).
 
 Tests: `python -m unittest discover -s shared/skills/tasks/scripts/tests -v`.
 

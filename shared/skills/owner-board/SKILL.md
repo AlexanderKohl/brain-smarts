@@ -151,6 +151,7 @@ stops the build), `folder` (default `boards`, under the memory root) and `title`
 | `enabled` | `true` | `false` draws no tasks anywhere. |
 | `personal` | see the example | The personal board: `id` (must not be a registered board id), `label`, `page` (relative to the directory folder), `blurb`. |
 | `store` | `tasks` | The task store, relative to the memory root. |
+| `wip_limit` | `2` | How many cards one team may hold *in progress* at once. Each board page lists every team present above the columns as `team · in progress n / limit`, in the warning colour when n exceeds it. |
 
 ## Invocation and required inputs
 

@@ -9,6 +9,8 @@ Commands:
     done     complete a task: status, History, move to completed/, STATE.md row out
     do-now   ask for a task now: priority high, status ready (unless in progress), History
     note     add the owner's note to a task's History
+    claim    a team thread takes a card: in_progress, claimed_by and claimed_at (task_claims.py)
+    release  the thread lets it go: claimed_by and claimed_at cleared, ready (task_claims.py)
 
 The store is `--tasks` (a repository-root path such as /memory/tasks, or an absolute path),
 default /memory/tasks. Standard library only. `new`, `done`, `do-now` and `note` write: the
@@ -56,6 +58,7 @@ from state_table import (
     review, _row_text, _recount, _state_table, _row_index, state_remove, state_update,
     state_recently_completed, state_row,
 )
+import task_claims
 
 DEFAULT_STORE = "/memory/tasks"
 FOLDER_STATUSES = {
@@ -146,6 +149,7 @@ def check(store: Path) -> Report:
             report.warnings.append(f"{where}: waiting without waiting_on")
         if not task.get("priority") and task.folder != "completed":
             report.warnings.append(f"{where}: no priority")
+        report.warnings += task_claims.warnings(task, where)
     return report
 
 
@@ -296,10 +300,12 @@ def create(store: Path, title: str, status: str = "inbox", priority: str = "norm
            due: str | None = None, next_review: str | None = None, waiting_on: str | None = None,
            owner: str | None = None, slug: str | None = None, outcome: str | None = None,
            next_action: str | None = None, now: str | None = None, year: int | None = None,
-           update_state: bool = True) -> tuple[Path, list[str]]:
+           update_state: bool = True, team: str | None = None) -> tuple[Path, list[str]]:
     """Write one new task record and its STATE.md row. Returns the path and what was said."""
     if status not in NEW_STATUSES:
         raise ValueError(f"status {status} is not one of {', '.join(NEW_STATUSES)}")
+    if team:
+        team = task_claims.check_team(team)
     for key, value in (("due", due), ("next_review", next_review)):
         if value and not DATE_RE.match(value):
             raise ValueError(f"{key} {value} is not a date")
@@ -328,6 +334,8 @@ def create(store: Path, title: str, status: str = "inbox", priority: str = "norm
         "due": due, "next_review": next_review, "waiting_on": waiting_on,
         "project_refs": list(projects or []), "skill_refs": list(skills or []),
     }
+    if team:
+        fields["team"] = team
     folder = "inbox" if status == "inbox" else "open"
     path = store / folder / f"{tid}-{slug or slugify(title)}.md"
     text = render_new(template, dict(fields, _outcome=outcome, _next_action=next_action))
@@ -424,7 +432,8 @@ def complete(store: Path, tid: str, note: str | None = None, shots: list[str] | 
     stamp, said = _stamp(store, now)
     images = save_images(store, tid, shot_stamp or stamp, shots)
     text = task.path.read_text(encoding="utf-8")
-    text = add_history(set_fields(text, {"status": "completed", "updated": stamp}),
+    # A completed card leaves in_progress, so a claim on it is cleared with it.
+    text = add_history(set_fields(text, dict(task_claims.cleared(task), status="completed", updated=stamp)),
                        _entry(stamp, "done, marked by the owner on the board.", note, images))
     target = store / "completed" / task.path.name
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -451,7 +460,10 @@ def do_now(store: Path, tid: str, note: str | None = None, shots: list[str] | No
     images = save_images(store, tid, shot_stamp or stamp, shots)
     status = "in_progress" if task.get("status") == "in_progress" else "ready"
     text = task.path.read_text(encoding="utf-8")
-    text = add_history(set_fields(text, {"priority": "high", "status": status, "updated": stamp}),
+    fields: dict[str, str | None] = {"priority": "high", "status": status, "updated": stamp}
+    if status != "in_progress":
+        fields.update(task_claims.cleared(task))   # a card that is not in progress is held by nobody
+    text = add_history(set_fields(text, fields),
                        _entry(stamp, f"Asked for now by the owner (priority high, {status}).", note, images))
     target = store / "open" / task.path.name
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -527,6 +539,7 @@ def main(argv: list[str] | None = None, cwd: Path | None = None) -> int:
     c.add_argument("--due", help="YYYY-MM-DD, only for a real deadline")
     c.add_argument("--next-review", help="YYYY-MM-DD; required for waiting and scheduled")
     c.add_argument("--waiting-on", help="who or what is expected to move it; required for waiting")
+    c.add_argument("--team", metavar="LABEL", help="the team thread that works the card: a short lowercase label")
     c.add_argument("--owner", help="default the template's owner, else owner_short_name in /memory/OWNER.md")
     c.add_argument("--slug", help="file name after the id; default from the title")
     c.add_argument("--outcome", help="text for the Outcome section")
@@ -536,12 +549,17 @@ def main(argv: list[str] | None = None, cwd: Path | None = None) -> int:
     c.add_argument("--no-board", action="store_true", help="do not refresh the owner board")
     for name, text in (("done", "complete a task and move it to completed/"),
                        ("do-now", "ask for a task now: priority high, status ready unless in progress"),
-                       ("note", "add the owner's note to a task's History")):
+                       ("note", "add the owner's note to a task's History"),
+                       ("claim", "a team thread takes a card: in_progress, claimed_by, claimed_at"),
+                       ("release", "the thread lets a card go: claim cleared, status ready")):
         a = sub.add_parser(name, help=text)
         a.add_argument("task", help="the task id, TASK-YYYY-NNNN")
         a.add_argument("--note", required=name == "note", help="the owner's words, kept verbatim in History")
         a.add_argument("--now", help="the timestamp, ISO 8601 with offset; default now")
         a.add_argument("--no-board", action="store_true", help="do not refresh the owner board")
+        if name == "claim":
+            a.add_argument("--by", required=True, metavar="SESSION NAME", help="the session taking the card")
+            a.add_argument("--team", metavar="LABEL", help="also set the card's team: a short lowercase label")
     args = parser.parse_args(argv)
 
     store = resolve_store(args.tasks, cwd or Path.cwd())
@@ -573,7 +591,7 @@ def main(argv: list[str] | None = None, cwd: Path | None = None) -> int:
                                 next_review=args.next_review, waiting_on=args.waiting_on,
                                 owner=args.owner, slug=args.slug, outcome=args.outcome,
                                 next_action=args.next_action, now=args.now,
-                                update_state=not args.no_state)
+                                update_state=not args.no_state, team=args.team)
         except ValueError as err:
             print(f"ERROR: {err}")
             return 1
@@ -585,9 +603,14 @@ def main(argv: list[str] | None = None, cwd: Path | None = None) -> int:
             print("\n".join(said))
         return 0
 
-    if args.command in ("done", "do-now", "note"):
+    if args.command in ("done", "do-now", "note", "claim", "release"):
         try:
-            path, said = ACTIONS[args.command.replace("-", "_")](store, args.task, note=args.note, now=args.now)
+            if args.command == "claim":
+                path, said = task_claims.claim(store, args.task, args.by, team=args.team, note=args.note, now=args.now)
+            elif args.command == "release":
+                path, said = task_claims.release(store, args.task, note=args.note, now=args.now)
+            else:
+                path, said = ACTIONS[args.command.replace("-", "_")](store, args.task, note=args.note, now=args.now)
         except (LookupError, ValueError) as err:
             print(f"ERROR: {str(err).strip(chr(39))}")
             return 1

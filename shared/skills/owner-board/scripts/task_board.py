@@ -51,6 +51,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tasks" / "scripts"
 
 import board_config  # noqa: E402
 import page_js  # noqa: E402
+import team_lanes  # noqa: E402
 import tasks as task_store  # noqa: E402
 
 # Left to right is the way a task travels. The action columns come first; `completed` shows
@@ -84,9 +85,10 @@ TOKENS = """:root {
 :root[data-theme="dark"] {
   --bg:#0f141a; --surface:#1a222b; --surface-2:#243039; --ink:#e7edf2; --muted:#9db0c0;
   --line:#2f3c48; --accent:#4fd1b5; --warn:#ff8a80; --shadow:none; --col:#161d24;
-}"""
+}
+""" + team_lanes.TOKENS
 
-CSS = """
+CSS = team_lanes.CSS + """
 .tasks { margin-top:28px; }
 .tasks h2 { font-size:16px; margin:0 0 4px; display:flex; gap:10px; align-items:baseline; }
 .tasks h2 .n { color:var(--muted); font-size:12.5px; font-weight:400; }
@@ -288,8 +290,10 @@ def route(config: board_config.Config, records: list[task_store.Task] | None = N
                 continue
         board, ref = board_for(config, task, known)
         placed.setdefault(board["key"], []).append((task, ref))
+    limit = int(config.tasks.get("wip_limit") or board_config.TASKS_DEFAULTS["wip_limit"])
     for key, board in known.items():
         board["tasks"] = placed.get(key, [])
+        board["wip_limit"] = limit
     return known
 
 
@@ -345,6 +349,10 @@ def _task_html(task: task_store.Task, ref: str | None, board: dict, page_dir: Pa
     # Which project a task belongs to is said only where the board does not already say it.
     if ref and ref != board.get("node"):
         tags.append('<span class="tag">' + esc(ref.rstrip("/").rsplit("/", 1)[-1]) + "</span>")
+    team = team_lanes.team_of(task)
+    if team:
+        tags.append(team_lanes.team_tag(team))
+    held = team_lanes.held_html(task) if column == "in_progress" else ""
     wait = ""
     if column in BY_REVIEW:
         parts = []
@@ -357,7 +365,7 @@ def _task_html(task: task_store.Task, ref: str | None, board: dict, page_dir: Pa
             + ('<div class="tmeta">' + "".join(tags) + "</div>" if tags else "")
             + '<p class="ask"><a href="' + esc(_href(page_dir, task.path)) + '">'
             + esc(task.get("title") or task.tid) + "</a></p>"
-            + '<p class="tid">' + esc(task.tid) + "</p>" + wait
+            + '<p class="tid">' + esc(task.tid) + "</p>" + held + wait
             + (CONTROLS if column != "completed" else "") + "</article>")
 
 
@@ -378,6 +386,9 @@ def section(board: dict, page_dir: Path, today: datetime.date | None = None) -> 
         column = column_of(task)
         (groups[column] if column in groups else lost).append((task, ref))
     open_count = sum(len(groups[k]) for k in OPEN_STATUSES) + len(lost)
+    # One line per team present, above the columns: how many cards it holds in progress.
+    lanes = team_lanes.wip_lines([(team_lanes.team_of(t), column_of(t)) for t, _ in board.get("tasks") or [] if is_open(t)],
+                                 int(board.get("wip_limit") or board_config.TASKS_DEFAULTS["wip_limit"]))
     cols = []
     if lost:
         # Nothing may vanish: a status no column draws is shown first, in the warning colour.
@@ -394,7 +405,7 @@ def section(board: dict, page_dir: Path, today: datetime.date | None = None) -> 
             '<h2>Tasks<span class="n">' + str(open_count) + " open</span></h2>"
             '<p class="tnote">Shown from the task records in /memory/tasks/. Click a title to open the record. '
             "Mark a task Do now or Done, or leave a note, and save it for the agent with the bar below.</p>"
-            '<div class="tboard">' + "".join(cols) + "</div></section>")
+            + lanes + '<div class="tboard">' + "".join(cols) + "</div></section>")
 
 
 def counts(board: dict, today: datetime.date | None = None) -> dict[str, int]:

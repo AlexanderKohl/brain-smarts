@@ -15,6 +15,9 @@ waiting_on: null
 project_refs: []
 skill_refs: []
 depends_on: []
+team: null
+claimed_by: null
+claimed_at: null
 ---
 
 # Clear action or outcome
