@@ -21,6 +21,8 @@ HERE = Path(__file__).resolve().parent
 EVENTS = HERE.parent / "hooks" / "events.json"
 MARK = "brain-hooks"
 UNTRACKED = "brain-session-untracked.txt"
+# SMART-RULE-0038: set to 1 for a commit made on purpose in the shared checkout.
+SHARED_CHECKOUT = "BRAIN_SHARED_CHECKOUT"
 
 
 def brain_root(start: Path) -> Path:
@@ -88,6 +90,20 @@ def session_start() -> str:
     return "\n".join(l for l in lines if l)
 
 
+def shared_checkout_refusal(repo: Path) -> str | None:
+    """SMART-RULE-0038: a commit on `main` in a repository's own working tree – the shared checkout –
+    is refused. Session copies are linked worktrees on their own branches, so their commits pass."""
+    if os.environ.get(SHARED_CHECKOUT) == "1":
+        return None
+    own = os.path.normcase(git(repo, "rev-parse", "--path-format=absolute", "--git-dir").strip())
+    common = os.path.normcase(git(repo, "rev-parse", "--path-format=absolute", "--git-common-dir").strip())
+    if not own or own != common or git(repo, "rev-parse", "--abbrev-ref", "HEAD").strip() != "main":
+        return None
+    return ("pre-commit: this is the shared checkout, which holds only merged work (SMART-RULE-0038).\n"
+            "Work in a session copy: python shared/skills/repository-preflight/scripts/session.py start <name>\n"
+            f"A host that cannot work in a separate folder sets {SHARED_CHECKOUT}=1 for its commits.")
+
+
 def pre_commit(repo: Path) -> int:
     """The brain's checks for one commit, scoped to the repository being committed."""
     staged = git(repo, "diff", "--cached", "--name-only").split("\n")
@@ -102,6 +118,10 @@ def pre_commit(repo: Path) -> int:
     if root is None:
         print("pre-commit: no brain above this repository; brain checks skipped", file=sys.stderr)
         return 0
+    refusal = shared_checkout_refusal(repo)
+    if refusal:
+        print(refusal, file=sys.stderr)
+        return 1
     layer = layer_of(repo, root)
     check = subprocess.run([sys.executable, str(root / "shared/skills/repository-preflight/scripts/preflight.py"),
                             "--root", str(root), "--layer", layer], cwd=root, capture_output=True, text=True,

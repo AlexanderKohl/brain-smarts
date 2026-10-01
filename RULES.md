@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-10-01T10:48:20+10:00
+updated: 2026-10-01T12:05:38+10:00
 owner: brain-owner
 ---
 
@@ -512,8 +512,14 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
   session's branch and merged back by the conductor, only when its work cannot be kept apart: it
   builds or tests code, it must change a file another worker also changes, or it is one of
   several alternative attempts.
+- The pre-commit hook refuses a commit on `main` in a repository's own working tree – the
+  shared checkout – and names the command that makes a session copy. Session copies are linked
+  worktrees on their own branches, so their commits pass; so do a `proposal/*` branch and any
+  other branch.
 - A host that cannot work in a separate folder says so at the start, works in the shared
-  checkout, re-reads each file immediately before changing it, and stages only its own paths.
+  checkout with `BRAIN_SHARED_CHECKOUT=1` set for its commits, re-reads each file immediately
+  before changing it, and stages only its own paths. The owner uses the same variable for a
+  commit made by hand there.
 
 ## SMART-RULE-0041 – Code files stay small
 

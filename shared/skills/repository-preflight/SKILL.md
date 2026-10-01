@@ -14,7 +14,7 @@ script_paths:
   - /shared/skills/repository-preflight/scripts/session.py
   - /shared/skills/repository-preflight/tests/test_session.py
 created: 2026-08-04T23:16:08+10:00
-updated: 2026-10-01T08:25:31+10:00
+updated: 2026-10-01T12:05:38+10:00
 owner: brain-owner
 ---
 
@@ -114,9 +114,10 @@ python shared/skills/repository-preflight/scripts/session.py list
   work left by a session that ended is found and finished rather than lost.
 - Append-only logs merge by union (`LOG.md merge=union` in `.gitattributes`), so two sessions'
   entries both survive.
-- Not yet built: a check that refuses a commit made in the shared checkout while session copies
-  are live. It waits for the owner's evaluation of hooks at session start and before commit, so it
-  is built in the form that evaluation keeps.
+- The pre-commit hook (`hooks.py pre-commit`) refuses a commit on `main` in a repository's own
+  working tree – the shared checkout – and names `session.py start`. A linked worktree (a session
+  copy) or any other branch passes. `BRAIN_SHARED_CHECKOUT=1` lets a host that cannot work in a
+  separate folder, or the owner by hand, commit there on purpose.
 
 ## Outputs
 

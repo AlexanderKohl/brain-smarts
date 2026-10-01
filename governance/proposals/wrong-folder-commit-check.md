@@ -4,20 +4,21 @@ title: The pre-commit hook refuses a commit on main in the shared checkout
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: proposed
+status: implemented
 owner: brain-owner
 created: 2026-10-01T10:52:46+10:00
-updated: 2026-10-01T10:52:46+10:00
+updated: 2026-10-01T12:05:38+10:00
 rule_id: SMART-RULE-0038
-accepted_by: null
-accepted_at: null
-implemented_at: null
+accepted_by: brain-owner
+accepted_at: 2026-10-01T12:05:38+10:00
+implemented_at: 2026-10-01T12:05:38+10:00
 previous_contract_version: 2.2.0
 new_contract_version: 2.2.0
 target_files:
   - /RULES.md
   - /shared/skills/repository-preflight/scripts/hooks.py
   - /shared/skills/repository-preflight/SKILL.md
+  - /shared/skills/repository-preflight/tests/test_wrong_folder.py
 ---
 
 # The pre-commit hook refuses a commit on main in the shared checkout
@@ -122,8 +123,9 @@ Remove the check from `hooks.py` and restore the bullet's wording.
 
 ## Acceptance
 
-Not yet requested. Ask one direct question that identifies this proposal.
+Accepted by the owner on 1 October 2026. The owner's record is kept in their memory.
 
 ## Implementation record
 
-None.
+Implemented on 1 October 2026: `hooks.py` `shared_checkout_refusal`, the two bullets of
+`SMART-RULE-0038`, the preflight skill's description, and `tests/test_wrong_folder.py`.
