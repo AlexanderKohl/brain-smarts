@@ -11,7 +11,7 @@ updated: 2026-09-30T22:19:37+10:00
 rule_id: SMART-RULE-0034
 accepted_by: brain-owner
 accepted_at: 2026-09-30T22:15:17+10:00
-implemented_at: 2026-09-30T22:19:37+10:00
+implemented_at: 2026-10-01T10:57:33+10:00
 previous_contract_version: 2.2.0
 new_contract_version: 2.2.0
 target_files:
