@@ -4,11 +4,11 @@ title: Portable AI Brain Contract
 type: contract
 status: active
 schema_version: 0.2
-contract_version: 2.2.0
+contract_version: 2.3.0
 contract: /CONTRACT.md
 canonical: true
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-28T15:01:51+10:00
+updated: 2026-10-01T11:14:53+10:00
 owner: brain-owner
 ---
 
@@ -802,15 +802,17 @@ When uncertain:
 
 ### 13.2 Protected governance
 
-Protected governance files are:
+Protected governance is rule and contract wording:
 
 - `/CONTRACT.md`
 - every active `RULES.md`, including the owner layer `/memory/RULES.md` and node rules in memory and in project repositories
-- governance schemas and templates
+- governance schemas and templates that define the wording of a rule or a proposal
 - bootstrap instructions that determine how agents locate or load the contract and inherited rules
-- the repository preflight skill and validator that enforce this protocol
+- the statement of what the repository preflight validator enforces: the *Failure behaviour* section of its skill
 
-A substantive or semantic change to protected governance must not become active until the owner explicitly accepts an identified proposal or the exact displayed diff.
+The validator's code, tests and fixtures, the rest of its skill, and README files are not protected governance; they change as ordinary persistent changes (section 13.1). Code that changes what the validator accepts or refuses changes the rule it enforces, so the *Failure behaviour* section changes with it, under this section.
+
+A substantive or semantic change to protected governance must not become active until the owner explicitly accepts an identified proposal or the exact displayed diff. Acceptance covers that change, not later changes to the same file: each substantive change needs its own. A change that only rewrites the `updated` stamp, line endings or the dash style is not substantive.
 
 Before requesting acceptance, present:
 
