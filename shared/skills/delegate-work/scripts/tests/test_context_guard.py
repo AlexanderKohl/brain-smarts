@@ -110,7 +110,7 @@ class ContextGuardTestCase(unittest.TestCase):
 
     def test_drain_gets_through_with_the_threshold_switched_off(self) -> None:
         with mock.patch.object(context_guard, "DRAIN_TOKENS", 10 ** 9):
-            code, out = self.new_run("--context-tokens", "250000")
+            code, out = self.new_run("--context-tokens", "750000")
         self.assertEqual(code, 0, out)
 
     def test_new_packet_passes_drain_and_is_refused_at_the_stop_threshold(self) -> None:
@@ -124,8 +124,8 @@ class ContextGuardTestCase(unittest.TestCase):
         self.assertFalse((self.root / "temp" / "delegation" / "runs" / "RUN-TEST" / "W02.md").exists())
 
     def test_thresholds_are_the_named_constants(self) -> None:
-        self.assertEqual(context_guard.DRAIN_TOKENS, 250000)
-        self.assertEqual(context_guard.STOP_TOKENS, 400000)
+        self.assertEqual(context_guard.DRAIN_TOKENS, 750000)
+        self.assertEqual(context_guard.STOP_TOKENS, 850000)
 
     # ------------------------------------------------------------ override and unknown
 
