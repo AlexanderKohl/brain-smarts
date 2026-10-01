@@ -441,7 +441,7 @@ The prompt is a pointer; the files are the substance. Ten minutes, not an hour.
 
 **Arriving in a thread (the successor):**
 
-1. Read `/CORE.md`, `/memory/OWNER.md`, `/memory/RULES.md`, then the `## Handover` of
+1. Read `/CORE.md`, `/CORE-RULES.md`, `/memory/OWNER.md`, `/memory/RULES.md`, then the `## Handover` of
    `/memory/projects/brain-development/STATE.md` and the `## Handover` sections it points to. That is
    the whole bootstrap; do not re-derive the position from logs, transcripts or git.
 2. Check the live facts the Handover cannot promise: `git log -1` on the branches it names,
