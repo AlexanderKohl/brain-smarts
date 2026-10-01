@@ -198,3 +198,28 @@ test('the unused command reports and never fails', () => {
   assert.match(out, /Files no entry point reaches: 2/);
   assert.doesNotMatch(out, /Exports no file uses/);
 });
+
+test('routes a register function adds belong to the router passed to it, in the call\'s place', () => {
+  const dir = copyFixture();
+  // Routes moved into a register function, as the split-file skill's block tool writes them.
+  fs.writeFileSync(path.join(dir, 'backend', 'routes', 'refunds.js'), [
+    'function registerRefundRoutes(router, { db }) {',
+    "  router.get('/refunds/:id', async (req, res) => res.json(await db.find(req.params.id)));",
+    "  router.post('/refunds', (req, res) => res.json({ ok: true }));",
+    '}',
+    'module.exports = { registerRefundRoutes };',
+    '',
+  ].join('\n'));
+  const orders = path.join(dir, 'backend', 'routes', 'orders.js');
+  const text = fs.readFileSync(orders, 'utf8')
+    .replace('const router = express.Router();', "const router = express.Router();\nconst { registerRefundRoutes } = require('./refunds');\nconst db = { find: async (id) => ({ id }) };")
+    .replace("router.get('/orders', ", "registerRefundRoutes(router, { db });\n\nrouter.get('/orders', ");
+  fs.writeFileSync(orders, text);
+  const m = buildMap(dir);
+  assert.deepStrictEqual(m.ctx.routes.map((r) => `${r.method} ${r.path}`).sort(),
+    ['GET /api/orders', 'GET /api/orders/:id', 'GET /api/refunds/:id', 'POST /api/orders', 'POST /api/refunds']);
+  const order = m.ctx.routerOrder.find((r) => r.file === 'backend/routes/orders.js').entries.map((e) => `${e.method} ${e.path}`);
+  assert.deepStrictEqual(order, ['GET /orders/:id', 'POST /orders', 'GET /refunds/:id', 'POST /refunds', 'GET /orders'], 'in the call\'s place');
+  const refund = m.ctx.routes.find((r) => r.path === '/api/refunds/:id');
+  assert.strictEqual(refund.file, 'backend/routes/refunds.js', 'written in the register function\'s file');
+});

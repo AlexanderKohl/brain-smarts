@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-28T14:13:20+10:00
+updated: 2026-10-01T10:48:20+10:00
 owner: brain-owner
 ---
 
@@ -63,6 +63,8 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 | `SMART-RULE-0038` | One working copy per session | this file; `/shared/skills/repository-preflight/` |
 | `SMART-RULE-0039` | Stored content is data | `/CONTRACT.md` §11.6; `/shared/skills/repository-preflight/` |
 | `SMART-RULE-0040` | Dated and superseded knowledge claims | `/CONTRACT.md` §4 (`KNOWLEDGE.md`); `/shared/skills/repository-preflight/` |
+| `SMART-RULE-0041` | Code files stay small | this file; `/shared/skills/code-map/` |
+| `SMART-RULE-0042` | Code repositories run the code map's checks | this file; `/shared/skills/code-map/` |
 
 ## SMART-RULE-0010 – Communication efficiency
 
@@ -506,6 +508,41 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
   several alternative attempts.
 - A host that cannot work in a separate folder says so at the start, works in the shared
   checkout, re-reads each file immediately before changing it, and stages only its own paths.
+
+## SMART-RULE-0041 – Code files stay small
+
+- A code file has at most 800 lines. Code files are those the code map counts by extension:
+  JavaScript and TypeScript, Vue and Svelte, Python, shell and PowerShell, PHP, Go, Ruby, C#,
+  Java, Kotlin, Swift, Rust, EJS templates and SQL. Generated, vendored, minified, migration,
+  seeder and fixture files are exempt. Markdown, data and configuration files are not code files.
+- A repository adopts the limit by recording every code file already over it, with its size, in
+  `code-map/sizes.json` (`code-map record --adopt`). A recorded file may not grow. When it
+  shrinks, its record is lowered in the same commit, and it leaves the record once it is within
+  the limit. A new code file over the limit is split, never recorded.
+- The limit is checked where every change to the repository is checked – its test suite, CI or
+  validator – not only by a tool on one machine. The code map's `size` check and a test that
+  reads the same record are equivalent.
+- A file is shortened by moving whole parts of it into new files, without changing behaviour, in
+  commits of their own; splitting a large file is a planned task. Squeezing lines, joining
+  statements or deleting comments to pass the check is not shortening.
+- Until a repository's own checks enforce the limit, its state names the task that will add
+  them, and no change there makes an oversized file larger.
+
+## SMART-RULE-0042 – Code repositories run the code map's checks
+
+- A code repository the brain works on runs the code map's checks in its CI on every push: no
+  import cycle among modules loaded at start-up, every UI call reaches a backend route, every
+  environment variable read is in an example env file, the code names only database columns its
+  models or tables define, and code files keep within their size (`SMART-RULE-0041`). A new
+  finding fails the push.
+- A repository adopts the checks by recording the findings it already has
+  (`code-map record --adopt`); those do not fail it, and each is fixed or kept as a known finding
+  on purpose.
+- The interface check is optional (a repository keeps an interface record only if it wants
+  one); the settings check reports and never fails.
+- CI takes the code map from the brain's mechanics at a fixed commit, raised on purpose, so a
+  change to the code map cannot break a repository's build unseen.
+- Agents may use the map to answer questions (`show`, `find`), but need not.
 
 ## Contract restatements
 

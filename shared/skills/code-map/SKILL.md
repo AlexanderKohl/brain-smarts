@@ -6,11 +6,11 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 scope: shared
-version: 0.5.0
+version: 0.5.2
 script_paths:
   - /shared/skills/code-map/scripts/code-map.js
 created: 2026-09-28T17:00:17+10:00
-updated: 2026-09-28T21:39:50+10:00
+updated: 2026-10-01T10:48:20+10:00
 owner: brain-owner
 ---
 
@@ -18,9 +18,8 @@ owner: brain-owner
 
 Read `/CONTRACT.md` first.
 
-A candidate core skill. No rule requires it yet: whether one should is decided on the evidence of its
-trial, and until then an agent may use it on any code repository and must not treat its checks as
-mandatory.
+A core skill. `SMART-RULE-0042` requires its checks in the CI of every code repository the brain works
+on (see *In CI*); using the map to answer questions stays optional.
 
 ## Purpose
 
@@ -123,6 +122,35 @@ question's own words when no name is known.
 
 Unresolved items – a URL held in a variable, a computed key – never fail a check; they are listed.
 
+## In CI
+
+`SMART-RULE-0042`: a code repository runs `check` on every push, and a new finding fails the push. The
+repository adopts the checks once with `record <repo> --adopt`, which records the findings it already
+has, and commits the record. CI takes the code map from the mechanics at a fixed commit, raised on
+purpose, never a branch. As a job of its own, or as the same steps in an existing job:
+
+```yaml
+  code-map:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: app
+      - uses: actions/checkout@v7
+        with:
+          repository: <owner>/<mechanics repository>
+          ref: <full commit hash>
+          path: mechanics
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: npm ci --prefix mechanics/shared/skills/code-map --no-audit --no-fund
+      - run: node mechanics/shared/skills/code-map/scripts/code-map.js check app
+```
+
+The interface check runs only where the repository keeps an interface record; the settings check
+reports and does not fail.
+
 ## The unused report
 
 `unused` lists code the repository no longer uses. It never fails a run: each kind has blind spots,
@@ -138,7 +166,7 @@ listed below and printed with the report.
 
 Not covered: imports never used, TypeScript types, Vue options-API state, packages, Python.
 
-Measured on extract-bill-api (`testing` `44e7b8a`, 28 September 2026), every finding or a sample checked
+Measured on the owner's main code repository (28 September 2026), every finding or a sample checked
 by hand:
 
 | Kind | Found | Real |

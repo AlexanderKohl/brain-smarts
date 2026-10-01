@@ -50,7 +50,9 @@ class RobustHooksTest(unittest.TestCase):
 
     def test_a_proposal_branch_may_hold_its_draft_diff(self):
         import re
-        text = (ROOT / "shared/skills/repository-preflight/scripts/preflight.py").read_text(encoding="utf-8")
+        # preflight.py and the modules split out of it, read as one text.
+        scripts = ROOT / "shared/skills/repository-preflight/scripts"
+        text = "\n".join(p.read_text(encoding="utf-8") for p in sorted(scripts.glob("preflight*.py")))
         self.assertIn('branch.startswith("proposal/")', text)
         self.assertRegex(text, re.compile(r'status"\) in \("proposed", "draft"\)'))
 

@@ -1,0 +1,16 @@
+{
+  "name": "split-file",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Split a large code file by moving whole parts of it into new files, unedited, with checks that the rest of the program sees the same thing.",
+  "license": "UNLICENSED",
+  "scripts": {
+    "test": "node --test \"tests/js/*.test.js\""
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@babel/parser": "^7.29.0"
+  }
+}

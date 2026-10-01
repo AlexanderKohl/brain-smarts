@@ -60,6 +60,10 @@ _LRESULT = ctypes.c_ssize_t
 _WNDPROC = ctypes.WINFUNCTYPE(
     _LRESULT, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM
 )
+# Without these, ctypes passes a 64-bit LPARAM (a pointer, for example during window creation) as a
+# 32-bit int, and the call fails with "OverflowError: int too long to convert".
+user32.DefWindowProcW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+user32.DefWindowProcW.restype = _LRESULT
 
 
 class _RECT(ctypes.Structure):

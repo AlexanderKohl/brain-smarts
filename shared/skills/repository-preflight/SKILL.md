@@ -9,10 +9,12 @@ scope: shared
 script_paths:
   - /shared/skills/repository-preflight/scripts/preflight.py
   - /shared/skills/repository-preflight/tests/test_preflight.py
+  - /shared/skills/repository-preflight/scripts/file_sizes.py
+  - /shared/skills/repository-preflight/tests/test_file_sizes.py
   - /shared/skills/repository-preflight/scripts/session.py
   - /shared/skills/repository-preflight/tests/test_session.py
 created: 2026-08-04T23:16:08+10:00
-updated: 2026-09-28T08:21:33+10:00
+updated: 2026-10-01T08:25:31+10:00
 owner: brain-owner
 ---
 
@@ -58,7 +60,10 @@ python -m unittest discover -s shared/skills/repository-preflight/tests -v
 
 The tests build fictional two-repository brains in temporary folders and need `git` for the governance cases.
 
-The script uses only the Python standard library.
+The script uses only the Python standard library. `preflight.py` runs the checks; the basics they
+share (`preflight_base.py`), the reference checks (`preflight_references.py`), protected governance
+(`preflight_governance.py`), the manifests and the personal-data check (`preflight_manifest.py`),
+and the file-size check (`file_sizes.py`) are modules of their own.
 
 ## Starting from the latest
 
@@ -122,6 +127,12 @@ python shared/skills/repository-preflight/scripts/session.py list
 - fail on missing required Markdown metadata, duplicate IDs, invalid task states, an open task missing from its store's `STATE.md` (`/memory/tasks/STATE.md`) or listed there without its status word (`SMART-RULE-0025`), broken declared references (a `#fragment` after the path must match the start of a Markdown heading in the referenced file), a `/memory/` reference that does not resolve while memory is present, a metadata reference in a mechanics file (any `*_ref`, `*_refs`, `evidence` or other reference key) to a `/memory/` path that `/shared/templates/memory-skeleton/` does not provide – another owner's memory would not have it, so the reference belongs in the owner's memory copy of the file (for a knowledge entry `/memory/skills/<skill>/knowledge/<same filename>`), or the target belongs in the skeleton – contract-version mismatch in either manifest, an uncovered protected-governance change in either repository, or personal data in a shareable repository (below)
 - warn about undocumented immediate folders, unavailable Git state, an absent memory checkout, a memory folder that is not its own repository, `/memory/` references left unchecked because memory is absent, a missing memory manifest, a declared reference to a git-ignored file absent from this checkout (a local-only recording or scratch run), and a mechanics file whose `owner` is not `brain-owner` (a tripwire for CONTRACT §3.4, not a personal-data scan)
 - **personal data (`SMART-RULE-0008`):** check every file Git tracks or would track in each shareable repository – the mechanics, and the skill library at `/library/` when it is checked out – with `scripts/personal_data.py`. Owner terms are built in memory at run time from `/memory/OWNER.md` (a personal name matches only as written), the owner's own project and system node names (not those the memory skeleton ships) and the optional `/memory/skills/repository-preflight/config/denylist.txt`; patterns find e-mail addresses, telephone numbers (not those reserved for fiction, nor long unbroken counts), UUIDs and absolute user paths. Without memory only the patterns run. Each hit is an error naming file, line and kind; the value is withheld, because errors are written into the committed manifest (`skill_exchange.py scrub <file>` shows it on the console). Generic exemptions are in `config/exemptions.txt`, one per line with its reason; a line without a reason is an error. Owner-specific values never go there. Git failures are reported without their command line, so no machine path reaches a manifest
+- **code files over the size limit (`SMART-RULE-0041`):** in each repository that has adopted the limit
+  (a `sizes.json` in its code-map record folder, named by `code-map.config.json`; the mechanics and the
+  library keep `.code-map/`), fail when a code file is over 800 lines and not recorded, or a recorded
+  file has grown past its recorded size. Files are counted as the code map counts them, with its
+  ignored and size-exempt patterns and code extensions; `tests/test_file_sizes.py` fails when those
+  lists differ from the code map's. A repository without a record is not checked
 - **timestamps ahead of the clock (CONTRACT §8.2):** fail when a `created` or `updated` value, or a log-entry heading in a `LOG.md`, is more than five minutes ahead of the time the validator runs (the tolerance allows for slightly different clocks on synced machines); the error says how far ahead. Templates and raw evidence are not checked
 - treat a file under a `templates/` folder, or named `_TEMPLATE.md` (a CRM node's contact and persona templates), as a template: its `YYYY-...` timestamps and placeholder references are not errors
 - never repair content silently
