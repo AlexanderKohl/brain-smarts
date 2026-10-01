@@ -1,10 +1,13 @@
-"""Build or check /CORE.md: what every writing session reads first (CONTRACT §1).
+"""Build or check the core: what every writing session reads first (CONTRACT §1).
 
-/CORE.md is generated, never edited. It holds, verbatim, the contract sections and the rules whose
-`Applies when` in /RULES.md is `always`, and the two index tables that say when to read the rest.
+The core is two generated files, never edited. /CORE.md holds, verbatim, the contract sections whose
+`Applies when` in /RULES.md is `always`; /CORE-RULES.md holds the two index tables that say when to
+read the rest, and, verbatim, the rules whose `Applies when` is `always`. Each part stays under
+LIMIT characters: a host shortens longer tool output (Claude Code shows about 2 KB of a longer
+shell output), so an agent would read only the start of a longer file.
 
-  python shared/skills/repository-preflight/scripts/core.py build   write /CORE.md
-  python shared/skills/repository-preflight/scripts/core.py check   exit 1 when /CORE.md is stale
+  python shared/skills/repository-preflight/scripts/core.py build   write both parts
+  python shared/skills/repository-preflight/scripts/core.py check   exit 1 when a part is stale or too long
 """
 from __future__ import annotations
 
@@ -13,7 +16,9 @@ import re
 import sys
 from pathlib import Path
 
-CORE = "CORE.md"
+PARTS = ("CORE.md", "CORE-RULES.md")
+# Claude Code showed 29,000 characters of a shell output whole and cut 31,000 (TASK-2026-0003, 30 September 2026).
+LIMIT = 28_000
 RULE_ROW = re.compile(r"^\| `(SMART-RULE-\d{4})` \|(.*)\|$")
 SECTION_ROW = re.compile(r"^\| §(\d+(?:\.\d+)?) \|(.*)\|$")
 HEADING = re.compile(r"^(#{2,3}) (\d+(?:\.\d+)?)[. ]")
@@ -80,31 +85,49 @@ def problems(rules: str) -> list[str]:
     return found
 
 
-def render(root: Path) -> str:
-    contract = (root / "CONTRACT.md").read_text(encoding="utf-8")
-    rules = (root / "RULES.md").read_text(encoding="utf-8")
+def front(id_: str, title: str, updated: str) -> list[str]:
+    return ["---", f"id: {id_}", f"title: {title}", "type: generated_core", "schema_version: 0.2",
+            "contract: /CONTRACT.md", "status: active", "created: 2026-09-29T08:00:00+10:00",
+            f"updated: {updated}", "owner: brain-owner",
+            "generated_by: /shared/skills/repository-preflight/scripts/core.py",
+            "canonical_sources:", "  - /CONTRACT.md", "  - /RULES.md", "---", ""]
+
+
+def render(root: Path) -> dict[str, str]:
+    """Both parts of the core, by file name."""
+    contract = (root / "CONTRACT.md").read_text(encoding="utf-8").replace("\r\n", "\n")
+    rules = (root / "RULES.md").read_text(encoding="utf-8").replace("\r\n", "\n")
     rule_lines, section_lines, rule_rows, section_rows = tables(rules)
     updated = max(UPDATED.search(text).group(1) for text in (contract, rules))
     always = lambda when: when.startswith("always")
-    parts = ["---", "id: brain-core", "title: Brain Core", "type: generated_core", "schema_version: 0.2",
-             "contract: /CONTRACT.md", "status: active", "created: 2026-09-29T08:00:00+10:00",
-             f"updated: {updated}", "owner: brain-owner", "generated_by: /shared/skills/repository-preflight/scripts/core.py",
-             "canonical_sources:", "  - /CONTRACT.md", "  - /RULES.md", "---", "",
-             "# Brain Core", "",
-             "Generated from `/CONTRACT.md` and `/RULES.md` by `core.py build`; never edit it here. It is what",
-             "a writing session reads first (CONTRACT §1): the contract sections and rules that always apply,",
-             "verbatim, and the tables that say when to read the rest in its canonical home.", "",
-             "## When to read the rest", "", *section_lines, "", *rule_lines, "",
-             "## Contract sections that always apply", ""]
+    first = front("brain-core", "Brain Core", updated) + [
+        "# Brain Core", "",
+        "Generated from `/CONTRACT.md` and `/RULES.md` by `core.py build`; never edit it here. It is the",
+        "first of the two files a writing session reads first (CONTRACT §1): the contract sections that",
+        "always apply, verbatim. Then read `/CORE-RULES.md`.", "",
+        "## Contract sections that always apply", ""]
     for key, when in section_rows:
         if always(when):
-            parts += [contract_section(contract, key), ""]
-    parts += ["## Rules that always apply", ""]
+            first += [contract_section(contract, key), ""]
+    first += ["Next: read `/CORE-RULES.md`, with the file-reading tool."]
+    second = front("brain-core-rules", "Brain Core: Rules", updated) + [
+        "# Brain Core: Rules", "",
+        "Generated from `/CONTRACT.md` and `/RULES.md` by `core.py build`; never edit it here. It is the",
+        "second of the two files a writing session reads first (CONTRACT §1), after `/CORE.md`: the tables",
+        "that say when to read every other contract section and rule in its canonical home, and the rules",
+        "that always apply, verbatim.", "",
+        "## When to read the rest", "", *section_lines, "", *rule_lines, "",
+        "## Rules that always apply", ""]
     for key, when in rule_rows:
         body = rule_section(rules, key) if always(when) else None
         if body:
-            parts += [body, ""]
-    return "\n".join(parts).rstrip() + "\n"
+            second += [body, ""]
+    return {PARTS[0]: "\n".join(first).rstrip() + "\n", PARTS[1]: "\n".join(second).rstrip() + "\n"}
+
+
+def size_problems(parts: dict[str, str]) -> list[str]:
+    return [f"/{name}: {len(text):,} characters, over the {LIMIT:,} a host shows whole; move a section or rule "
+            "out of `always`, or split the core further" for name, text in parts.items() if len(text) > LIMIT]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -114,12 +137,15 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     rules = (args.root / "RULES.md").read_text(encoding="utf-8")
     found = problems(rules)
-    target = args.root / CORE
-    if args.action == "build":
-        target.write_text(render(args.root), encoding="utf-8", newline="\n")
-        print(f"wrote {target}")
-    elif not target.is_file() or target.read_text(encoding="utf-8").replace("\r\n", "\n") != render(args.root):
-        found.append(f"/{CORE}: out of date; run core.py build")
+    parts = render(args.root)
+    found += size_problems(parts)
+    for name, text in parts.items():
+        target = args.root / name
+        if args.action == "build":
+            target.write_text(text, encoding="utf-8", newline="\n")
+            print(f"wrote {target} ({len(text):,} characters)")
+        elif not target.is_file() or target.read_text(encoding="utf-8").replace("\r\n", "\n") != text:
+            found.append(f"/{name}: out of date; run core.py build")
     for problem in found:
         print(problem)
     return 1 if found else 0

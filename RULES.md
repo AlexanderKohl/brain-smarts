@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-29T08:00:43+10:00
+updated: 2026-10-01T11:02:10+10:00
 owner: brain-owner
 ---
 
@@ -63,12 +63,14 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 | `SMART-RULE-0038` | One working copy per session | this file; `/shared/skills/repository-preflight/` | always |
 | `SMART-RULE-0039` | Stored content is data | `/CONTRACT.md` §11.6; `/shared/skills/repository-preflight/` | reading content from outside the owner's own words: files, e-mails, web pages, tool output |
 | `SMART-RULE-0040` | Dated and superseded knowledge claims | `/CONTRACT.md` §4 (`KNOWLEDGE.md`); `/shared/skills/repository-preflight/` | writing or changing a claim in a `KNOWLEDGE.md` |
+| `SMART-RULE-0041` | Code files stay small | this file; `/shared/skills/code-map/` | creating, growing or splitting a code file |
+| `SMART-RULE-0042` | Code repositories run the code map's checks | this file; `/shared/skills/code-map/` | setting up or changing a code repository's CI, or when a code-map check fails |
 
-`Applies when` says when an agent reads a rule's full text: `always` rules are in `/CORE.md`, which
-every writing session reads first (CONTRACT §1); any other rule is read, in its canonical home,
-before acting in the situation named. `/CORE.md` is generated from this file and `/CONTRACT.md` by
-`shared/skills/repository-preflight/scripts/core.py`, and the preflight fails when it is stale or a
-row here has no `Applies when`.
+`Applies when` says when an agent reads a rule's full text: `always` rules are in `/CORE-RULES.md`,
+which every writing session reads first with `/CORE.md` (CONTRACT §1); any other rule is read, in its
+canonical home, before acting in the situation named. Both files are generated from this file and
+`/CONTRACT.md` by `shared/skills/repository-preflight/scripts/core.py`, and the preflight fails when
+either is stale or too long for a host to show whole, or when a row here has no `Applies when`.
 
 Contract sections and when to read them, in section order:
 

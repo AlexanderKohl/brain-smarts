@@ -386,245 +386,9 @@ def validate_tasks(
                 )
 
 
-def git(repo: Path, *args: str) -> list[str]:
-    return subprocess.run(
-        ["git", "-c", f"safe.directory={repo.as_posix()}", "-C", str(repo), *args],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.splitlines()
-
-
-def repository_changes(repo: Path) -> set[str]:
-    tracked = git(repo, "diff", "--name-only", "--diff-filter=ACMRTUXB", "HEAD")
-    untracked = git(repo, "ls-files", "--others", "--exclude-standard")
-    return {value.replace("\\", "/") for value in tracked + untracked}
-
-
-def is_own_repository(repo: Path) -> bool:
-    """True when `repo` is the top level of its own Git repository, not a folder of a parent."""
-    try:
-        top = git(repo, "rev-parse", "--show-toplevel")
-    except (OSError, subprocess.CalledProcessError):
-        return False
-    return bool(top) and Path(top[0]).resolve() == repo.resolve()
-
-
-def git_failure(exc: Exception) -> str:
-    """Why Git could not answer, without the command line: it carries this machine's paths, and
-    warnings are written into the committed manifest (SMART-RULE-0008)."""
-    if isinstance(exc, subprocess.CalledProcessError):
-        return f"git exited with status {exc.returncode}"
-    return f"git could not run ({type(exc).__name__})"
-
-
-def changed_paths(root: Path) -> tuple[set[str], list[str]]:
-    """Changed paths relative to the brain root, across both repositories.
-
-    Memory paths carry the `memory/` prefix. Returns the paths and any problems met, one
-    per repository that could not be read.
-    """
-    problems: list[str] = []
-    changed: set[str] = set()
-    try:
-        changed |= repository_changes(root)
-    except (OSError, subprocess.CalledProcessError) as exc:
-        problems.append(f"mechanics repository: {git_failure(exc)}")
-    memory = memory_root(root)
-    if memory is not None:
-        if not is_own_repository(memory):
-            problems.append(
-                f"{MEMORY_PREFIX} is not its own Git repository; memory governance changes not checked"
-            )
-        else:
-            try:
-                changed |= {
-                    f"{MEMORY_DIR}/{value}" for value in repository_changes(memory)
-                }
-            except (OSError, subprocess.CalledProcessError) as exc:
-                problems.append(f"{MEMORY_PREFIX} repository: {git_failure(exc)}")
-    return changed, problems
-
-
-def is_protected(path: str) -> bool:
-    """Protected governance under CONTRACT §13.2, by brain-root-relative path."""
-    # Proposal areas sit outside the inherited rule path: the whole governance/ folder of each
-    # repository.
-    proposal_areas = ("governance/", f"{MEMORY_DIR}/governance/")
-    if path.startswith(proposal_areas):
-        return False
-    return (
-        path == "CONTRACT.md"
-        or path == "BOOTSTRAP.md"
-        or path == "README.md"
-        or path == "AGENTS.md"
-        or path.endswith("/AGENTS.md")
-        or path.endswith("/RULES.md")
-        or path == "RULES.md"
-        or path == "shared/templates/node-RULES.template.md"
-        or path.startswith("shared/skills/repository-preflight/")
-        or "governance" in path
-    )
-
-
-def validate_governance(
-    root: Path, records: dict[Path, dict[str, Any]], result: Result
-) -> None:
-    changed, problems = changed_paths(root)
-    for problem in problems:
-        result.warnings.append(
-            f"Git change state unavailable; protected-governance coverage not checked: {problem}"
-        )
-
-    protected = {"/" + path for path in changed if is_protected(path)}
-    if not protected:
-        return
-
-    covered: set[str] = set()
-    proposal_roots = [root.joinpath(*parts) for parts in PROPOSAL_ROOTS]
-    for path, metadata in records.items():
-        if not any(proposals in path.parents for proposals in proposal_roots):
-            continue
-        if metadata.get("type") != "governance_proposal":
-            continue
-        if metadata.get("status") not in ACCEPTED_PROPOSAL_STATUSES:
-            continue
-        if not metadata.get("accepted_by") or not metadata.get("accepted_at"):
-            result.errors.append(
-                f"{root_path(path, root)}: accepted proposal lacks acceptance evidence"
-            )
-            continue
-        targets = metadata.get("target_files", [])
-        if isinstance(targets, list):
-            covered.update(str(target) for target in targets)
-
-    # CONTRACT 13.2: acceptance is enforced where a change becomes active. On a proposal/*
-    # branch, a file an open proposal lists is that proposal's draft diff, reported as a warning.
-    branch = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=root, capture_output=True,
-                            text=True).stdout.strip()
-    drafted: set[str] = set()
-    if branch.startswith("proposal/"):
-        for path, metadata in records.items():
-            if (any(proposals in path.parents for proposals in proposal_roots)
-                    and metadata.get("type") == "governance_proposal"
-                    and metadata.get("status") in ("proposed", "draft")
-                    and isinstance(metadata.get("target_files"), list)):
-                drafted.update(str(target) for target in metadata["target_files"])
-
-    for path in sorted(protected - covered):
-        if path in drafted:
-            result.warnings.append(f"{path}: protected governance drafted on {branch}; not active until accepted and merged")
-            continue
-        result.errors.append(
-            f"{path}: changed protected governance is not covered by an accepted proposal"
-        )
-
-
-def manifest_paths(root: Path) -> dict[str, Path]:
-    paths = {"mechanics": root / MANIFEST_NAME}
-    memory = memory_root(root)
-    if memory is not None:
-        paths["memory"] = memory / MANIFEST_NAME
-    library = library_root(root)
-    if library is not None:
-        paths["library"] = library / MANIFEST_NAME
-    return paths
-
-
-def validate_manifest(
-    root: Path, result: Result, writing: bool
-) -> None:
-    for layer, path in manifest_paths(root).items():
-        display = root_path(path, root)
-        if not path.exists():
-            if writing:
-                continue
-            if layer == "mechanics":
-                result.errors.append(f"{display}: missing")
-            else:
-                result.warnings.append(
-                    f"{display}: missing; create it with --write-manifest"
-                )
-            continue
-        try:
-            manifest = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            result.errors.append(f"{display}: {exc}")
-            continue
-        if (
-            not writing
-            and manifest.get("contract_version") != result.contract_version
-        ):
-            result.errors.append(
-                f"{display}: contract_version does not match /CONTRACT.md"
-            )
-
-
-def write_manifests(root: Path, result: Result) -> None:
-    """Write one manifest per repository, each holding only its own layer's messages."""
-    now = datetime.now().astimezone().isoformat(timespec="seconds")
-    names = {"mechanics": "Portable AI Brain – mechanics", "memory": "Portable AI Brain – memory",
-             "library": "Portable AI Brain – skill library"}
-    for layer, path in manifest_paths(root).items():
-        created = now
-        name = names[layer]
-        if path.exists():
-            try:
-                existing = json.loads(path.read_text(encoding="utf-8"))
-                created = existing.get("created", created)
-                name = existing.get("name", name)
-            except (OSError, json.JSONDecodeError):
-                pass
-        manifest = {
-            "name": name,
-            "layer": layer,
-            "created": created,
-            "updated": now,
-            "validated_at": now,
-            "contract_version": result.contract_version,
-            "markdown_files": result.layer_markdown_files.get(layer, 0),
-            "unique_ids": result.layer_unique_ids.get(layer, 0),
-            "validation_errors": [m for m in result.errors if message_layer(m) == layer],
-            "validation_warnings": [m for m in result.warnings if message_layer(m) == layer],
-            "root_contract": "/CONTRACT.md",
-            "validator": VALIDATOR_PATH,
-        }
-        temporary = path.with_suffix(path.suffix + ".tmp")
-        # LF on every platform, so a rewrite on Windows is not a whole-file change.
-        temporary.write_text(
-            json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
-            encoding="utf-8",
-            newline="\n",
-        )
-        temporary.replace(path)
-
-
-def shareable_repositories(root: Path) -> list[Path]:
-    """The repositories that must hold no personal data: the mechanics, and the skill library when
-    it is checked out (CONTRACT §3.4)."""
-    library = root / LIBRARY_DIR
-    return [root] + ([library] if library.is_dir() else [])
-
-
-def validate_personal_data(root: Path, result: Result) -> None:
-    """SMART-RULE-0008: a shareable repository is written clean, and this confirms it. Owner terms
-    come from memory at run time; without memory only the patterns run."""
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    import personal_data
-
-    for repo in shareable_repositories(root):
-        hits, problems = personal_data.check_repository(root, repo)
-        result.errors.extend(f"personal-data exemptions: {problem}" for problem in problems)
-        # The value itself is withheld: errors are written into the committed manifest, and
-        # repeating it there would copy the leak. File, line and kind are enough to find it;
-        # `skill_exchange.py scrub <file>` prints the value on the console only.
-        for file, line, kind, _value in hits:
-            display = root_path(Path(file), root)
-            result.errors.append(f"{display}:{line}: personal data ({kind}); value withheld")
-
-
 def validate_core(root: Path, errors: list[str]) -> None:
-    """CONTRACT §1 and §15: /CORE.md is current, and every index row says when it applies."""
+    """CONTRACT §1 and §15: the core's parts are current and short enough to be read whole, and every
+    index row says when it applies."""
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import core
 
@@ -633,14 +397,16 @@ def validate_core(root: Path, errors: list[str]) -> None:
     if not rules.is_file() or not (root / "CONTRACT.md").is_file() or "| Applies when |" not in rules.read_text(encoding="utf-8"):
         return
     errors.extend(core.problems(rules.read_text(encoding="utf-8")))
-    target = root / core.CORE
     try:
-        current = target.is_file() and target.read_text(encoding="utf-8") == core.render(root)
+        parts = core.render(root)
     except ValueError as exc:
-        errors.append(f"/{core.CORE}: {exc}")
+        errors.append(f"/{core.PARTS[0]}: {exc}")
         return
-    if not current:
-        errors.append(f"/{core.CORE}: out of date with /CONTRACT.md and /RULES.md; run core.py build")
+    errors.extend(core.size_problems(parts))
+    for name, text in parts.items():
+        target = root / name
+        if not target.is_file() or target.read_text(encoding="utf-8").replace("\r\n", "\n") != text:
+            errors.append(f"/{name}: out of date with /CONTRACT.md and /RULES.md; run core.py build")
 
 
 def run(root: Path, writing: bool) -> Result:
@@ -663,6 +429,8 @@ def run(root: Path, writing: bool) -> Result:
     validate_pointer_files(root, result.errors)
     validate_knowledge_provenance(root, result.errors)
     validate_knowledge_review_dates(root, result.errors)
+    from file_sizes import validate_file_sizes
+    validate_file_sizes(root, result.errors)
     validate_core(root, result.errors)
     validate_manifest(root, result, writing)
     if writing:

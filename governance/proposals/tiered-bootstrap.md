@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 status: proposed
 owner: brain-owner
 created: 2026-09-29T06:36:01+10:00
-updated: 2026-09-29T08:20:35+10:00
+updated: 2026-10-01T11:06:07+10:00
 rule_id: null
 accepted_by: null
 accepted_at: null
@@ -20,6 +20,7 @@ target_files:
   - /CLAUDE.md
   - /CONTRACT.md
   - /CORE.md
+  - /CORE-RULES.md
   - /RULES.md
   - /repository-manifest.json
   - /shared/skills/delegate-work/SKILL.md
@@ -40,10 +41,12 @@ bump of the library and memory manifests on the same branch name there. Nothing 
 ## Plain-language summary
 
 Today every session that may write reads the whole contract and the whole of `/RULES.md` first:
-117 KB with the owner files, about 29k tokens, whether it edits one task or builds software. After
-this change it reads one generated file, `/CORE.md` (41 KB), and the owner files: 49 KB, about 12k
-tokens, 58 % less. `/CORE.md` holds, word for word, the contract sections and rules that always
-apply, and two tables that say, for every other section and rule, the situation in which to read it.
+114 KB with the owner files, about 28k tokens, whether it edits one task or builds software. After
+this change it reads two generated files, `/CORE.md` and `/CORE-RULES.md` (about 21 KB each), and
+the owner files: 51 KB, about 13k tokens, 55 % less. They hold, word for word, the contract sections
+and rules that always apply, and two tables that say, for every other section and rule, the
+situation in which to read it. Each is short enough for a host to show whole, and every pointer says
+to read the bootstrap files with the host's file-reading tool, not a shell command.
 A read-only question reads only what it needs. No rule is dropped or reworded; only when it is read
 changes.
 
@@ -57,6 +60,26 @@ changes.
 3. **Part 6 cost more, not less.** Loading rules where they apply was 40–42k tokens on light
    sessions against 38k. It added session hooks and extra steps; smaller files did not mean fewer
    tokens.
+
+## Revision of 1 October 2026: two parts, and the file-reading tool
+
+TASK-2026-0003's probe (31 runs in Claude Code on the web, 30 September 2026) found that Claude Code
+replaces a shell output of more than about 30,000 characters with a 2 KB preview and the path of the
+saved output (29,000 shown whole, 31,000 cut). 12 of the 31 runs read the bootstrap files with a
+shell command, and only 4 of those opened every saved output; one model opened none and answered as
+if it had read the contract. The Read tool showed every file whole. The one-file core of
+29 September, 41 KB, would have been cut the same way. So, at the owner's answer of 1 October:
+
+1. The core is two files: `/CORE.md` holds the contract sections that always apply; `/CORE-RULES.md`
+   holds the two tables and the rules that always apply. Each is about 21,000 characters.
+2. `core.py` fails, and so the preflight fails, when either part is longer than 28,000 characters.
+3. CONTRACT §1, `/BOOTSTRAP.md`, `/CLAUDE.md` and `/AGENTS.md` say to read the bootstrap files with
+   the host's file-reading tool, not a shell command such as `cat`.
+4. The branch is brought up to date with `main` (the validator's split into modules, and
+   `SMART-RULE-0041` and `0042`, each with its `Applies when`).
+
+Codex, Cursor and Claude Code on Windows were not probed; their limits may differ, and the retest
+records how each arm's sessions read the core.
 
 ## Current wording and exact diff
 
@@ -73,11 +96,14 @@ The branch holds the exact diff; the parts that change behaviour:
     session, or targeted reads of known paths – and nothing else."
   - "**Full bootstrap** (required before the first creation, change or deletion of brain content, a
     governance change, use of a skill with side effects, or when applicable policy is unclear): read
-    `/CORE.md`, then the owner profile `/memory/OWNER.md` and the owner-layer rules
-    `/memory/RULES.md`, then inherited node `RULES.md` files down to the active node, then the
-    active node's `README.md`, `STATE.md` and relevant dependencies before acting. `/CORE.md` is
-    generated from this contract and `/RULES.md`: it holds, verbatim, the sections and rules that
-    always apply, and the tables that say when every other section and rule applies."
+    `/CORE.md` and `/CORE-RULES.md`, then the owner profile `/memory/OWNER.md` and the owner-layer
+    rules `/memory/RULES.md`, then inherited node `RULES.md` files down to the active node, then the
+    active node's `README.md`, `STATE.md` and relevant dependencies before acting. The two files are
+    generated from this contract and `/RULES.md`: `/CORE.md` holds, verbatim, the sections of this
+    contract that always apply; `/CORE-RULES.md` holds the tables that say when every other section
+    and rule applies, and, verbatim, the rules that always apply. Each is short enough for a host to
+    show whole; read them, and every bootstrap file, with the host's file-reading tool (for example
+    Read), not a shell command such as `cat`: a shell may show only the start of a long file."
   - "**Read by situation.** Before acting in a situation named under `Applies when` in those
     tables, read that section of this contract, or that rule in its canonical home, in full. When
     it is unclear whether a row applies, read it."
@@ -91,26 +117,28 @@ The branch holds the exact diff; the parts that change behaviour:
   needs (item 4 above) has not been done in the current working session, do it before using the
   file."
 - **CONTRACT §14, steps 1 and 4:** "read this contract" becomes "choose the bootstrap tier; for full
-  bootstrap read `/CORE.md` (section 1)"; step 4 reads a contract section or `/RULES.md` rule
-  "when its `Applies when` fits the work".
-- **CONTRACT §15:** adds "`/CORE.md` is current with this contract and `/RULES.md`
-  (`core.py check`)".
+  bootstrap read `/CORE.md` and `/CORE-RULES.md` (section 1)"; step 4 reads a contract section or
+  `/RULES.md` rule "when its `Applies when` fits the work".
+- **CONTRACT §15:** adds "`/CORE.md` and `/CORE-RULES.md` are current with this contract and
+  `/RULES.md` (`core.py check`)".
 - **`/RULES.md`:** the identifier table gains an `Applies when` column; a new table lists every
   contract section with its `Applies when`. `always` rules: `SMART-RULE-0003`, `0009`, `0010`,
   `0014`, `0027`, `0034`, `0036`, `0038`; `always` contract sections: §1, §2, §3.4–§3.6, §5, §6,
   §13, §14. No rule text changes.
 - **`/BOOTSTRAP.md`, `/AGENTS.md`, `/CLAUDE.md`, delegate-work's successor steps:** choose the tier
-  first; a writing session reads `/CORE.md`, not the contract and `/RULES.md` whole.
-- **`core.py`** builds `/CORE.md`; the **preflight** fails when it is stale, a row has no
-  `Applies when`, or a rule heading has no row; **`session.py start`** prints the reading list.
+  first; a writing session reads `/CORE.md` and `/CORE-RULES.md` with the file-reading tool, not
+  the contract and `/RULES.md` whole.
+- **`core.py`** builds both parts; the **preflight** fails when a part is stale or longer than
+  28,000 characters, a row has no `Applies when`, or a rule heading has no row; **`session.py
+  start`** prints the reading list.
 
 ## Change from the agreed design
 
 One point, for simplicity: the `Applies when` text sits in a column of the existing index table in
 `/RULES.md`, not on a line under each rule heading. Rules whose canonical home is the contract or a
 skill have no heading in `/RULES.md`, so a column is the one place every rule already has a row.
-The generated file is `/CORE.md` (the index plus the always-applicable text, one read) rather than
-an index alone, so a writing session needs three reads instead of seven.
+The generated core holds the index and the always-applicable text rather than an index alone, so a
+writing session needs four reads instead of seven (two since the revision of 1 October).
 
 ## Reason
 
@@ -138,8 +166,9 @@ too, and showed how not to do it.
 
 ## Migration
 
-None for records. At acceptance: merge the branch in each repository, rebuild `/CORE.md`, write the
-manifests, update the owner's global host pointer.
+None for records. At acceptance: merge the branch in each repository, rebuild the core, write the
+manifests, update the owner's global host pointer. `new_contract_version` is 2.3.0; if
+`PROPOSAL-placeholder-and-mirror-nodes` is accepted first, this change becomes 2.4.0.
 
 ## Rollback
 
@@ -147,9 +176,10 @@ Revert the merge commits; the full read is today's behaviour and needs nothing e
 
 ## Validation
 
-Done on the branch: `core.py check` passes; preflight tests 99 of 99 pass, including five new tests
-(the core holds what always applies and both tables; a row without `Applies when` fails; a rule
-heading without a row fails; a stale core fails and a fresh one passes; the real core is current).
+Done on the branch: `core.py check` passes; the preflight's tests pass, including six for the core
+(the parts hold what always applies and both tables; a part over 28,000 characters fails; a row
+without `Applies when` fails; a rule heading without a row fails; a stale part fails and a fresh one
+passes; the real core is current).
 
 To do before acceptance, in the before-and-after harness with the first test's scenarios, today's
 brain (A), a repeat of A as control, and this change (B), pass marks fixed now:
@@ -160,6 +190,8 @@ brain (A), a repeat of A as control, and this change (B), pass marks fixed now:
 4. Trigger checks: in the scenarios that need them, B reads the triggered rule before acting
    (commit, delegation, external write, software change), and a scenario that starts as a question
    and turns into a write reads the core before the first write.
+5. Reading: every B session that bootstraps reads both parts whole (with the file-reading tool, or
+   a shell output short enough to be shown whole).
 
 Total tokens processed are measured, not final context, because the two differ.
 

@@ -8,7 +8,7 @@ contract_version: 2.3.0
 contract: /CONTRACT.md
 canonical: true
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-29T08:00:43+10:00
+updated: 2026-10-01T11:02:10+10:00
 owner: brain-owner
 ---
 
@@ -25,7 +25,7 @@ Every AI agent, script or person working anywhere in the brain must:
 3. Treat an absolute bootstrap path as a location hint, not repository authority. Verify that the path exists and contains this contract.
 4. Choose a bootstrap tier for the current turn, before reading further:
    - **Scoped bootstrap** (allowed only for answer-only / read-only fact retrieval with no durable writes): read what the answer needs – injected host context, a file already read in this session, or targeted reads of known paths – and nothing else.
-   - **Full bootstrap** (required before the first creation, change or deletion of brain content, a governance change, use of a skill with side effects, or when applicable policy is unclear): read `/CORE.md`, then the owner profile `/memory/OWNER.md` and the owner-layer rules `/memory/RULES.md`, then inherited node `RULES.md` files down to the active node, then the active node's `README.md`, `STATE.md` and relevant dependencies before acting. `/CORE.md` is generated from this contract and `/RULES.md`: it holds, verbatim, the sections and rules that always apply, and the tables that say when every other section and rule applies.
+   - **Full bootstrap** (required before the first creation, change or deletion of brain content, a governance change, use of a skill with side effects, or when applicable policy is unclear): read `/CORE.md` and `/CORE-RULES.md`, then the owner profile `/memory/OWNER.md` and the owner-layer rules `/memory/RULES.md`, then inherited node `RULES.md` files down to the active node, then the active node's `README.md`, `STATE.md` and relevant dependencies before acting. The two files are generated from this contract and `/RULES.md`: `/CORE.md` holds, verbatim, the sections of this contract that always apply; `/CORE-RULES.md` holds the tables that say when every other section and rule applies, and, verbatim, the rules that always apply. Each is short enough for a host to show whole; read them, and every bootstrap file, with the host's file-reading tool (for example Read), not a shell command such as `cat`: a shell may show only the start of a long file.
    - **Read by situation.** Before acting in a situation named under `Applies when` in those tables, read that section of this contract, or that rule in its canonical home, in full. When it is unclear whether a row applies, read it.
    - **Escalation.** A turn that began scoped escalates to full bootstrap the moment it is about to write, take a side effect, use a credential or meet policy doubt: before that first action, never after it. A write to a brain repository begins with `session.py start` (`SMART-RULE-0038`), which prints the full-bootstrap reading list, so every agent in every host meets the escalation at the same step.
 5. Stop and report the problem if the contract cannot be found or read, or if competing location hints identify different contracts.
@@ -874,7 +874,7 @@ Every accepted contract change must identify its previous and new contract versi
 
 When an agent starts work:
 
-1. choose the bootstrap tier; for full bootstrap read `/CORE.md` (section 1)
+1. choose the bootstrap tier; for full bootstrap read `/CORE.md` and `/CORE-RULES.md` (section 1)
 2. read `/memory/OWNER.md` when memory is present
 3. establish the active node
 4. read inherited rules (`/memory/RULES.md`, then node rules; a section of this contract or a `/RULES.md` rule when its `Applies when` fits the work) and active state
@@ -909,7 +909,7 @@ Before finishing a substantive update, verify:
 - protected governance changes have an accepted proposal
 - the active `contract_version` is recorded in the repository manifest of each brain repository changed (`/repository-manifest.json`, `/library/repository-manifest.json` and `/memory/repository-manifest.json`)
 - no personal data has entered the mechanics repository or the skill library (section 3.4)
-- `/CORE.md` is current with this contract and `/RULES.md` (`core.py check`)
+- `/CORE.md` and `/CORE-RULES.md` are current with this contract and `/RULES.md` (`core.py check`)
 - the repository preflight validator passes
 - every separable, validated, agent-owned durable change has been committed at the required logical checkpoint
 - the final report identifies each resulting commit and push status, or gives the exact permitted reason no commit was created
