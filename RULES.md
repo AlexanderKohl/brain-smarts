@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-10-01T12:45:21+10:00
+updated: 2026-10-01T23:09:40+10:00
 owner: brain-owner
 ---
 
@@ -65,6 +65,7 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 | `SMART-RULE-0040` | Dated and superseded knowledge claims | `/CONTRACT.md` §4 (`KNOWLEDGE.md`); `/shared/skills/repository-preflight/` |
 | `SMART-RULE-0041` | Code files stay small | this file; `/shared/skills/code-map/` |
 | `SMART-RULE-0042` | Code repositories run the code map's checks | this file; `/shared/skills/code-map/` |
+| `SMART-RULE-0043` | Work moves between threads through cards | this file; `/shared/skills/delegate-work/`; `/shared/skills/tasks/` |
 
 ## SMART-RULE-0010 – Communication efficiency
 
@@ -205,9 +206,30 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
   context threshold: the best moment is immediately after a validated, committed increment and
   **before** starting a new stage of work, because that is when the repository and the agent's
   understanding agree. Take the checkpoint at whichever comes first – the natural boundary, or
-  roughly the last fifth of the context window.
+  the drain threshold below.
 - Never begin a new stage of work when the remaining context is unlikely to carry it to a
   committed, validated state. Checkpoint and say so instead.
+- **The conductor stops dispatching before its context runs out; the owner does not have to
+  find the moment.** Before opening a delegation run or dispatching a packet, the conductor
+  reads its context size from the host and passes it to the delegation script
+  (`--context-tokens`). Up to 750 000 tokens it dispatches freely. From 750 000 it **drains**:
+  no new run; the workers in flight finish, their results are merged, the checkpoint is written
+  and the handover prompt given. From 900 000 no new packet either, and no new stage of its own
+  work, until the checkpoint is committed. The thresholds are a guard rail, not a working
+  budget: a conductor that only conducts (`SMART-RULE-0024`) rarely reaches them, and reaching
+  them is itself a finding to record. The delegation script refuses a run or packet past its
+  threshold; only the owner can override it, for a named run or packet, and the override and
+  its reason are recorded in the run.
+- **An automatic compaction of the conductor's context is a missed checkpoint.** The host hook
+  marks it; dispatching stays closed until the conductor has re-read `/CONTRACT.md`,
+  `/RULES.md`, `/memory/RULES.md` and the owning node's `## Handover`, written the checkpoint,
+  committed, and cleared the marker (`delegation.py checkpoint-done`). The conductor tells the
+  owner in its next reply that a compaction happened.
+- On a host that cannot report the context size, the conductor passes `--context-unknown`
+  with the reason, and drains at its first compaction or after its fourth run in the thread,
+  whichever comes first.
+- Each run records the context size when it opens and when it closes, so the thresholds are
+  tuned from measurements recorded under `/memory/projects/brain-development/`, never by feel.
 - A checkpoint updates, in the owning node: `STATE.md` with the current position, what is in
   flight, what is uncommitted and where, and the exact next action; `KNOWLEDGE.md` with durable
   facts a later session could not re-derive cheaply – especially external-system behaviour
@@ -324,6 +346,13 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
   the conductor can use without the worker's reasoning. Before dispatching, state in one line
   why parallel workers beat doing the work in sequence. Tightly coupled reasoning, sequential
   implementation and work that needs constant shared state stay with one agent.
+- **The conductor's context is for coordination: it reads results, not sources.** A conductor
+  writes packets, reads result records, routes them, reviews diffs, merges, and writes the
+  shared files (state, log, tasks, indexes) and the commit. Any work that needs reading more
+  than a packet and its result – a source file, a transcript, a log, a page, a tool's output –
+  goes to a worker or a team thread, however small it looks: one such detour costs more context
+  than ten dispatches. A conductor that reads a source says so in the run's log entry and why;
+  the context size recorded on each run shows the cost.
 - Delegate through `/shared/skills/delegate-work/`: a work packet that references canonical
   files rather than copying prose, and a result record the worker writes back. Packets and
   results are ephemeral instrumentation under `/temp/delegation/`, not task records. Work that
@@ -560,6 +589,36 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 - CI takes the code map from the brain's mechanics at a fixed commit, raised on purpose, so a
   change to the code map cannot break a repository's build unseen.
 - Agents may use the map to answer questions (`show`, `find`), but need not.
+
+## SMART-RULE-0043 – Work moves between threads through cards
+
+- A body of work that several threads share runs as a **scrum**: one **scrum-master thread**
+  and one **team thread** per project or area. The scrum master owns the boards, the
+  priorities and the owner's questions, assigns cards to teams and watches work in progress;
+  it never reads code, dispatches workers or reviews work, so its context stays small for
+  weeks. A team thread is a conductor under `SMART-RULE-0024` for the cards of its team: it
+  pulls a card, dispatches the workers it needs, reviews, merges to its project's branch and
+  closes the card.
+- A **card** is a task record under `/memory/tasks/` with a `team`. A team thread takes a card
+  by setting `claimed_by` to its session name, `claimed_at` from the clock and
+  `status: in_progress`, and committing that record on its own (`tasks.py claim`); a conflict
+  on that commit means another thread took it first, and the loser moves on. A card leaving
+  `in_progress` loses its claim (`tasks.py release`, or completion). The task record stays the
+  only record: who holds a card lives nowhere else.
+- **Work in progress is limited.** A team holds at most `tasks.wip_limit` cards in
+  `in_progress` (two, until a measured trial says otherwise), and the scrum master assigns no
+  card past it. A card that waits on another team's card says so in `waiting_on`; finishing
+  the first clears the second, and the board shows it.
+- A team thread acts only on a turn. It is woken by a message from the scrum master when a
+  card of its team becomes ready, or by its own slow check of the board (one short turn every
+  twenty to thirty minutes), never faster. A thread that finds nothing ready writes nothing.
+- A team thread hands over under `SMART-RULE-0019` when its own context fills. Its cards are
+  its handover: the successor claims them again under its own session name. The `## Handover`
+  of `/memory/projects/brain-development/STATE.md` names the scrum master and the live team
+  threads with their teams.
+- Start with two teams. The trial – cards closed per day, context sizes at open and close,
+  merge conflicts, owner interruptions – and its decision are recorded under
+  `/memory/projects/brain-development/` before a third team is added.
 
 ## Contract restatements
 
