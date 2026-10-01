@@ -7,13 +7,13 @@ contract: /CONTRACT.md
 status: proposed
 owner: brain-owner
 created: 2026-09-29T06:36:01+10:00
-updated: 2026-10-01T11:06:07+10:00
+updated: 2026-10-01T12:10:36+10:00
 rule_id: null
 accepted_by: null
 accepted_at: null
 implemented_at: null
-previous_contract_version: 2.2.0
-new_contract_version: 2.3.0
+previous_contract_version: 2.3.0
+new_contract_version: 2.4.0
 target_files:
   - /AGENTS.md
   - /BOOTSTRAP.md
@@ -148,7 +148,7 @@ too, and showed how not to do it.
 
 ## Scope and behavioural consequences
 
-- Every session in every host, and new owners. Contract 2.2.0 to 2.3.0 (minor: compatible;
+- Every session in every host, and new owners. Contract 2.3.0 to 2.4.0 (minor: compatible;
   changes when rules are read).
 - An agent must notice that a situation in the tables has arisen and read the rule then.
 - A host that injects the owner's own global pointer should point to `/BOOTSTRAP.md` rather than
@@ -167,8 +167,8 @@ too, and showed how not to do it.
 ## Migration
 
 None for records. At acceptance: merge the branch in each repository, rebuild the core, write the
-manifests, update the owner's global host pointer. `new_contract_version` is 2.3.0; if
-`PROPOSAL-placeholder-and-mirror-nodes` is accepted first, this change becomes 2.4.0.
+manifests, update the owner's global host pointer. Contract 2.3.0 to 2.4.0:
+`PROPOSAL-placeholder-and-mirror-nodes` took 2.3.0 on 1 October 2026.
 
 ## Rollback
 

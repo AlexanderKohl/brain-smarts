@@ -4,11 +4,11 @@ title: Portable AI Brain Contract
 type: contract
 status: active
 schema_version: 0.2
-contract_version: 2.3.0
+contract_version: 2.4.0
 contract: /CONTRACT.md
 canonical: true
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-10-01T11:02:10+10:00
+updated: 2026-10-01T12:10:36+10:00
 owner: brain-owner
 ---
 
