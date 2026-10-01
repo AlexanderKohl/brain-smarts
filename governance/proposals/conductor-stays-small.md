@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 status: proposed
 owner: brain-owner
 created: 2026-10-01T22:37:41+10:00
-updated: 2026-10-01T22:59:04+10:00
+updated: 2026-10-01T23:00:50+10:00
 rule_id: null
 accepted_by: null
 accepted_at: null
@@ -90,9 +90,9 @@ stage of work…"):
 > - **The conductor stops dispatching before its context runs out; the owner does not have to
 >   find the moment.** Before opening a delegation run or dispatching a packet, the conductor
 >   reads its context size from the host and passes it to the delegation script
->   (`--context-tokens`). Up to 250 000 tokens it dispatches freely. From 250 000 it **drains**:
+>   (`--context-tokens`). Up to 750 000 tokens it dispatches freely. From 750 000 it **drains**:
 >   no new run; the workers in flight finish, their results are merged, the checkpoint is written
->   and the handover prompt given. From 400 000 no new packet either, and no new stage of its own
+>   and the handover prompt given. From 850 000 no new packet either, and no new stage of its own
 >   work, until the checkpoint is committed. The thresholds are a guard rail, not a working
 >   budget: a conductor that only conducts (`SMART-RULE-0024`) rarely reaches them, and reaching
 >   them is itself a finding to record. The delegation script refuses a run or packet past its
@@ -162,7 +162,10 @@ with canonical home "this file; `/shared/skills/delegate-work/`; `/shared/skills
   duty to stop dispatching belongs to it, and a script that refuses is more reliable over several
   days than a sentence it may or may not remember.
 - A guard rail in tokens, not in percent of the window, because the evidence says quality falls
-  with length, not with fill; a 1 000 000-token window is headroom for safety, not a budget.
+  with length, not with fill. The author first suggested 250 000 and 400 000; the owner set
+  750 000 and 850 000 on 1 October 2026 ("250k is too early"), leaving about 120 000 tokens
+  before the host's own compaction at 970 000 for workers to finish and the checkpoint to be
+  written. The run records decide where they go from there.
 - "Results, not sources" is the change that makes the guard rail rarely matter: a conductor that
   conducts grows by roughly ten to twenty thousand tokens per worker cycle and lives for days.
 - Cards, claims and a work-in-progress limit let several threads share one board without a
