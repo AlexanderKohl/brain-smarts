@@ -405,6 +405,9 @@ class VaultTrayApp:
             except Exception:
                 pass
             time.sleep(0.1)
+        raise CredentialError(
+            "Vault Agent did not start within 5 seconds: its state file was not written."
+        )
 
     def _do_unlock(self, _icon: Any = None, _item: Any = None) -> None:
         if self._unlocked():

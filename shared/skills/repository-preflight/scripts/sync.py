@@ -1,22 +1,32 @@
 #!/usr/bin/env python3
 """Start from the latest (SMART-RULE-0034): bring every brain repository up to date with `origin`.
 
-    python shared/skills/repository-preflight/scripts/sync.py [--also <repo>]... [--json]
+    python shared/skills/repository-preflight/scripts/sync.py [--also <repo>]... [--no-merge] [--json]
 
 For the mechanics (the brain root), the skill library (`library/`) and the memory (`memory/`) –
 and any project repository named with `--also` – it fetches `origin` and, for the checked-out
 branch:
 
 - only behind, no uncommitted changes: fast-forwards it;
-- behind with uncommitted changes, or diverged (commits on both sides): changes nothing and says
-  so, because merging then needs the owner (SMART-RULE-0034);
+- diverged (commits on both sides), no uncommitted changes, a brain repository in the shared
+  checkout: merges it, through `session.py`'s merge – in a session copy whose branch begins at the
+  local commit, `origin` is merged in (a merge commit; a conflicting generated file is rebuilt),
+  preflight is run, the result is pushed (never forced, retried when `origin` moves on) and the
+  shared checkout is fast-forwarded to it. The shared checkout is never merged into. A conflict in
+  a hand-written file, a failed preflight or a push refused three times stops it: the copy is kept
+  with the merge in progress, the shared checkout is unchanged, and it says so;
+- diverged in a project repository (`--also`), in a session copy, or with `--no-merge`: changes
+  nothing and says so – a project repository follows its own merge routine, and a session copy is
+  merged by `session.py finish`;
+- behind or diverged with uncommitted changes: changes nothing and says so, because they may be
+  another session's work (SMART-RULE-0034);
 - ahead only: says how many commits are not pushed yet;
 - `origin` unreachable: says so.
 
-It never merges, rebases, resets, stashes or discards anything, and never pushes. Untracked files
+It never rebases, resets, stashes or discards anything, and never forces a push. Untracked files
 do not count as changes; a fast-forward that would overwrite one fails in Git and is reported.
-Exit code 0 when every repository is up to date (or was fast-forwarded), 1 when one needs the
-owner or could not be checked.
+Exit code 0 when every repository is up to date (or was fast-forwarded or merged), 1 when one
+needs attention or could not be checked.
 """
 
 from __future__ import annotations
@@ -48,8 +58,20 @@ def repositories(root: Path, also: list[Path]) -> list[tuple[str, Path]]:
     return found
 
 
-def sync_one(name: str, repo: Path) -> dict:
-    """What happened to one repository, as {name, state, detail, ok}."""
+def is_session_copy(repo: Path) -> bool:
+    """A linked worktree (a session copy), as opposed to the repository's main checkout."""
+    dirs = [git(repo, "rev-parse", "--path-format=absolute", flag).stdout.strip()
+            for flag in ("--git-dir", "--git-common-dir")]
+    return all(dirs) and Path(dirs[0]).resolve() != Path(dirs[1]).resolve()
+
+
+def sync_one(name: str, repo: Path, merge_from: Path | None = None, project: bool = False) -> dict:
+    """What happened to one repository, as {name, state, detail, ok}.
+
+    `merge_from` is the brain root of the shared checkout when a diverged branch may be merged
+    (SMART-RULE-0034); without it a diverged branch is only reported. `project` marks a project
+    repository, whose own merge routine applies.
+    """
     def result(state: str, detail: str, ok: bool) -> dict:
         return {"name": name, "path": str(repo), "state": state, "detail": detail, "ok": ok}
 
@@ -69,7 +91,29 @@ def sync_one(name: str, repo: Path) -> dict:
     changed = [line for line in git(repo, "status", "--porcelain").stdout.splitlines()
                if line and not line.startswith("??")]
     if ahead and behind:
-        return result("diverged", f"{ahead} local and {behind} remote commits; not merged – the owner decides", False)
+        both = f"{ahead} local and {behind} remote commits"
+        if changed:
+            return result("diverged, with changes", f"{both} and {len(changed)} changed file(s); not merged – "
+                          "commit your own changes and run sync again; changes that are not yours go to the owner", False)
+        if project:
+            return result("diverged", f"{both}; not merged – the project's own merge routine applies; "
+                          "without one, tell the owner", False)
+        if is_session_copy(repo):
+            return result("diverged", f"{both}; not merged here – session.py finish merges a session copy", False)
+        if merge_from is None:
+            return result("diverged", f"{both}; not merged – sync.py without --no-merge merges it", False)
+        import session  # here, not at the top: session.py imports this module (SMART-RULE-0018)
+        merged, copy, lines = session.merge_diverged(merge_from, name, repo)
+        if not merged:
+            said = [line for line in lines if not line.startswith(("session copy:", "work only there"))
+                    and "up to date with" not in line]
+            return result("diverged, merge stopped", f"{both}; the shared checkout is unchanged; the merge stopped "
+                          f"in {copy}: " + " | ".join(said), False)
+        left = git(repo, "rev-list", "--count", "HEAD..@{u}").stdout.strip()
+        if left != "0":
+            return result("merged, not fast-forwarded", f"{both} merged and pushed; the shared checkout is still "
+                          f"{left} commit(s) behind: " + (lines[-1] if lines else "?"), False)
+        return result("merged", f"{both} merged (a merge commit), checked, pushed and fast-forwarded", True)
     if behind and changed:
         return result("behind, with changes", f"{behind} commit(s) behind and {len(changed)} changed file(s); not updated", False)
     if behind:
@@ -86,6 +130,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--root", type=Path, default=None, help="the brain root (default: found from here)")
     parser.add_argument("--also", type=Path, action="append", default=[], help="a project repository to sync too")
+    parser.add_argument("--no-merge", action="store_true", help="report a diverged brain repository, do not merge it")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
     try:
@@ -96,7 +141,10 @@ def main(argv: list[str] | None = None) -> int:
     if root is None:
         print("CONTRACT.md not found; run inside the brain")
         return 1
-    results = [sync_one(name, repo) for name, repo in repositories(root, args.also)]
+    brain = len(repositories(root, []))
+    results = [sync_one(name, repo, merge_from=None if args.no_merge else root)
+               if index < brain else sync_one(name, repo, project=True)
+               for index, (name, repo) in enumerate(repositories(root, args.also))]
     if args.json:
         print(json.dumps(results, indent=2))
     else:

@@ -14,24 +14,31 @@ sessions folder is `<brain root>-sessions` beside the shared checkout unless `--
 `finish` merges each repository's branch with `origin/main`, rebuilds a generated file that
 conflicted (taking `main`'s version first), stops on any other conflict and leaves it for the
 session to resolve, runs preflight, pushes `HEAD:main`, fast-forwards the shared checkout with
-`sync.py`, and removes the worktrees and branches once `main` contains them. `--keep` keeps the copy
-for the next unit of work.
+`sync.py`, and removes the worktrees and branches once `main` contains them. A push refused because
+`origin` moved on is merged, checked and pushed again, up to three attempts in all (SMART-RULE-0034).
+`--keep` keeps the copy for the next unit of work.
+
+`merge_diverged` is how `sync.py` merges a shared-checkout branch whose history has diverged from
+`origin` (SMART-RULE-0034): it starts a copy whose branch begins at that local commit and finishes it
+as above, so the merge happens in the copy and the shared checkout only fast-forwards.
 
 `list` shows every session copy, its age and the commits not yet in `main`, so work left by a
 session that ended is found and finished rather than lost.
 
-It never force-pushes, never removes a worktree with unmerged commits or uncommitted changes, and
-never merges inside the shared checkout. Exit code 0 on success, 1 when something needs attention.
+It never force-pushes, never rebases, never removes a worktree with unmerged commits or uncommitted
+changes, and never merges inside the shared checkout. Exit code 0 on success, 1 when something needs attention.
 """
 
 from __future__ import annotations
 
 import argparse
 import datetime
+import io
 import os
 import re
 import subprocess
 import sys
+from contextlib import redirect_stdout
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -40,6 +47,8 @@ import sync  # noqa: E402  (one canonical brain_root, git and fast-forward, SMAR
 
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,59}$")
 NESTED = ("library", "memory")   # nested repositories, in the order they are made
+ATTEMPTS = 3                     # merge-check-push rounds before a refused push is reported
+REFUSED = ("[rejected]", "non-fast-forward", "fetch first")   # git's words for "origin moved on"
 
 # Generated files a merge may conflict on, per repository: the pattern and the command that
 # rebuilds them, run from the session root. A conflict in any other file stops `finish`.
@@ -116,7 +125,8 @@ def remove_copy(root: Path, copy: Path, branch: str, made: list[str]) -> None:
         git(repo, "branch", "-D", branch)
 
 
-def cmd_start(root: Path, name: str, folder: Path) -> int:
+def cmd_start(root: Path, name: str, folder: Path, start_at: dict[str, str] | None = None) -> int:
+    """Make the copy; `start_at` names a commit to begin a repository's branch at instead of origin."""
     if not NAME_RE.match(name):
         print(f"name must be lower-case letters, digits and hyphens: {name}")
         return 1
@@ -139,7 +149,8 @@ def cmd_start(root: Path, name: str, folder: Path) -> int:
     made: list[str] = []
     for repo_name, repo in repos:
         target = session_path(copy, repo_name)
-        added = git(repo, "worktree", "add", "--quiet", "-b", branch, str(target), base_ref(repo))
+        begin = (start_at or {}).get(repo_name) or base_ref(repo)
+        added = git(repo, "worktree", "add", "--quiet", "-b", branch, str(target), begin)
         if added.returncode:
             print(f"{repo_name}: could not make the worktree – {last_line(added)}")
             remove_copy(root, copy, branch, made)
@@ -210,6 +221,57 @@ def merge_main(copy: Path, repo_name: str, repo: Path, base: str) -> tuple[bool,
     return True, f"merged {base}; rebuilt " + ", ".join(files)
 
 
+def refused(done: subprocess.CompletedProcess) -> bool:
+    """A push refused because origin has commits this branch lacks, as opposed to any other failure."""
+    text = (done.stderr or "") + (done.stdout or "")
+    return any(word in text for word in REFUSED)
+
+
+def merge_check_push(copy: Path, repos: list[tuple[str, Path, Path]], base: dict[str, str],
+                     preflight: bool, attempt: int) -> bool | None:
+    """One round of finish: merge origin, check, push. True: all pushed; False: origin moved on
+    during the push, so merge again; None: stopped (a conflict, a failed check, a failed push)."""
+    ahead: dict[str, bool] = {}
+    for repo_name, _, path in repos:
+        ok, what = merge_main(copy, repo_name, path, base[repo_name])
+        print(f"{repo_name}: {what}")
+        if not ok:
+            return None
+        ahead[repo_name] = git(path, "merge-base", "--is-ancestor", "HEAD", base[repo_name]).returncode != 0
+    if preflight and any(ahead.values()):
+        checked = run_child([sys.executable, str(copy / "shared/skills/repository-preflight/scripts/preflight.py"),
+                             "--root", str(copy)], copy)
+        lines = checked.stdout.splitlines()
+        summary = next((line for line in lines if line.startswith(("PASS", "FAIL"))), last_line(checked))
+        print(f"preflight: {summary}")
+        if checked.returncode:
+            # Say why, so the fix is visible without re-running the check by hand
+            for line in lines:
+                if line.startswith("ERROR"):
+                    print(f"  {line}")
+            print("preflight failed: nothing was pushed; fix the errors in the session copy and finish again")
+            return None
+    for repo_name, _, path in repos:
+        if not ahead[repo_name]:
+            continue
+        target = base[repo_name].split("/", 1)[1]
+        pushed = git(path, "push", "--quiet", "origin", f"HEAD:{target}")
+        if pushed.returncode == 0:
+            print(f"{repo_name}: pushed to {target}")
+            continue
+        if not refused(pushed):
+            print(f"{repo_name}: push failed – {last_line(pushed)}; nothing was forced")
+            return None
+        if attempt < ATTEMPTS:
+            print(f"{repo_name}: push refused – origin moved on; merging again "
+                  f"(attempt {attempt + 1} of {ATTEMPTS})")
+            return False
+        print(f"{repo_name}: push refused {ATTEMPTS} times – origin keeps moving; nothing was forced; "
+              "run finish again to merge the newer main")
+        return None
+    return True
+
+
 def session_repos(root: Path, copy: Path) -> list[tuple[str, Path, Path]]:
     """(name, shared repository, session worktree) for each worktree the copy has."""
     found = []
@@ -232,36 +294,13 @@ def cmd_finish(root: Path, name: str, folder: Path, keep: bool, preflight: bool)
         if dirty:
             print(f"{repo_name}: uncommitted changes in {path}; commit or discard them first")
             return 1
-    ahead: dict[str, bool] = {}
     base = {repo_name: base_ref(repo) for repo_name, repo, _ in repos}
-    for repo_name, _, path in repos:
-        ok, what = merge_main(copy, repo_name, path, base[repo_name])
-        print(f"{repo_name}: {what}")
-        if not ok:
+    for attempt in range(1, ATTEMPTS + 1):
+        pushed_all = merge_check_push(copy, repos, base, preflight, attempt)
+        if pushed_all is None:
             return 1
-        ahead[repo_name] = git(path, "merge-base", "--is-ancestor", "HEAD", base[repo_name]).returncode != 0
-    if preflight and any(ahead.values()):
-        checked = run_child([sys.executable, str(copy / "shared/skills/repository-preflight/scripts/preflight.py"),
-                             "--root", str(copy)], copy)
-        lines = checked.stdout.splitlines()
-        summary = next((line for line in lines if line.startswith(("PASS", "FAIL"))), last_line(checked))
-        print(f"preflight: {summary}")
-        if checked.returncode:
-            # Say why, so the fix is visible without re-running the check by hand
-            for line in lines:
-                if line.startswith("ERROR"):
-                    print(f"  {line}")
-            print("preflight failed: nothing was pushed; fix the errors in the session copy and finish again")
-            return 1
-    for repo_name, _, path in repos:
-        if not ahead[repo_name]:
-            continue
-        target = base[repo_name].split("/", 1)[1]
-        pushed = git(path, "push", "--quiet", "origin", f"HEAD:{target}")
-        if pushed.returncode:
-            print(f"{repo_name}: push refused – {last_line(pushed)}; run finish again to merge the newer main")
-            return 1
-        print(f"{repo_name}: pushed to {target}")
+        if pushed_all:
+            break
     for repo_name, repo in repositories(root):
         r = sync.sync_one(repo_name, repo)
         print(f"shared checkout {repo_name}: {r['state']}" + (f" – {r['detail']}" if r["detail"] else ""))
@@ -288,6 +327,27 @@ def cmd_finish(root: Path, name: str, folder: Path, keep: bool, preflight: bool)
             pass
         print(f"session {name} finished and removed")
     return status
+
+
+def merge_diverged(root: Path, repo_name: str, repo: Path) -> tuple[bool, str, list[str]]:
+    """Merge a shared-checkout branch that has diverged from origin, outside the shared checkout.
+
+    A copy is started with this repository's branch at the shared checkout's own commit, and
+    finished: origin is merged in (a merge commit; a conflicting generated file is rebuilt), the
+    result is checked and pushed, and the shared checkout is fast-forwarded to it. The shared
+    checkout itself is never merged into (SMART-RULE-0038). Returns (merged, copy path, what
+    happened). When it stops – a conflict in a hand-written file, a failed check, a refused push –
+    the copy is kept for the session and the owner to finish, and `list` shows it.
+    """
+    name = f"merge-{repo_name}-{datetime.datetime.now():%Y%m%d-%H%M%S}"
+    folder = sessions_folder(root, None)
+    head = git(repo, "rev-parse", "HEAD").stdout.strip()
+    out = io.StringIO()
+    with redirect_stdout(out):
+        code = cmd_start(root, name, folder, {repo_name: head})
+        if code == 0:
+            code = cmd_finish(root, name, folder, keep=False, preflight=True)
+    return code == 0, str(folder / name), [line for line in out.getvalue().splitlines() if line]
 
 
 def cmd_list(root: Path) -> int:

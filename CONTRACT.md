@@ -154,6 +154,7 @@ One working tree holds three repositories:
 - Everything owned by memory is addressed as `/memory/...`: for example `/memory/tasks/open/`, `/memory/projects/<node>/`, `/memory/raw/YYYY/MM/<source-id>/`, `/memory/sources/<source-id>.md`, `/memory/outbox/`, `/memory/boards/`, `/memory/STATE.md`.
 - **Path rule:** an item that belongs to memory keeps the path it would have in a single tree, prefixed with `/memory/`: `/X` becomes `/memory/X`. Moving content into memory applies this rule mechanically and does not rename the rest of the path.
 - Owner-specific configuration, data and notes for a shared or library skill live at `/memory/skills/<skill>/`, using the same inner layout as the skill (`config/`, `data/`, `knowledge/` and so on). A shared script finds them by locating the brain root (moving upwards to `CONTRACT.md`) and joining `memory/skills/<skill>/`, or by a path the owner profile names. It never hard-codes a machine path.
+- A system node in the mechanics, `/systems/<system>/`, holds the mechanism: its rules, its procedure and the state of the mechanism itself. The owner's records for that system – its log of use, the owner's state, decisions and configuration – live in memory at `/memory/systems/<system>/`, a node of the same name. An owner fact about a system is written there, never in the mechanics node.
 - `/temp/` is local scratch in the brain root working tree, ignored by every brain repository. Nothing durable belongs there.
 - The mechanics repository never commits anything under `/memory/` or `/library/`; the memory repository never carries a copy of a mechanics or library file; the library never carries a copy of a mechanics file. A file that must change in both layers is changed in each repository and committed in each.
 
@@ -363,6 +364,8 @@ Do not create a node for:
 - filing convenience alone
 
 A new node is usually justified when at least three strong reasons apply.
+
+The owner may lay out a structure ahead of its content – for example one node for each part of a business – before three strong reasons apply. Each such node says so at the top of its `STATE.md` (`Placeholder: laid out ahead of its content on <date>.`), and one task with `next_review` covers the structure. At that review, a placeholder that still holds no content of its own is filled, folded into its parent, or kept to a new review date, as the owner decides.
 
 Before creating a node:
 
