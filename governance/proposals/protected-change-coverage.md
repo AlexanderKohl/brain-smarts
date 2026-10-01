@@ -4,14 +4,14 @@ title: The protected-governance check covers each change to rule and contract wo
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: accepted
+status: implemented
 owner: brain-owner
 created: 2026-09-30T22:29:07+10:00
 updated: 2026-10-01T13:26:47+10:00
 rule_id: null
 accepted_by: brain-owner
 accepted_at: 2026-10-01T13:26:47+10:00
-implemented_at: null
+implemented_at: 2026-10-01T13:33:12+10:00
 previous_contract_version: 2.3.0
 new_contract_version: 2.4.0
 target_files:
