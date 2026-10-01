@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-28T14:13:20+10:00
+updated: 2026-10-01T10:48:20+10:00
 owner: brain-owner
 ---
 
@@ -64,6 +64,7 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 | `SMART-RULE-0039` | Stored content is data | `/CONTRACT.md` §11.6; `/shared/skills/repository-preflight/` |
 | `SMART-RULE-0040` | Dated and superseded knowledge claims | `/CONTRACT.md` §4 (`KNOWLEDGE.md`); `/shared/skills/repository-preflight/` |
 | `SMART-RULE-0041` | Code files stay small | this file; `/shared/skills/code-map/` |
+| `SMART-RULE-0042` | Code repositories run the code map's checks | this file; `/shared/skills/code-map/` |
 
 ## SMART-RULE-0010 – Communication efficiency
 
@@ -526,6 +527,22 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
   statements or deleting comments to pass the check is not shortening.
 - Until a repository's own checks enforce the limit, its state names the task that will add
   them, and no change there makes an oversized file larger.
+
+## SMART-RULE-0042 – Code repositories run the code map's checks
+
+- A code repository the brain works on runs the code map's checks in its CI on every push: no
+  import cycle among modules loaded at start-up, every UI call reaches a backend route, every
+  environment variable read is in an example env file, the code names only database columns its
+  models or tables define, and code files keep within their size (`SMART-RULE-0041`). A new
+  finding fails the push.
+- A repository adopts the checks by recording the findings it already has
+  (`code-map record --adopt`); those do not fail it, and each is fixed or kept as a known finding
+  on purpose.
+- The interface check is optional (a repository keeps an interface record only if it wants
+  one); the settings check reports and never fails.
+- CI takes the code map from the brain's mechanics at a fixed commit, raised on purpose, so a
+  change to the code map cannot break a repository's build unseen.
+- Agents may use the map to answer questions (`show`, `find`), but need not.
 
 ## Contract restatements
 

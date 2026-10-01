@@ -4,9 +4,13 @@ title: Code repositories run the code map's checks in their CI
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: proposed
+status: implemented
 created: 2026-10-01T10:13:16+10:00
-updated: 2026-10-01T10:13:16+10:00
+updated: 2026-10-01T10:48:20+10:00
+accepted_by: brain-owner
+accepted_at: 2026-10-01T10:48:20+10:00
+implemented_at: 2026-10-01T10:48:20+10:00
+rule_id: SMART-RULE-0042
 owner: brain-owner
 previous_contract_version: 2.2.0
 new_contract_version: 2.2.0
@@ -36,7 +40,8 @@ it applies to every code repository and not only the first.
 
 The code map's checks run only when an agent remembers to run them. The trial of 28 September 2026
 found real gaps this way (environment variables missing from the example file). And on 1 October,
-splitting files made 45 UI calls in extract-bill-api look as if they reached no route; nothing ran
+splitting files made 45 UI calls in the owner's main code repository look as if they reached no
+route; nothing ran
 the check, so no one saw it until the code map was put in CI. Code map 0.5.1 fixed the cause.
 
 ## Current wording
@@ -72,8 +77,8 @@ is skipped, as the release-note check was.
 
 ## Scope and consequences
 
-- Every code repository the brain works on; extract-bill-api already runs it (2.98.15), with every
-  check passing.
+- Every code repository the brain works on; the owner's main code repository already runs it, with
+  every check passing.
 - A repository's CI needs Node and a checkout of the public mechanics.
 
 ## Risks and conflicts
@@ -88,10 +93,11 @@ Remove the rule from `/RULES.md`; repositories may keep or drop their CI job.
 
 ## Validation
 
-- extract-bill-api: the job passes on `testing` (2.98.15); each check was shown failing on purpose
+- The owner's main code repository: the job passes; each check was shown failing on purpose
   in the code map's own tests.
 - The repository preflight passes.
 
 ## Acceptance
 
-Not yet accepted.
+Accepted by the owner on 1 October 2026 and applied as `SMART-RULE-0042`. The owner's record is
+kept in their memory.
