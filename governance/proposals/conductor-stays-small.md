@@ -4,14 +4,14 @@ title: The conductor stays small – a context guard, results not sources, and c
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: proposed
+status: implemented
 owner: brain-owner
 created: 2026-10-01T22:37:41+10:00
-updated: 2026-10-01T23:00:50+10:00
-rule_id: null
-accepted_by: null
-accepted_at: null
-implemented_at: null
+updated: 2026-10-01T23:09:40+10:00
+rule_id: SMART-RULE-0043
+accepted_by: brain-owner
+accepted_at: 2026-10-01T23:08:38+10:00
+implemented_at: 2026-10-01T23:09:40+10:00
 previous_contract_version: 2.4.0
 new_contract_version: 2.4.0
 target_files:
@@ -92,7 +92,7 @@ stage of work…"):
 >   reads its context size from the host and passes it to the delegation script
 >   (`--context-tokens`). Up to 750 000 tokens it dispatches freely. From 750 000 it **drains**:
 >   no new run; the workers in flight finish, their results are merged, the checkpoint is written
->   and the handover prompt given. From 850 000 no new packet either, and no new stage of its own
+>   and the handover prompt given. From 900 000 no new packet either, and no new stage of its own
 >   work, until the checkpoint is committed. The thresholds are a guard rail, not a working
 >   budget: a conductor that only conducts (`SMART-RULE-0024`) rarely reaches them, and reaching
 >   them is itself a finding to record. The delegation script refuses a run or packet past its
@@ -163,8 +163,8 @@ with canonical home "this file; `/shared/skills/delegate-work/`; `/shared/skills
   days than a sentence it may or may not remember.
 - A guard rail in tokens, not in percent of the window, because the evidence says quality falls
   with length, not with fill. The author first suggested 250 000 and 400 000; the owner set
-  750 000 and 850 000 on 1 October 2026 ("250k is too early"), leaving about 120 000 tokens
-  before the host's own compaction at 970 000 for workers to finish and the checkpoint to be
+  750 000 and 900 000 on 1 October 2026 ("250k is too early"), then 900 000 for the stop ("1 yes, 2 900,000"), leaving
+  about 70 000 tokens before the host's own compaction at 970 000 for workers to finish and the checkpoint to be
   written. The run records decide where they go from there.
 - "Results, not sources" is the change that makes the guard rail rarely matter: a conductor that
   conducts grows by roughly ten to twenty thousand tokens per worker cycle and lives for days.
@@ -235,10 +235,18 @@ the hooks off. Cards keep their fields harmlessly.
 
 ## Acceptance
 
+Accepted by the owner on 2026-10-01 ("1 yes, 2 900,000, 3 yes, 4 yes": the proposal, the stop threshold
+at 900 000, teams `brain` and `atlas`, and a separate amendment to `SMART-RULE-0038` to be
+worded and accepted on its own). The question as put:
+
 Do you accept `PROPOSAL-conductor-stays-small`: the amendments to `SMART-RULE-0019` and
 `SMART-RULE-0024` and the new rule *Work moves between threads through cards*, exactly as worded
 above, to be applied to `/RULES.md`?
 
 ## Implementation record
 
-Not yet implemented.
+Implemented 2026-10-01T23:09:40+10:00: `SMART-RULE-0019` and `SMART-RULE-0024` amended and `SMART-RULE-0043` added
+to `/RULES.md` with the accepted wording (thresholds 750 000 and 900 000 as the owner set them),
+`0043` indexed. `contract_version` unchanged at 2.4.0. Owner record:
+`/memory/governance/proposals/conductor-stays-small-acceptance.md`. Validation results follow in
+the commit that carries this file and in the node log.
