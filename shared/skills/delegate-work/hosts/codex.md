@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-15T07:45:00+10:00
-updated: 2026-10-01T22:44:24+10:00
+updated: 2026-10-01T22:59:04+10:00
 owner: brain-owner
 ---
 
@@ -19,10 +19,42 @@ facility unless the running version demonstrably offers one.
 
 ## Reading the context size
 
-No reading is known on this host. Pass `--context-unknown "Codex reports no context size"` to
-`new-run`, `new-packet` and `close-run`, and drain (SKILL.md, *When to stop dispatching*) at the
-first compaction or after the fourth run in the thread, whichever comes first. No compaction
-hook is installed here; the conductor tells the owner itself when its context was compacted.
+No reading the model can take is known on this host (`/status` in the terminal shows the
+figure to the owner, not to the model). Pass `--context-unknown "Codex reports no context size
+to the model"` to `new-run`, `new-packet` and `close-run`, and drain (SKILL.md, *When to stop
+dispatching*) at the first compaction or after the fourth run in the thread, whichever comes
+first.
+
+## Compaction hooks
+
+Codex offers the same two hooks as Claude Code (official configuration reference, read
+1 October 2026): `PreCompact` receives `session_id`, `cwd` and `trigger` on stdin, and
+`SessionStart` with matcher `compact` receives `session_id`, `cwd` and `source`, and its stdout
+is added to the model's context. So the brain's `hooks.py pre-compact` and `hooks.py post-compact`
+run unchanged. Enable hooks and add to `~/.codex/config.toml`, with the command run from the
+brain root:
+
+```toml
+[features]
+hooks = true
+
+[[hooks.PreCompact]]
+matcher = "manual|auto"
+[[hooks.PreCompact.hooks]]
+type = "command"
+command = "python shared/skills/repository-preflight/scripts/hooks.py pre-compact"
+
+[[hooks.SessionStart]]
+matcher = "compact"
+[[hooks.SessionStart.hooks]]
+type = "command"
+command = "python shared/skills/repository-preflight/scripts/hooks.py post-compact"
+```
+
+Not yet verified on the owner's machine: the Codex CLI is not installed there (only the Codex
+app's folder exists). Two differences to know: Codex's compaction summary is an opaque blob the
+model cannot steer, and `AGENTS.md` is re-read every turn, so the pointer file survives a
+compaction on its own; the `## Handover` reload still needs the hook.
 
 ## Procedure
 
