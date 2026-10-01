@@ -4,14 +4,14 @@ title: A worker is an agent started with a work packet; any other helper does it
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: proposed
+status: implemented
 owner: brain-owner
 created: 2026-10-01T12:07:12+10:00
-updated: 2026-10-01T12:07:12+10:00
+updated: 2026-10-01T12:45:21+10:00
 rule_id: SMART-RULE-0024
-accepted_by: null
-accepted_at: null
-implemented_at: null
+accepted_by: brain-owner
+accepted_at: 2026-10-01T12:45:21+10:00
+implemented_at: 2026-10-01T12:45:21+10:00
 previous_contract_version: 2.3.0
 new_contract_version: 2.3.0
 target_files:
@@ -85,8 +85,8 @@ checks that it updates the records and commits.
 
 ## Acceptance
 
-Not yet requested. Ask one direct question that identifies this proposal.
+Accepted by the owner on 1 October 2026. The owner's record is kept in their memory.
 
 ## Implementation record
 
-None.
+Implemented on 1 October 2026: the bullet in `SMART-RULE-0024` as worded above.

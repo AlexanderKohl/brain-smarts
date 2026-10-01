@@ -14,7 +14,7 @@ script_paths:
   - /shared/skills/repository-preflight/scripts/session.py
   - /shared/skills/repository-preflight/tests/test_session.py
 created: 2026-08-04T23:16:08+10:00
-updated: 2026-10-01T12:05:38+10:00
+updated: 2026-10-01T12:45:21+10:00
 owner: brain-owner
 ---
 
@@ -114,6 +114,9 @@ python shared/skills/repository-preflight/scripts/session.py list
   work left by a session that ended is found and finished rather than lost.
 - Append-only logs merge by union (`LOG.md merge=union` in `.gitattributes`), so two sessions'
   entries both survive.
+- The commit-message hook (`hooks.py commit-msg`, in all three repositories) refuses a commit, other
+  than a merge, whose message lacks a `Tool:` or a `Co-Authored-By:` trailer (`SMART-RULE-0009`);
+  in the mechanics and the library it also refuses personal data (`SMART-RULE-0008`).
 - The pre-commit hook (`hooks.py pre-commit`) refuses a commit on `main` in a repository's own
   working tree – the shared checkout – and names `session.py start`. A linked worktree (a session
   copy) or any other branch passes. `BRAIN_SHARED_CHECKOUT=1` lets a host that cannot work in a

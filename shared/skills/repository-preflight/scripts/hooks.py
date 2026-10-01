@@ -140,14 +140,38 @@ def brain_root_above(start: Path) -> Path | None:
     return None
 
 
+# SMART-RULE-0009: every commit names its tool and its model in these trailers, never in the subject.
+TRAILERS = ("Tool", "Co-Authored-By")
+
+
+def missing_trailers(repo: Path, message_file: Path) -> list[str]:
+    """The trailers a commit message lacks. A merge makes no change of its own and needs none."""
+    if (git_dir(repo) / "MERGE_HEAD").exists():
+        return []
+    parsed = subprocess.run(["git", "interpret-trailers", "--parse", str(message_file)], cwd=repo,
+                            capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
+    keys = {line.split(":", 1)[0].strip().lower() for line in parsed.splitlines() if ":" in line}
+    return [name for name in TRAILERS if name.lower() not in keys]
+
+
 def commit_msg(repo: Path, message_file: Path) -> int:
-    """SMART-RULE-0008: a commit message in a shareable repository holds no personal data.
+    """A commit message names its tool and model in trailers (SMART-RULE-0009), in every brain
+    repository; in a shareable repository it also holds no personal data (SMART-RULE-0008).
 
     Uses the preflight's own personal-data patterns and the owner's terms read from memory. The
     Co-Authored-By trailer names the tool, not the owner, and is skipped.
     """
     root = brain_root_above(repo)
-    if root is None or layer_of(repo, root) == "memory":
+    if root is None:
+        return 0
+    missing = missing_trailers(repo, message_file)
+    if missing:
+        print("commit-msg: the message lacks the trailer(s) " + ", ".join(f"{m}:" for m in missing)
+              + ". Name the tool and the model in trailers, not the subject (SMART-RULE-0009), for example:\n\n"
+              "    Tool: Claude Code desktop\n    Co-Authored-By: Claude Opus 5.5 <the host's no-reply address>",
+              file=sys.stderr)
+        return 1
+    if layer_of(repo, root) == "memory":
         return 0
     import tempfile
     sys.path.insert(0, str(root / "shared/skills/repository-preflight/scripts"))
