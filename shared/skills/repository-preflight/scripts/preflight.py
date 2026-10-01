@@ -21,7 +21,7 @@ from typing import Any
 from preflight_base import (
     MEMORY_DIR, MEMORY_PREFIX, LIBRARY_DIR, LIBRARY_PREFIX, in_memory, memory_root, in_library,
     library_root, layer_of, Result, message_layer, root_path, git_ignored, is_template_path, git,
-    repository_changes, is_own_repository, git_failure,
+    repository_changes, is_own_repository, git_failure, TIMESTAMP_RE,
 )
 from preflight_references import (
     SKELETON_PARTS, REFERENCE_KEYS, heading_exists, CLOSED_PROPOSAL, removed_files,
@@ -56,9 +56,6 @@ TASK_STATUSES = {
     "completed",
     "cancelled",
 }
-TIMESTAMP_RE = re.compile(
-    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2})$"
-)
 # CONTRACT §8.2: a timestamp is never later than the moment it was written. Five minutes allow
 # for clocks on different machines disagreeing slightly when repositories are synced.
 FUTURE_TOLERANCE = timedelta(minutes=5)
@@ -400,7 +397,7 @@ def run(root: Path, writing: bool) -> Result:
     validate_declared_references(root, records, result)
     validate_mechanics_memory_references(root, records, result)
     validate_tasks(root, records, result)
-    validate_governance(root, records, result)
+    validate_governance(root, records, result, clock())
     validate_personal_data(root, result)
     from checks_b import validate_knowledge_provenance, validate_knowledge_review_dates, validate_pointer_files
     validate_pointer_files(root, result.errors)

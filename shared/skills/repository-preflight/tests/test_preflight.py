@@ -417,22 +417,35 @@ class ManifestTests(BrainTestCase):
 
 class ProtectedPathTests(unittest.TestCase):
     def test_protection_by_path(self) -> None:
+        # Rule and contract wording only (PROPOSAL-protected-change-coverage): scripts, tests,
+        # fixtures, README files and other operating detail are not protected.
         cases = {
             "AGENTS.md": True,
             "BOOTSTRAP.md": True,
+            "CLAUDE.md": True,
             "CONTRACT.md": True,
-            "README.md": True,
+            "README.md": False,
             "RULES.md": True,
             "governance/README.md": False,
             "governance/proposals/example-change.md": False,
+            "memory/AGENTS.md": True,
             "memory/README.md": False,
             "memory/RULES.md": True,
             "memory/governance/proposals/owner-example-change.md": False,
             "memory/projects/example-project/RULES.md": True,
+            "memory/tasks/open/TASK-2026-0001-a-governance-review.md": False,
             "memory/tasks/open/TASK-2026-0001.md": False,
+            "shared/schemas/card-schema.md": False,
+            "shared/schemas/governance-proposal-schema.md": True,
             "shared/skills/example-skill/SKILL.md": False,
-            "shared/skills/repository-preflight/scripts/preflight.py": True,
+            "shared/skills/example-skill/templates/node-RULES.template.md": True,
+            "shared/skills/repository-preflight/SKILL.md": True,
+            "shared/skills/repository-preflight/scripts/preflight.py": False,
+            "shared/skills/repository-preflight/scripts/preflight_governance.py": False,
+            "shared/skills/repository-preflight/tests/test_preflight.py": False,
+            "shared/templates/governance-proposal.template.md": True,
             "shared/templates/memory-skeleton/RULES.md": True,
+            "shared/templates/memory-skeleton/governance/README.md": False,
             "shared/templates/node-RULES.template.md": True,
         }
         for path, expected in sorted(cases.items()):
@@ -618,6 +631,48 @@ class GovernanceTests(BrainTestCase):
         self.assertEqual([e for e in result.errors if "protected governance" in e], [])
         self.assertTrue(any(w.startswith("/RULES.md: protected governance drafted on proposal/example-change")
                             for w in result.warnings), result.warnings)
+
+    # ------------------------------------------------ wording only (question 175, option 2)
+
+    def test_script_test_and_readme_changes_need_no_proposal(self) -> None:
+        """Before: any change to the preflight skill or the root README needed a proposal."""
+        brain = self.make_repos()
+        brain.write("shared/skills/repository-preflight/scripts/preflight.py", "print('a fix')\n")
+        brain.write("shared/skills/repository-preflight/tests/fixtures/example.txt", "renamed fixture\n")
+        brain.write("README.md", readme("brain-root-readme", ["memory", "shared"], owner="brain-owner"))
+        self.assertEqual(self.governance_errors(brain), [])
+
+    def preflight_skill(self, brain: Brain, script: str, failure: str) -> None:
+        brain.write("shared/skills/repository-preflight/SKILL.md", md(
+            "repository-preflight", f"# Preflight\n\n## Script\n\n{script}\n\n## Failure behaviour\n\n"
+            f"{failure}\n\n## Logging behaviour\n\nNone.\n", type="skill"))
+
+    def test_only_the_validators_failure_behaviour_is_wording(self) -> None:
+        brain = self.make_repos()
+        self.preflight_skill(brain, "Run it.", "- fail on an uncovered change")
+        git(brain.root, "add", "-A")
+        git(brain.root, "commit", "-q", "-m", "the skill as it stands")
+        self.preflight_skill(brain, "Run it with --root.", "- fail on an uncovered change")
+        self.assertEqual(self.governance_errors(brain), [])
+        self.preflight_skill(brain, "Run it.", "- warn on an uncovered change")
+        errors = self.governance_errors(brain)
+        self.assertEqual(len(errors), 1, errors)
+        self.assertIn("/shared/skills/repository-preflight/SKILL.md: changed protected governance", errors[0])
+
+    def test_a_new_node_rules_file_needs_a_proposal(self) -> None:
+        brain = self.make_repos()
+        brain.write("memory/projects/example-project/RULES.md",
+                    md("example-project-rules", "# Rules\n\n- A node rule.\n", type="rules"))
+        self.assertEqual(self.governance_errors(brain),
+                         ["/memory/projects/example-project/RULES.md: changed protected governance is not "
+                          "covered by an accepted proposal"])
+
+    def test_a_task_named_after_governance_is_not_protected(self) -> None:
+        """Before: any path containing the word was protected, so editing such a task failed."""
+        brain = self.make_repos()
+        brain.write("memory/tasks/open/TASK-2026-0001-a-governance-review.md",
+                    md("TASK-2026-0001", type="task", status="ready", owner="brain-owner"))
+        self.assertEqual(self.governance_errors(brain), [])
 
     def test_memory_that_is_not_its_own_repository_is_a_warning(self) -> None:
         brain = self.make_repos(memory_own_repo=False)
