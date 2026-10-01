@@ -16,6 +16,7 @@ import sys
 import tempfile
 import textwrap
 import unittest
+from datetime import datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
@@ -416,22 +417,35 @@ class ManifestTests(BrainTestCase):
 
 class ProtectedPathTests(unittest.TestCase):
     def test_protection_by_path(self) -> None:
+        # Rule and contract wording only (PROPOSAL-protected-change-coverage): scripts, tests,
+        # fixtures, README files and other operating detail are not protected.
         cases = {
             "AGENTS.md": True,
             "BOOTSTRAP.md": True,
+            "CLAUDE.md": True,
             "CONTRACT.md": True,
-            "README.md": True,
+            "README.md": False,
             "RULES.md": True,
             "governance/README.md": False,
             "governance/proposals/example-change.md": False,
+            "memory/AGENTS.md": True,
             "memory/README.md": False,
             "memory/RULES.md": True,
             "memory/governance/proposals/owner-example-change.md": False,
             "memory/projects/example-project/RULES.md": True,
+            "memory/tasks/open/TASK-2026-0001-a-governance-review.md": False,
             "memory/tasks/open/TASK-2026-0001.md": False,
+            "shared/schemas/card-schema.md": False,
+            "shared/schemas/governance-proposal-schema.md": True,
             "shared/skills/example-skill/SKILL.md": False,
-            "shared/skills/repository-preflight/scripts/preflight.py": True,
+            "shared/skills/example-skill/templates/node-RULES.template.md": True,
+            "shared/skills/repository-preflight/SKILL.md": True,
+            "shared/skills/repository-preflight/scripts/preflight.py": False,
+            "shared/skills/repository-preflight/scripts/preflight_governance.py": False,
+            "shared/skills/repository-preflight/tests/test_preflight.py": False,
+            "shared/templates/governance-proposal.template.md": True,
             "shared/templates/memory-skeleton/RULES.md": True,
+            "shared/templates/memory-skeleton/governance/README.md": False,
             "shared/templates/node-RULES.template.md": True,
         }
         for path, expected in sorted(cases.items()):
@@ -441,6 +455,14 @@ class ProtectedPathTests(unittest.TestCase):
 
 @unittest.skipUnless(HAS_GIT, "git is not available")
 class GovernanceTests(BrainTestCase):
+    # The validator's clock, one hour after the fixtures' acceptance time TS.
+    NOW = datetime.fromisoformat(TS) + timedelta(hours=1)
+
+    def setUp(self) -> None:
+        real = preflight.clock
+        preflight.clock = lambda: self.NOW
+        self.addCleanup(setattr, preflight, "clock", real)
+
     def make_repos(self, memory_own_repo: bool = True) -> Brain:
         brain = self.make()
         brain.write(".gitignore", "memory/\n")
@@ -499,6 +521,158 @@ class GovernanceTests(BrainTestCase):
                        target_files=["/RULES.md"]))
         self.assertIn("/governance/proposals/example-change.md: accepted proposal lacks "
                       "acceptance evidence", brain.run().errors)
+
+    # ------------------------------------------------ coverage per change (PROPOSAL-protected-change-coverage)
+
+    def rules_change(self, brain: Brain, text: str = "- A new rule.\n") -> None:
+        brain.write("RULES.md", md("brain-root-rules", "# Rules\n\n" + text, type="rules", owner="brain-owner"))
+
+    def proposal(self, brain: Brain, name: str, **fields: object) -> None:
+        fields.setdefault("accepted_by", "brain-owner")
+        fields.setdefault("target_files", ["/RULES.md"])
+        brain.write(f"governance/proposals/{name}.md",
+                    md(f"PROPOSAL-{name}", type="governance_proposal", **fields))
+
+    def with_origin(self, brain: Brain) -> None:
+        """Give the mechanics a remote whose main holds the fixture, as a real brain has."""
+        origin = brain.root.parent / "origin.git"
+        git(brain.root.parent, "init", "-q", "--bare", str(origin))
+        git(brain.root, "remote", "add", "origin", str(origin))
+        git(brain.root, "push", "-q", "origin", "HEAD:main")
+        git(brain.root, "fetch", "-q", "origin")
+
+    def governance_errors(self, brain: Brain) -> list[str]:
+        return [e for e in brain.run().errors if "protected governance" in e]
+
+    def test_an_implemented_proposal_does_not_cover_a_later_change(self) -> None:
+        """The gap: once any accepted proposal had listed /RULES.md, every later edit passed."""
+        brain = self.make_repos()
+        self.proposal(brain, "old-change", status="implemented", accepted_at=TS, implemented_at=TS)
+        self.NOW = datetime.fromisoformat(TS) + timedelta(days=2)
+        self.rules_change(brain)
+        errors = self.governance_errors(brain)
+        self.assertEqual(len(errors), 1, errors)
+        self.assertIn("/RULES.md: changed protected governance is not covered by an accepted proposal", errors[0])
+        self.assertIn("1 accepted proposal(s) list it", errors[0])
+
+    def test_a_change_within_an_hour_of_implementation_is_covered(self) -> None:
+        brain = self.make_repos()
+        self.proposal(brain, "this-change", status="implemented", accepted_at=TS,
+                      implemented_at="2026-01-01T09:30:00+10:00")
+        self.NOW = datetime.fromisoformat("2026-01-01T10:25:00+10:00")
+        self.rules_change(brain)
+        self.assertEqual(self.governance_errors(brain), [])
+
+    def test_a_change_more_than_an_hour_after_implementation_is_not(self) -> None:
+        brain = self.make_repos()
+        self.proposal(brain, "this-change", status="implemented", accepted_at=TS,
+                      implemented_at="2026-01-01T09:30:00+10:00")
+        self.NOW = datetime.fromisoformat("2026-01-01T10:35:00+10:00")
+        self.rules_change(brain)
+        self.assertEqual(len(self.governance_errors(brain)), 1)
+
+    def test_a_proposal_never_marked_implemented_stops_covering_after_seven_days(self) -> None:
+        brain = self.make_repos()
+        self.proposal(brain, "forgotten", status="accepted", accepted_at=TS)
+        self.rules_change(brain)
+        self.NOW = datetime.fromisoformat(TS) + timedelta(days=6)
+        self.assertEqual(self.governance_errors(brain), [])
+        self.NOW = datetime.fromisoformat(TS) + timedelta(days=8)
+        self.assertEqual(len(self.governance_errors(brain)), 1)
+
+    def test_a_change_before_acceptance_is_not_covered(self) -> None:
+        brain = self.make_repos()
+        self.proposal(brain, "later", status="accepted", accepted_at="2026-01-02T09:00:00+10:00")
+        self.rules_change(brain)
+        self.assertEqual(len(self.governance_errors(brain)), 1)
+
+    def test_an_acceptance_time_without_a_timezone_is_an_error(self) -> None:
+        brain = self.make_repos()
+        self.proposal(brain, "vague", status="accepted", accepted_at="2026-01-01")
+        self.rules_change(brain)
+        errors = brain.run().errors
+        self.assertIn("/governance/proposals/vague.md: accepted_at is not a timestamp with a timezone", errors)
+
+    def test_a_committed_but_unpushed_change_is_checked(self) -> None:
+        """Before: only uncommitted changes were checked, so a commit made the change invisible."""
+        brain = self.make_repos()
+        self.with_origin(brain)
+        self.rules_change(brain)
+        git(brain.root, "commit", "-q", "-am", "an unaccepted rule")
+        self.assertEqual(len(self.governance_errors(brain)), 1)
+
+    def test_a_change_already_on_origin_is_not_checked_again(self) -> None:
+        brain = self.make_repos()
+        self.with_origin(brain)
+        self.rules_change(brain)
+        git(brain.root, "commit", "-q", "-am", "a rule accepted long ago")
+        git(brain.root, "push", "-q", "origin", "HEAD:main")
+        git(brain.root, "fetch", "-q", "origin")
+        self.assertEqual(self.governance_errors(brain), [])
+
+    def test_a_stamp_or_dash_only_change_needs_no_proposal(self) -> None:
+        brain = self.make_repos()
+        brain.write("RULES.md", md("brain-root-rules", "# Rules\n\n- One rule \u2014 with a dash.\n",
+                                   type="rules", owner="brain-owner"))
+        git(brain.root, "commit", "-q", "-am", "the rule as it stands")
+        text = (brain.root / "RULES.md").read_text(encoding="utf-8")
+        text = text.replace(f"updated: {TS}", "updated: 2026-01-01T09:45:00+10:00")
+        brain.write("RULES.md", text.replace(" \u2014 ", " \u2013 "))
+        self.assertEqual(self.governance_errors(brain), [])
+        brain.write("RULES.md", text.replace("One rule", "One changed rule"))
+        self.assertEqual(len(self.governance_errors(brain)), 1)
+
+    def test_a_drafted_change_on_a_proposal_branch_is_a_warning(self) -> None:
+        brain = self.make_repos()
+        git(brain.root, "switch", "-q", "-c", "proposal/example-change")
+        self.proposal(brain, "example-change", status="proposed", accepted_by="null", accepted_at="null")
+        self.rules_change(brain)
+        result = brain.run()
+        self.assertEqual([e for e in result.errors if "protected governance" in e], [])
+        self.assertTrue(any(w.startswith("/RULES.md: protected governance drafted on proposal/example-change")
+                            for w in result.warnings), result.warnings)
+
+    # ------------------------------------------------ wording only (question 175, option 2)
+
+    def test_script_test_and_readme_changes_need_no_proposal(self) -> None:
+        """Before: any change to the preflight skill or the root README needed a proposal."""
+        brain = self.make_repos()
+        brain.write("shared/skills/repository-preflight/scripts/preflight.py", "print('a fix')\n")
+        brain.write("shared/skills/repository-preflight/tests/fixtures/example.txt", "renamed fixture\n")
+        brain.write("README.md", readme("brain-root-readme", ["memory", "shared"], owner="brain-owner"))
+        self.assertEqual(self.governance_errors(brain), [])
+
+    def preflight_skill(self, brain: Brain, script: str, failure: str) -> None:
+        brain.write("shared/skills/repository-preflight/SKILL.md", md(
+            "repository-preflight", f"# Preflight\n\n## Script\n\n{script}\n\n## Failure behaviour\n\n"
+            f"{failure}\n\n## Logging behaviour\n\nNone.\n", type="skill"))
+
+    def test_only_the_validators_failure_behaviour_is_wording(self) -> None:
+        brain = self.make_repos()
+        self.preflight_skill(brain, "Run it.", "- fail on an uncovered change")
+        git(brain.root, "add", "-A")
+        git(brain.root, "commit", "-q", "-m", "the skill as it stands")
+        self.preflight_skill(brain, "Run it with --root.", "- fail on an uncovered change")
+        self.assertEqual(self.governance_errors(brain), [])
+        self.preflight_skill(brain, "Run it.", "- warn on an uncovered change")
+        errors = self.governance_errors(brain)
+        self.assertEqual(len(errors), 1, errors)
+        self.assertIn("/shared/skills/repository-preflight/SKILL.md: changed protected governance", errors[0])
+
+    def test_a_new_node_rules_file_needs_a_proposal(self) -> None:
+        brain = self.make_repos()
+        brain.write("memory/projects/example-project/RULES.md",
+                    md("example-project-rules", "# Rules\n\n- A node rule.\n", type="rules"))
+        self.assertEqual(self.governance_errors(brain),
+                         ["/memory/projects/example-project/RULES.md: changed protected governance is not "
+                          "covered by an accepted proposal"])
+
+    def test_a_task_named_after_governance_is_not_protected(self) -> None:
+        """Before: any path containing the word was protected, so editing such a task failed."""
+        brain = self.make_repos()
+        brain.write("memory/tasks/open/TASK-2026-0001-a-governance-review.md",
+                    md("TASK-2026-0001", type="task", status="ready", owner="brain-owner"))
+        self.assertEqual(self.governance_errors(brain), [])
 
     def test_memory_that_is_not_its_own_repository_is_a_warning(self) -> None:
         brain = self.make_repos(memory_own_repo=False)
