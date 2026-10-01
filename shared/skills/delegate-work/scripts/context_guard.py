@@ -31,7 +31,7 @@ from pathlib import Path
 # At or above DRAIN_TOKENS no new run is opened: let the workers in flight finish, take the
 # checkpoint, hand over. At or above STOP_TOKENS not even a packet is opened.
 DRAIN_TOKENS = 750000
-STOP_TOKENS = 850000
+STOP_TOKENS = 900000
 # A compaction marker older than this is stale and ignored; the hook that writes it and the
 # checkpoint that clears it both happen within a working day.
 MARKER_MAX_AGE = timedelta(hours=24)

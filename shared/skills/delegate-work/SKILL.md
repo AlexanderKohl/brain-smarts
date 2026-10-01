@@ -9,7 +9,7 @@ scope: shared
 script_paths:
   - /shared/skills/delegate-work/scripts/delegation.py
 created: 2026-09-15T07:45:00+10:00
-updated: 2026-10-01T23:00:50+10:00
+updated: 2026-10-01T23:08:38+10:00
 owner: brain-owner
 project_refs:
   - /memory/projects/brain-development
@@ -108,7 +108,7 @@ python shared/skills/delegate-work/scripts/delegation.py new-run \
   --parent TASK-2026-0999 --context-tokens 131000
 
 # 2. one packet per worker; defaults are isolated, read-only, no external access;
-#    refused from 850 000 tokens or after a compaction
+#    refused from 900 000 tokens or after a compaction
 python shared/skills/delegate-work/scripts/delegation.py new-packet \
   --run RUN-20990101-090000 --title "Audit SKILL.md sections" \
   --objective "Check every /shared/skills/*/SKILL.md for the CONTRACT section 10.2 headings." \
@@ -270,7 +270,7 @@ fix is one more theory, and the symptom can survive all of them.
 
 - `new-run`, `new-packet` and `close-run` refuse to run without exactly one of
   `--context-tokens N` and `--context-unknown REASON`. `new-run` is refused from 750 000 tokens
-  (drain), `new-packet` from 850 000 (stop), and both while a compaction marker younger than
+  (drain), `new-packet` from 900 000 (stop), and both while a compaction marker younger than
   24 hours exists under `/temp/conductor/compacted/` in the session copy or in the shared
   checkout named by `brain_root` in `/memory/OWNER.md`, unless `--session ID` names this thread
   and no marker carries that id. `--owner-override REASON` passes every check and is recorded
@@ -471,10 +471,10 @@ not with how full the window is; a 1 000 000-token window is headroom, not a bud
 | --- | --- |
 | below 750 000 | dispatches normally |
 | from 750 000 | **drains**: no new run; workers in flight finish; merge their results; checkpoint; handover prompt |
-| from 850 000 | no new packet and no new stage of its own work until the checkpoint is committed |
+| from 900 000 | no new packet and no new stage of its own work until the checkpoint is committed |
 | any compaction | a missed checkpoint: re-read the bootstrap files and `## Handover`, checkpoint, commit, `checkpoint-done`, tell the owner |
 
-- `new-run` is refused from 750 000, `new-packet` from 850 000, both while a compaction marker
+- `new-run` is refused from 750 000, `new-packet` from 900 000, both while a compaction marker
   exists (`/temp/conductor/compacted/<session_id>.json`, written by the host's pre-compaction
   hook). The owner, and only the owner, overrides a refusal for a named run or packet with
   `--owner-override "<reason>"`; the reason is recorded in the run.

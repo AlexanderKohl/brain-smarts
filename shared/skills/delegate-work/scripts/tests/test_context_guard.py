@@ -125,7 +125,7 @@ class ContextGuardTestCase(unittest.TestCase):
 
     def test_thresholds_are_the_named_constants(self) -> None:
         self.assertEqual(context_guard.DRAIN_TOKENS, 750000)
-        self.assertEqual(context_guard.STOP_TOKENS, 850000)
+        self.assertEqual(context_guard.STOP_TOKENS, 900000)
 
     # ------------------------------------------------------------ override and unknown
 
