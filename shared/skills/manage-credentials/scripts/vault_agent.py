@@ -9,6 +9,7 @@ import secrets
 import sys
 import threading
 import time
+from multiprocessing import AuthenticationError
 from multiprocessing.connection import Listener
 from pathlib import Path
 from typing import Any
@@ -249,11 +250,26 @@ class VaultAgent:
             flush=True,
         )
         print(f"Vault path: {self.vault.path.resolve()}", flush=True)
+        failures = 0
         while True:
-            try:
-                connection = self._listener.accept()
-            except (OSError, EOFError):
+            listener = self._listener
+            if listener is None:
                 break
+            try:
+                connection = listener.accept()
+            except (AuthenticationError, EOFError):
+                # A client with the wrong key, or one that left during the handshake, is refused;
+                # the agent goes on serving everyone else.
+                continue
+            except OSError:
+                # Closing the listener at shutdown ends the loop; any other error is retried a
+                # bounded number of times so a broken pipe cannot spin forever.
+                failures += 1
+                if self._listener is None or failures >= 50:
+                    break
+                time.sleep(0.1)
+                continue
+            failures = 0
             thread = threading.Thread(
                 target=self._serve_connection,
                 args=(connection,),

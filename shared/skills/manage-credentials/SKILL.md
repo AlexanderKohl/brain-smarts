@@ -11,7 +11,7 @@ metadata:
   scope: shared
   project_ref: /memory/projects/credential-management
   created: 2026-08-04T16:11:53+10:00
-  updated: 2026-09-23T12:00:00+10:00
+  updated: 2026-10-01T12:01:44+10:00
 ---
 
 # Credential Management
@@ -98,6 +98,17 @@ Before prompting for the recovery passphrase, check the tray colour or run `pyth
 The tray broker publishes its discovery record at `%LOCALAPPDATA%\PortableAIBrain\vault-agent\agent-state.json`. The file contains broker authentication material, is restricted to the current Windows user, and must never be displayed, copied into the repository, or logged.
 
 A restricted or sandboxed process may be able to see this file while being unable to read it. In that case, `vaultctl status`, `BrokerOAuthStore`, or an integration client may misleadingly report that the Vault Agent is not running even when the tray icon is red and unlocked.
+
+A process started by a packaged Windows app (MSIX), such as the Claude desktop app, sees the app's
+own copy of `%LOCALAPPDATA%`: what it writes there goes to
+`%LOCALAPPDATA%\Packages\<app>\LocalCache\Local\...`, and that copy hides the real file from it
+afterwards. So never start the tray or `vault_agent.py serve` from such a session: its state file
+lands in the app's copy, outlives the process, and later sessions there read its key instead of the
+running tray's. The client refuses a state file whose process has ended rather than connect with a
+dead agent's key, and the agent survives a client with a wrong key. If a session reports that the
+state names a process that has ended while the tray is running, the owner removes the app's copy
+(`%LOCALAPPDATA%\Packages\<app>\LocalCache\Local\PortableAIBrain\vault-agent\`, only those two
+runtime files) and the session sees the real one again.
 
 Use this recovery sequence:
 

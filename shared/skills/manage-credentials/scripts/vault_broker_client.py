@@ -7,7 +7,7 @@ from multiprocessing.connection import Client
 from typing import Any
 
 from portable_vault import CredentialError
-from vault_agent_runtime import AGENT_PROTOCOL_VERSION, ipc_address, read_state
+from vault_agent_runtime import AGENT_PROTOCOL_VERSION, _pid_is_running, ipc_address, read_state
 
 
 class BrokerUnavailable(CredentialError):
@@ -29,6 +29,15 @@ def _connect() -> Any:
     token = state.get("token")
     if not isinstance(authkey, str) or not isinstance(token, str):
         raise BrokerUnavailable("Vault Agent state is malformed; restart the agent.")
+    pid = int(state.get("pid") or 0)
+    if not _pid_is_running(pid):
+        # Never connect with a key from an agent that has ended: the running agent would refuse it.
+        raise BrokerUnavailable(
+            f"Vault Agent is not running: its state file names process {pid}, which has ended. "
+            "Start the Portable Vault tray app and unlock it. A process started by a packaged app "
+            "(such as the Claude desktop app) may see the app's own old copy of the state file; "
+            "see the skill's notes on sandboxed access."
+        )
     try:
         connection = Client(ipc_address(), authkey=bytes.fromhex(authkey))
     except Exception as exc:  # noqa: BLE001 - surface as broker error
