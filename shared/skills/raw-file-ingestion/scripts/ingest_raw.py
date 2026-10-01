@@ -6,15 +6,16 @@ This script:
 1. Locates the brain root by finding CONTRACT.md.
 2. Copies the source byte-for-byte into /memory/raw/YYYY/MM/<source-id>/.
 3. Computes SHA-256 and detects existing identical raw files.
-4. Creates a canonical Markdown record under /memory/sources/.
+4. Creates a canonical Markdown record under /memory/sources/, or keeps the
+   record an identical earlier file already has.
 5. Optionally creates a project-local source reference.
 6. Appends the event to /memory/systems/raw-file-management/LOG.md.
 
 Raw files, source records and the ingestion log are owner data, so they live
 in the memory checkout at <brain root>/memory/.
 
-Direct extraction is supported for text-like formats. Other formats are
-preserved and marked pending_conversion.
+convert.py turns the raw file into the record's Markdown. Formats it cannot
+read are preserved and marked pending_conversion.
 """
 
 from __future__ import annotations
@@ -31,11 +32,9 @@ import shutil
 import sys
 from typing import Optional
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-TEXT_EXTENSIONS = {
-    ".txt", ".md", ".markdown", ".csv", ".tsv", ".json", ".yaml", ".yml",
-    ".xml", ".html", ".htm", ".log", ".py", ".js", ".ts", ".css", ".sql"
-}
+from convert import Conversion, convert  # noqa: E402
 
 
 def find_root(start: Path) -> Path:
@@ -80,6 +79,27 @@ def root_path(root: Path, path: Path) -> str:
     return "/" + path.resolve().relative_to(root.resolve()).as_posix()
 
 
+def resolve_node(root: Path, value: str) -> Path:
+    """The target node folder for `--node`, checked before anything is written.
+
+    Accepts a path relative to the brain root, a repository-root path (`/memory/...`), an
+    absolute path inside the brain, and Windows separators. The node must be an existing
+    folder inside the memory checkout: a source reference names an owner's file, so it never
+    goes into the mechanics or the skill library (CONTRACT §3.4, §11.1).
+    """
+    text = value.strip().replace("\\", "/")
+    given = Path(text)
+    if given.is_absolute() and given.resolve().is_relative_to(root.resolve()):
+        node = given.resolve()
+    else:
+        node = (root / text.lstrip("/")).resolve()
+    if not node.is_relative_to(memory_root(root).resolve()):
+        raise ValueError(f"target node must be inside the memory checkout ({MEMORY_DIR}/): {value}")
+    if not node.is_dir():
+        raise FileNotFoundError(f"target node does not exist: {value}")
+    return node
+
+
 def find_duplicate(root: Path, file_hash: str) -> Optional[Path]:
     raw_root = memory_root(root) / "raw"
     if not raw_root.exists():
@@ -96,22 +116,53 @@ def find_duplicate(root: Path, file_hash: str) -> Optional[Path]:
     return None
 
 
-def extract_text(path: Path) -> tuple[str, str]:
-    if path.suffix.lower() not in TEXT_EXTENSIONS:
-        return "", "pending_conversion"
+def find_source_record(root: Path, source_id: str) -> Optional[Path]:
+    """The canonical source record an identical earlier file already has, if any."""
+    sources = memory_root(root) / "sources"
+    for candidate in sorted(sources.glob(f"{source_id}*.md")):
+        if candidate.stem == source_id or candidate.stem.startswith(source_id + "-"):
+            return candidate
+    return None
+
+
+def recorded_status(record: Path) -> str:
+    found = re.search(r"^conversion_status:\s*(\S+)", record.read_text(encoding="utf-8"), re.M)
+    return found.group(1) if found else "unknown"
+
+
+def write_lf(path: Path, text: str) -> None:
+    """Write with LF line ends on every platform, as the brain's other generated files are.
+
+    Written beside the target and moved into place, so a failure never leaves half a file.
+    """
+    partial = path.with_name(path.name + ".tmp")
+    partial.write_text(text, encoding="utf-8", newline="\n")
+    os.replace(partial, path)
+
+
+def safe_convert(path: Path) -> Conversion:
+    """convert(), with an unexpected error turned into a failed conversion.
+
+    The raw file is already stored when conversion runs, so a stopped run would leave it without a
+    record or a log line; this way it always gets both, and the record says what went wrong.
+    """
     try:
-        return path.read_text(encoding="utf-8"), "complete"
-    except UnicodeDecodeError:
-        try:
-            return path.read_text(encoding="utf-8", errors="replace"), "partial"
-        except OSError:
-            return "", "failed"
+        conversion = convert(path)
+        conversion.markdown.encode("utf-8")               # a record must be writable as UTF-8
+        return conversion
+    except Exception as err:
+        return Conversion("failed", "", [
+            f"Conversion stopped with an unexpected error ({type(err).__name__}: {err}). The raw file is "
+            "preserved; the error is a defect of the converter."])
 
 
 def append_log(log_path: Path, line: str, timestamp: str) -> None:
     if not log_path.is_file():
         return
-    text = log_path.read_text(encoding="utf-8")
+    data = log_path.read_bytes()
+    # Keep the log's own line ends, so an appended entry never rewrites every line of it.
+    newline = "\r\n" if b"\r\n" in data else "\n"
+    text = data.decode("utf-8").replace("\r\n", "\n")
     heading = f"## {timestamp}"
     if heading in text:
         text = text.rstrip() + "\n" + line + "\n"
@@ -123,13 +174,58 @@ def append_log(log_path: Path, line: str, timestamp: str) -> None:
         text,
         count=1,
     )
-    log_path.write_text(text, encoding="utf-8")
+    log_path.write_text(text, encoding="utf-8", newline=newline)
+
+
+def write_source_record(canonical: Path, *, source_id: str, title: str, timestamp: str,
+                        raw_repo_path: str, file_hash: str, source_name: str,
+                        conversion: Conversion, node_ref: Optional[str]) -> None:
+    body = [
+        "---",
+        f"id: {source_id}",
+        f"title: {yaml_quote(title)}",
+        "type: source_document",
+        "schema_version: 0.2",
+        "contract: /CONTRACT.md",
+        "status: active",
+        f"created: {timestamp}",
+        f"updated: {timestamp}",
+        f"raw_source: {yaml_quote(raw_repo_path)}",
+        f"raw_sha256: {file_hash}",
+        f"source_filename: {yaml_quote(source_name)}",
+        f"conversion_status: {conversion.status}",
+        "conversion_skill: /shared/skills/raw-file-ingestion",
+        "project_refs:",
+    ]
+    if node_ref:
+        body.append(f"  - {node_ref}")
+    else:
+        body.append("  []")
+    body += [
+        "---",
+        "",
+        f"# {title}",
+        "",
+        "## Source",
+        "",
+        f"- Raw file: `{raw_repo_path}`",
+        f"- SHA-256: `{file_hash}`",
+        f"- Conversion status: `{conversion.status}`",
+        "",
+        "## Conversion notes",
+        "",
+    ]
+    body.append("\n\n".join(conversion.notes))
+    body += ["", "## Extracted content", "", conversion.markdown.rstrip("\n") or "_No extracted content yet._", ""]
+
+    canonical.parent.mkdir(parents=True, exist_ok=True)
+    write_lf(canonical, "\n".join(body))
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Ingest a file into the Portable AI Brain.")
     parser.add_argument("file", type=Path, help="File to ingest")
-    parser.add_argument("--node", type=str, help="Target node path relative to the brain root, e.g. memory/projects/example")
+    parser.add_argument("--node", type=str, help="Target node inside the memory checkout, e.g. memory/projects/example")
     parser.add_argument("--title", type=str, help="Human-readable title")
     args = parser.parse_args()
 
@@ -138,12 +234,23 @@ def main() -> int:
         print(f"Error: source file not found: {source}", file=sys.stderr)
         return 2
 
-    root = find_root(Path.cwd())
+    # Everything is checked before the first write, so a refused run leaves nothing behind.
     try:
+        root = find_root(Path.cwd())
         memory_root(root)
     except FileNotFoundError as err:
         print(f"Error: {err}", file=sys.stderr)
         return 6
+    node: Optional[Path] = None
+    if args.node:
+        try:
+            node = resolve_node(root, args.node)
+        except ValueError as err:
+            print(f"Error: {err}", file=sys.stderr)
+            return 4
+        except FileNotFoundError as err:
+            print(f"Error: {err}", file=sys.stderr)
+            return 5
     now = dt.datetime.now().astimezone().replace(microsecond=0)
     timestamp = now.isoformat()
     today_dt = now.date()
@@ -171,79 +278,34 @@ def main() -> int:
             "original_path": str(source),
             "mime_type": mimetypes.guess_type(source.name)[0],
         }
-        (raw_path.parent / "manifest.json").write_text(
-            json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
-            encoding="utf-8",
-        )
+        write_lf(raw_path.parent / "manifest.json", json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
 
-    extracted, conversion_status = extract_text(raw_path)
-    canonical = memory_root(root) / "sources" / f"{source_id}-{slugify(title)}.md"
+    # One canonical record per raw file (CONTRACT §3.3, §11.1): an identical file ingested
+    # again keeps the record it already has, whatever title it arrives with, so a manual or
+    # specialised conversion made in that record since is never overwritten.
+    existing = find_source_record(root, source_id)
     raw_repo_path = root_path(root, raw_path)
+    if existing:
+        canonical = existing
+        conversion_status = recorded_status(existing)
+    else:
+        canonical = memory_root(root) / "sources" / f"{source_id}-{slugify(title)}.md"
+        conversion = safe_convert(raw_path)
+        conversion_status = conversion.status
+        write_source_record(
+            canonical, source_id=source_id, title=title, timestamp=timestamp,
+            raw_repo_path=raw_repo_path, file_hash=file_hash, source_name=source.name,
+            conversion=conversion,
+            node_ref=root_path(root, node) if node else None,
+        )
     canonical_repo_path = root_path(root, canonical)
 
-    body = [
-        "---",
-        f"id: {source_id}",
-        f"title: {yaml_quote(title)}",
-        "type: source_document",
-        "schema_version: 0.2",
-        "contract: /CONTRACT.md",
-        "status: active",
-        f"created: {timestamp}",
-        f"updated: {timestamp}",
-        f"raw_source: {yaml_quote(raw_repo_path)}",
-        f"raw_sha256: {file_hash}",
-        f"source_filename: {yaml_quote(source.name)}",
-        f"conversion_status: {conversion_status}",
-        "conversion_skill: /shared/skills/raw-file-ingestion",
-        "project_refs:",
-    ]
-    if args.node:
-        node_path = "/" + args.node.strip("/")
-        body.append(f"  - {node_path}")
-    else:
-        body.append("  []")
-    body += [
-        "---",
-        "",
-        f"# {title}",
-        "",
-        "## Source",
-        "",
-        f"- Raw file: `{raw_repo_path}`",
-        f"- SHA-256: `{file_hash}`",
-        f"- Conversion status: `{conversion_status}`",
-        "",
-        "## Conversion notes",
-        "",
-    ]
-    if conversion_status == "pending_conversion":
-        body.append("This format requires a specialised converter. The raw file has been preserved.")
-    elif conversion_status == "partial":
-        body.append("Text was decoded with replacement characters. Review against the raw file.")
-    elif conversion_status == "failed":
-        body.append("Text extraction failed. Review and run a specialised converter.")
-    else:
-        body.append("Direct text extraction completed.")
-    body += ["", "## Extracted content", "", extracted if extracted else "_No extracted content yet._", ""]
-
-    canonical.parent.mkdir(parents=True, exist_ok=True)
-    canonical.write_text("\n".join(body), encoding="utf-8")
-
-    if args.node:
-        node = (root / args.node).resolve()
-        try:
-            node.relative_to(root.resolve())
-        except ValueError:
-            print("Error: target node must be inside the repository.", file=sys.stderr)
-            return 4
-        if not node.is_dir():
-            print(f"Error: target node does not exist: {node}", file=sys.stderr)
-            return 5
+    if node:
         local_dir = node / "sources"
         local_dir.mkdir(parents=True, exist_ok=True)
         local = local_dir / canonical.name
-        local_text = f"""---
+        if not local.exists():
+            local_text = f"""---
 id: {source_id}-{slugify(node.name)}-reference
 title: {yaml_quote(title)}
 type: source_reference
@@ -267,18 +329,16 @@ Read `/CONTRACT.md` first.
 - Immutable raw file: `{raw_repo_path}`
 - SHA-256: `{file_hash}`
 """
-        local.write_text(local_text, encoding="utf-8")
-        append_log(
-            node / "LOG.md",
-            f"- Ingested source `{source.name}` as `{source_id}`.",
-            timestamp,
-        )
+            write_lf(local, local_text)
+            verb = "Referenced existing source" if existing else "Ingested source"
+            append_log(node / "LOG.md", f"- {verb} `{source.name}` as `{source_id}`.", timestamp)
 
-    append_log(
-        memory_root(root) / "systems" / "raw-file-management" / "LOG.md",
-        f"- Ingested `{source.name}` as `{source_id}` with status `{conversion_status}`.",
-        timestamp,
-    )
+    if existing:
+        line = (f"- Ingested `{source.name}` again: identical to `{source_id}`; "
+                "its raw file and source record were kept.")
+    else:
+        line = f"- Ingested `{source.name}` as `{source_id}` with status `{conversion_status}`."
+    append_log(memory_root(root) / "systems" / "raw-file-management" / "LOG.md", line, timestamp)
 
     print(json.dumps({
         "source_id": source_id,
@@ -286,6 +346,7 @@ Read `/CONTRACT.md` first.
         "canonical_markdown": canonical_repo_path,
         "conversion_status": conversion_status,
         "duplicate_reused": duplicate is not None,
+        "source_record_reused": existing is not None,
     }, indent=2))
     return 0
 
