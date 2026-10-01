@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-10-01T23:09:40+10:00
+updated: 2026-10-01T23:19:19+10:00
 owner: brain-owner
 ---
 
@@ -544,8 +544,9 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
   keeps shared files – logs, state, task lists, indexes, version fields, build output – for
   itself. Only the conductor stages and commits. A worker gets its own worktree, branched from the
   session's branch and merged back by the conductor, only when its work cannot be kept apart: it
-  builds or tests code, it must change a file another worker also changes, or it is one of
-  several alternative attempts.
+  builds code or runs tests that write outside its own paths, it must change a file another
+  worker also changes, or it is one of several alternative attempts. Unit tests that read and
+  write only inside the worker's own paths (and their caches) run in the session copy.
 - The pre-commit hook refuses a commit on `main` in a repository's own working tree – the
   shared checkout – and names the command that makes a session copy. Session copies are linked
   worktrees on their own branches, so their commits pass; so do a `proposal/*` branch and any
