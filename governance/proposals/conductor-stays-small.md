@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 status: proposed
 owner: brain-owner
 created: 2026-10-01T22:37:41+10:00
-updated: 2026-10-01T22:37:41+10:00
+updated: 2026-10-01T22:59:04+10:00
 rule_id: null
 accepted_by: null
 accepted_at: null
@@ -183,7 +183,11 @@ with canonical home "this file; `/shared/skills/delegate-work/`; `/shared/skills
 - Hosts: Claude Code gets a `PreCompact` hook (writes the marker) and a `SessionStart` hook for
   the `compact` matcher (prints the reload text). Both fire only on a compaction, so the
   held-back reason for session hooks (token cost on light sessions, 28 September 2026) does not
-  apply. Other hosts use `--context-unknown` and the first-compaction or fourth-run rule.
+  apply. Codex offers the same two hooks (`PreCompact` and `SessionStart` with matcher
+  `compact`, `session_id` on stdin, stdout into the model's context), so the marker and the
+  reload port unchanged; its model has no reading of its own context size, so it uses
+  `--context-unknown` and the first-compaction or fourth-run rule, as does any other host
+  (`/shared/skills/delegate-work/hosts/`).
 - Nothing changes for an agent that never dispatches.
 
 ## Risks and conflicts
