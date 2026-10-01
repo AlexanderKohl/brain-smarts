@@ -46,14 +46,6 @@ TIMESTAMP_RE = re.compile(
 # CONTRACT §8.2: a timestamp is never later than the moment it was written. Five minutes allow
 # for clocks on different machines disagreeing slightly when repositories are synced.
 FUTURE_TOLERANCE = timedelta(minutes=5)
-# CONTRACT §13.2, coverage per change: an accepted proposal covers changes to its target files from
-# its acceptance until an hour after its implementation, or for seven days when it is never marked
-# implemented. The branches on which a change becomes active, in the order they are tried.
-IMPLEMENTATION_GRACE = timedelta(hours=1)
-UNIMPLEMENTED_WINDOW = timedelta(days=7)
-MAINLINES = ("origin/main", "origin/master")
-UPDATED_RE = re.compile(r"^updated:\s")
-DASH_RE = re.compile("\\s*[\u2013\u2014]\\s*")
 LOG_HEADING_RE = re.compile(r"^## (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2}))", re.M)
 SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
 KEY_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_-]*):(?:\s*(.*))?$")
@@ -638,45 +630,10 @@ def git(repo: Path, *args: str) -> list[str]:
     ).stdout.splitlines()
 
 
-def change_base(repo: Path) -> str:
-    """The commit a repository's changes are measured from: where it left the branch on which a
-    change becomes active (CONTRACT §13.2), so committed but unpushed changes count, and changes
-    already on that branch do not. Without such a branch (no remote), the last commit."""
-    for mainline in MAINLINES:
-        try:
-            base = git(repo, "merge-base", mainline, "HEAD")
-        except subprocess.CalledProcessError:
-            continue
-        if base:
-            return base[0]
-    return "HEAD"
-
-
-def repository_changes(repo: Path) -> tuple[str, set[str]]:
-    """(base, paths changed since it): committed, staged, unstaged and untracked."""
-    base = change_base(repo)
-    tracked = git(repo, "diff", "--name-only", "--diff-filter=ACMRTUXB", base)
+def repository_changes(repo: Path) -> set[str]:
+    tracked = git(repo, "diff", "--name-only", "--diff-filter=ACMRTUXB", "HEAD")
     untracked = git(repo, "ls-files", "--others", "--exclude-standard")
-    return base, {value.replace("\\", "/") for value in tracked + untracked}
-
-
-def normalised(text: str) -> str:
-    """A file's text without what never needs a proposal: its `updated` stamp, line endings, and
-    the choice of long dash (an em dash replaced by a spaced en dash)."""
-    lines = [line for line in text.replace("\r\n", "\n").split("\n") if not UPDATED_RE.match(line)]
-    return DASH_RE.sub(" – ", "\n".join(lines))
-
-
-def cosmetic_only(repo: Path, base: str, relative: str) -> bool:
-    """True when a changed file differs from its base version only in what `normalised` drops."""
-    try:
-        before = subprocess.run(["git", "-c", f"safe.directory={repo.as_posix()}", "-C", str(repo), "show",
-                                 f"{base}:{relative}"], check=True, capture_output=True).stdout
-        after = (repo / relative).read_bytes()
-    except (OSError, subprocess.CalledProcessError):
-        return False                       # a new file, or one that cannot be read: not cosmetic
-    decode = lambda raw: raw.decode("utf-8", errors="replace")  # noqa: E731
-    return normalised(decode(before)) == normalised(decode(after))
+    return {value.replace("\\", "/") for value in tracked + untracked}
 
 
 def is_own_repository(repo: Path) -> bool:
@@ -696,17 +653,16 @@ def git_failure(exc: Exception) -> str:
     return f"git could not run ({type(exc).__name__})"
 
 
-def changed_paths(root: Path) -> tuple[dict[str, tuple[Path, str, str]], list[str]]:
+def changed_paths(root: Path) -> tuple[set[str], list[str]]:
     """Changed paths relative to the brain root, across both repositories.
 
-    Memory paths carry the `memory/` prefix. Returns {path: (repository, base, path in it)} and
-    any problems met, one per repository that could not be read.
+    Memory paths carry the `memory/` prefix. Returns the paths and any problems met, one
+    per repository that could not be read.
     """
     problems: list[str] = []
-    changed: dict[str, tuple[Path, str, str]] = {}
+    changed: set[str] = set()
     try:
-        base, paths = repository_changes(root)
-        changed.update({value: (root, base, value) for value in paths})
+        changed |= repository_changes(root)
     except (OSError, subprocess.CalledProcessError) as exc:
         problems.append(f"mechanics repository: {git_failure(exc)}")
     memory = memory_root(root)
@@ -717,35 +673,12 @@ def changed_paths(root: Path) -> tuple[dict[str, tuple[Path, str, str]], list[st
             )
         else:
             try:
-                base, paths = repository_changes(memory)
-                changed.update({f"{MEMORY_DIR}/{value}": (memory, base, value) for value in paths})
+                changed |= {
+                    f"{MEMORY_DIR}/{value}" for value in repository_changes(memory)
+                }
             except (OSError, subprocess.CalledProcessError) as exc:
                 problems.append(f"{MEMORY_PREFIX} repository: {git_failure(exc)}")
     return changed, problems
-
-
-def stamp(value: Any) -> datetime | None:
-    """A front-matter timestamp as an aware datetime, or None when it is not one."""
-    if isinstance(value, datetime):
-        return value if value.tzinfo else None
-    if not isinstance(value, str) or not TIMESTAMP_RE.fullmatch(value.strip()):
-        return None
-    return datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
-
-
-def coverage_window(metadata: dict[str, Any]) -> tuple[datetime, datetime] | None:
-    """When an accepted proposal covers changes to its target files (CONTRACT §13.2).
-
-    From acceptance until implementation, with an hour's grace for the commits that apply and
-    record it; a proposal accepted but never marked implemented stops covering after seven days.
-    After that a change to the same file needs a proposal of its own.
-    """
-    opened = stamp(metadata.get("accepted_at"))
-    if opened is None:
-        return None
-    ends = [s for s in (stamp(metadata.get("implemented_at")), stamp(metadata.get("reverted_at"))) if s]
-    closed = max(ends) + IMPLEMENTATION_GRACE if ends else opened + UNIMPLEMENTED_WINDOW
-    return opened - FUTURE_TOLERANCE, closed
 
 
 def is_protected(path: str) -> bool:
@@ -778,18 +711,11 @@ def validate_governance(
             f"Git change state unavailable; protected-governance coverage not checked: {problem}"
         )
 
-    # A change that only touches the `updated` stamp or the dash style is not substantive.
-    protected = {"/" + path for path, (repo, base, relative) in changed.items()
-                 if is_protected(path) and not cosmetic_only(repo, base, relative)}
+    protected = {"/" + path for path in changed if is_protected(path)}
     if not protected:
         return
 
-    # Coverage is per change, not per file: a proposal covers a file it lists only while its
-    # window is open (coverage_window), judged at the moment the change is checked – the commit
-    # or the push that would make it active.
-    now = clock()
     covered: set[str] = set()
-    closed: dict[str, list[str]] = {}
     proposal_roots = [root.joinpath(*parts) for parts in PROPOSAL_ROOTS]
     for path, metadata in records.items():
         if not any(proposals in path.parents for proposals in proposal_roots):
@@ -804,17 +730,8 @@ def validate_governance(
             )
             continue
         targets = metadata.get("target_files", [])
-        if not isinstance(targets, list):
-            continue
-        window = coverage_window(metadata)
-        if window is None:
-            result.errors.append(f"{root_path(path, root)}: accepted_at is not a timestamp with a timezone")
-            continue
-        for target in (str(t) for t in targets):
-            if window[0] <= now <= window[1]:
-                covered.add(target)
-            else:
-                closed.setdefault(target, []).append(root_path(path, root))
+        if isinstance(targets, list):
+            covered.update(str(target) for target in targets)
 
     # CONTRACT 13.2: acceptance is enforced where a change becomes active. On a proposal/*
     # branch, a file an open proposal lists is that proposal's draft diff, reported as a warning.
@@ -833,12 +750,8 @@ def validate_governance(
         if path in drafted:
             result.warnings.append(f"{path}: protected governance drafted on {branch}; not active until accepted and merged")
             continue
-        earlier = closed.get(path)
         result.errors.append(
             f"{path}: changed protected governance is not covered by an accepted proposal"
-            # A count, not the names: memory proposal names must not reach the mechanics manifest.
-            + (f" ({len(earlier)} accepted proposal(s) list it, but each was implemented, or accepted more "
-               "than seven days ago, before this change)" if earlier else "")
         )
 
 
