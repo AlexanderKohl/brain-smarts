@@ -14,12 +14,20 @@ AGENT_PROTOCOL_VERSION = 1
 AGENT_NAME = "PortableAIBrainVaultAgent"
 
 
-def runtime_dir() -> Path:
+def runtime_base() -> Path:
+    """Where the agent keeps its state file and singleton lock.
+
+    On Windows this is outside AppData: a packaged app (MSIX, such as the Claude desktop app) gives
+    the processes it starts its own view of AppData, which hides the running tray's state file from
+    them, so sessions there could never reach the agent. The user profile outside AppData is shared.
+    """
     if os.name == "nt":
-        base = Path(os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData" / "Local"))
-    else:
-        base = Path(os.environ.get("XDG_RUNTIME_DIR") or (Path.home() / ".cache"))
-    path = base / "PortableAIBrain" / "vault-agent"
+        return Path(os.environ.get("USERPROFILE") or Path.home()) / ".portable-ai-brain" / "vault-agent"
+    return Path(os.environ.get("XDG_RUNTIME_DIR") or (Path.home() / ".cache")) / "PortableAIBrain" / "vault-agent"
+
+
+def runtime_dir() -> Path:
+    path = runtime_base()
     path.mkdir(parents=True, exist_ok=True)
     return path
 
