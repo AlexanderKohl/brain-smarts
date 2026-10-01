@@ -1,6 +1,6 @@
 {
   "name": "code-map",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "description": "A deterministic map of a code repository – files, functions, imports, routes, UI calls, database columns, settings and environment variables – with checks that fail when a link breaks.",
   "license": "UNLICENSED",

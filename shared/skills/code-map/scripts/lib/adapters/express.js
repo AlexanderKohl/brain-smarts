@@ -212,6 +212,34 @@ function expressAdapter(ctx) {
     }
   }
 
+  // Pass 3b: register functions – function registerX(router, deps) { router.get('/x', …) } called as
+  // registerX(someRouter, { … }): what it registers on its first parameter belongs to the router passed,
+  // at the call's place in that router's order (the split-file skill's block tool writes these).
+  const registerFns = new Map();
+  for (const facts of project.facts.values()) {
+    for (const fn of facts.functions) {
+      const p0 = fn.node.params[0];
+      if (!p0 || p0.type !== 'Identifier' || mountFns.has(fn.id)) continue;
+      const sites = facts.callSites.filter((site) => site.rootType === 'id' && site.path.length === 1
+        && (VERBS.has(site.path[0]) || site.path[0] === 'use')
+        && site.binding && site.binding.param && site.binding.param.fn === fn.node && site.binding.param.index === 0);
+      if (sites.length) registerFns.set(fn.id, { fn, facts, sites: sites.sort((a, b) => a.node.start - b.node.start) });
+    }
+  }
+  for (const facts of project.facts.values()) {
+    for (const site of facts.callSites) {
+      const target = project.callTarget(facts, site);
+      const rf = target && registerFns.get(target);
+      if (!rf || !site.args[0]) continue;
+      const parentArg = A.unwrap(site.args[0]);
+      const parent = parentArg.type === 'Identifier' ? routerOf(facts, lookup(site.scopes, parentArg.name), site.scopes) : null;
+      if (!parent) continue;
+      rf.sites.forEach((inner, i) => {
+        parent.registrations.push({ verb: inner.path[0], site: inner, facts: rf.facts, start: site.node.start + (i + 1) / 100000, line: inner.line, via: rf.fn.qualified });
+      });
+    }
+  }
+
   // Pass 4: routes, middleware and direct mounts, in registration order.
   const order = [];
   for (const router of routers.values()) {
@@ -248,7 +276,7 @@ function expressAdapter(ctx) {
         graph.unresolvedItem('route-path', facts.file, reg.line, A.snippet(site.text, site.node, 100), 'route path is not a literal');
         return;
       }
-      entries.push({ kind: 'route', method, path: localPath, line: reg.line, order: index, handler,
+      entries.push({ kind: 'route', method, path: localPath, line: reg.line, file: facts.file, order: index, handler,
         middleware: handlers.slice(0, -1).map((h) => A.snippet(site.text, h, 50)) });
     });
     router.entries = entries;
@@ -276,14 +304,16 @@ function expressAdapter(ctx) {
     for (const e of router.entries || []) {
       if (e.kind !== 'route') continue;
       const fulls = prefixes.length ? prefixes.map((p) => joinPath(p, e.path)) : [null];
+      // A route a register function adds is written in that function's file.
+      const file = e.file || router.facts.file;
       for (const full of fulls) {
         const id = `route:${e.method} ${full === null ? `(not mounted) ${router.facts.file} ${e.path}` : full}`;
-        const node = graph.nodes.get(id) ? graph.node(`${id} @${router.facts.file}:${e.line}`, 'route', {}) : graph.node(id, 'route', {});
-        Object.assign(node, { method: e.method, path: full, localPath: e.path, file: router.facts.file, line: e.line, framework: 'express', router: router.id, order: e.order, middleware: e.middleware });
-        graph.edge('contains', `file:${router.facts.file}`, node.id);
+        const node = graph.nodes.get(id) ? graph.node(`${id} @${file}:${e.line}`, 'route', {}) : graph.node(id, 'route', {});
+        Object.assign(node, { method: e.method, path: full, localPath: e.path, file, line: e.line, framework: 'express', router: router.id, order: e.order, middleware: e.middleware });
+        graph.edge('contains', `file:${file}`, node.id);
         graph.edge('defines', router.id, node.id);
         if (e.handler) graph.edge('handles', node.id, `fn:${e.handler}`);
-        if (full !== null) ctx.routes.push({ method: e.method, path: full, id: node.id, file: router.facts.file, line: e.line, framework: 'express' });
+        if (full !== null) ctx.routes.push({ method: e.method, path: full, id: node.id, file, line: e.line, framework: 'express' });
       }
     }
   }
