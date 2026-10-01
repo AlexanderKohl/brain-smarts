@@ -695,9 +695,12 @@ Amendment A1 of `SMART-RULE-0034`'s proposal record in the owner's memory.
 
 ## Implementation record
 
-- Applied at 2026-09-30T22:19:37+10:00: `1c3bc0e` merged into `main` with the merge commit `910910c`
-  (`--no-ff`, so one revert undoes it). `main` had not moved, and the merged tree is identical to
-  `1c3bc0e`: only the accepted change set was applied.
+- Applied on 1 October 2026: `1c3bc0e` re-applied unchanged on top of the latest `main` as `a895e03`
+  (one commit, so one revert undoes it), followed by the acceptance record. The first application, a
+  merge commit made on 30 September, was not pushed: by 1 October `main` had moved 32 commits, and the
+  merge commit that brought them in was refused by the commit hook as reaching across two territories.
+  Only the two `updated` stamps conflicted; the newer stamp was kept. Only the accepted change set was
+  applied.
 - Files changed: `/RULES.md` (`SMART-RULE-0034`), `/shared/skills/repository-preflight/SKILL.md`,
   `scripts/sync.py`, `scripts/session.py`, `tests/test_sync.py`, `tests/test_session.py`, and this
   file.
