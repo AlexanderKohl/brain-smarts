@@ -17,7 +17,12 @@ class HooksTest(unittest.TestCase):
         if settings.is_file():
             self.assertEqual(json.loads(settings.read_text(encoding="utf-8")), hooks.host_settings())
         else:
-            self.assertEqual(hooks.host_settings(), {"hooks": {}})
+            # Only the events the list gives a Claude Code name reach the host; today the two
+            # compaction hooks, which fire on a compaction and never on a light session.
+            listed = {e["claude_code"] for e in json.loads(hooks.EVENTS.read_text(encoding="utf-8"))["events"]
+                      if e.get("claude_code")}
+            self.assertEqual(set(hooks.host_settings()["hooks"]), listed)
+            self.assertEqual(listed, {"PreCompact", "SessionStart"})
         self.assertEqual(hooks.host_settings(), hooks.host_settings())
 
     def test_a_file_untracked_at_session_start_cannot_be_committed(self):

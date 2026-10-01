@@ -16,10 +16,18 @@
   },
   {
    "event": "before compaction",
-   "claude_code": null,
+   "claude_code": "PreCompact",
    "git": null,
    "command": "shared/skills/repository-preflight/scripts/hooks.py pre-compact",
-   "held_back": "the host session hooks cost tokens on every light session (before-and-after test, 28 September 2026); the pre-commit hook is proposed alone"
+   "note": "fires only when a context is compacted, never on a light session, so the held-back reason of the session hooks does not apply; writes the compaction marker (trial of an amendment to SMART-RULE-0019)"
+  },
+  {
+   "event": "after compaction",
+   "claude_code": "SessionStart",
+   "matcher": "compact",
+   "git": null,
+   "command": "shared/skills/repository-preflight/scripts/hooks.py post-compact",
+   "note": "the compacted thread reloads the contract and rules and writes the missed handover checkpoint before it dispatches anything (trial of an amendment to SMART-RULE-0019)"
   }
  ]
 }

@@ -121,6 +121,18 @@ python shared/skills/repository-preflight/scripts/session.py list
   working tree – the shared checkout – and names `session.py start`. A linked worktree (a session
   copy) or any other branch passes. `BRAIN_SHARED_CHECKOUT=1` lets a host that cannot work in a
   separate folder, or the owner by hand, commit there on purpose.
+- A compaction is a missed handover checkpoint (`SMART-RULE-0019`, amendment proposed in
+  `PROPOSAL-conductor-stays-small`). `hooks.py pre-compact` runs as the host's `PreCompact` hook:
+  it writes a marker `<brain_root>/temp/conductor/compacted/<session_id>.json` (session, time,
+  cwd, trigger), repeats the handover reminder, and closes dispatching until
+  `delegation.py checkpoint-done --session <id>` has been run. `hooks.py post-compact` runs as the
+  `SessionStart` hook with matcher `compact`: it tells the thread when it was compacted, that it
+  must re-read `/CONTRACT.md`, `/RULES.md`, `/memory/RULES.md` and the owning node's `## Handover`
+  before anything else, write and commit the checkpoint and start no new worker until then, and
+  lists the markers still present. Both fire only on a compaction, never on a light session.
+  Regenerate `.claude/settings.json` with `hooks.py host-settings` after changing
+  `hooks/events.json`; the file is git-ignored, so each checkout the owner opens sessions in
+  regenerates its own.
 
 ## Outputs
 
