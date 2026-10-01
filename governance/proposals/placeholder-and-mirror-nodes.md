@@ -4,14 +4,14 @@ title: Placeholder nodes the owner lays out ahead of content, and where a system
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: proposed
+status: implemented
 owner: brain-owner
 created: 2026-10-01T10:52:46+10:00
-updated: 2026-10-01T10:52:46+10:00
+updated: 2026-10-01T12:05:38+10:00
 rule_id: null
-accepted_by: null
-accepted_at: null
-implemented_at: null
+accepted_by: brain-owner
+accepted_at: 2026-10-01T12:05:38+10:00
+implemented_at: 2026-10-01T12:05:38+10:00
 previous_contract_version: 2.2.0
 new_contract_version: 2.3.0
 target_files:
@@ -115,8 +115,9 @@ marked and that no mechanics system node holds owner records.
 
 ## Acceptance
 
-Not yet requested. Ask one direct question that identifies this proposal.
+Accepted by the owner on 1 October 2026. The owner's record is kept in their memory.
 
 ## Implementation record
 
-None.
+Implemented on 1 October 2026: CONTRACT §7 and §3.5 as worded above; `contract_version` 2.3.0
+in the contract and the three repository manifests.
