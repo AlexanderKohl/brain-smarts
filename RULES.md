@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-10-01T23:19:19+10:00
+updated: 2026-10-01T23:25:28+10:00
 owner: brain-owner
 ---
 
@@ -368,9 +368,11 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
   conductor's copy and branch (`SMART-RULE-0038`), and returns findings, artifacts inside its run
   folder, and every changed path with its validation result. The conductor keeps the paths of one
   run disjoint, reviews each worker's diff before staging it, and commits and reports. A worker
-  whose work cannot be kept apart – it builds or tests code, it must change a file another worker
-  also changes, or it is one of several alternative attempts – works in its own worktree, branched
-  from the conductor's branch; the conductor merges it back (`SMART-RULE-0014`).
+  whose work cannot be kept apart – it builds code or runs tests that write outside its own
+  paths, it must change a file another worker also changes, or it is one of several alternative
+  attempts – works in its own worktree, branched from the conductor's branch; the conductor
+  merges it back (`SMART-RULE-0014`). Unit tests that read and write only inside the worker's
+  own paths (and their caches) run in the session copy (`SMART-RULE-0038`).
 - Workers use no credentials and take no external side effect unless the packet names a target
   the owner confirmed for this operation under CONTRACT §10.5. The default is none. A worker
   that needs an owner decision stops with status `blocked` and the question; it does not guess.
