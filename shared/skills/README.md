@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 node_type: skill_library
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-28T17:00:17+10:00
+updated: 2026-09-30T23:00:32+00:00
 ---
 
 # Core Skills
@@ -56,7 +56,7 @@ Contains the investment-proportionate product-development process for new and ex
 
 ##### `raw-file-ingestion/`
 
-Contains the canonical shared executable skill for preserving raw files under `/memory/raw/` and creating traceable Markdown source records under `/memory/sources/`. It must never modify or delete an existing raw file.
+Contains the canonical shared executable skill for preserving raw files under `/memory/raw/` and creating traceable Markdown source records under `/memory/sources/`. It converts text, CSV, JSON, Markdown, Word and Excel files with the standard library, and PDF through `pdftotext` or `pypdf` where installed, and says in each record what was left out. It must never modify or delete an existing raw file. Tests in `tests/` run on fictional files.
 
 ##### `repository-preflight/`
 
@@ -65,6 +65,10 @@ Contains the canonical validator for metadata, identifiers, references, task sta
 ##### `skill-exchange/`
 
 Active (`SMART-RULE-0032`). How agents notice a reusable capability and suggest promoting it to a shared skill, offer it upstream as a pull request, tell the owner about new or changed upstream skills, and install a skill from another brain with its provenance recorded. `scripts/skill_exchange.py` does the read-only parts: the upstream comparison, the provenance record and the promotion check.
+
+##### `split-file/`
+
+Contains the method and tools for shortening a large code file without changing what it does (`SMART-RULE-0041`): a destination table first; moves of whole declarations, class methods or route blocks into new files with the text unchanged and only wiring added; refusals for any move that could change behaviour; and a shape snapshot that shows a file's names, exports, classes and routes are the same afterwards, with every new file loaded alone. JavaScript (CommonJS) tools in `scripts/js/` with their own pinned parser (`npm ci` in the folder; `node_modules/` is ignored) and Python tools in `scripts/py/` (standard library only). Tests in `tests/` run on fictional apps.
 
 ##### `tasks/`
 

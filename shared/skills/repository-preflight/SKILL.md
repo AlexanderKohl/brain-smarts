@@ -9,10 +9,12 @@ scope: shared
 script_paths:
   - /shared/skills/repository-preflight/scripts/preflight.py
   - /shared/skills/repository-preflight/tests/test_preflight.py
+  - /shared/skills/repository-preflight/scripts/file_sizes.py
+  - /shared/skills/repository-preflight/tests/test_file_sizes.py
   - /shared/skills/repository-preflight/scripts/session.py
   - /shared/skills/repository-preflight/tests/test_session.py
 created: 2026-08-04T23:16:08+10:00
-updated: 2026-09-28T08:21:33+10:00
+updated: 2026-10-01T08:25:31+10:00
 owner: brain-owner
 ---
 
@@ -58,7 +60,10 @@ python -m unittest discover -s shared/skills/repository-preflight/tests -v
 
 The tests build fictional two-repository brains in temporary folders and need `git` for the governance cases.
 
-The script uses only the Python standard library.
+The script uses only the Python standard library. `preflight.py` runs the checks; the basics they
+share (`preflight_base.py`), the reference checks (`preflight_references.py`), protected governance
+(`preflight_governance.py`), the manifests and the personal-data check (`preflight_manifest.py`),
+and the file-size check (`file_sizes.py`) are modules of their own.
 
 ## Starting from the latest
 

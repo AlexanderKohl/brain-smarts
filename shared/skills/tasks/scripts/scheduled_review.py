@@ -7,10 +7,12 @@ repository), and a desktop notification when something needs attention.
   python shared/skills/tasks/scripts/scheduled_review.py              write /temp/due.md and notify
   python shared/skills/tasks/scripts/scheduled_review.py --no-notify  write /temp/due.md only
   python shared/skills/tasks/scripts/scheduled_review.py --register   run it daily from the OS scheduler
+  python shared/skills/tasks/scripts/scheduled_review.py --status     show the registered daily run
+  python shared/skills/tasks/scripts/scheduled_review.py --unregister remove it
 
 CONTRACT §14: an agent may claim follow-up only when a scheduler is actually configured; once
-registered, this is that scheduler. It needs no model and no AI host: Windows Task Scheduler on
-Windows, cron elsewhere. The same scripts run at session start through the hook list.
+registered, this is that scheduler. It needs no model and no AI host: Windows Task Scheduler, a
+launchd agent on macOS, a systemd user timer on Linux, or cron where systemd is not available.
 """
 from __future__ import annotations
 
@@ -139,11 +141,45 @@ def notify(title: str, message: str) -> bool:
     return subprocess.run(command, env=env, capture_output=True).returncode == 0
 
 
-def schedule_command(script: Path) -> list[str]:
-    """The command that registers a daily run; on Windows a missed run starts when the computer is next on."""
-    python = Path(sys.executable)
-    root = script.parents[4]
+LAUNCHD_LABEL = "local.brain.scheduled-review"
+
+
+class Plan:
+    """What registering, checking or removing the daily run does on one operating system: files to
+    write or delete, then commands to run. Built without side effects, so it can be shown and tested."""
+
+    def __init__(self, scheduler: str, write: dict[Path, str] | None = None, delete: list[Path] | None = None,
+                 commands: list[list[str]] | None = None):
+        self.scheduler, self.write, self.delete, self.commands = scheduler, write or {}, delete or [], commands or []
+
+    def apply(self) -> None:
+        for path, text in self.write.items():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding="utf-8")
+        for path in self.delete:
+            path.unlink(missing_ok=True)
+        for command in self.commands:
+            subprocess.run(command, check=True)
+
+
+def platform_name() -> str:
     if sys.platform == "win32":
+        return "windows"
+    if sys.platform == "darwin":
+        return "macos"
+    return "linux-systemd" if shutil.which("systemctl") and os.environ.get("XDG_RUNTIME_DIR") else "linux-cron"
+
+
+def plan(action: str, script: Path, python: Path, home: Path, system: str, uid: int | None = None) -> Plan:
+    """action: register, status or unregister. A missed 07:00 run starts when the computer is next
+    on (Windows start-when-available, launchd after sleep, a persistent systemd timer); cron cannot."""
+    root = script.parents[4]
+    hour, minute = (int(part) for part in DAILY_AT.split(":"))
+    if system == "windows":
+        if action == "status":
+            return Plan("Windows Task Scheduler", commands=[["schtasks", "/Query", "/TN", TASK_NAME, "/V", "/FO", "LIST"]])
+        if action == "unregister":
+            return Plan("Windows Task Scheduler", commands=[["schtasks", "/Delete", "/TN", TASK_NAME, "/F"]])
         pythonw = python.with_name("pythonw.exe")
         runner = pythonw if pythonw.is_file() else python
         ps = (f"$a = New-ScheduledTaskAction -Execute '{runner}' -Argument '\"{script}\"' -WorkingDirectory '{root}';"
@@ -151,23 +187,72 @@ def schedule_command(script: Path) -> list[str]:
               "$s = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries "
               "-DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 10);"
               f"Register-ScheduledTask -TaskName {TASK_NAME} -Action $a -Trigger $t -Settings $s -Force > $null")
-        return ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps]
-    hour, minute = DAILY_AT.split(":")
-    line = f"{int(minute)} {int(hour)} * * * cd '{root}' && '{python}' '{script}'  # {TASK_NAME}"
-    return ["sh", "-c", f"(crontab -l 2>/dev/null | grep -v '# {TASK_NAME}'; echo \"{line}\") | crontab -"]
+        return Plan("Windows Task Scheduler", commands=[["powershell", "-NoProfile", "-NonInteractive", "-Command", ps]])
+    if system == "macos":
+        # A LaunchAgent runs in the owner's login session, so its notification is shown.
+        agent = home / "Library" / "LaunchAgents" / f"{LAUNCHD_LABEL}.plist"
+        target = f"gui/{uid if uid is not None else os.getuid()}"
+        if action == "status":
+            return Plan("launchd", commands=[["launchctl", "print", f"{target}/{LAUNCHD_LABEL}"]])
+        if action == "unregister":
+            return Plan("launchd", delete=[agent],
+                        commands=[["sh", "-c", f"launchctl bootout {target}/{LAUNCHD_LABEL} 2>/dev/null || true"]])
+        plist = (
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
+            '<plist version="1.0">\n<dict>\n'
+            f"  <key>Label</key><string>{LAUNCHD_LABEL}</string>\n"
+            f"  <key>ProgramArguments</key><array><string>{python}</string><string>{script}</string></array>\n"
+            f"  <key>WorkingDirectory</key><string>{root}</string>\n"
+            f"  <key>StartCalendarInterval</key><dict><key>Hour</key><integer>{hour}</integer>"
+            f"<key>Minute</key><integer>{minute}</integer></dict>\n"
+            "</dict>\n</plist>\n")
+        return Plan("launchd", write={agent: plist}, commands=[
+            ["sh", "-c", f"launchctl bootout {target}/{LAUNCHD_LABEL} 2>/dev/null || true"],
+            ["launchctl", "bootstrap", target, str(agent)]])
+    if system == "linux-systemd":
+        # A user timer runs in the owner's session (notify-send reaches the desktop); Persistent catches up.
+        folder = home / ".config" / "systemd" / "user"
+        service, timer = folder / "brain-scheduled-review.service", folder / "brain-scheduled-review.timer"
+        if action == "status":
+            return Plan("systemd user timer", commands=[["systemctl", "--user", "list-timers", "brain-scheduled-review.timer"]])
+        if action == "unregister":
+            return Plan("systemd user timer", delete=[service, timer], commands=[
+                ["sh", "-c", "systemctl --user disable --now brain-scheduled-review.timer || true"],
+                ["systemctl", "--user", "daemon-reload"]])
+        return Plan("systemd user timer", write={
+            service: ("[Unit]\nDescription=Brain scheduled review\n\n[Service]\nType=oneshot\n"
+                      f"WorkingDirectory={root}\nExecStart={python} {script}\n"),
+            timer: ("[Unit]\nDescription=Brain scheduled review, daily\n\n[Timer]\n"
+                    f"OnCalendar=*-*-* {hour:02d}:{minute:02d}:00\nPersistent=true\n\n[Install]\nWantedBy=timers.target\n")},
+            commands=[["systemctl", "--user", "daemon-reload"],
+                      ["systemctl", "--user", "enable", "--now", "brain-scheduled-review.timer"]])
+    # cron: no catch-up, and a notification needs the desktop session's environment.
+    if action == "status":
+        return Plan("cron", commands=[["sh", "-c", f"crontab -l | grep '# {TASK_NAME}'"]])
+    keep = f"crontab -l 2>/dev/null | grep -v '# {TASK_NAME}'"
+    if action == "unregister":
+        return Plan("cron", commands=[["sh", "-c", f"({keep}) | crontab -"]])
+    line = f"{minute} {hour} * * * cd '{root}' && '{python}' '{script}'  # {TASK_NAME}"
+    return Plan("cron", commands=[["sh", "-c", f"({keep}; echo \"{line}\") | crontab -"]])
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--register", action="store_true", help=f"run daily at {DAILY_AT} from the OS scheduler")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--register", action="store_true", help=f"run daily at {DAILY_AT} from the OS scheduler")
+    group.add_argument("--status", action="store_true", help="show the registered daily run")
+    group.add_argument("--unregister", action="store_true", help="remove the daily run")
     parser.add_argument("--no-notify", action="store_true", help="write the report without a notification")
     args = parser.parse_args(argv)
     root = brain_root(Path(__file__).resolve().parent)
-    if args.register:
-        shared = owner_brain_root(root)
-        script = shared / "shared" / "skills" / "tasks" / "scripts" / "scheduled_review.py"
-        subprocess.run(schedule_command(script), check=True)
-        print(f"registered {TASK_NAME}: daily at {DAILY_AT}, running {script}")
+    action = "register" if args.register else "status" if args.status else "unregister" if args.unregister else None
+    if action:
+        script = owner_brain_root(root) / "shared" / "skills" / "tasks" / "scripts" / "scheduled_review.py"
+        chosen = plan(action, script, Path(sys.executable), Path.home(), platform_name())
+        chosen.apply()
+        if action != "status":
+            print(f"{action}: {TASK_NAME} with {chosen.scheduler}, daily at {DAILY_AT}, running {script}")
         return 0
     report, reasons = review(root, datetime.now().astimezone())
     out = root / "temp" / "due.md"
