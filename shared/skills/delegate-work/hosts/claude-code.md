@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-15T07:45:00+10:00
-updated: 2026-09-27T15:32:32+10:00
+updated: 2026-10-01T22:41:12+10:00
 owner: brain-owner
 ---
 
@@ -29,9 +29,20 @@ Verified with a trial run of several read-only workers launched in one turn.
 | `model: <name>` | the `model` parameter, only from the host's offered list; the result must record what ran |
 | parallel execution | launch every packet with `run_in_background: true` in the same turn, then wait for the completion notifications |
 
+## Reading the context size
+
+The desktop app offers a session-usage tool (`get_usage`, session `self`) that reports the
+tokens in this session's context, the window size and the percentage at which auto-compaction
+starts. Read it before every `new-run` and `new-packet` and pass the token figure as
+`--context-tokens`; state it in the dispatch line. In the terminal CLI the status line can show
+the same figure; when no reading is available, pass `--context-unknown "<reason>"`. After a
+compaction the app runs the brain's `SessionStart` hook for the `compact` matcher, which prints
+the session id and the `checkpoint-done` command; dispatching is refused until it has run.
+
 ## Procedure
 
-1. Create the run and packets with `delegation.py`, then print each packet's dispatch prompt.
+1. Read the context size (above). Create the run and packets with `delegation.py`, then print
+   each packet's dispatch prompt.
 2. Launch one Agent call per packet, all in the same response, with the dispatch prompt as the
    prompt. Do not paste the packet body; the worker reads it from the path.
 3. When each completion notification arrives, run `validate-result` for that packet.

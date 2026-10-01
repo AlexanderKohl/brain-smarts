@@ -18,7 +18,10 @@ Commands
   check-writes     --run RUN [--mine PATH ...]
   summarise        --run RUN
   close-run        --run RUN --status synthesised|abandoned --host TEXT --parallel yes|no
+  checkpoint-done  --session ID   (the handover checkpoint is committed; clears the compaction marker)
 
+new-run, new-packet and close-run take exactly one of --context-tokens N | --context-unknown REASON;
+new-run and new-packet also take --owner-override REASON and --session ID (see context_guard.py).
 Common options: --root PATH (otherwise discovered upward from the current directory by finding
 CONTRACT.md) and --now ISO-8601 (tests only). Standard library only.
 """
@@ -31,6 +34,8 @@ import subprocess
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
+
+import context_guard
 
 SKILL_PATH = "/shared/skills/delegate-work"
 RUNS_SUBDIR = Path("temp") / "delegation" / "runs"
@@ -305,6 +310,7 @@ def resolve(root: Path, ref: str) -> Path:
 def cmd_new_run(args) -> int:
     root = discover_root(args.root)
     stamp = now_stamp(args.now)
+    context_tokens, override = context_guard.guard(root, args, "new-run", datetime.fromisoformat(stamp))
     run_id = args.run_id or ("RUN-" + stamp[:19].replace("-", "").replace(":", "").replace("T", "-"))
     max_workers = args.max_workers or DEFAULT_MAX_WORKERS
     if max_workers > HARD_MAX_WORKERS:
@@ -325,6 +331,8 @@ def cmd_new_run(args) -> int:
         "max_depth": 1,
         "host": None,
         "parallel": None,
+        "context_tokens_at_open": context_tokens,
+        **({"owner_override": override} if override else {}),
         # What was already changed before any worker started, so check-writes does not blame
         # a worker for it.
         "dirty_at_start": brain_changes(root),
@@ -383,6 +391,7 @@ def worker_instructions(fields: dict, result_ref: str) -> str:
 def cmd_new_packet(args) -> int:
     root = discover_root(args.root)
     stamp = now_stamp(args.now)
+    _, override = context_guard.guard(root, args, "new-packet", datetime.fromisoformat(stamp))
     run = run_dir(root, args.run)
     run_meta, _ = load(run / "RUN.md")
     existing = packet_files(run)
@@ -441,6 +450,7 @@ def cmd_new_packet(args) -> int:
         "max_output_words": args.max_output_words,
         "context_refs": args.context or [],
         "facts_verified": [f["label"] for f in facts],
+        **({"owner_override": override} if override else {}),
         "created": stamp,
         "updated": stamp,
     }
@@ -481,7 +491,7 @@ def cmd_new_packet(args) -> int:
     }
     result_body = template_body(root, "result.template.md").replace("{{TITLE}}", args.title)
     write(run / f"{short}.result.md", result_fields, result_body)
-    touch_updated(run / "RUN.md", stamp)
+    touch_updated(run / "RUN.md", stamp, **({"owner_override": override} if override else {}))
     print(root_path(run / f"{short}.md", root))
     return 0
 
@@ -697,7 +707,8 @@ def cmd_close_run(args) -> int:
     if args.status not in {"synthesised", "abandoned"}:
         raise SystemExit("error: status must be synthesised or abandoned")
     touch_updated(run / "RUN.md", now_stamp(args.now), status=args.status, host=args.host,
-                  parallel=(args.parallel == "yes"))
+                  parallel=(args.parallel == "yes"),
+                  context_tokens_at_close=context_guard.context_value(args, "close-run"))
     print(root_path(run / "RUN.md", root))
     return 0
 
@@ -720,6 +731,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--parent", help="task or run id this run serves")
     p.add_argument("--max-workers", type=int)
     p.add_argument("--run-id", help=argparse.SUPPRESS)
+    context_guard.add_context_arguments(p)
     p.set_defaults(func=cmd_new_run)
 
     p = sub.add_parser("new-packet")
@@ -740,6 +752,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--model", default="inherit")
     p.add_argument("--max-tool-calls", type=int, default=15)
     p.add_argument("--max-output-words", type=int, default=800)
+    context_guard.add_context_arguments(p)
     p.set_defaults(func=cmd_new_packet)
 
     p = sub.add_parser("dispatch-prompt")
@@ -766,11 +779,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--status", required=True)
     p.add_argument("--host", required=True)
     p.add_argument("--parallel", required=True, choices=["yes", "no"])
+    context_guard.add_context_arguments(p, guarded=False)
     p.set_defaults(func=cmd_close_run)
+
+    p = sub.add_parser("checkpoint-done")
+    p.add_argument("--session", required=True, help="this conductor's session id; removes its compaction marker")
+    p.set_defaults(func=lambda a: context_guard.checkpoint_done(discover_root(a.root), a.session))
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
+    for stream in (sys.stdout, sys.stderr):  # a Windows console defaults to cp1252; the messages carry an en dash
+        getattr(stream, "reconfigure", lambda **_: None)(encoding="utf-8", errors="replace")
     args = build_parser().parse_args(argv)
     return args.func(args)
 

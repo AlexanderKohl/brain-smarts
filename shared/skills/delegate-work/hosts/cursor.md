@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-15T07:45:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-10-01T22:44:24+10:00
 owner: brain-owner
 ---
 
@@ -17,6 +17,14 @@ Read `/CONTRACT.md` first and `/shared/skills/delegate-work/SKILL.md` for the pr
 Not yet verified on the owner's machine. Cursor's agent has offered subagent and background-agent
 facilities in recent versions; the exact controls change between releases, so check the
 running version before claiming parallel execution.
+
+## Reading the context size
+
+Cursor shows a context meter in its agent panel in recent versions; when the running version
+does, read it and pass the token figure as `--context-tokens`. When it does not, pass
+`--context-unknown "Cursor shows no context size"` and drain (SKILL.md, *When to stop
+dispatching*) at the first compaction or after the fourth run in the thread, whichever comes
+first. No compaction hook is installed here; the conductor tells the owner itself.
 
 ## Procedure
 

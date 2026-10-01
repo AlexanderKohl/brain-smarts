@@ -9,7 +9,7 @@ scope: shared
 script_paths:
   - /shared/skills/delegate-work/scripts/delegation.py
 created: 2026-09-15T07:45:00+10:00
-updated: 2026-09-28T13:44:41+10:00
+updated: 2026-10-01T22:41:12+10:00
 owner: brain-owner
 project_refs:
   - /memory/projects/brain-development
@@ -38,7 +38,9 @@ outputs through artifacts, share only summaries through agent messages.
 - Not a task system. Packets and results are ephemeral instrumentation under `/temp/`. Work
   that must outlive the session is an ordinary `/memory/tasks/` record with `waiting_on` and
   `next_review` (CONTRACT section 9.1).
-- Not cross-session or asynchronous. A run starts and ends inside one conductor session.
+- Not cross-session or asynchronous. A run starts and ends inside one conductor session. Work
+  that crosses sessions moves through **cards** (task records with a `team`), not through runs;
+  see *Team threads and the scrum master* below.
 
 ## Independent review suggestions
 
@@ -69,8 +71,10 @@ state.
 - validate a worker's result record
 - print a synthesis summary of a run
 - close a run, recording the host and whether packets actually ran in parallel
+- refuse a run or packet past the context guard or after a compaction, and clear a compaction
+  marker once the handover checkpoint is committed (`checkpoint-done`)
 
-The script writes only inside `/temp/delegation/runs/`. Workers write only their result file
+The script writes only inside `/temp/delegation/runs/` and `/temp/conductor/compacted/`. Workers write only their result file
 and artifacts inside the run folder unless a packet explicitly widens `writes`.
 
 ## Required inputs
@@ -96,18 +100,20 @@ and artifacts inside the run folder unless a packet explicitly widens `writes`.
 ```bash
 cd <brain-root>   # the folder holding CONTRACT.md (brain_root in /memory/OWNER.md)
 
-# 1. open a run (max four workers, depth one)
+# 0. read your context size from the host (see hosts/); every dispatch states it
+# 1. open a run (max four workers, depth one); refused from 250 000 tokens or after a compaction
 python shared/skills/delegate-work/scripts/delegation.py new-run \
   --title "Audit skills, tasks and transcripts" \
   --why-parallel "three read-only audits with no shared state" \
-  --parent TASK-2026-0999
+  --parent TASK-2026-0999 --context-tokens 131000
 
-# 2. one packet per worker; defaults are isolated, read-only, no external access
+# 2. one packet per worker; defaults are isolated, read-only, no external access;
+#    refused from 400 000 tokens or after a compaction
 python shared/skills/delegate-work/scripts/delegation.py new-packet \
   --run RUN-20990101-090000 --title "Audit SKILL.md sections" \
   --objective "Check every /shared/skills/*/SKILL.md for the CONTRACT section 10.2 headings." \
   --context /CONTRACT.md --context /shared/skills/README.md \
-  --acceptance "one row per skill naming each missing section"
+  --acceptance "one row per skill naming each missing section" --context-tokens 133000
 
 # 3. hand each packet to the host's subagent facility (see hosts/)
 python shared/skills/delegate-work/scripts/delegation.py dispatch-prompt \
@@ -119,7 +125,11 @@ python shared/skills/delegate-work/scripts/delegation.py check-writes --run RUN-
   [--mine /memory/projects/example/LOG.md]
 python shared/skills/delegate-work/scripts/delegation.py summarise --run RUN-20990101-090000
 python shared/skills/delegate-work/scripts/delegation.py close-run \
-  --run RUN-20990101-090000 --status synthesised --host "Claude Code" --parallel yes
+  --run RUN-20990101-090000 --status synthesised --host "Claude Code" --parallel yes \
+  --context-tokens 162000
+
+# after a compaction, once the handover checkpoint is committed (the hook prints the id)
+python shared/skills/delegate-work/scripts/delegation.py checkpoint-done --session <session_id>
 
 # tests
 python -m unittest discover -s shared/skills/delegate-work/scripts/tests
@@ -258,6 +268,13 @@ fix is one more theory, and the symptom can survive all of them.
 
 ## Failure behaviour
 
+- `new-run`, `new-packet` and `close-run` refuse to run without exactly one of
+  `--context-tokens N` and `--context-unknown REASON`. `new-run` is refused from 250 000 tokens
+  (drain), `new-packet` from 400 000 (stop), and both while a compaction marker younger than
+  24 hours exists under `/temp/conductor/compacted/` in the session copy or in the shared
+  checkout named by `brain_root` in `/memory/OWNER.md`, unless `--session ID` names this thread
+  and no marker carries that id. `--owner-override REASON` passes every check and is recorded
+  on the run and the packet. A marker whose time cannot be read blocks on its file's age.
 - `new-packet` refuses a fifth packet, a fork without a reason, a `paths` write mode without
   paths, a `paths` packet naming a file (or a folder around a file) another packet of the run
   already names, an external write without a confirmed target, and a context reference that
@@ -423,9 +440,91 @@ constraints specific to this work, and what done looks like. It also carries wha
 housekeeping the next thread would otherwise discover the hard way - stale worktrees, merged
 branches, the current version.
 
+## The conductor reads results, not sources
+
+The conductor's context is for coordination (`SMART-RULE-0024`, proposed amendment in
+`PROPOSAL-conductor-stays-small`). It writes packets, reads result records, routes them, reviews
+diffs, merges, writes the shared files and commits. What fills a context is reading sources and
+tool output, and the moment a conductor decides a task is "small enough to do myself" it spends
+more context on that one detour than on ten dispatches. So:
+
+- a source file, a transcript, a log, a page, a tool's long output: a worker reads it and returns
+  a compressed result, however small the job looks;
+- the conductor itself reads only packets, results, diffs it is about to stage, and the shared
+  files it owns;
+- when it does read a source, the run's log entry says which and why, and the context size
+  recorded on the run shows what it cost.
+
+A conductor that conducts grows by roughly ten to twenty thousand tokens per worker cycle and
+lives for days at a size where its judgement is still good. That, not the guard rail below, is
+what keeps a thread alive.
+
+## When to stop dispatching
+
+The guard rail (`SMART-RULE-0019`, proposed amendment): the conductor reads its context size
+from the host before every dispatch (hosts/ says how), states it in the dispatch line
+(`Dispatching 3 workers · context 131k`), and passes it to the script, which refuses past the
+thresholds. The thresholds are in tokens because quality falls with the length of the context,
+not with how full the window is; a 1 000 000-token window is headroom, not a budget.
+
+| Context size | What the conductor does |
+| --- | --- |
+| below 250 000 | dispatches normally |
+| from 250 000 | **drains**: no new run; workers in flight finish; merge their results; checkpoint; handover prompt |
+| from 400 000 | no new packet and no new stage of its own work until the checkpoint is committed |
+| any compaction | a missed checkpoint: re-read the bootstrap files and `## Handover`, checkpoint, commit, `checkpoint-done`, tell the owner |
+
+- `new-run` is refused from 250 000, `new-packet` from 400 000, both while a compaction marker
+  exists (`/temp/conductor/compacted/<session_id>.json`, written by the host's pre-compaction
+  hook). The owner, and only the owner, overrides a refusal for a named run or packet with
+  `--owner-override "<reason>"`; the reason is recorded in the run.
+- Reaching a threshold is a finding: the conductor was reading sources. Say so in the log entry.
+- On a host with no reading, pass `--context-unknown "<reason>"` and drain at the first
+  compaction or after the fourth run in the thread, whichever comes first.
+- `close-run` records the context size too. The pairs (open, close) on every run are the data
+  the thresholds are tuned from; never adjust them by feel.
+
+**Draining**: stop opening runs; let the workers in flight finish; validate, route, merge and
+commit their results; write the checkpoint (next section); give the prompt. A worker that cannot
+finish in time is left running and named under `## Handover` with its packet and result file;
+the successor reads the result file when it appears (a completion notice reaches only the thread
+that launched it, so the successor polls the file, not the host).
+
+## Team threads and the scrum master
+
+Trial under `PROPOSAL-conductor-stays-small` (the proposed rule *Work moves between threads
+through cards*). Several threads share one body of work through the board, not through runs:
+
+- **The scrum master** is one long-lived thread with a tiny context. It owns the boards,
+  priorities and the owner's questions, assigns cards to teams, and watches work in progress.
+  It never reads code, dispatches workers or reviews work.
+- **A team thread** is a conductor, as this skill describes, for the cards of one team (a
+  project or an area). It pulls a card, dispatches the workers it needs, reviews, merges to its
+  project's branch and closes the card. It works in its own session copy (`SMART-RULE-0038`).
+- **A card** is a task record with a `team`. Taking one: `python shared/skills/tasks/scripts/tasks.py
+  claim TASK-2026-NNNN --by "<session name>"` sets `claimed_by`, `claimed_at` and
+  `status: in_progress`; commit that record on its own and push. A conflict on that push means
+  another thread took it first: pull, drop the claim, take the next card. Leaving one:
+  `tasks.py release TASK-2026-NNNN` or completion clears the claim.
+- **Work in progress is limited** to `tasks.wip_limit` cards per team (two to start). The board
+  shows each team's count against the limit; the scrum master assigns no card past it.
+- **Waking a team thread.** A thread acts only on a turn. The scrum master messages it when a
+  card of its team becomes ready (on Claude Code desktop, sessions on one machine can message
+  each other), or the thread checks the board itself in one short turn every twenty to thirty
+  minutes; never faster, and a thread that finds nothing ready writes nothing.
+- **Handover inside a team** is the ordinary one below; the cards are the substance. The
+  successor claims the team's in-progress cards again under its own session name.
+- The `## Handover` of `/memory/projects/brain-development/STATE.md` names the scrum master and
+  each live team thread with its team, so a new thread can tell which role is free.
+
+Start with two teams and measure (cards closed per day, context sizes at open and close, merge
+conflicts, owner interruptions) before adding a third.
+
 ## Handover between conductor threads
 
-The prompt is a pointer; the files are the substance. Ten minutes, not an hour.
+The prompt is a pointer; the files are the substance. Ten minutes, not an hour. Drain first
+(*When to stop dispatching*): a handover with workers in flight hands the successor a wait it
+cannot see.
 
 **Leaving a thread (the conductor):**
 

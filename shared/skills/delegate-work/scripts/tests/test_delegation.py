@@ -54,7 +54,7 @@ class DelegationTestCase(unittest.TestCase):
     # ------------------------------------------------------------ helpers
 
     def new_run(self, **overrides) -> str:
-        args = [*self.common, "new-run", "--title", "Trial", "--why-parallel",
+        args = [*self.common, "new-run", "--context-tokens", "1000", "--title", "Trial", "--why-parallel",
                 "three independent read-only audits", "--run-id", overrides.get("run_id", "RUN-TEST")]
         if "max_workers" in overrides:
             args += ["--max-workers", str(overrides["max_workers"])]
@@ -63,8 +63,8 @@ class DelegationTestCase(unittest.TestCase):
         return overrides.get("run_id", "RUN-TEST")
 
     def new_packet(self, run: str, *extra: str) -> tuple[int, str]:
-        return run_cli(*self.common, "new-packet", "--run", run, "--title", "Audit skills",
-                       "--objective", "Check every SKILL.md.", *extra)
+        return run_cli(*self.common, "new-packet", "--context-tokens", "1000", "--run", run,
+                       "--title", "Audit skills", "--objective", "Check every SKILL.md.", *extra)
 
     def result_path(self, run: str, short: str) -> Path:
         return self.root / "temp" / "delegation" / "runs" / run / f"{short}.result.md"
@@ -97,8 +97,8 @@ class DelegationTestCase(unittest.TestCase):
         self.assertNotEqual(code, 0)
 
     def test_new_run_rejects_budget_above_four(self) -> None:
-        code, out = run_cli(*self.common, "new-run", "--title", "T", "--why-parallel", "x",
-                            "--max-workers", "5")
+        code, out = run_cli(*self.common, "new-run", "--context-tokens", "1000", "--title", "T",
+                            "--why-parallel", "x", "--max-workers", "5")
         self.assertNotEqual(code, 0)
         self.assertIn("max workers is 4", out)
 
@@ -350,12 +350,13 @@ class DelegationTestCase(unittest.TestCase):
     def test_close_run_records_host_and_parallel_flag(self) -> None:
         run = self.new_run()
         code, _ = run_cli(*self.common, "close-run", "--run", run, "--status", "synthesised",
-                          "--host", "Claude Code", "--parallel", "no")
+                          "--host", "Claude Code", "--parallel", "no", "--context-tokens", "180000")
         self.assertEqual(code, 0)
         meta, _ = delegation.load(self.root / "temp/delegation/runs" / run / "RUN.md")
         self.assertEqual(meta["status"], "synthesised")
         self.assertEqual(meta["host"], "Claude Code")
         self.assertEqual(meta["parallel"], "false")
+        self.assertEqual(meta["context_tokens_at_close"], "180000")
 
     # ------------------------------------------------------------ workers stay apart (SMART-RULE-0038)
     # Each check is also run switched off, and the fault must then get through: that shows the

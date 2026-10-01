@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-15T07:45:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-10-01T22:44:24+10:00
 owner: brain-owner
 ---
 
@@ -16,6 +16,13 @@ Read `/CONTRACT.md` first and `/shared/skills/delegate-work/SKILL.md` for the pr
 
 Not yet verified on the owner's machine. Assume the Codex CLI session has no parallel subagent
 facility unless the running version demonstrably offers one.
+
+## Reading the context size
+
+No reading is known on this host. Pass `--context-unknown "Codex reports no context size"` to
+`new-run`, `new-packet` and `close-run`, and drain (SKILL.md, *When to stop dispatching*) at the
+first compaction or after the fourth run in the thread, whichever comes first. No compaction
+hook is installed here; the conductor tells the owner itself when its context was compacted.
 
 ## Procedure
 
