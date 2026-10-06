@@ -9,15 +9,6 @@
    "held_back": "the host session hooks cost tokens on every light session (before-and-after test, 28 September 2026); the pre-commit hook is proposed alone"
   },
   {
-   "event": "after a shell command",
-   "claude_code": "PostToolUse",
-   "matcher": "Bash|PowerShell",
-   "git": null,
-   "skill": "command-output",
-   "command": "library/skills/command-output/scripts/hook.py claude-code",
-   "note": "shortens the long output of a recognised command that succeeded and saves the full output to a file it names; adds no tokens and prints nothing for any other command. Emitted only while command-output is in active_skills in /memory/OWNER.md; the other hosts' registrations are in that skill's SKILL.md"
-  },
-  {
    "event": "before commit",
    "claude_code": null,
    "git": ".githooks/pre-commit in each repository (core.hooksPath .githooks)",

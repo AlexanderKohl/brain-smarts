@@ -193,41 +193,15 @@ def commit_msg(repo: Path, message_file: Path) -> int:
     return 0
 
 
-def active_skills(root: Path = ROOT) -> set[str]:
-    """The skills listed under `active_skills` in the front matter of /memory/OWNER.md; none when the
-    memory or the list is absent."""
-    try:
-        lines = (root / "memory" / "OWNER.md").read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return set()
-    if not lines or lines[0].strip() != "---":
-        return set()
-    found: set[str] = set()
-    inside = False
-    for line in lines[1:]:
-        if line.strip() == "---":
-            break
-        if inside and line.lstrip().startswith("- "):
-            found.add(line.strip()[2:].strip().strip("'\""))
-        else:
-            inside = line.split(":", 1)[0].strip() == "active_skills" and not line.startswith(" ")
-    return found
-
-
-def host_settings(events: list[dict] | None = None, active: set[str] | None = None) -> dict:
+def host_settings(events: list[dict] | None = None) -> dict:
     """The Claude Code project settings generated from the event list, in the shape Claude Code reads:
     {"hooks": {"<Event>": [{"matcher": "...", "hooks": [{"type": "command", "command": "..."}]}]}}.
-    The matcher is emitted only when the event has one (SessionStart's "compact", for example). An
-    event that belongs to a library skill (`skill`) is emitted only when that skill is in the owner's
-    `active_skills`, so a skill an owner has not chosen never reaches their host."""
+    The matcher is emitted only when the event has one (SessionStart's "compact", for example)."""
     if events is None:
         events = json.loads(EVENTS.read_text(encoding="utf-8"))["events"]
-    active = active_skills() if active is None else active
     hooks: dict[str, list[dict]] = {}
     for event in events:
         if not event.get("claude_code"):
-            continue
-        if event.get("skill") and event["skill"] not in active:
             continue
         entry: dict = {}
         if event.get("matcher"):
