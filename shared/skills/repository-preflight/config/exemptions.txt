@@ -11,3 +11,7 @@ value: C:\dev\brain\library  # documented default skill library checkout on Wind
 value: C:\dev\brain\memory  # documented default memory checkout on Windows (SETUP)
 value: ceo@send.example.org  # a fictional address on a sending subdomain of a documentation-reserved domain, used by tests for the platform-domain rule
 value: gmail-api-push@system.gserviceaccount.com  # Google's published service account for Gmail push notifications
+value: invitations-noreply@linkedin.com  # LinkedIn's system sender address for its notification mail, not a person's
+value: jobs-noreply@linkedin.com  # LinkedIn's system sender address for its notification mail, not a person's
+value: messages-noreply@linkedin.com  # LinkedIn's system sender address for its notification mail, not a person's
+value: notifications-noreply@linkedin.com  # LinkedIn's system sender address for its notification mail, not a person's
