@@ -10,3 +10,7 @@ value: C:\dev\brain  # documented default brain root on Windows (SETUP, seed pro
 value: C:\dev\brain\library  # documented default skill library checkout on Windows (SETUP)
 value: C:\dev\brain\memory  # documented default memory checkout on Windows (SETUP)
 value: gmail-api-push@system.gserviceaccount.com  # Google's published service account for Gmail push notifications
+value: invitations-noreply@linkedin.com  # LinkedIn's system sender address for its notification mail, not a person's
+value: jobs-noreply@linkedin.com  # LinkedIn's system sender address for its notification mail, not a person's
+value: messages-noreply@linkedin.com  # LinkedIn's system sender address for its notification mail, not a person's
+value: notifications-noreply@linkedin.com  # LinkedIn's system sender address for its notification mail, not a person's
