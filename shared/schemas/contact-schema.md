@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-23T19:35:27+10:00
-updated: 2026-09-23T20:58:00+10:00
+updated: 2026-10-07T11:01:45+10:00
 ---
 
 # Contact and Persona Schema
@@ -36,6 +36,8 @@ receiving_personas: []
 preferred_reply_persona: null
 newsletter: false
 newsletter_read_detail: null
+handling: null
+forward_to: null
 emails: []
 phones: []
 organisations: []
@@ -63,6 +65,8 @@ updated: YYYY-MM-DDTHH:mm:ss+HH:MM
 | `preferred_reply_persona` | `persona_key` or `null` | Identity to reply as; `null` means ask. Always `null` for newsletters and systems unless the owner sets one |
 | `newsletter` | `true` \| `false` | Apply newsletter handling |
 | `newsletter_read_detail` | `subject` \| `body` \| `body_and_images` \| `null` | How much of a newsletter to load; `subject` by default, `null` when not a newsletter |
+| `handling` | `reply` \| `summarise` \| `ignore` \| `forward` \| `action` \| `null` | What an agent does when mail arrives from this party: draft a reply (`reply`), report it in a digest and draft nothing (`summarise`), leave it unread and unreported (`ignore`), pass it to the person in `forward_to` (`forward`), or do something other than write back, named in the Reply guidance (`action`); `null` means not yet decided, so the agent asks |
+| `forward_to` | a `contact-<slug>` id, a `persona_key` or a plain name; `null` otherwise | Who receives this party's mail when `handling` is `forward`; set only then |
 | `related_task_refs`, `related_project_refs` | repository-root paths | Links to `/memory/tasks/` and project nodes |
 
 Required on every contact and persona: `id`, `title`, `type`, `contract`, `created`, `updated`.
@@ -118,3 +122,6 @@ mailbox of its own. Resolve the persona first, then take the account from the pe
   identifiers (they belong in `receiving_personas` or a persona).
 - Never store a secret, token or recovery material in a contact or persona.
 - Do not invent `preferred_reply_persona`; `null` means ask.
+- `handling` is set from the owner's own replies and instructions, never from one message's
+  content; the style of a reply (tone, length, sign-off) is written in words under
+  `## Reply guidance`, and `handling: forward` always names `forward_to`.
