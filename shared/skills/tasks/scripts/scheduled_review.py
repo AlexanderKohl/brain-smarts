@@ -4,11 +4,18 @@ Runs with no model and changes nothing that Git tracks, so it can run from the o
 own scheduler while sessions work in the same tree. Output: /temp/due.md (ignored by every brain
 repository), and a desktop notification when something needs attention.
 
-  python shared/skills/tasks/scripts/scheduled_review.py              write /temp/due.md and notify
-  python shared/skills/tasks/scripts/scheduled_review.py --no-notify  write /temp/due.md only
+  python shared/skills/tasks/scripts/scheduled_review.py              write /temp/due.md, run the morning jobs, notify
+  python shared/skills/tasks/scripts/scheduled_review.py --no-notify  the same without a notification
+  python shared/skills/tasks/scripts/scheduled_review.py --no-jobs    the same without the morning jobs
   python shared/skills/tasks/scripts/scheduled_review.py --register   run it daily from the OS scheduler
   python shared/skills/tasks/scripts/scheduled_review.py --status     show the registered daily run
   python shared/skills/tasks/scripts/scheduled_review.py --unregister remove it
+
+After its own report the review runs the owner's morning jobs (morning_jobs.py: the commands in
+/memory/skills/tasks/config/morning-jobs.json, each from the brain root, output to
+/temp/morning/<name>.log) and reports one line per job; a job that fails or times out is named in
+the notification and never stops the review or the other jobs. One scheduled run, one hook
+(SMART-RULE-0018): a second daily job is not registered for them.
 
 CONTRACT §14: an agent may claim follow-up only when a scheduler is actually configured; once
 registered, this is that scheduler. It needs no model and no AI host: Windows Task Scheduler, a
@@ -25,8 +32,16 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+HERE = Path(__file__).resolve().parent
+if str(HERE) not in sys.path:
+    sys.path.insert(0, str(HERE))
+
+import morning_jobs  # noqa: E402
+
 TASK_NAME = "BrainScheduledReview"
 DAILY_AT = "07:00"
+# The Windows task is stopped at this limit, so the morning jobs' timeouts together stay under it.
+EXECUTION_LIMIT_MINUTES = 30
 REPOSITORIES = [(".", "mechanics"), ("library", "skill library"), ("memory", "memory")]
 DIGEST_INDEX = "memory/projects/brain-development/data/learning/index.md"
 DIGEST_DUE = re.compile(r"next is due (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2})")
@@ -92,8 +107,9 @@ def digest_due(root: Path, now: datetime) -> str | None:
     return f"due since {match.group(1)}" if due <= now else None
 
 
-def review(root: Path, now: datetime) -> tuple[str, list[str]]:
-    """The report, and the short reasons it needs the owner's attention (empty when nothing does)."""
+def review(root: Path, now: datetime, jobs: bool = True) -> tuple[str, list[str], list[str]]:
+    """The report, the short reasons it needs the owner's attention (empty when nothing does), and
+    the lines of the morning jobs that failed, for the notification's text."""
     stamp = now.isoformat(timespec="seconds")
     tasks = run(root, "shared/skills/tasks/scripts/tasks.py", "review")
     preflight = run(root, "shared/skills/repository-preflight/scripts/preflight.py")
@@ -109,6 +125,9 @@ def review(root: Path, now: datetime) -> tuple[str, list[str]]:
     lines += ["## Weekly learning digest", "", f"- {digest}" if digest else "- not due", ""]
     for title, text in sections:
         lines += [f"## {title}", "", "```", text[-6000:] or "(nothing)", "```", ""]
+    # The morning jobs run last, after the review's own report is complete.
+    results, problem = morning_jobs.run_jobs(root) if jobs else ([], "skipped (--no-jobs)")
+    lines += ["## Morning jobs", "", *morning_jobs.report_lines(results, problem), ""]
     reasons = []
     count = TASK_COUNT.search(tasks)
     if count and int(count.group(1)):
@@ -117,7 +136,8 @@ def review(root: Path, now: datetime) -> tuple[str, list[str]]:
         reasons.append("weekly learning digest due")
     if not preflight.startswith("PASS"):
         reasons.append("preflight not passing")
-    return "\n".join(lines), reasons
+    reasons += morning_jobs.reasons(results)
+    return "\n".join(lines), reasons, [result.line() for result in morning_jobs.failures(results)]
 
 
 def notify(title: str, message: str) -> bool:
@@ -185,7 +205,7 @@ def plan(action: str, script: Path, python: Path, home: Path, system: str, uid: 
         ps = (f"$a = New-ScheduledTaskAction -Execute '{runner}' -Argument '\"{script}\"' -WorkingDirectory '{root}';"
               f"$t = New-ScheduledTaskTrigger -Daily -At {DAILY_AT};"
               "$s = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries "
-              "-DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 10);"
+              f"-DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes {EXECUTION_LIMIT_MINUTES});"
               f"Register-ScheduledTask -TaskName {TASK_NAME} -Action $a -Trigger $t -Settings $s -Force > $null")
         return Plan("Windows Task Scheduler", commands=[["powershell", "-NoProfile", "-NonInteractive", "-Command", ps]])
     if system == "macos":
@@ -244,6 +264,7 @@ def main(argv: list[str] | None = None) -> int:
     group.add_argument("--status", action="store_true", help="show the registered daily run")
     group.add_argument("--unregister", action="store_true", help="remove the daily run")
     parser.add_argument("--no-notify", action="store_true", help="write the report without a notification")
+    parser.add_argument("--no-jobs", action="store_true", help="write the report without running the morning jobs")
     args = parser.parse_args(argv)
     root = brain_root(Path(__file__).resolve().parent)
     action = "register" if args.register else "status" if args.status else "unregister" if args.unregister else None
@@ -254,13 +275,15 @@ def main(argv: list[str] | None = None) -> int:
         if action != "status":
             print(f"{action}: {TASK_NAME} with {chosen.scheduler}, daily at {DAILY_AT}, running {script}")
         return 0
-    report, reasons = review(root, datetime.now().astimezone())
+    report, reasons, failed_jobs = review(root, datetime.now().astimezone(), jobs=not args.no_jobs)
     out = root / "temp" / "due.md"
     out.parent.mkdir(exist_ok=True)
     out.write_text(report, encoding="utf-8")
     print(f"wrote {out}")
+    for line in failed_jobs:
+        print(line)
     if reasons and not args.no_notify:
-        shown = notify("Brain: " + "; ".join(reasons), f"Details in {out}")
+        shown = notify("Brain: " + "; ".join(reasons), "\n".join([f"Details in {out}", *failed_jobs]))
         print("notified" if shown else "no desktop notification available")
     return 0
 

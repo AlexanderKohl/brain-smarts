@@ -18,12 +18,15 @@ spec.loader.exec_module(scheduled_review)
 class ScheduledReviewTest(unittest.TestCase):
     def test_writes_due_file_and_leaves_git_clean(self):
         before = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True).stdout
-        run = subprocess.run([sys.executable, str(SCRIPT), "--no-notify"], cwd=ROOT, capture_output=True, text=True)
+        # --no-jobs: the owner's morning jobs are theirs to run, not a test's (test_morning_jobs.py proves them).
+        run = subprocess.run([sys.executable, str(SCRIPT), "--no-notify", "--no-jobs"], cwd=ROOT,
+                             capture_output=True, text=True)
         self.assertEqual(run.returncode, 0, run.stderr)
         due = (ROOT / "temp" / "due.md").read_text(encoding="utf-8")
         for heading in ("## Checkout compared with origin", "## Weekly learning digest",
-                        "## Tasks due, blocked or waiting", "## Repository preflight"):
+                        "## Tasks due, blocked or waiting", "## Repository preflight", "## Morning jobs"):
             self.assertIn(heading, due)
+        self.assertIn("- skipped (--no-jobs)", due)
         self.assertNotIn("�", due, "a child's output was decoded in the wrong code page")
         after = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True).stdout
         self.assertEqual(before, after)
@@ -55,6 +58,9 @@ class ScheduledReviewTest(unittest.TestCase):
         self.assertIn(scheduled_review.TASK_NAME, command)
         self.assertIn("-StartWhenAvailable", command)
         self.assertIn(f"-Daily -At {scheduled_review.DAILY_AT}", command)
+        # The limit must cover the review and its morning jobs together.
+        self.assertIn(f"-ExecutionTimeLimit (New-TimeSpan -Minutes {scheduled_review.EXECUTION_LIMIT_MINUTES})", command)
+        self.assertGreaterEqual(scheduled_review.EXECUTION_LIMIT_MINUTES, 30)
 
     def test_macos_writes_a_valid_launch_agent_in_the_login_session(self):
         import plistlib

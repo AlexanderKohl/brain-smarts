@@ -17,7 +17,7 @@ metadata:
     - /shared/skills/owner-board
     - /shared/skills/repository-preflight
   created: 2026-09-23T13:10:00+10:00
-  updated: 2026-09-29T08:50:29+10:00
+  updated: 2026-10-14T20:14:37+10:00
 ---
 
 # Tasks
@@ -198,7 +198,28 @@ that `STATE.md` lists every open task with its status word.
 | `tasks.py claim <id> --by "SESSION NAME" [--team LABEL] [--now] [--no-board]` | A team thread takes a card: status `in_progress`, `claimed_by` and `claimed_at` (the clock) set together, History, `STATE.md` row. Refused when another session holds it |
 | `tasks.py release <id> [--note] [--now] [--no-board]` | The thread lets a card go: `claimed_by` and `claimed_at` cleared, status `ready`, History, `STATE.md` row |
 | `tasks.py next-id [--year YYYY]` | The next free task number across all folders and live claims |
-| `scheduled_review.py [--register \| --status \| --unregister] [--no-notify]` | Read-only review with no model: writes the ignored `/temp/due.md` (each repository compared with origin, the weekly learning digest when due, tasks due, skill exchange, preflight) and shows a desktop notification when something needs attention. `--register` runs it daily at 07:00 from the operating system's scheduler – Windows Task Scheduler, a launchd agent on macOS, a systemd user timer on Linux (cron without systemd) – catching up after the computer was off except under cron, always from the shared checkout named in `/memory/OWNER.md`; `--status` shows it and `--unregister` removes it. Set up per computer in `/SETUP.md` G.2. Once registered, follow-up is real under CONTRACT §14 |
+| `scheduled_review.py [--register \| --status \| --unregister] [--no-notify] [--no-jobs]` | Read-only review with no model: writes the ignored `/temp/due.md` (each repository compared with origin, the weekly learning digest when due, tasks due, skill exchange, preflight), then runs the owner's **morning jobs** (below) and reports one line per job, and shows a desktop notification when something needs attention, a failed or timed-out job included. `--register` runs it daily at 07:00 from the operating system's scheduler – Windows Task Scheduler, a launchd agent on macOS, a systemd user timer on Linux (cron without systemd) – catching up after the computer was off except under cron, always from the shared checkout named in `/memory/OWNER.md`; `--status` shows it and `--unregister` removes it. Set up per computer in `/SETUP.md` G.2. Once registered, follow-up is real under CONTRACT §14. `--no-jobs` writes the report without the jobs |
+
+**Morning jobs.** Anything that should refresh once a day – a generated page, a snapshot, a
+digest – is a job on the scheduled review, never a second scheduled task (`SMART-RULE-0018`).
+The owner lists the jobs in `/memory/skills/tasks/config/morning-jobs.json`:
+
+```json
+{"jobs": [{"name": "example-page", "command": ["python", "library/skills/example/scripts/daily.py", "--account", "example-gmail"],
+           "timeout_s": 300, "needs": "the example service reachable; until then the page keeps yesterday's state"}]}
+```
+
+`name` is the job's log file name (letters, digits, dot, dash, underscore); `command` is the
+argument list, run from the brain root (a first word of `python` means the interpreter running
+the review); `timeout_s` kills the job after that many seconds; `needs` is optional text shown
+with the job's line when it fails, written for the person who reads the notification. After its
+report the review runs the jobs in the order listed (`morning_jobs.py`), captures each one's
+output to `/temp/morning/<name>.log`, and adds a `## Morning jobs` section to `due.md` with one
+line per job: whether it ran, its exit code, its seconds and the last line it printed. A job that
+fails, times out or cannot start is named in the notification and never stops the review or the
+jobs after it. A missing or invalid config means no jobs and one line in `due.md` that says so.
+The jobs' timeouts together stay under the scheduler's limit on Windows (`EXECUTION_LIMIT_MINUTES`,
+30 minutes; after changing it run `--register` again).
 
 Common options: `--tasks <path>` (repository-root or absolute; default `/memory/tasks`) and
 `--json`. Standard library only; `new`, `done`, `do-now`, `note`, `claim` and `release` write.
@@ -214,7 +235,8 @@ Task records and `STATE.md` rows in `/memory/tasks/`; review tables in the reply
 ## Permissions
 
 Writes only inside `/memory/tasks/`, to the state of nodes a task references, and (through the
-owner-board script) to generated board pages. Checking an
+owner-board script) to generated board pages; the scheduled review writes only the ignored
+`/temp/due.md` and `/temp/morning/`, and its morning jobs write what their own skills allow. Checking an
 awaited external party uses that system's skill and its permissions; a write there still needs
 the target confirmed (CONTRACT §10.5).
 
