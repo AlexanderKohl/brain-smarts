@@ -4,13 +4,18 @@ title: A worker tier in the bootstrap – a packet worker reads a short brief, n
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: proposed
+status: implemented
 owner: brain-owner
+rule_id: SMART-RULE-0001, SMART-RULE-0007
+accepted_by: brain-owner
+accepted_at: 2026-10-14T19:50:39+10:00
+implemented_at: 2026-10-14T19:50:39+10:00
 created: 2026-10-14T19:38:30+10:00
-updated: 2026-10-14T19:38:30+10:00
+updated: 2026-10-14T19:50:39+10:00
 previous_contract_version: 2.4.0
 new_contract_version: 2.5.0
 target_files:
+  - /shared/skills/delegate-work/templates/worker-brief.template.md
   - /CONTRACT.md
   - /RULES.md
   - /shared/skills/delegate-work/SKILL.md
@@ -180,3 +185,7 @@ bootstrap as before.
 The owner accepts or declines `PROPOSAL-worker-bootstrap-tier` as one answer. On acceptance the exact
 wording above is applied, `contract_version` becomes 2.5.0, and the acceptance is recorded in the
 memory's governance proposals.
+
+## Implementation
+
+Accepted by the owner on 14 October 2026 ("1. accept 2. accept 3. ok") and applied the same evening, exactly as worded above. Validation: the repository preflight passed on the mechanics, the skill library and the memory after the change. Tool: Claude Code desktop, Claude Fable 5.1.

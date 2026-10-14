@@ -4,10 +4,14 @@ title: Implementation packets run on a worker type that pins an Opus-class model
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: proposed
+status: implemented
 owner: brain-owner
+rule_id: SMART-RULE-0024
+accepted_by: brain-owner
+accepted_at: 2026-10-14T19:50:39+10:00
+implemented_at: 2026-10-14T19:50:39+10:00
 created: 2026-10-14T19:38:30+10:00
-updated: 2026-10-14T19:38:30+10:00
+updated: 2026-10-14T19:50:39+10:00
 previous_contract_version: 2.4.0
 new_contract_version: 2.4.0
 target_files:
@@ -146,3 +150,7 @@ inherit as before.
 
 The owner accepts or declines `PROPOSAL-worker-model-default` as one answer. On acceptance the exact
 wording above is applied and the acceptance is recorded in the memory's governance proposals.
+
+## Implementation
+
+Accepted by the owner on 14 October 2026 ("1. accept 2. accept 3. ok") and applied the same evening, exactly as worded above. Validation: the repository preflight passed on the mechanics, the skill library and the memory after the change. Tool: Claude Code desktop, Claude Fable 5.1.
