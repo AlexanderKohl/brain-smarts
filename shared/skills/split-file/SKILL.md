@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 scope: shared
-version: 0.2.1
+version: 0.3.0
 script_paths:
   - /shared/skills/split-file/scripts/js/move.js
   - /shared/skills/split-file/scripts/js/move-methods.js
@@ -17,7 +17,7 @@ script_paths:
   - /shared/skills/split-file/scripts/py/analyse.py
   - /shared/skills/split-file/scripts/py/shape.py
 created: 2026-10-01T07:11:48+10:00
-updated: 2026-10-15T06:43:45+10:00
+updated: 2026-10-15T08:21:03+10:00
 owner: brain-owner
 ---
 
@@ -81,7 +81,8 @@ behaviour (characterisation tests), even if the tools would move it.
 ### 2. Take the shape before, and plant faults
 
 - `shape.js --out before.json` / `shape.py --out before.json`, or compare to a git ref with
-  `--compare-ref <ref>` after each move.
+  `--compare-ref <ref>` after each move. `shape.js` imports an ES module and describes its namespace
+  (its named exports and `default`) as it describes a CommonJS module's exports.
 - `--compare-ref` takes the base's snapshot in a temporary worktree elsewhere on disk. A value worked
   out from where the checkout sits (a root found by walking up to a parent folder) then differs for
   that reason alone: take `--out` before the move, in place, and `--compare` after.
@@ -94,6 +95,7 @@ behaviour (characterisation tests), even if the tools would move it.
 | Tool | Moves | Wiring it writes |
 |---|---|---|
 | `js/move.js <src> --to <mod> --names a,b` | whole top-level declarations of a CommonJS file | the new module's imports (copied, narrowed) and `module.exports`; one `require` back in the source |
+| `js/move.js <src.mjs> --to <mod> --names a,b` | whole top-level declarations of an ES module (`.mjs`, or a `.js` file with `import` or `export`), `export` keyword and all (since 0.3.0) | the new module (`.mjs` beside a `.mjs`): the source's `import` declarations narrowed to the names used, aliases and import attributes kept, and `export { … }` of the moved names the source still uses; in the source, after its own imports, `import { … } from './<mod>.mjs'` for those names and `export { … } from './<mod>.mjs'` for the moved names it exported |
 | `js/move-methods.js <src> --class C --to <mod> --methods m1,m2` | whole methods of one class | a holder class in the new module; a loop in the source copying its descriptors onto `C.prototype` |
 | `js/move-block.js <src> --to <mod> --register fn --lines A-B` | a contiguous run of statements (route registrations and the helpers only they use) | `function fn(router, { deps })` in the new module; one call where the run was |
 | `py/move.py <src> --to <mod> --names a,b` | whole top-level definitions and assignments of a Python module | the new module's imports (copied, narrowed), `from __future__`, and the path setup they need; one `from <mod> import …` back in the source |
@@ -109,7 +111,10 @@ the top-level one. It refuses when:
 - moved code needs a name that stays behind (other than an import): the new module would have to load
   the source, a cycle – move that name too, or first;
 - moved code uses what means something else in another file: `module`, `exports`, `__filename`, a
-  top-level `this`; in Python `__name__`, `globals()`, and `__file__` other than to name the folder;
+  top-level `this`, an ES module's `import.meta`; in Python `__name__`, `globals()`, and `__file__`
+  other than to name the folder;
+- a name is an ES module's default export (`export default function f`): it stays in the source;
+- `move-methods.js` or `move-block.js` is given an ES module: they write CommonJS wiring only;
 - a binding would be copied where it must be shared: a reassigned `let`/`var` passed to a block, a
   moved variable assigned later, Python `global`, a test that patches a moved name on the source module;
 - a value would be read before it is set: a dependency declared after a block's call;
@@ -162,7 +167,8 @@ python shared/skills/split-file/scripts/py/move.py scripts/big.py --to big_parse
 python shared/skills/split-file/scripts/py/shape.py --root . --modules scripts/big.py --compare-ref HEAD
 ```
 
-Tests, on fictional apps in `tests/fixtures/`:
+Tests, on fictional apps in `tests/fixtures/` (`js-app` CommonJS, `esm-app` an ES module, `py_app`
+Python):
 
 ```bash
 npm test --prefix shared/skills/split-file

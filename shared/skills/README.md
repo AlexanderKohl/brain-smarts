@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 node_type: skill_library
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-30T23:00:32+00:00
+updated: 2026-10-15T08:21:34+10:00
 ---
 
 # Core Skills
@@ -68,7 +68,7 @@ Active (`SMART-RULE-0032`). How agents notice a reusable capability and suggest 
 
 ##### `split-file/`
 
-Contains the method and tools for shortening a large code file without changing what it does (`SMART-RULE-0041`): a destination table first; moves of whole declarations, class methods or route blocks into new files with the text unchanged and only wiring added; refusals for any move that could change behaviour; and a shape snapshot that shows a file's names, exports, classes and routes are the same afterwards, with every new file loaded alone. JavaScript (CommonJS) tools in `scripts/js/` with their own pinned parser (`npm ci` in the folder; `node_modules/` is ignored) and Python tools in `scripts/py/` (standard library only). Tests in `tests/` run on fictional apps.
+Contains the method and tools for shortening a large code file without changing what it does (`SMART-RULE-0041`): a destination table first; moves of whole declarations, class methods or route blocks into new files with the text unchanged and only wiring added; refusals for any move that could change behaviour; and a shape snapshot that shows a file's names, exports, classes and routes are the same afterwards, with every new file loaded alone. JavaScript tools in `scripts/js/` (CommonJS; `move.js`, `analyse.js` and `shape.js` also read ES modules) with their own pinned parser (`npm ci` in the folder; `node_modules/` is ignored) and Python tools in `scripts/py/` (standard library only). Tests in `tests/` run on fictional apps.
 
 ##### `tasks/`
 

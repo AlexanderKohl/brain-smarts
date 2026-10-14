@@ -1,6 +1,7 @@
 'use strict';
-// Shared parsing for the JavaScript split tools: the top-level statements of a CommonJS file, with
-// their line ranges, the names each declares, reads and assigns, and the import each one is.
+// Shared parsing for the JavaScript split tools: the top-level statements of a CommonJS file or an
+// ES module, with their line ranges, the names each declares, reads and assigns, and the import each
+// one is (a `require` or an `import` declaration).
 // `refs` gives the top-level names a statement uses, resolved through its own scopes (lib/scope.js),
 // so a local variable is not taken for a top-level one of the same name; `uses` over-counts (every
 // identifier) and is kept for what needs no scopes: `this.x` members and `super`.
@@ -27,17 +28,29 @@ function writeText(file, text, eol) {
   fs.writeFileSync(file, text.replace(/\n/g, eol));
 }
 
-function parse(text, { recover = false } = {}) {
+// An ES module when the file is .mjs, CommonJS when it is .cjs; otherwise a module only when the
+// text holds import or export (a .js file in a package of type "module").
+function parse(text, { recover = false, file = '' } = {}) {
   return parser.parse(text, {
-    sourceType: 'script',
+    sourceType: /\.mjs$/i.test(file) ? 'module' : /\.cjs$/i.test(file) ? 'script' : 'unambiguous',
     allowReturnOutsideFunction: true,
     errorRecovery: recover,
     plugins: ['optionalChaining', 'nullishCoalescingOperator', 'classProperties'],
   });
 }
 
-// Names a top-level statement declares.
-function declared(stmt) {
+// The declaration inside `export function f`, `export const x = …` or `export class C`; any other
+// statement as it is.
+const unwrap = (stmt) => (stmt.type === 'ExportNamedDeclaration' && stmt.declaration ? stmt.declaration : stmt);
+
+// The tools that write CommonJS wiring (move-block.js, move-methods.js) refuse an ES module.
+function commonJsOnly(ast, file, tool) {
+  if (ast.program.sourceType === 'module') throw new Error(`${file} is an ES module; ${tool} moves CommonJS code only (move.js moves an ES module's declarations)`);
+}
+
+// Names a top-level statement declares: its declarations, exported or not, and an import's names.
+function declared(statement) {
+  const stmt = unwrap(statement);
   const out = [];
   const pat = (p) => {
     if (!p) return;
@@ -49,6 +62,7 @@ function declared(stmt) {
   };
   if ((stmt.type === 'FunctionDeclaration' || stmt.type === 'ClassDeclaration') && stmt.id) out.push(stmt.id.name);
   if (stmt.type === 'VariableDeclaration') stmt.declarations.forEach((d) => pat(d.id));
+  if (stmt.type === 'ImportDeclaration') stmt.specifiers.forEach((sp) => out.push(sp.local.name));
   return out;
 }
 
@@ -98,8 +112,8 @@ function usesPrivate(node) {
 }
 
 // Names that mean something else in another file: the module object, its exports, its file name,
-// and `this` at the top level (module.exports in CommonJS). __dirname is the same in a module in
-// the same folder, so it is allowed.
+// `this` at the top level (module.exports in CommonJS) and an ES module's `import.meta`. __dirname is
+// the same in a module in the same folder, so it is allowed.
 function fileBound(node) {
   const found = new Set();
   const visit = (n, parent, key, inFunction) => {
@@ -107,6 +121,7 @@ function fileBound(node) {
       && !(parent && /MemberExpression$/.test(parent.type) && key === 'property' && !parent.computed)
       && !(parent && ['ObjectProperty', 'ObjectMethod'].includes(parent.type) && key === 'key' && !parent.computed)) found.add(n.name);
     if (n.type === 'ThisExpression' && !inFunction) found.add('this');
+    if (n.type === 'MetaProperty' && n.meta.name === 'import') found.add('import.meta');
     const fn = ['FunctionDeclaration', 'FunctionExpression', 'ObjectMethod', 'ClassMethod', 'ClassPrivateMethod'].includes(n.type);
     eachChild(n, (c, k) => visit(c, n, k, inFunction || fn));
   };
@@ -150,6 +165,29 @@ function requireOf(stmt, text) {
   return null;
 }
 
+// A top-level `import … from '…'` with the names it binds. Each specifier keeps its text (`a`,
+// `a as b`, `* as ns`, a default name), and `from` the rest of the statement as written: the source
+// and any import attributes (`with { type: 'json' }`). A module in the same folder resolves the same
+// source the same way. A bare `import './x.mjs'` binds nothing and is not one.
+function importOf(stmt, text) {
+  if (stmt.type !== 'ImportDeclaration' || !stmt.specifiers.length) return null;
+  return {
+    esm: true,
+    specifiers: stmt.specifiers.map((sp) => ({ local: sp.local.name, text: text.slice(sp.start, sp.end), type: sp.type })),
+    from: text.slice(stmt.source.start, stmt.end),
+  };
+}
+
+// The import declaration for the specifiers of `req` whose names are in `names`, in the source's
+// order: a default and a namespace import first, then the named ones in braces.
+function importLine(req, names) {
+  const kept = req.specifiers.filter((sp) => names.has(sp.local));
+  const lead = kept.filter((sp) => sp.type !== 'ImportSpecifier').map((sp) => sp.text);
+  const named = kept.filter((sp) => sp.type === 'ImportSpecifier').map((sp) => sp.text);
+  const head = [...lead, ...(named.length ? [braceList(named, 14 + lead.join(', ').length + req.from.length)] : [])].join(', ');
+  return `import ${head} from ${req.from}${req.from.endsWith(';') ? '' : ';'}`;
+}
+
 const KIND = { FunctionDeclaration: 'function', ClassDeclaration: 'class' };
 
 // The first line of a node with its leading comments. Babel attaches a comment that trails the
@@ -162,17 +200,23 @@ function firstLine(node, prevEnd = 0) {
 }
 
 // Every top-level statement: its node, first line with its leading comments (`from`), first and
-// last line, the names it declares, its kind, and its import form.
+// last line, the names it declares, its kind, its import form, whether it exports what it declares
+// (`export function f`), and the name a default export declares (`export default function f`).
 function statements(ast, text) {
-  const stmts = ast.program.body.map((s, i, all) => ({
-    node: s,
-    from: firstLine(s, i ? all[i - 1].loc.end.line : 0),
-    start: s.loc.start.line,
-    end: s.loc.end.line,
-    declares: declared(s),
-    kind: s.type === 'VariableDeclaration' ? s.kind : KIND[s.type] || null,
-    req: requireOf(s, text),
-  }));
+  const stmts = ast.program.body.map((s, i, all) => {
+    const inner = unwrap(s);
+    return {
+      node: s,
+      from: firstLine(s, i ? all[i - 1].loc.end.line : 0),
+      start: s.loc.start.line,
+      end: s.loc.end.line,
+      declares: declared(s),
+      kind: inner.type === 'VariableDeclaration' ? inner.kind : KIND[inner.type] || null,
+      req: requireOf(inner, text) || importOf(s, text),
+      exported: inner !== s,
+      defaultName: s.type === 'ExportDefaultDeclaration' && s.declaration.id ? s.declaration.id.name : null,
+    };
+  });
   // `const { a, b } = logging` where `logging = require('./logging')`: the same names come straight
   // from require('./logging') in a new module.
   const wholeBy = new Map(stmts.filter((x) => x.req && x.req.whole).map((x) => [x.req.whole, x.req]));
@@ -201,9 +245,12 @@ function importsFor(needed, stmts, exclude) {
     if (!bySource.has(s.start)) bySource.set(s.start, { req: s.req, names: new Set(), whole: false });
     if (s.req.whole) bySource.get(s.start).whole = true; else bySource.get(s.start).names.add(n);
   }
-  const lines = [...bySource.entries()].sort((a, b) => a[0] - b[0]).map(([, info]) => (info.whole
-    ? `${info.req.kind} ${info.req.whole} = require(${info.req.source});`
-    : `${info.req.kind} ${braceList(info.req.names.filter((x) => info.names.has(x)), info.req.kind.length + info.req.source.length + 16)} = require(${info.req.source});`));
+  const lines = [...bySource.entries()].sort((a, b) => a[0] - b[0]).map(([, info]) => {
+    if (info.req.esm) return importLine(info.req, info.names);
+    return info.whole
+      ? `${info.req.kind} ${info.req.whole} = require(${info.req.source});`
+      : `${info.req.kind} ${braceList(info.req.names.filter((x) => info.names.has(x)), info.req.kind.length + info.req.source.length + 16)} = require(${info.req.source});`;
+  });
   return { lines, behind };
 }
 
@@ -236,8 +283,11 @@ function braceList(names, indent = 0) {
 }
 
 // The line after which a new `require` of moved code goes: after the last top-level require that
-// comes before the first remaining statement using a moved name, so every use sees it loaded.
+// comes before the first remaining statement using a moved name, so every use sees it loaded. In an
+// ES module, whose imports load before any of its statements run, after its last import.
 function backRequireLine(staying, movedNames) {
+  const imports = staying.filter((s) => s.node.type === 'ImportDeclaration');
+  if (imports.length) return Math.max(...imports.map((s) => s.end));
   const firstUse = staying.find((s) => [...refs(s.node).read].some((n) => movedNames.has(n)));
   const limit = firstUse ? firstUse.start : Infinity;
   let after = 0;
@@ -280,6 +330,6 @@ function countLines(text) {
 }
 
 module.exports = {
-  readSource, writeText, parse, declared, uses, refs, usesPrivate, fileBound, isPure, requireOf, firstLine, statements, importsFor,
-  braceList, commentLines, backRequireLine, countLines, dropRanges,
+  readSource, writeText, parse, commonJsOnly, unwrap, declared, uses, refs, usesPrivate, fileBound, isPure, requireOf, importOf, firstLine, statements,
+  importsFor, braceList, commentLines, backRequireLine, countLines, dropRanges,
 };

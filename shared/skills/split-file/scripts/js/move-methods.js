@@ -31,7 +31,8 @@ function main() {
   if (fs.existsSync(target)) throw new Error(`${target} exists`);
 
   const { eol, text, lines } = A.readSource(sourceFile);
-  const ast = A.parse(text);
+  const ast = A.parse(text, { file: sourceFile });
+  A.commonJsOnly(ast, sourceFile, 'move-methods.js');
   const stmts = A.statements(ast, text);
   const strict = (ast.program.directives || []).some((d) => d.value.value === 'use strict');
   const clsStmt = stmts.find((s) => s.node.type === 'ClassDeclaration' && s.node.id && s.node.id.name === className);
