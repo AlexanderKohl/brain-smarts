@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-15T07:45:00+10:00
-updated: 2026-10-01T22:41:12+10:00
+updated: 2026-10-14T19:50:39+10:00
 owner: brain-owner
 ---
 
@@ -25,8 +25,9 @@ Verified with a trial run of several read-only workers launched in one turn.
 | `context_mode: fork` | a forking subagent type when the host offers one; otherwise treat as isolated and say so in the result |
 | `writes: none` | a read-only subagent type (for example `Explore`) or `general-purpose` with the packet's instructions |
 | `writes: worktree` | `isolation: "worktree"` so the worker gets its own git worktree; the conductor merges |
-| `model: inherit` | omit the model parameter |
-| `model: <name>` | the `model` parameter, only from the host's offered list; the result must record what ran |
+| `model: inherit` | omit the model parameter; the subagent runs at the conductor's model and effort |
+| `model: worker-opus-medium` or `worker-fable-medium` | the `subagent_type` parameter; the definition in `/.claude/agents/` pins the model and medium effort whatever the conductor's setting |
+| `model: <other name>` | the `model` parameter, only from the host's offered list; effort follows the conductor's session; the result must record what ran |
 | parallel execution | launch every packet with `run_in_background: true` in the same turn, then wait for the completion notifications |
 
 ## Reading the context size
@@ -69,3 +70,7 @@ the session id and the `checkpoint-done` command; dispatching is refused until i
 - In a trial of three read-only workers in parallel, all returned `completed` and passed
   validation first time, and the wall clock was well under half that of running them in
   sequence. Read each worker's token cost from its completion notification.
+- A subagent inherits the conductor's effort level unless its definition pins one. At maximum
+  effort an implementation card that takes a minute at medium can take ten or more, so a packet
+  that does not name a worker type runs at whatever the conductor is set to. A definitions folder
+  created during a session is watched only from the next session.

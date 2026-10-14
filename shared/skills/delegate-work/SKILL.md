@@ -9,7 +9,7 @@ scope: shared
 script_paths:
   - /shared/skills/delegate-work/scripts/delegation.py
 created: 2026-09-15T07:45:00+10:00
-updated: 2026-10-01T23:08:38+10:00
+updated: 2026-10-14T19:50:39+10:00
 owner: brain-owner
 project_refs:
   - /memory/projects/brain-development
@@ -151,9 +151,13 @@ The script uses only the Python standard library.
 
 ### Choosing a worker's model
 
-**`inherit` is the default and stays the default**. Name a smaller model only for a packet whose objective
-leaves no judgement, and decide that packet by packet, never as a standing rule for a class of
-work.
+**A packet that leaves no judgement names the implementation worker type; every other packet
+inherits.** The implementation worker type is the host's definition that pins the current
+Opus-class model at medium effort (on Claude Code, `worker-opus-medium`); a packet that needs
+more judgement than that but less than the conductor names the judgement worker type
+(`worker-fable-medium`); a packet that needs the conductor's own model and effort keeps
+`inherit`. The conductor decides packet by packet, by the test below, and the result records
+what actually ran.
 
 A packet leaves no judgement when every decision is already made in it: the files are named,
 the change is spelled out, the acceptance is a command that passes or fails, and nothing in it
@@ -164,11 +168,16 @@ qualify.
 
 The reason for the caution is arithmetic, not taste: a worker that misreads a packet costs a
 full re-run plus the conductor's merge time, which is more than the saving on the first run.
-The result records what actually ran, so a packet that named one model and a worker that
-reports another shows up at validation.
+The result records what actually ran, so a packet that named one model and a worker that reports another shows up at validation.
+
+A packet carries an `effort` field beside `model`: `inherit` (default) or one of the host's
+effort levels. A worker type's pinned effort overrides it; the host note says how each host
+honours it.
 
 A read-only packet lets the worker use the scoped bootstrap tier from CONTRACT section 1. A
-packet that allows writes tells the worker to complete the full bootstrap first.
+packet that allows writes names the worker brief (`templates/worker-brief.template.md`, with the
+owner's values filled in by the conductor) and tells the worker to use the worker bootstrap
+tier: the brief, the packet, and the `RULES.md` of each node its write paths touch.
 
 ## Outputs
 
