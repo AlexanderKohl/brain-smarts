@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 scope: shared
-version: 0.2.0
+version: 0.2.1
 script_paths:
   - /shared/skills/split-file/scripts/js/move.js
   - /shared/skills/split-file/scripts/js/move-methods.js
@@ -17,7 +17,7 @@ script_paths:
   - /shared/skills/split-file/scripts/py/analyse.py
   - /shared/skills/split-file/scripts/py/shape.py
 created: 2026-10-01T07:11:48+10:00
-updated: 2026-10-01T07:11:48+10:00
+updated: 2026-10-15T06:43:45+10:00
 owner: brain-owner
 ---
 
@@ -118,6 +118,9 @@ the top-level one. It refuses when:
 - a range cuts a statement, a name is not found, or a statement declares more than was named;
 - JavaScript members that cannot be copied as descriptors: constructors, static, private, getters,
   setters, methods using `super` or the class by name.
+
+A moved statement or member takes its leading comments with it, except a comment that starts on the
+previous statement's last line (`const a = 1; // note`): that comment stays with that line (since 0.2.1).
 
 ### 4. Check after each move
 

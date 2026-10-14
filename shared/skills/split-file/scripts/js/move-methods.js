@@ -44,7 +44,8 @@ function main() {
   const problems = [];
   const moving = [];
   for (const name of names) {
-    const m = cls.body.body.find((x) => memberName(x) === name);
+    const i = cls.body.body.findIndex((x) => memberName(x) === name);
+    const m = cls.body.body[i];
     if (!m) { problems.push(`method ${name} not found in ${className}`); continue; }
     if (m.type !== 'ClassMethod' || m.kind !== 'method' || m.static || m.computed) { problems.push(`${name} is not a plain method`); continue; }
     if (counts.get(name) > 1) { problems.push(`${name} is defined more than once`); continue; }
@@ -52,7 +53,7 @@ function main() {
     if (u.usesSuper) problems.push(`${name} uses super`);
     for (const n of A.fileBound(m)) if (n !== 'this') problems.push(`${name} uses ${n}, which means something else in another file`);
     if (A.usesPrivate(m)) problems.push(`${name} uses a private member`);
-    const from = m.leadingComments && m.leadingComments.length ? m.leadingComments[0].loc.start.line : m.loc.start.line;
+    const from = A.firstLine(m, i ? cls.body.body[i - 1].loc.end.line : cls.body.loc.start.line);
     moving.push({ name, node: m, from, end: m.loc.end.line, read: A.refs(m).read });
   }
   moving.sort((a, b) => a.from - b.from);

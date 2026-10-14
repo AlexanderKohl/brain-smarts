@@ -48,9 +48,9 @@ function topLevel(file) {
 function classMembers(ast, topNames, className) {
   const cls = ast.program.body.find((s) => s.type === 'ClassDeclaration' && s.id && s.id.name === className);
   if (!cls) throw new Error(`class ${className} is not declared at top level`);
-  return cls.body.body.map((m) => {
+  return cls.body.body.map((m, i, all) => {
     const u = A.uses(m);
-    const from = m.leadingComments && m.leadingComments.length ? m.leadingComments[0].loc.start.line : m.loc.start.line;
+    const from = A.firstLine(m, i ? all[i - 1].loc.end.line : cls.body.loc.start.line);
     return {
       name: m.key && (m.key.name || m.key.value || (m.key.id && `#${m.key.id.name}`)),
       type: m.type,

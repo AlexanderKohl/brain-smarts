@@ -152,12 +152,21 @@ function requireOf(stmt, text) {
 
 const KIND = { FunctionDeclaration: 'function', ClassDeclaration: 'class' };
 
+// The first line of a node with its leading comments. Babel attaches a comment that trails the
+// previous node on its last line (`const a = 1; // note`) as a leading comment of the next node;
+// such a comment stays with the line it is on, so only a comment that begins after `prevEnd` (the
+// previous node's last line; 0 when there is none) counts towards the start.
+function firstLine(node, prevEnd = 0) {
+  const own = (node.leadingComments || []).find((c) => c.loc.start.line > prevEnd);
+  return own ? own.loc.start.line : node.loc.start.line;
+}
+
 // Every top-level statement: its node, first line with its leading comments (`from`), first and
 // last line, the names it declares, its kind, and its import form.
 function statements(ast, text) {
-  const stmts = ast.program.body.map((s) => ({
+  const stmts = ast.program.body.map((s, i, all) => ({
     node: s,
-    from: s.leadingComments && s.leadingComments.length ? s.leadingComments[0].loc.start.line : s.loc.start.line,
+    from: firstLine(s, i ? all[i - 1].loc.end.line : 0),
     start: s.loc.start.line,
     end: s.loc.end.line,
     declares: declared(s),
@@ -271,6 +280,6 @@ function countLines(text) {
 }
 
 module.exports = {
-  readSource, writeText, parse, declared, uses, refs, usesPrivate, fileBound, isPure, requireOf, statements, importsFor,
+  readSource, writeText, parse, declared, uses, refs, usesPrivate, fileBound, isPure, requireOf, firstLine, statements, importsFor,
   braceList, commentLines, backRequireLine, countLines, dropRanges,
 };
