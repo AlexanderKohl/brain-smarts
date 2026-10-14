@@ -399,7 +399,7 @@ class DelegationTestCase(unittest.TestCase):
         run = self.new_run()
         self.new_packet(run, "--writes", "paths", "--path", "/RULES.md")
         self.fill_result(run, "W01", changed_paths=["/OTHER.md"], validation=["ran"])
-        with mock.patch.object(delegation, "within", lambda path, scope: True):
+        with mock.patch("results.within", lambda path, scope: True):
             code, out = run_cli(*self.common, "validate-result", "--run", run)
         self.assertEqual(code, 0, out)
 

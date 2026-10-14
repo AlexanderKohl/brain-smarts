@@ -8,6 +8,7 @@ status: active
 scope: shared
 script_paths:
   - /shared/skills/delegate-work/scripts/delegation.py
+  - /shared/skills/delegate-work/scripts/results.py
 created: 2026-09-15T07:45:00+10:00
 updated: 2026-10-14T19:50:39+10:00
 owner: brain-owner
