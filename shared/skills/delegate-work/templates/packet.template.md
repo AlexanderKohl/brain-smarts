@@ -6,14 +6,14 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-15T07:45:00+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-10-14T19:50:39+10:00
 owner: brain-owner
 ---
 
 # {{TITLE}}
 
 The script `/shared/skills/delegate-work/scripts/delegation.py new-packet` writes the front
-matter (`context_mode`, `writes`, `write_paths`, `external`, `external_target`, `model`,
+matter (`context_mode`, `writes`, `write_paths`, `external`, `external_target`, `model`, `effort`,
 `max_tool_calls`, `max_output_words`, `context_refs`) and substitutes the placeholders below.
 Do not copy this file by hand.
 

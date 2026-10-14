@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-10-01T23:25:28+10:00
+updated: 2026-10-14T19:50:39+10:00
 owner: brain-owner
 ---
 
@@ -150,7 +150,7 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 
 - Keep durable behavioural rules only in portable governance: `/CONTRACT.md`, root and node `RULES.md` files, and skill operating instructions. Do not create or maintain host-specific behavioural rule files that restate or extend how agents must behave.
 - Host entry files may only point agents to portable bootstrap (`/CONTRACT.md`, `/BOOTSTRAP.md`, `/AGENTS.md`) and must not carry independent behavioural policy.
-- **One text per rule.** A rule's wording lives only in its canonical home. Anywhere else it is referred to by its identifier and section, never restated in other words; a list that can be generated from its sources is generated. The repository preflight fails when a pointer file carries rule identifiers or runs past a pointer's length.
+- **One text per rule.** A rule's wording lives only in its canonical home. Anywhere else it is referred to by its identifier and section, never restated in other words; a list that can be generated from its sources is generated. The repository preflight fails when a pointer file carries rule identifiers or runs past a pointer's length. The worker brief (`/shared/skills/delegate-work/templates/worker-brief.template.md`) is the one permitted digest: each of its items names the rule or contract section it digests, and a change to a digested rule changes the brief in the same commit.
 
 ## SMART-RULE-0016 – Product-development process
 

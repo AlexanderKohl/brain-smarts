@@ -4,11 +4,11 @@ title: Portable AI Brain Contract
 type: contract
 status: active
 schema_version: 0.2
-contract_version: 2.4.0
+contract_version: 2.5.0
 contract: /CONTRACT.md
 canonical: true
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-10-01T13:26:27+10:00
+updated: 2026-10-14T19:50:39+10:00
 owner: brain-owner
 ---
 
@@ -26,6 +26,7 @@ Every AI agent, script or person working anywhere in the brain must:
 4. Choose a bootstrap tier for the current turn:
    - **Full bootstrap** (required when creating, changing or deleting brain content, changing governance, using a skill with side effects, or when applicable policy is unclear): read the discovered `/CONTRACT.md`, then `/RULES.md`, then the owner profile `/memory/OWNER.md` and the owner-layer rules `/memory/RULES.md`, then inherited node `RULES.md` files down to the active node, then the active node's `README.md`, `STATE.md` and relevant dependencies before acting.
    - **Scoped bootstrap** (allowed only for answer-only / read-only fact retrieval with no durable writes): if the needed fact is already available from injected host context, a file already read in this session, or one targeted read of a known path, do not re-read the full contract tree. Escalate immediately to full bootstrap when a durable write, governance change, credential/side-effecting skill use, or policy uncertainty appears.
+   - **Worker bootstrap** (allowed only for a worker executing a delegation packet under `SMART-RULE-0024`): read the worker brief the packet names, the packet itself, and the `RULES.md` of each node the packet's write paths touch. The worker writes only inside the packet's write paths, never commits, and escalates by a blocked result. The conductor that wrote the packet has completed the full bootstrap, validates the result before it is integrated, and remains accountable for routing, tasks, logs, state and commits. A worker that must act outside its packet escalates instead of bootstrapping further.
 5. Stop and report the problem if the contract cannot be found or read, or if competing location hints identify different contracts.
 6. When `/memory/` is absent, work only on the mechanics layer and say so; do not create owner content anywhere else to compensate. A fresh memory is set up from `/shared/templates/memory-skeleton/`.
 
