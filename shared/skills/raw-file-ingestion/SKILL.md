@@ -6,19 +6,21 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 scope: shared
-version: 0.4.2
+version: 0.5.0
 script_paths:
   - /shared/skills/raw-file-ingestion/scripts/ingest_raw.py
   - /shared/skills/raw-file-ingestion/scripts/convert.py
   - /shared/skills/raw-file-ingestion/scripts/convert_office.py
   - /shared/skills/raw-file-ingestion/scripts/convert_pdf.py
   - /shared/skills/raw-file-ingestion/scripts/markdown_blocks.py
+  - /shared/skills/raw-file-ingestion/scripts/reconvert.py
   - /shared/skills/raw-file-ingestion/tests/test_ingest_raw.py
   - /shared/skills/raw-file-ingestion/tests/test_text_formats.py
   - /shared/skills/raw-file-ingestion/tests/test_office_formats.py
   - /shared/skills/raw-file-ingestion/tests/test_pdf.py
+  - /shared/skills/raw-file-ingestion/tests/test_reconvert.py
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-30T23:02:09+00:00
+updated: 2026-10-14T20:18:34+10:00
 ---
 
 # Raw File Ingestion
@@ -64,6 +66,7 @@ conversion made there since is never lost. Only a node reference that does not e
 - The script finds the brain root by walking up to `CONTRACT.md` and stops with an error when `<brain root>/memory/` is missing.
 - A target node must be an existing folder inside `/memory/`: a source reference names an owner's file, so it never goes into the mechanics or the skill library (CONTRACT §3.4).
 - Never modify, overwrite, normalise or delete an existing raw file.
+- `reconvert.py SOURCE-ID` writes in exactly one of two places: the record `/memory/sources/<SOURCE-ID>.md` itself, rewritten in place, when its `updated` equals its `created`; otherwise `/memory/sources/<SOURCE-ID>.reconverted.md` beside it, overwritten if it exists, and the record stays byte-identical. Either way it appends one line to `/memory/systems/raw-file-management/LOG.md`. It never touches the raw file or a node's `sources/`.
 - No credentials and no external systems. For a PDF it may run `pdftotext` as a local child process (no network), limited to 300 seconds.
 
 ## Script
@@ -81,6 +84,13 @@ python -m unittest discover -s shared/skills/raw-file-ingestion/tests -v
 ```
 
 The tests build a fictional brain in a temporary folder and ingest fictional files.
+
+```bash
+python shared/skills/raw-file-ingestion/scripts/reconvert.py --list
+python shared/skills/raw-file-ingestion/scripts/reconvert.py SOURCE-ID
+```
+
+Re-ingesting a file never rewrites its record, so `reconvert.py` converts a record's raw file again on purpose, through the same `convert.py` path. `--list` prints one tab-separated line per record whose `conversion_status` is not `complete` – id, status, raw source – sorted by id. `SOURCE-ID` (exactly the front-matter id or the record's file name without `.md`, never a prefix) decides by one rule: a record whose `updated` differs from its `created` is hand-edited, so it is left byte-identical and the new conversion is written beside it as `<SOURCE-ID>.reconverted.md` with `canonical_source_md` naming the record; any other record is rewritten in place. Either way every front-matter field the record had (owner, tags, node references and the rest) is carried through in its order; only `updated` (from the clock) and `conversion_status` change, and the derivative sets `canonical_source_md` to the record, replacing any value; an in-place rewrite keeps the record's own `canonical_source_md`. It logs which happened and prints the source id, the path written and the `conversion_status`. Exit 2: no such record, or a SOURCE-ID containing `/`, `\`, `*`, `?` or `[`; 3: its raw file is missing; 6: no brain or memory.
 
 ## Formats
 
