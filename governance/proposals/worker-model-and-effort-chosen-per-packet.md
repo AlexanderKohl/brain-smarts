@@ -4,14 +4,14 @@ title: The conductor chooses each worker's model and effort from the packet
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: draft
+status: implemented
 owner: brain-owner
 created: 2026-10-16T15:23:32+10:00
-updated: 2026-10-16T15:23:32+10:00
+updated: 2026-10-16T15:28:10+10:00
 rule_id: null
-accepted_by: null
-accepted_at: null
-implemented_at: null
+accepted_by: brain-owner
+accepted_at: 2026-10-16T15:28:10+10:00
+implemented_at: 2026-10-16T15:28:10+10:00
 previous_contract_version: 2.5.0
 new_contract_version: 2.5.0
 target_files:
@@ -137,6 +137,8 @@ test; `preflight.py` passes; the next run's packets carry `model_reason`.
 
 ## Acceptance
 
-Not yet requested. Ask one direct question that identifies this proposal.
+The owner answered "Apply PROPOSAL-worker-model-and-effort-chosen-per-packet." to the direct question asking to apply it, with the full wording shown.
 
 ## Implementation record
+
+- 2026-10-16T15:28:10+10:00 – applied: SKILL.md section replaced, host note mapping and allowance rows, `delegation.py new-packet` takes `--effort` and `--model-reason` (required when `--model` or `--effort` is given, written as `effort` and `model_reason`), packet template field list; 57 delegate-work tests pass.
