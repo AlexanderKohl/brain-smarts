@@ -13,7 +13,7 @@ owner: brain-owner
 # {{TITLE}}
 
 The script `/shared/skills/delegate-work/scripts/delegation.py new-packet` writes the front
-matter (`context_mode`, `writes`, `write_paths`, `external`, `external_target`, `model`, `effort`,
+matter (`context_mode`, `writes`, `write_paths`, `external`, `external_target`, `model`, `effort`, `model_reason`,
 `max_tool_calls`, `max_output_words`, `context_refs`) and substitutes the placeholders below.
 Do not copy this file by hand.
 

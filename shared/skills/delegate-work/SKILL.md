@@ -150,30 +150,43 @@ The script uses only the Python standard library.
 | `context_refs` | repository-root paths | What the worker reads. References, never copied prose. Each must exist. |
 | `--fact LABEL=COMMAND` | repeatable | Runs the command at packet time and pastes its output into the packet. A packet quotes only facts the conductor verified by a command in the same session; a count typed from memory is a hint, and the packet says so. |
 
-### Choosing a worker's model
+### Choosing a worker's model and effort
 
-**A packet that leaves no judgement names the implementation worker type; every other packet
-inherits.** The implementation worker type is the host's definition that pins the current
-Opus-class model at medium effort (on Claude Code, `worker-opus-medium`); a packet that needs
-more judgement than that but less than the conductor names the judgement worker type
-(`worker-fable-medium`); a packet that needs the conductor's own model and effort keeps
-`inherit`. The conductor decides packet by packet, by the test below, and the result records
-what actually ran.
+**The conductor chooses a model and an effort for every packet from what that packet needs, and
+writes the choice and a one-line reason on the packet** (`--model`, `--effort`, `--model-reason`).
+No kind of work is tied to one model.
 
-A packet leaves no judgement when every decision is already made in it: the files are named,
-the change is spelled out, the acceptance is a command that passes or fails, and nothing in it
-asks the worker to weigh evidence, choose between two reasonable shapes, or decide whether
-something could be verified. If the objective contains the words *decide*, *judge*, *check
-whether*, *if you cannot verify*, or an option for the worker to choose between, it does not
-qualify.
+It weighs, in this order:
 
-The reason for the caution is arithmetic, not taste: a worker that misreads a packet costs a
-full re-run plus the conductor's merge time, which is more than the saving on the first run.
-The result records what actually ran, so a packet that named one model and a worker that reports another shows up at validation.
+1. **What a wrong result costs.** Rework only; something a person sees; stored data, money,
+   security or production.
+2. **How much judgement the packet leaves.** None: the files, the change and the acceptance are
+   spelled out. Bounded: one area, a few reasonable choices. Open: design, trade-offs, research
+   that must weigh evidence.
+3. **How much the worker must read.** A large reading load favours the model that is cheapest per
+   token at the quality the first two need.
+4. **The allowance left.** The conductor reads the host's usage before dispatching (the host note
+   says how). A model past 75 % of its period's allowance is chosen only when no other fits, and
+   the reason says so.
 
-A packet carries an `effort` field beside `model`: `inherit` (default) or one of the host's
-effort levels. A worker type's pinned effort overrides it; the host note says how each host
-honours it.
+The ladder, lowest first; the host note maps it to model names:
+
+| Packet | Model and effort |
+|---|---|
+| no judgement, rework only | the cheapest model that writes code reliably; low or medium effort |
+| bounded judgement, or a person sees the result | the current Opus-class model; medium effort |
+| open judgement, or data, money, security or production | the Opus-class model at high effort, or the conductor's own model and effort (`inherit`) |
+| open judgement where a specialised model is known to do better, and its allowance is healthy | that model; the reason names why |
+
+**Effort rises before the model does:** the next step up for a packet is the same model at a
+higher effort, then the next model. A worker that comes back weak is resumed or re-run one step up
+the ladder, and the run's log says so. Repeated step-ups for one kind of packet are a learning
+(`SMART-RULE-0028`) and move that kind's default up the ladder.
+
+The reason for weighing cost first is arithmetic: a worker that misreads a packet costs a full
+re-run plus the conductor's merge time, which is more than the saving on the first run. The
+result records what actually ran, so a packet that named one model and a worker that reports
+another shows up at validation.
 
 A read-only packet lets the worker use the scoped bootstrap tier from CONTRACT section 1. A
 packet that allows writes names the worker brief (`templates/worker-brief.template.md`, with the

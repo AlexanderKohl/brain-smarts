@@ -331,6 +331,25 @@ class DelegationTestCase(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("model must be set", out)
 
+    def test_a_chosen_model_or_effort_needs_a_reason(self) -> None:
+        run = self.new_run()
+        code, out = self.new_packet(run, "--model", "opus", "--effort", "medium")
+        self.assertEqual(code, 1, out)
+        self.assertIn("--model-reason is required", out)
+        code, out = self.new_packet(run, "--effort", "high")
+        self.assertEqual(code, 1, out)
+        code, out = self.new_packet(run, "--model", "opus", "--effort", "medium",
+                                    "--model-reason", "bounded judgement, a person sees it")
+        self.assertEqual(code, 0, out)
+        meta, _ = delegation.load(self.root / "temp" / "delegation" / "runs" / run / "W01.md")
+        self.assertEqual(meta["model"], "opus")
+        self.assertEqual(meta["effort"], "medium")
+        self.assertEqual(meta["model_reason"], "bounded judgement, a person sees it")
+        code, out = self.new_packet(run)
+        self.assertEqual(code, 0, out)
+        meta, _ = delegation.load(self.root / "temp" / "delegation" / "runs" / run / "W02.md")
+        self.assertEqual((meta["model"], meta["effort"], meta["model_reason"]), ("inherit", "inherit", None))
+
     # ------------------------------------------------------------ synthesis
 
     def test_summarise_lists_every_packet_and_collects_routing_sections(self) -> None:
