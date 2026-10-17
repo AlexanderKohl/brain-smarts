@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-10-14T19:50:39+10:00
+updated: 2026-10-17T11:43:10+10:00
 owner: brain-owner
 ---
 
@@ -376,8 +376,13 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 - Workers use no credentials and take no external side effect unless the packet names a target
   the owner confirmed for this operation under CONTRACT §10.5. The default is none. A worker
   that needs an owner decision stops with status `blocked` and the question; it does not guess.
-- Budget: depth one (workers do not delegate) and at most four workers per run, until a
-  measured trial recorded under `/memory/projects/brain-development/` justifies more.
+- Budget: depth one (workers do not delegate) and at most four workers per run. A run may hold
+  up to eight workers when an approved build plan splits the work first: the plan names each
+  packet's write paths, no two packets share a path, and the plan fixes every interface between
+  the packets (names, data shapes, identifiers), so no worker needs another's result to finish.
+  The conductor approves the plan before the run opens and names it on the run. The machine
+  limit of `SMART-RULE-0037` still applies, and the number is the lower of the two. A raise
+  beyond eight needs another measured trial recorded under `/memory/projects/brain-development/`.
 - The conductor routes each result under CONTRACT §5 and §6, treats worker claims as
   unverified until checked, writes one `LOG.md` entry per run in the owning node, and does the
   Git accounting under `SMART-RULE-0014`. Never claim parallel execution on a host that ran

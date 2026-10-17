@@ -4,14 +4,14 @@ title: Up to eight file-changing workers in a run that an approved plan has spli
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: draft
+status: implemented
 owner: brain-owner
 created: 2026-10-17T11:39:36+10:00
-updated: 2026-10-17T11:39:36+10:00
+updated: 2026-10-17T11:43:10+10:00
 rule_id: SMART-RULE-0024
-accepted_by: null
-accepted_at: null
-implemented_at: null
+accepted_by: brain-owner
+accepted_at: 2026-10-17T11:42:00+10:00
+implemented_at: 2026-10-17T11:43:10+10:00
 previous_contract_version: 2.5.0
 new_contract_version: 2.5.0
 target_files:
@@ -127,7 +127,9 @@ the repository preflight, and one real run opened with `--plan`.
 
 ## Acceptance
 
-Not yet requested. Ask one direct question that identifies this proposal. Do not treat silence,
-adjacent approval or general agreement as acceptance.
+Accepted by the owner in the conversation at 2026-10-17T11:42:00+10:00, identifying this proposal by its id
+("I accept PROPOSAL-eight-workers-under-an-approved-plan as shown").
 
 ## Implementation record
+
+- 2026-10-17T11:43:10+10:00: the `SMART-RULE-0024` budget bullet in `/RULES.md` and the owner layer's trial bullet in `/memory/RULES.md` replaced with the accepted wording; `delegation.py --plan`, its tests and the skill's budget paragraph and failure behaviour built in the same unit of work (run `RUN-20261017-114237`). Contract version unchanged (2.5.0): a rule amendment, no contract change.
