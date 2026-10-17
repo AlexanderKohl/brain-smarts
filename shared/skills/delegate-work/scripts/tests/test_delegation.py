@@ -102,6 +102,58 @@ class DelegationTestCase(unittest.TestCase):
         self.assertNotEqual(code, 0)
         self.assertIn("max workers is 4", out)
 
+    # ------------------------------------------------------------ MEMORY-RULE-0005 trial runs
+
+    def new_trial_run(self, *trial: str) -> tuple[int, str]:
+        return run_cli(*self.common, "new-run", "--context-tokens", "1000", "--title", "Trial",
+                       "--why-parallel", "x", "--run-id", "RUN-TRIAL", *trial)
+
+    def test_trial_run_of_seven_accepts_seven_packets_and_refuses_the_eighth(self) -> None:
+        code, out = self.new_trial_run("--trial-workers", "7", "--trial-reason", "measured trial")
+        self.assertEqual(code, 0, out)
+        for _ in range(7):
+            code, out = self.new_packet("RUN-TRIAL")
+            self.assertEqual(code, 0, out)
+        code, out = self.new_packet("RUN-TRIAL")
+        self.assertNotEqual(code, 0)
+        self.assertIn("budget is 7", out)
+
+    def test_trial_workers_above_eight_is_refused(self) -> None:
+        code, out = self.new_trial_run("--trial-workers", "9", "--trial-reason", "too many")
+        self.assertNotEqual(code, 0)
+        self.assertIn("5 to 8", out)
+
+    def test_trial_workers_without_reason_is_refused(self) -> None:
+        code, out = self.new_trial_run("--trial-workers", "6")
+        self.assertNotEqual(code, 0)
+        self.assertIn("--trial-reason is required", out)
+
+    def test_run_without_trial_flags_still_refuses_the_fifth_packet(self) -> None:
+        code, out = self.new_trial_run()
+        self.assertEqual(code, 0, out)
+        for _ in range(4):
+            self.assertEqual(self.new_packet("RUN-TRIAL")[0], 0)
+        code, out = self.new_packet("RUN-TRIAL")
+        self.assertNotEqual(code, 0)
+        self.assertIn("budget is 4", out)
+        meta, _ = delegation.load(self.root / "temp/delegation/runs/RUN-TRIAL/RUN.md")
+        self.assertNotIn("trial", meta)
+
+    def test_trial_run_records_trial_fields_and_close_and_summarise_show_them(self) -> None:
+        code, out = self.new_trial_run("--trial-workers", "6", "--trial-reason", "first measured trial")
+        self.assertEqual(code, 0, out)
+        meta, _ = delegation.load(self.root / "temp/delegation/runs/RUN-TRIAL/RUN.md")
+        self.assertEqual(meta["trial"], {"workers": "6", "reason": "first measured trial"})
+        self.assertEqual(meta["max_workers"], "6")
+        code, out = run_cli(*self.common, "summarise", "--run", "RUN-TRIAL")
+        self.assertIn("trial: workers 6; reason: first measured trial", out)
+        code, out = run_cli(*self.common, "close-run", "--run", "RUN-TRIAL", "--status", "synthesised",
+                            "--host", "Claude Code", "--parallel", "yes", "--context-tokens", "1000")
+        self.assertEqual(code, 0, out)
+        self.assertIn("trial: workers 6; reason: first measured trial", out)
+        meta, _ = delegation.load(self.root / "temp/delegation/runs/RUN-TRIAL/RUN.md")
+        self.assertEqual(meta["trial"], {"workers": "6", "reason": "first measured trial"})
+
     # ------------------------------------------------------------ packets
 
     def test_packets_number_sequentially_and_create_pending_result(self) -> None:

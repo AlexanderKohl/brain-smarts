@@ -7,6 +7,7 @@ task record. The conductor routes durable outcomes under CONTRACT sections 5 and
 
 Commands
   new-run          --title T --why-parallel TEXT [--parent ID] [--max-workers N]
+                   [--trial-workers 5-8 --trial-reason TEXT]  (MEMORY-RULE-0005 trial run)
   new-packet       --run RUN --title T --objective TEXT [--context PATH ...]
                    [--context-mode isolated|fork] [--fork-reason TEXT]
                    [--writes none|worktree|paths] [--path PATH ...]
@@ -41,6 +42,9 @@ SKILL_PATH = "/shared/skills/delegate-work"
 RUNS_SUBDIR = Path("temp") / "delegation" / "runs"
 DEFAULT_MAX_WORKERS = 4
 HARD_MAX_WORKERS = 4
+# A run marked as the measured trial of MEMORY-RULE-0005 may hold five to eight workers.
+TRIAL_MIN_WORKERS = 5
+TRIAL_MAX_WORKERS = 8
 RESULT_STATUSES = {"pending", "completed", "failed", "blocked"}
 CONTEXT_MODES = {"isolated", "fork"}
 WRITE_MODES = {"none", "worktree", "paths"}
@@ -98,7 +102,7 @@ def root_path(path: Path, root: Path) -> str:
 
 
 def parse_front_matter(text: str) -> tuple[dict, str]:
-    """Parse the YAML subset this skill writes: scalars and flat lists."""
+    """Parse the YAML subset this skill writes: scalars, flat lists and one-level mappings."""
     if not text.startswith("---\n"):
         return {}, text
     end = text.find("\n---", 4)
@@ -115,6 +119,13 @@ def parse_front_matter(text: str) -> tuple[dict, str]:
             if not isinstance(data.get(key), list):
                 data[key] = []
             data[key].append(unquote(line[4:].strip()))
+            continue
+        if line.startswith("  ") and ":" in line and key is not None:
+            if not isinstance(data.get(key), dict):
+                data[key] = {}
+            sub, _, raw = line.strip().partition(":")
+            raw = raw.strip()
+            data[key][sub.strip()] = None if raw == "null" else unquote(raw)
             continue
         if ":" in line and not line.startswith(" "):
             key, _, raw = line.partition(":")
@@ -151,7 +162,10 @@ def quote(value) -> str:
 def render_front_matter(fields: dict) -> str:
     lines = ["---"]
     for key, value in fields.items():
-        if isinstance(value, list):
+        if isinstance(value, dict):
+            lines.append(f"{key}:")
+            lines.extend(f"  {sub}: {quote(item)}" for sub, item in value.items())
+        elif isinstance(value, list):
             if not value:
                 lines.append(f"{key}: []")
             else:
@@ -312,9 +326,23 @@ def cmd_new_run(args) -> int:
     stamp = now_stamp(args.now)
     context_tokens, override = context_guard.guard(root, args, "new-run", datetime.fromisoformat(stamp))
     run_id = args.run_id or ("RUN-" + stamp[:19].replace("-", "").replace(":", "").replace("T", "-"))
-    max_workers = args.max_workers or DEFAULT_MAX_WORKERS
-    if max_workers > HARD_MAX_WORKERS:
-        raise SystemExit(f"error: max workers is {HARD_MAX_WORKERS} per run (SMART-RULE-0024 budget)")
+    trial = None
+    if args.trial_workers is not None or args.trial_reason:
+        if args.trial_workers is None:
+            raise SystemExit("error: --trial-reason needs --trial-workers")
+        if not (args.trial_reason or "").strip():
+            raise SystemExit("error: --trial-reason is required with --trial-workers")
+        if not TRIAL_MIN_WORKERS <= args.trial_workers <= TRIAL_MAX_WORKERS:
+            raise SystemExit(f"error: --trial-workers must be {TRIAL_MIN_WORKERS} to {TRIAL_MAX_WORKERS} "
+                             "(MEMORY-RULE-0005 trial)")
+        if args.max_workers is not None:
+            raise SystemExit("error: --max-workers and --trial-workers cannot be combined")
+        trial = {"workers": args.trial_workers, "reason": args.trial_reason.strip()}
+        max_workers = args.trial_workers
+    else:
+        max_workers = args.max_workers or DEFAULT_MAX_WORKERS
+        if max_workers > HARD_MAX_WORKERS:
+            raise SystemExit(f"error: max workers is {HARD_MAX_WORKERS} per run (SMART-RULE-0024 budget)")
     path = root / RUNS_SUBDIR / run_id
     if path.exists():
         raise SystemExit(f"error: run {run_id} already exists")
@@ -328,6 +356,7 @@ def cmd_new_run(args) -> int:
         "status": "open",
         "parent": args.parent,
         "max_workers": max_workers,
+        **({"trial": trial} if trial else {}),
         "max_depth": 1,
         "host": None,
         "parallel": None,
@@ -548,6 +577,14 @@ def cmd_check_writes(args) -> int:
     return 0
 
 
+def trial_line(run_meta: dict) -> str:
+    """One line naming a MEMORY-RULE-0005 trial run's fields, or "" for an ordinary run."""
+    trial = run_meta.get("trial")
+    if not isinstance(trial, dict):
+        return ""
+    return f"trial: workers {trial.get('workers')}; reason: {trial.get('reason')}"
+
+
 def cmd_close_run(args) -> int:
     root = discover_root(args.root)
     run = run_dir(root, args.run)
@@ -557,6 +594,10 @@ def cmd_close_run(args) -> int:
                   parallel=(args.parallel == "yes"),
                   context_tokens_at_close=context_guard.context_value(args, "close-run"))
     print(root_path(run / "RUN.md", root))
+    meta, _ = load(run / "RUN.md")
+    line = trial_line(meta)
+    if line:
+        print(line)
     return 0
 
 
@@ -578,6 +619,9 @@ def build_parser() -> argparse.ArgumentParser:
                    help="one line: why parallel workers beat sequential work")
     p.add_argument("--parent", help="task or run id this run serves")
     p.add_argument("--max-workers", type=int)
+    p.add_argument("--trial-workers", type=int,
+                   help="5 to 8: mark this run as the MEMORY-RULE-0005 measured trial")
+    p.add_argument("--trial-reason", help="required with --trial-workers: why this run is the trial")
     p.add_argument("--run-id", help=argparse.SUPPRESS)
     context_guard.add_context_arguments(p)
     p.set_defaults(func=cmd_new_run)

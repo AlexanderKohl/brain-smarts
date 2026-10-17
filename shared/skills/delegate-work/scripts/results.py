@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from delegation import (discover_root, run_dir, load, packet_files, root_path, sections, has_content,
+from delegation import (trial_line, discover_root, run_dir, load, packet_files, root_path, sections, has_content,
                         template_body, resolve, within, RESULT_STATUSES,
                         SECRET_PATTERNS, REQUIRED_RESULT_SECTIONS)
 
@@ -140,6 +140,8 @@ def cmd_summarise(args) -> int:
     print(f"# Run {run_meta.get('id')}: {run_meta.get('title')}")
     print(f"status: {run_meta.get('status')}; host: {run_meta.get('host')}; "
           f"parallel: {run_meta.get('parallel')}; parent: {run_meta.get('parent')}")
+    if trial_line(run_meta):
+        print(trial_line(run_meta))
     print()
     print("| Packet | Title | Status | Host | Model | Changed paths | Artifacts |")
     print("|---|---|---|---|---|---|---|")

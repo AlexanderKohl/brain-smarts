@@ -107,6 +107,8 @@ python shared/skills/delegate-work/scripts/delegation.py new-run \
   --title "Audit skills, tasks and transcripts" \
   --why-parallel "three read-only audits with no shared state" \
   --parent TASK-2026-0999 --context-tokens 131000
+#    a run marked as the measured trial of MEMORY-RULE-0005 may hold five to eight workers:
+#    add --trial-workers N (5 to 8) --trial-reason TEXT; RUN.md then records trial: {workers, reason}
 
 # 2. one packet per worker; defaults are isolated, read-only, no external access;
 #    refused from 900 000 tokens or after a compaction
@@ -149,6 +151,8 @@ The script uses only the Python standard library.
 | `max_tool_calls`, `max_output_words` | integers | Soft budgets the worker is told to respect. |
 | `context_refs` | repository-root paths | What the worker reads. References, never copied prose. Each must exist. |
 | `--fact LABEL=COMMAND` | repeatable | Runs the command at packet time and pastes its output into the packet. A packet quotes only facts the conductor verified by a command in the same session; a count typed from memory is a hint, and the packet says so. |
+
+Budget: a run holds at most four packets (`max_workers`, `SMART-RULE-0024`); only a run opened with `--trial-workers N --trial-reason TEXT` may hold five to eight, because `MEMORY-RULE-0005` asks for that measured trial before the budget of four is raised, and `close-run` and `summarise` print its `trial` fields.
 
 ### Choosing a worker's model and effort
 
