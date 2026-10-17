@@ -10,7 +10,7 @@ script_paths:
   - /shared/skills/delegate-work/scripts/delegation.py
   - /shared/skills/delegate-work/scripts/results.py
 created: 2026-09-15T07:45:00+10:00
-updated: 2026-10-14T19:50:39+10:00
+updated: 2026-10-17T11:44:46+10:00
 owner: brain-owner
 project_refs:
   - /memory/projects/brain-development
@@ -102,13 +102,16 @@ and artifacts inside the run folder unless a packet explicitly widens `writes`.
 cd <brain-root>   # the folder holding CONTRACT.md (brain_root in /memory/OWNER.md)
 
 # 0. read your context size from the host (see hosts/); every dispatch states it
-# 1. open a run (max four workers, depth one); refused from 750 000 tokens or after a compaction
+# 1. open a run (max four workers, depth one; up to eight with --plan); refused from 750 000 tokens
+#    or after a compaction
 python shared/skills/delegate-work/scripts/delegation.py new-run \
   --title "Audit skills, tasks and transcripts" \
   --why-parallel "three read-only audits with no shared state" \
   --parent TASK-2026-0999 --context-tokens 131000
-#    a run marked as the measured trial of MEMORY-RULE-0005 may hold five to eight workers:
-#    add --trial-workers N (5 to 8) --trial-reason TEXT; RUN.md then records trial: {workers, reason}
+#    a run an approved build plan has split may hold up to eight workers: add --plan PATH
+#    --max-workers N (1 to 8); RUN.md then records plan: <repository-root path>
+#    a measured trial run: add --trial-workers N --trial-reason TEXT (never with --plan);
+#    RUN.md then records trial: {workers, reason}
 
 # 2. one packet per worker; defaults are isolated, read-only, no external access;
 #    refused from 900 000 tokens or after a compaction
@@ -152,7 +155,7 @@ The script uses only the Python standard library.
 | `context_refs` | repository-root paths | What the worker reads. References, never copied prose. Each must exist. |
 | `--fact LABEL=COMMAND` | repeatable | Runs the command at packet time and pastes its output into the packet. A packet quotes only facts the conductor verified by a command in the same session; a count typed from memory is a hint, and the packet says so. |
 
-Budget: a run holds at most four packets (`max_workers`, `SMART-RULE-0024`); only a run opened with `--trial-workers N --trial-reason TEXT` may hold five to eight, because `MEMORY-RULE-0005` asks for that measured trial before the budget of four is raised, and `close-run` and `summarise` print its `trial` fields.
+Budget: a run holds at most four packets (`max_workers`, `SMART-RULE-0024`). A run opened with `--plan PATH --max-workers N` may hold up to eight, when `PATH` names an approved build plan that gives each packet its own write paths, no two packets sharing one, and fixes every interface between the packets; the conductor approves the plan before the run opens, RUN.md records it as `plan:`, and `close-run` and `summarise` print it. The machine limit of `SMART-RULE-0037` still applies, and the lower number wins. `--trial-workers N --trial-reason TEXT` stays, unchanged (five to eight today), as the mechanism for a measured trial beyond eight, which `SMART-RULE-0024` asks for before eight is raised (such a trial also raises its cap); it may not be combined with `--plan`, and `close-run` and `summarise` print its `trial` fields.
 
 ### Choosing a worker's model and effort
 
@@ -302,7 +305,11 @@ fix is one more theory, and the symptom can survive all of them.
   checkout named by `brain_root` in `/memory/OWNER.md`, unless `--session ID` names this thread
   and no marker carries that id. `--owner-override REASON` passes every check and is recorded
   on the run and the packet. A marker whose time cannot be read blocks on its file's age.
-- `new-packet` refuses a fifth packet, a fork without a reason, a `paths` write mode without
+- `new-run` refuses `--plan` naming no file (`error: --plan names no file: <path>`), more than
+  eight workers with `--plan` (the message names `SMART-RULE-0024` and the trial option), and
+  `--plan` combined with `--trial-workers`. Without `--plan`, more than four is refused as before.
+- `new-packet` refuses a packet beyond the run's `max_workers` (a fifth, unless the run names a
+  plan or a trial), a fork without a reason, a `paths` write mode without
   paths, a `paths` packet naming a file (or a folder around a file) another packet of the run
   already names, an external write without a confirmed target, and a context reference that
   does not exist.

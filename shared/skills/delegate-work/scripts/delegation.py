@@ -7,7 +7,8 @@ task record. The conductor routes durable outcomes under CONTRACT sections 5 and
 
 Commands
   new-run          --title T --why-parallel TEXT [--parent ID] [--max-workers N]
-                   [--trial-workers 5-8 --trial-reason TEXT]  (MEMORY-RULE-0005 trial run)
+                   [--plan PATH]  (an approved build plan: --max-workers may then be 1 to 8)
+                   [--trial-workers 5-8 --trial-reason TEXT]  (MEMORY-RULE-0005 trial run; not with --plan)
   new-packet       --run RUN --title T --objective TEXT [--context PATH ...]
                    [--context-mode isolated|fork] [--fork-reason TEXT]
                    [--writes none|worktree|paths] [--path PATH ...]
@@ -42,6 +43,8 @@ SKILL_PATH = "/shared/skills/delegate-work"
 RUNS_SUBDIR = Path("temp") / "delegation" / "runs"
 DEFAULT_MAX_WORKERS = 4
 HARD_MAX_WORKERS = 4
+# A run named on an approved build plan (--plan) may hold up to eight workers (SMART-RULE-0024).
+PLAN_MAX_WORKERS = 8
 # A run marked as the measured trial of MEMORY-RULE-0005 may hold five to eight workers.
 TRIAL_MIN_WORKERS = 5
 TRIAL_MAX_WORKERS = 8
@@ -327,7 +330,23 @@ def cmd_new_run(args) -> int:
     context_tokens, override = context_guard.guard(root, args, "new-run", datetime.fromisoformat(stamp))
     run_id = args.run_id or ("RUN-" + stamp[:19].replace("-", "").replace(":", "").replace("T", "-"))
     trial = None
-    if args.trial_workers is not None or args.trial_reason:
+    plan = None
+    if args.plan is not None:
+        if args.trial_workers is not None or args.trial_reason:
+            raise SystemExit("error: --plan and --trial-workers cannot be combined")
+        plan_file = resolve(root, args.plan)
+        if not plan_file.is_file():
+            raise SystemExit(f"error: --plan names no file: {args.plan}")
+        try:
+            plan = root_path(plan_file, root)
+        except ValueError:  # outside the brain: record the absolute path as given
+            plan = plan_file.resolve().as_posix()
+        max_workers = args.max_workers or DEFAULT_MAX_WORKERS
+        if not 1 <= max_workers <= PLAN_MAX_WORKERS:
+            raise SystemExit(f"error: max workers is 1 to {PLAN_MAX_WORKERS} per run with --plan "
+                             "(SMART-RULE-0024 budget); more than eight needs a measured trial "
+                             "(--trial-workers with --trial-reason)")
+    elif args.trial_workers is not None or args.trial_reason:
         if args.trial_workers is None:
             raise SystemExit("error: --trial-reason needs --trial-workers")
         if not (args.trial_reason or "").strip():
@@ -342,7 +361,8 @@ def cmd_new_run(args) -> int:
     else:
         max_workers = args.max_workers or DEFAULT_MAX_WORKERS
         if max_workers > HARD_MAX_WORKERS:
-            raise SystemExit(f"error: max workers is {HARD_MAX_WORKERS} per run (SMART-RULE-0024 budget)")
+            raise SystemExit(f"error: max workers is {HARD_MAX_WORKERS} per run (SMART-RULE-0024 budget); "
+                             f"up to {PLAN_MAX_WORKERS} with --plan naming an approved build plan")
     path = root / RUNS_SUBDIR / run_id
     if path.exists():
         raise SystemExit(f"error: run {run_id} already exists")
@@ -356,6 +376,7 @@ def cmd_new_run(args) -> int:
         "status": "open",
         "parent": args.parent,
         "max_workers": max_workers,
+        **({"plan": plan} if plan else {}),
         **({"trial": trial} if trial else {}),
         "max_depth": 1,
         "host": None,
@@ -578,11 +599,15 @@ def cmd_check_writes(args) -> int:
 
 
 def trial_line(run_meta: dict) -> str:
-    """One line naming a MEMORY-RULE-0005 trial run's fields, or "" for an ordinary run."""
+    """The run's budget lines for close-run and summarise: its approved plan and its measured
+    trial fields, one line each, or "" for an ordinary run."""
+    lines = []
+    if run_meta.get("plan"):
+        lines.append(f"plan: {run_meta.get('plan')}")
     trial = run_meta.get("trial")
-    if not isinstance(trial, dict):
-        return ""
-    return f"trial: workers {trial.get('workers')}; reason: {trial.get('reason')}"
+    if isinstance(trial, dict):
+        lines.append(f"trial: workers {trial.get('workers')}; reason: {trial.get('reason')}")
+    return "\n".join(lines)
 
 
 def cmd_close_run(args) -> int:
@@ -619,6 +644,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="one line: why parallel workers beat sequential work")
     p.add_argument("--parent", help="task or run id this run serves")
     p.add_argument("--max-workers", type=int)
+    p.add_argument("--plan", help="repository-root or absolute path of the approved build plan this run "
+                                  "follows; --max-workers may then be 1 to 8 (SMART-RULE-0024)")
     p.add_argument("--trial-workers", type=int,
                    help="5 to 8: mark this run as the MEMORY-RULE-0005 measured trial")
     p.add_argument("--trial-reason", help="required with --trial-workers: why this run is the trial")
