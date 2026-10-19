@@ -109,6 +109,10 @@ def build_parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="operation", required=True)
     commands.add_parser("init", help="Create a new empty encrypted vault")
     commands.add_parser("check", help="Verify the passphrase and vault integrity")
+    commands.add_parser(
+        "list",
+        help="Print the entry names in alphabetical order and their count; never a field or value",
+    )
     commands.add_parser("change-passphrase", help="Re-encrypt with a new passphrase")
 
     delete_entry = commands.add_parser(
@@ -180,6 +184,12 @@ def main() -> int:
         if args.operation == "check":
             vault.load(_passphrase())
             print("Credential vault unlocked and authenticated successfully.")
+            return 0
+        if args.operation == "list":
+            # Unlocks like check; prints nothing until the vault has opened (fail closed).
+            names = sorted(vault.entry_names(_passphrase()), key=lambda name: (name.casefold(), name))
+            noun = "entry" if len(names) == 1 else "entries"
+            print("\n".join([*names, f"{len(names)} {noun}"]))
             return 0
         if args.operation == "change-passphrase":
             old_passphrase = _passphrase("Current vault recovery passphrase: ")

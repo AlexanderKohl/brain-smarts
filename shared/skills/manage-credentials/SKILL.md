@@ -11,7 +11,7 @@ metadata:
   scope: shared
   project_ref: /memory/projects/credential-management
   created: 2026-08-04T16:11:53+10:00
-  updated: 2026-10-01T13:28:44+10:00
+  updated: 2026-10-19T10:35:34+10:00
 ---
 
 # Credential Management
@@ -32,6 +32,7 @@ Read `/memory/projects/credential-management/RULES.md` before changing credentia
 - Inject selected text fields only into an authorised child process (never the master passphrase).
 - Read and atomically replace rotating JSON credentials through `BrokerOAuthStore` / `PortableVaultJsonStore` via the agent.
 - Change the vault passphrase after authenticating with the current passphrase.
+- List the entry names held in this computer's vault (`list`): names and their count only, never a field name or value.
 - Log aliases and results only; never expose values or decrypted payloads.
 
 ## Required inputs
@@ -74,6 +75,13 @@ Verify the passphrase and authenticated vault:
 ```powershell
 cd <brain-root>   # the folder holding CONTRACT.md (brain_root in /memory/OWNER.md)
 python shared/skills/manage-credentials/scripts/vault_credentials.py check
+```
+
+List the names of the entries this computer's vault holds, in alphabetical order, then one line with their count. It unlocks the way `check` does and never prints a field name, value, token or passphrase; when the vault cannot be unlocked it prints nothing, gives a one-line reason on stderr and exits non-zero:
+
+```powershell
+cd <brain-root>   # the folder holding CONTRACT.md (brain_root in /memory/OWNER.md)
+python shared/skills/manage-credentials/scripts/vault_credentials.py list
 ```
 
 There is no password reset or recovery bypass. Loss of the passphrase means loss of vault contents.
