@@ -4,10 +4,13 @@ title: Project boards shared between peer brains in the project repository
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: proposed
+status: implemented
 owner: brain-owner
 created: 2026-10-21T08:11:09+10:00
-updated: 2026-10-21T08:11:09+10:00
+updated: 2026-10-21T09:01:17+10:00
+accepted_by: brain-owner
+accepted_at: 2026-10-21T09:01:17+10:00
+implemented_at: 2026-10-21T09:01:17+10:00
 previous_contract_version: 2.5.0
 new_contract_version: 2.6.0
 target_files:
@@ -88,4 +91,4 @@ clash test.
 
 ## Acceptance
 
-Pending the owner's explicit acceptance of this proposal as shown.
+Accepted by the owner as shown on 2026-10-21; implemented the same day (contract 2.5.0 to 2.6.0). The owner's record is in `/memory/governance/proposals/`.

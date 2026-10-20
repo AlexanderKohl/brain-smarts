@@ -4,11 +4,11 @@ title: Portable AI Brain Contract
 type: contract
 status: active
 schema_version: 0.2
-contract_version: 2.5.0
+contract_version: 2.6.0
 contract: /CONTRACT.md
 canonical: true
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-10-14T19:50:39+10:00
+updated: 2026-10-21T09:01:17+10:00
 owner: brain-owner
 ---
 
@@ -936,10 +936,10 @@ Tasks about the project remain canonical in `/memory/tasks/` and reference the p
 
 ### 16.2 The project's own node files
 
-The project's node files – `README.md`, `RULES.md`, `STATE.md`, `LOG.md` and `KNOWLEDGE.md`, and any `sources/` or `data/` it owns – live inside the project repository in a `brain/` folder, so a collaborator who clones the repository receives them. They follow this contract: YAML front matter with `contract: /CONTRACT.md`, the standard file meanings of section 4, and the timestamp rules of section 8.2. Their `RULES.md` inherits `/CONTRACT.md`, `/RULES.md` and `/memory/RULES.md` for the owner's agents; a collaborator without the brain reads it as the project's own rules.
+The project's node files – `README.md`, `RULES.md`, `STATE.md`, `LOG.md` and `KNOWLEDGE.md`, and any `sources/` or `data/` it owns – live inside the project repository in a `brain/` folder, so a collaborator who clones the repository receives them. They follow this contract: YAML front matter with `contract: /CONTRACT.md`, the standard file meanings of section 4, and the timestamp rules of section 8.2. Their `RULES.md` inherits `/CONTRACT.md`, `/RULES.md` and `/memory/RULES.md` for the owner's agents; a collaborator without the brain reads it as the project's own rules. A board the owner-board skill keeps for the project lives there too, in `brain/status/`, when more than one brain works on it. Every such brain is a peer: its records carry its author and are rewritten by no other author, its generated pages are not committed, and each owner's tasks about the project stay in that owner's `/memory/tasks/`, drawn only in that owner's memory, never into the repository.
 
 References from a project repository's `brain/` files to its own files use paths relative to the repository root, prefixed with the repository name and a colon when a reader outside the repository needs them (for example `example-repo:brain/STATE.md`). References into the brain use repository-root paths such as `/shared/skills/<skill>/`. A project repository never references `/memory/` paths, because a collaborator cannot resolve them.
 
 ### 16.3 Validation and commits
 
-The repository preflight validator validates the mechanics repository and, when present, `/library/` and `/memory/`. A project repository runs its own checks; its `brain/` folder follows section 15 where it applies. Commits and pushes in a project repository follow the inherited Git rules and are reported separately from the brain's own repositories.
+The repository preflight validator validates the mechanics repository and, when present, `/library/` and `/memory/`. A project repository runs its own checks; its `brain/` folder follows section 15 where it applies. Commits and pushes in a project repository follow the inherited Git rules and are reported separately from the brain's own repositories. A brain that shares a project repository with another pulls before it builds and before it pushes, and derives shared state from the repository's records rather than carrying its own copy.
