@@ -53,8 +53,24 @@ CLOSED_PROPOSAL = {"accepted", "implemented", "verified", "withdrawn", "supersed
 
 
 def removed_files(root: Path) -> set[str]:
-    """Paths listed in /governance/removed-files.md (first column of its table)."""
-    register = root / "governance" / "removed-files.md"
+    """Paths listed as removed (first column of each register's table).
+
+    /governance/removed-files.md lists mechanics paths; /memory/governance/removed-files.md, read
+    when the memory checkout is present, lists /memory/ paths. Each register is read only for its
+    own layer, so the mechanics register never needs a /memory/ path (which could hold personal
+    data) and the memory register cannot excuse a mechanics path.
+    """
+    found = {path for path in register_paths(root / "governance" / "removed-files.md")
+             if not path.startswith(MEMORY_PREFIX)}
+    memory = memory_root(root)
+    if memory is not None:
+        found |= {path for path in register_paths(memory / "governance" / "removed-files.md")
+                  if path.startswith(MEMORY_PREFIX)}
+    return found
+
+
+def register_paths(register: Path) -> set[str]:
+    """Repository-root paths in the first column of a removed-files register's table."""
     if not register.is_file():
         return set()
     found = set()
