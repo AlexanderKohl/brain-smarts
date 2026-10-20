@@ -40,6 +40,7 @@ BOARD_DEFAULTS: dict[str, Any] = {
     "main": "main",
     "merge_version_pattern": r"[0-9]+\.[0-9]+\.[0-9]+",
     "placeholder_pattern": r"\b(temp|wip|fixup|squash)\b",
+    "production": None,
     "remote": "origin",
     "repo": None,
     "where_view_href": None,

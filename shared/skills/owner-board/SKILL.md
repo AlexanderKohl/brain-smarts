@@ -19,7 +19,7 @@ script_paths:
   - /shared/skills/owner-board/scripts/task_board.py
   - /shared/skills/owner-board/scripts/verdicts.py
 created: 2026-09-18T11:05:00+10:00
-updated: 2026-09-28T11:00:10+10:00
+updated: 2026-10-21T07:47:25+10:00
 owner: brain-owner
 project_refs:
   - /memory/projects/brain-development
@@ -124,6 +124,7 @@ Board keys, alphabetical. Only `id`, `label` and `status` are required.
 | `merge_version_pattern` | `N.N.N` | How check 8 recognises a version in a merge subject. |
 | `node` | from `status` | Repository-root path of the owning node; written into each card's `parent`. |
 | `placeholder_pattern` | `temp`, `wip`, `fixup`, `squash` | Check 2: a main head commit message that was never written. |
+| `production` | `origin/main` | The branch releases go to. After a hotfix it is ahead of `main`; check 4 never reports it as pushed and unmerged, and check 6 never calls its checkout a stray. |
 | `remote` | `origin` | The product remote. |
 | `repo` | none | Product checkout. `{project_repos_root}` and `{brain_root}` are filled from `/memory/OWNER.md`; a relative path is taken under `project_repos_root`. Without it only the task checks run. |
 | `status` | required | The board folder, relative to the memory root. |
@@ -162,8 +163,11 @@ and, for the git checks, a working checkout of the product repository the board 
 
 - `<board>/cards/*.md` – **one card per owner request**. The truth.
 - `<board>/board.md` – what belongs to the board and to no single card, in one fenced JSON
-  block: `id`, `label`, `mainVersion`, `tracks` (each with `label`, `task`, `done`, `of`),
-  `closed`, `abandoned`, `elsewhere`, and any identifiers `where_view_href` uses.
+  block: `id`, `label`, `tracks` (each with `label`, `task`, `done`, `of`), `closed`,
+  `abandoned` (branch -> a one-line reason, as a mapping or a list of `branch: reason`
+  strings; a named branch is silenced by checks 4 and 6), `elsewhere`, and any identifiers
+  `where_view_href` uses. The product's version on the page (`mainVersion`) is read from git
+  on every build and is never kept in `board.md`.
 - The product repository, read by `reconcile.py`: branches, worktrees, merges, built output.
 - `<board>/verdicts-in/*.json` – what the owner saved from the board; the owner's Downloads
   folder is read as a fallback.
@@ -420,13 +424,17 @@ Numbered as in `reconcile.py`; checks 1 to 9 need `repo`.
 1. A merge left in progress in the product checkout.
 2. A main-branch head commit with a placeholder message.
 3. The built product is not the committed version.
-4. A branch pushed and not merged that no card is building and `abandoned` does not name.
+4. A branch pushed and not merged that no card is building, `abandoned` does not name and is
+   not the board's `production` branch.
 5. A `building` or `rework` card with no branch, a merged branch, or a branch that exists
    nowhere after the grace period (unless the card says `writes: none`).
 6. A worktree no card mentions.
 7. A worktree whose branch is already merged.
-8. A version merged into main with no card and not in `closed`.
-9. `mainVersion` in `board.md` disagrees with the repository.
+8. A version merged into main with no card, not in `closed`, and whose merge subject names no
+   task that exists under `/memory/tasks/` (open or completed): a merge such as
+   `Merge 1.4.0: paths (TASK-2026-0903)` is the task flow's own record and counts as seen.
+9. A static `mainVersion` left in `board.md`: the version is read from git on every build, so a
+   kept copy can only go stale and is reported until the field is removed.
 10. A track's task has no record, is missing from `/memory/tasks/STATE.md`, or still says
     `ready` while the track has landed work or a card in flight.
 

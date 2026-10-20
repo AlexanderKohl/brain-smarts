@@ -146,6 +146,12 @@ def build(config: board_config.Config, board: dict, directory: bool = True) -> d
         data["adrift"] = reconcile.check(board, data)
     except Exception as err:
         data["adrift"] = ["The reconciliation against git could not run: " + str(err)]
+    # The version on the page is git's, read now; board.md keeps no copy of it.
+    if board.get("repo"):
+        try:
+            data["mainVersion"] = reconcile.repo_version(board) or "?"
+        except Exception:
+            data["mainVersion"] = "?"
     resolve_links(board, data)
     inlined = inline_images(board, data)
     out = os.path.join(str(board["folder"]), "status.html")

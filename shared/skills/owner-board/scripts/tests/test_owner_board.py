@@ -292,7 +292,78 @@ class ReconcileTests(unittest.TestCase):
             self.assertIn("origin/fix/orphan is pushed and not merged - no card on the board is building it, and no worktree exists", said)
             self.assertIn("1.2.0 is merged into main and has no card - the owner has not seen it.", said)
             self.assertIn("seed-list says it is being built, but feature/seed-list has no worktree and is not on origin - nobody is building it.", said)
-            self.assertIn("The board says main is 1.1.0; git says 1.2.0.", said)
+            self.assertFalse(any("mainVersion" in s for s in said), said)   # none kept, none reported
+        finally:
+            brain.close()
+
+    @unittest.skipUnless(HAS_GIT, "git is not installed")
+    def test_a_static_main_version_left_in_board_md_is_reported_and_the_page_shows_gits(self):
+        brain = Brain(with_repo=True)
+        try:
+            board = brain.board()
+            board["fetch"] = False
+            data = cards.load(board)
+            data["mainVersion"] = "1.1.0"
+            said = reconcile.check(board, data)
+            self.assertIn("board.md still carries mainVersion 1.1.0; the version is read from git (1.2.0) "
+                          "on every build - remove the field.", said)
+            self.assertEqual(reconcile.repo_version(board), "1.2.0")
+            built, _ = quiet(build_status.build, brain.config(), board)
+            self.assertEqual(built["mainVersion"], "1.2.0")
+            self.assertIn('"mainVersion": "1.2.0"', (board["folder"] / "status.html").read_text(encoding="utf-8"))
+        finally:
+            brain.close()
+
+    @unittest.skipUnless(HAS_GIT, "git is not installed")
+    def test_the_production_branch_is_never_a_stray(self):
+        brain = Brain(with_repo=True)
+        try:
+            board = brain.board()
+            board["fetch"] = False
+            board["production"] = "origin/fix/orphan"   # stands in for a hotfix branch ahead of main
+            said = reconcile.check(board)
+            self.assertFalse(any("fix/orphan" in s for s in said), said)
+        finally:
+            brain.close()
+
+    @unittest.skipUnless(HAS_GIT, "git is not installed")
+    def test_a_merge_that_names_an_existing_task_counts_as_seen(self):
+        brain = Brain(with_repo=True)
+        try:
+            completed = brain.memory / "tasks" / "completed"
+            completed.mkdir()
+            (completed / "TASK-2026-0903-paths.md").write_text("---\nid: TASK-2026-0903\nstatus: completed\n---\n",
+                                                               encoding="utf-8")
+            for version, task in (("1.3.0", "TASK-2026-0901"), ("1.4.0", "TASK-2026-0903"), ("1.5.0", "TASK-2026-0999")):
+                git(brain.repo, "checkout", "-q", "-b", "release/" + version)
+                (brain.repo / "package.json").write_text('{"version": "%s"}' % version, encoding="utf-8")
+                git(brain.repo, "commit", "-q", "-am", "bump")
+                git(brain.repo, "checkout", "-q", "main")
+                git(brain.repo, "merge", "-q", "--no-ff", "-m", "Merge %s: paths (%s)" % (version, task),
+                    "release/" + version)
+            board = brain.board()
+            board["fetch"] = False
+            said = reconcile.check(board)
+            self.assertIn("1.2.0 is merged into main and has no card - the owner has not seen it.", said)
+            self.assertFalse(any(s.startswith("1.3.0 ") for s in said), said)   # names an open task
+            self.assertFalse(any(s.startswith("1.4.0 ") for s in said), said)   # names a completed task
+            self.assertIn("1.5.0 is merged into main and has no card - the owner has not seen it.", said)
+        finally:
+            brain.close()
+
+    @unittest.skipUnless(HAS_GIT, "git is not installed")
+    def test_abandoned_silences_a_branch_as_a_mapping_or_a_list(self):
+        brain = Brain(with_repo=True)
+        try:
+            board = brain.board()
+            board["fetch"] = False
+            reason = "Sam, 5 Jan 2026: abandoned until Pat confirms"
+            for form in ({"fix/orphan": reason}, ["fix/orphan: " + reason], [{"branch": "fix/orphan", "reason": reason}]):
+                data = cards.load(board)
+                data["abandoned"] = form
+                said = reconcile.check(board, data)
+                self.assertFalse(any("fix/orphan" in s for s in said), (form, said))
+            self.assertEqual(reconcile.abandoned_branches({"abandoned": ["a/b: why"]}), {"a/b": "why"})
         finally:
             brain.close()
 

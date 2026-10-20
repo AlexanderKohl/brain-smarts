@@ -41,7 +41,6 @@ owner: Sam
   "id": "garden",
   "label": "Garden Planner",
   "generated": "2026-01-05T09:00:00+10:00",
-  "mainVersion": "1.1.0",
   "tracks": {
     "beds": {"label": "Beds", "task": "TASK-2026-0901", "done": 2, "of": 5},
     "seeds": {"label": "Seeds", "task": "TASK-2026-0902", "done": 0, "of": 3}

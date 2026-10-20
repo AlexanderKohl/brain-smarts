@@ -29,7 +29,6 @@ versions the owner has closed, and branches abandoned with what superseded them.
   "id": "BOARD_ID",
   "label": "BOARD_LABEL",
   "generated": "YYYY-MM-DDTHH:mm:ss+HH:MM",
-  "mainVersion": "",
   "tracks": {},
   "closed": {},
   "abandoned": {},
@@ -38,7 +37,7 @@ versions the owner has closed, and branches abandoned with what superseded them.
 ```
 
 Keys, alphabetical: `abandoned` (branch -> what superseded it), `closed` (version -> what the
-owner accepted), `elsewhere` (work in the owner's other threads), `generated`, `id`, `label`,
-`mainVersion` (the product's version on its main branch; empty without a product
-repository) and `tracks` (track key -> `{"label", "task", "done", "of"}`; a card names its
-track, so add one before the first card).
+owner accepted), `elsewhere` (work in the owner's other threads), `generated`, `id`, `label`
+and `tracks` (track key -> `{"label", "task", "done", "of"}`; a card names its track, so add
+one before the first card). The product's version is read from git on every build and is
+never kept here.

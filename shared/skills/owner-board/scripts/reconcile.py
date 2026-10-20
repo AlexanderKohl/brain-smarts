@@ -37,6 +37,13 @@ class Repo:
         self.path = str(board["repo"])
         self.remote = board.get("remote") or "origin"
         self.main = board.get("main") or "main"
+        # The branch releases go to; it is ahead of main after a hotfix, never a stray.
+        self.production = board.get("production") or (self.remote + "/main")
+
+    def is_production(self, branch: str) -> bool:
+        """`branch` as git names it (`origin/main`) or as a worktree names it (`main`)."""
+        return branch in (self.production, self.remote + "/" + self.production,
+                          self.production.removeprefix(self.remote + "/"))
 
     def git(self, *args: str) -> str:
         out = subprocess.run(["git", "-C", self.path, *args], capture_output=True, text=True,
@@ -81,6 +88,42 @@ def young(item: dict, minutes: int) -> bool:
     return (now - began).total_seconds() < minutes * 60
 
 
+TASK_ID = re.compile(r"TASK-\d{4}-\d{4}")
+
+
+def abandoned_branches(data: dict) -> dict:
+    """`abandoned` as branch -> reason, whether the board file keeps it as a mapping or as a
+    list of `"branch: reason"` strings or `{"branch", "reason"}` records."""
+    raw = data.get("abandoned") or {}
+    if isinstance(raw, dict):
+        return {str(k): str(v) for k, v in raw.items()}
+    out = {}
+    for entry in raw:
+        if isinstance(entry, dict):
+            out[str(entry.get("branch", ""))] = str(entry.get("reason", ""))
+        else:
+            branch, _, reason = str(entry).partition(":")
+            out[branch.strip()] = reason.strip()
+    return out
+
+
+def repo_version(board: dict) -> str:
+    """The product's version on the board's main branch, read from git; empty without one."""
+    committed = board.get("committed_version") or {}
+    if not board.get("repo") or not committed.get("file") or not os.path.isdir(str(board["repo"])):
+        return ""
+    repo = Repo(board)
+    return _version_in(repo.git("show", repo.main + ":" + committed["file"]), committed)
+
+
+def task_exists(board: dict, task_id: str) -> bool:
+    """A task record under /memory/tasks/, open or completed, whichever folder holds it."""
+    tasks = Path(str(board["memory"])) / "tasks"
+    if not tasks.is_dir():
+        return False
+    return any(p.is_dir() and any(p.glob(task_id + "*.md")) for p in tasks.iterdir())
+
+
 def check(board: dict, data: dict | None = None) -> list:
     """Every way git, the task records and the board can disagree, as plain sentences."""
     said: list = []
@@ -93,11 +136,11 @@ def check(board: dict, data: dict | None = None) -> list:
         git_said, main_version = _git_checks(board, data)
         said += git_said
     said += _task_checks(board, data)
-    # 9. The board's own header, against the repository.
-    committed = board.get("committed_version") or {}
-    if main_version and committed.get("file") and data.get("mainVersion") and data["mainVersion"] != main_version:
-        said.append("The board says " + (board.get("main") or "main") + " is " + str(data["mainVersion"])
-                    + "; git says " + main_version + ".")
+    # 9. A static mainVersion left in board.md. The version is read from git on every build,
+    # so a kept copy can only go stale: it is reported until it is removed.
+    if board.get("repo") and data.get("mainVersion"):
+        said.append("board.md still carries mainVersion " + str(data["mainVersion"]) + "; the version is read from git ("
+                    + (main_version or "?") + ") on every build - remove the field.")
     return said
 
 
@@ -138,7 +181,7 @@ def _git_checks(board: dict, data: dict) -> tuple:
     # 4. A branch pushed, not merged, and nobody acting on it.
     merged = set(repo.git("branch", "-r", "--merged", main).split())
     items = data.get("items", [])
-    abandoned = data.get("abandoned", {}) or {}
+    abandoned = abandoned_branches(data)
     # Matched by branch, not by version: a worker renumbers when main moves under it, so a
     # version is the one thing about an in-flight card guaranteed to go stale.
     building = {(i.get("branch") or "") for i in items if i.get("state") in ("building", "rework")}
@@ -146,7 +189,7 @@ def _git_checks(board: dict, data: dict) -> tuple:
     prefix = remote + "/"
     for line in repo.git("branch", "-r", "--no-merged", main).split("\n"):
         branch = line.strip()
-        if not branch or branch.endswith("/" + main) or branch.startswith(prefix + "HEAD"):
+        if not branch or branch.endswith("/" + main) or branch.startswith(prefix + "HEAD") or repo.is_production(branch):
             continue
         tree = [w for w in trees if prefix + w["branch"] == branch]
         ver = ""
@@ -190,7 +233,7 @@ def _git_checks(board: dict, data: dict) -> tuple:
     for tree in trees:
         b = tree["branch"]
         # main is a remote name ("origin/testing"); the checkout on its local branch is not a stray.
-        if not b or b == main or prefix + b == main or b in named or b in abandoned:
+        if not b or b == main or prefix + b == main or b in named or b in abandoned or repo.is_production(b):
             continue
         if prefix + b in merged:
             continue  # check 7 says this one better
@@ -202,7 +245,9 @@ def _git_checks(board: dict, data: dict) -> tuple:
             said.append(tree["branch"] + " is merged but its worktree is still on disk.")
 
     # 8. A version that landed and has no card. Closing a card writes its version into
-    # `closed`, so anything merged and neither carded nor closed has gone quiet.
+    # `closed`, so anything merged and neither carded nor closed has gone quiet. A merge whose
+    # subject names a task that exists under /memory/tasks/ (open or completed) is the task
+    # flow's own record of it, and counts as seen.
     closed = set(data.get("closed", {}) or {})
     carded = {(i.get("version") or "") for i in items}
     pattern = board.get("merge_version_pattern")
@@ -213,6 +258,8 @@ def _git_checks(board: dict, data: dict) -> tuple:
                 continue
             ver = found.group(1)
             if ver in carded or ver in closed:
+                continue
+            if any(task_exists(board, t) for t in TASK_ID.findall(line)):
                 continue
             said.append(ver + " is merged into " + main + " and has no card - the owner has not seen it.")
     return said, main_version
