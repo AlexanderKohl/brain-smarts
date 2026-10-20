@@ -13,8 +13,9 @@ script_paths:
   - /shared/skills/repository-preflight/tests/test_file_sizes.py
   - /shared/skills/repository-preflight/scripts/session.py
   - /shared/skills/repository-preflight/tests/test_session.py
+  - /shared/skills/repository-preflight/scripts/tests/test_session_refresh.py
 created: 2026-08-04T23:16:08+10:00
-updated: 2026-10-20T16:50:31+10:00
+updated: 2026-10-21T07:47:25+10:00
 owner: brain-owner
 ---
 
@@ -56,6 +57,7 @@ The skill must not modify any other repository file.
 python shared/skills/repository-preflight/scripts/preflight.py --root .
 python shared/skills/repository-preflight/scripts/preflight.py --root . --write-manifest
 python -m unittest discover -s shared/skills/repository-preflight/tests -v
+python -m unittest discover -s shared/skills/repository-preflight/scripts/tests -v
 ```
 
 The tests build fictional two-repository brains in temporary folders and need `git` for the governance cases.
@@ -101,8 +103,17 @@ python shared/skills/repository-preflight/scripts/session.py list
   of those repositories on the same branch. The sessions folder is `<brain root>-sessions` beside
   the shared checkout, unless `--sessions` or a `sessions_root` field in `/memory/OWNER.md` names
   another. A name already used as a branch or folder is refused.
-- `finish` refuses a copy with uncommitted changes, then in each repository merges `origin/main`
-  into the session branch. A conflict in a generated file (the owner boards and status pages) is
+- `finish` refuses a copy with uncommitted changes, then refreshes the generated views before
+  anything is merged: for every git project in `/memory/skills/release-notes/config/release-notes.json`
+  it runs `release_notes.py fix`, `link <project>` and `build` (`/library/skills/release-notes/`),
+  rebuilds every board with `build_status.py --all --no-fetch` (`/shared/skills/owner-board/`),
+  and commits the regenerated brain files in the copy so the finish carries them. A note
+  repaired in a project repository is left there as a change: the repository and files that
+  need a commit and push are printed under their own heading, and `finish` never commits or
+  pushes a project repository. What `reconcile.py` finds adrift on each board is printed under
+  its own heading, never a stop. A missing configuration, a missing script or a generator that
+  fails is said in the output and the finish goes on; nothing in the refresh refuses it. Then,
+  in each repository, it merges `origin/main` into the session branch. A conflict in a generated file (the owner boards and status pages) is
   resolved by taking `main`'s version and rerunning its generator; any other conflict stops
   `finish` with the merge in progress, for the session to reconcile. It runs preflight on the
   copy, pushes `HEAD:main` (never forced; a push refused because `origin` moved on is merged,

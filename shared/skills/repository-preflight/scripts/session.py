@@ -11,12 +11,18 @@ those repositories on the same branch name, so the brain root and `/memory/` res
 sessions folder is `<brain root>-sessions` beside the shared checkout unless `--sessions` or a
 `sessions_root` field in `/memory/OWNER.md` names another.
 
-`finish` merges each repository's branch with `origin/main`, rebuilds a generated file that
-conflicted (taking `main`'s version first), stops on any other conflict and leaves it for the
-session to resolve, runs preflight, pushes `HEAD:main`, fast-forwards the shared checkout with
-`sync.py`, and removes the worktrees and branches once `main` contains them. A push refused because
-`origin` moved on is merged, checked and pushed again, up to three attempts in all (SMART-RULE-0034).
-`--keep` keeps the copy for the next unit of work.
+`finish` first refreshes the generated views (`refresh`): for every git project in the release-notes
+configuration it runs `release_notes.py fix`, `link` and `build`, then rebuilds every board, and
+commits the regenerated brain files in the copy. A note repaired in a project repository is left
+there as a change, and the repository and files that need a commit and push are printed under their
+own heading (finish never commits or pushes a project repository); board drift is printed under its
+own heading, never a stop. Nothing in the refresh refuses the finish. Then it merges each
+repository's branch with `origin/main`, rebuilds a generated file that conflicted (taking `main`'s
+version first), stops on any other conflict and leaves it for the session to resolve, runs
+preflight, pushes `HEAD:main`, fast-forwards the shared checkout with `sync.py`, and removes the
+worktrees and branches once `main` contains them. A push refused because `origin` moved on is
+merged, checked and pushed again, up to three attempts in all (SMART-RULE-0034). `--keep` keeps the
+copy for the next unit of work.
 
 `merge_diverged` is how `sync.py` merges a shared-checkout branch whose history has diverged from
 `origin` (SMART-RULE-0034): it starts a copy whose branch begins at that local commit and finishes it
@@ -34,6 +40,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import io
+import json
 import os
 import re
 import subprocess
@@ -58,6 +65,15 @@ GENERATED = {
         ("projects/*/status/status.html", ["python", "shared/skills/owner-board/scripts/build_status.py", "--no-fetch"]),
     ],
 }
+
+
+# The generated views every finish refreshes before it merges, each relative to the copy.
+RELEASE_NOTES = "library/skills/release-notes/scripts/release_notes.py"
+RELEASE_CONFIG = "memory/skills/release-notes/config/release-notes.json"
+BOARDS_CONFIG = "memory/skills/owner-board/config/boards.json"
+BUILD_STATUS = "shared/skills/owner-board/scripts/build_status.py"
+RECONCILE = "shared/skills/owner-board/scripts/reconcile.py"
+REFRESH_MESSAGE = "Finish: release notes and boards rebuilt\n\nTool: session.py finish\n"
 
 
 def git(repo: Path, *args: str) -> subprocess.CompletedProcess:
@@ -279,6 +295,103 @@ def session_repos(root: Path, copy: Path) -> list[tuple[str, Path, Path]]:
     return found
 
 
+def owner_field(copy: Path, name: str) -> str:
+    """One scalar from the front matter of `/memory/OWNER.md` in the copy, or empty."""
+    owner = copy / "memory" / "OWNER.md"
+    if not owner.is_file():
+        return ""
+    found = re.search(rf"^{name}:\s*(\S.*)$", owner.read_text(encoding="utf-8"), re.M)
+    return found.group(1).strip().strip("'\"") if found else ""
+
+
+def project_repos(copy: Path, config: dict) -> list[tuple[str, Path]]:
+    """(project id, checkout) for each git project in the release-notes configuration."""
+    repos_root = Path(config.get("project_repos_root") or owner_field(copy, "project_repos_root") or copy.parent)
+    return [(p["id"], repos_root / p["repo"]) for p in config.get("projects", []) if p.get("kind") == "git"]
+
+
+def tool(copy: Path, script: str, *args: str) -> tuple[bool, list[str]]:
+    """Run one of the brain's scripts from the copy; (ok, its output lines). A missing script
+    or a failure is reported in the lines, never raised: the refresh never stops a finish."""
+    path = copy / script
+    if not path.is_file():
+        return False, [f"{script} is not in the copy; skipped"]
+    done = run_child([sys.executable, str(path), "--root", str(copy), *args], copy)
+    lines = [line for line in ((done.stdout or "") + (done.stderr or "")).splitlines() if line.strip()]
+    if done.returncode:
+        lines.append(f"{Path(script).name} {' '.join(args)} exited {done.returncode}")
+    return done.returncode == 0, lines
+
+
+def refresh(copy: Path) -> dict:
+    """Rebuild the release-notes pages and every board in the copy before the merge.
+
+    Returns what was found: `project_changes` (checkout -> files that need a commit and push
+    in that project repository) and `drift` (board id -> what reconcile said). Everything is
+    printed as it happens, each part under its own heading; nothing here refuses the finish.
+    """
+    found: dict = {"project_changes": {}, "drift": {}}
+    config_path = copy / RELEASE_CONFIG
+    print("release notes:")
+    if not config_path.is_file():
+        print("  no release-notes configuration in the copy; skipped")
+    else:
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        repos = project_repos(copy, config)
+        steps = [("fix",)] + [("link", pid) for pid, _ in repos] + [("build",)]
+        for step in steps:
+            _, lines = tool(copy, RELEASE_NOTES, *step)
+            for line in lines:
+                print("  " + line)
+        for pid, checkout in repos:
+            status = git(checkout, "status", "--porcelain", "--", "release-notes") if checkout.is_dir() else None
+            files = [line[3:].strip() for line in (status.stdout if status and status.returncode == 0 else "").splitlines() if len(line) > 3]
+            if files:
+                found["project_changes"][str(checkout)] = files
+    print("boards:")
+    boards_path = copy / BOARDS_CONFIG
+    if not boards_path.is_file():
+        print("  no boards configuration in the copy; skipped")
+    else:
+        _, lines = tool(copy, BUILD_STATUS, "--all", "--no-fetch")
+        for line in lines:
+            print("  " + line)
+        boards = json.loads(boards_path.read_text(encoding="utf-8")).get("boards", [])
+        for board in boards:
+            _, lines = tool(copy, RECONCILE, "--board", board["id"], "--no-fetch")
+            adrift = [line.strip()[2:] for line in lines if line.strip().startswith("- ")]
+            if adrift:
+                found["drift"][board["id"]] = adrift
+    print("board drift (printed, never a stop):")
+    if not found["drift"]:
+        print("  nothing adrift")
+    for board_id, adrift in found["drift"].items():
+        print(f"  {board_id}:")
+        for line in adrift:
+            print(f"    - {line}")
+    print("project repositories with release notes to commit and push (finish never commits there):")
+    if not found["project_changes"]:
+        print("  none")
+    for checkout, files in found["project_changes"].items():
+        print(f"  {checkout}:")
+        for file in files:
+            print(f"    {file}")
+    return found
+
+
+def commit_regenerated(repos: list[tuple[str, Path, Path]]) -> None:
+    """Commit what the refresh regenerated in each session worktree, so the finish carries it."""
+    for repo_name, _, path in repos:
+        if not git(path, "status", "--porcelain").stdout.strip():
+            continue
+        git(path, "add", "-A")
+        committed = git(path, "commit", "--quiet", "-m", REFRESH_MESSAGE)
+        if committed.returncode:
+            print(f"{repo_name}: could not commit the regenerated files – {last_line(committed)}")
+        else:
+            print(f"{repo_name}: regenerated files committed")
+
+
 def cmd_finish(root: Path, name: str, folder: Path, keep: bool, preflight: bool) -> int:
     copy = folder / name
     branch = f"session/{name}"
@@ -291,6 +404,8 @@ def cmd_finish(root: Path, name: str, folder: Path, keep: bool, preflight: bool)
         if dirty:
             print(f"{repo_name}: uncommitted changes in {path}; commit or discard them first")
             return 1
+    refresh(copy)
+    commit_regenerated(repos)
     base = {repo_name: base_ref(repo) for repo_name, repo, _ in repos}
     for attempt in range(1, ATTEMPTS + 1):
         pushed_all = merge_check_push(copy, repos, base, preflight, attempt)
