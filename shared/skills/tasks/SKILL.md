@@ -17,7 +17,7 @@ metadata:
     - /shared/skills/owner-board
     - /shared/skills/repository-preflight
   created: 2026-09-23T13:10:00+10:00
-  updated: 2026-10-14T20:14:37+10:00
+  updated: 2026-10-21T10:23:43+10:00
 ---
 
 # Tasks
@@ -165,7 +165,7 @@ record – never copied – with columns by status (inbox, ready, in progress, w
 waits on and its review date, scheduled, blocked, completed recently). The routing and the
 pages belong to `/shared/skills/owner-board/SKILL.md` (**Tasks on the boards**). An open task
 card carries *Do now*, *Done* and a note box for the owner; the page changes nothing itself, and
-`apply_verdicts.py` applies what the owner saved through procedure 4.4, then prints the owner's
+`apply_events.py` applies what the owner saved through procedure 4.4, then prints the owner's
 *Do now* list. `tasks.py new`, `done`, `do-now` and `note` refresh the board themselves; after
 changing a record by hand (a status, `project_refs`, a move to `completed/`), run
 

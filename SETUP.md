@@ -1292,8 +1292,8 @@ board.
 > **Suggested reply:** `1`
 
 The agent makes the board by following **Making a board** in
-`/shared/skills/owner-board/SKILL.md`: copy `/shared/skills/owner-board/templates/board.template.md`
-to `<node>/status/board.md` and fill it, create `cards/` beside it, list `status/` in the node's
+`/shared/skills/owner-board/SKILL.md`: copy `/shared/skills/owner-board/templates/board.template.json`
+to `<node>/status/board.json` and fill it, create `cards/` and `events/` beside it, list `status/` in the node's
 `README.md`, and add one entry to the `boards` list in
 `/memory/skills/owner-board/config/boards.json`. For option 1 the entry is:
 
