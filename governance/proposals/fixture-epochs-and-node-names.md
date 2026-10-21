@@ -4,10 +4,14 @@ title: Fixture epoch values and memory node names stay clear of the personal-dat
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: proposed
+status: implemented
 owner: brain-owner
 created: 2026-10-21T12:53:44+10:00
-updated: 2026-10-21T12:53:44+10:00
+updated: 2026-10-21T14:08:42+10:00
+accepted_by: brain-owner
+accepted_at: 2026-10-21T14:08:42+10:00
+implemented_at: 2026-10-21T14:08:42+10:00
+rule_id: SMART-RULE-0008
 amends: SMART-RULE-0008
 target_files:
   - /RULES.md
@@ -97,3 +101,7 @@ owner record under `/memory/governance/proposals/`.
   is accepted.
 - Confirm the example `1755501000` passes the personal-data check and a ten-digit value without
   the run is reported.
+
+## Acceptance
+
+Accepted by the owner as shown on 2026-10-21; implemented the same day as an amendment to SMART-RULE-0008 (the number is kept). contract_version unchanged. The owner's record is in `/memory/governance/proposals/`.
