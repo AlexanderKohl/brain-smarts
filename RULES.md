@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-10-21T14:08:42+10:00
+updated: 2026-10-21T22:00:10+10:00
 owner: brain-owner
 ---
 
@@ -365,6 +365,15 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
   task-list updates the work needs and the commit. A session that wants work done in parallel,
   or kept apart, uses a packet.
 - Workers start isolated by default. A packet that forks the conductor's context states why.
+- **A build that carries risk starts from an approved plan.** Before a worker builds anything
+  that touches stored data, logins or permissions, money, or more than one module, a short plan
+  is written: the data flow, what happens when each read or write fails, the tests, and the
+  checks that will be run. The conductor approves the plan before the build starts. The plan is
+  the result of its own packet, or written by the conductor, and the build packet names it in its
+  context references; a build packet that needs a plan and names none is not dispatched. A
+  worker that finds, while building, that its work reaches one of these areas and its packet
+  names no approved plan stops with status `blocked`. The approved build plan of a run of more
+  than four workers serves as this plan when it covers these four points for each packet.
 - Workers do not commit, and do not write the files every task shares – logs, state, task lists,
   indexes, version fields, build output. A worker writes only the paths its packet names, in the
   conductor's copy and branch (`SMART-RULE-0038`), and returns findings, artifacts inside its run
