@@ -180,7 +180,8 @@ class FinishRefreshTests(unittest.TestCase):
         copy = self.start("alpha")
         write(copy / "memory" / "notes.md", "alpha's edit\n")
         commit_all(copy / "memory", "alpha edits the notes")
-        code, out = self.finish("alpha")
+        with mock.patch.dict(os.environ, {session.CO_AUTHOR_ENV: "Example Agent <agent@example.com>"}):
+            code, out = self.finish("alpha")
         self.assertEqual(code, 0, out)
         self.assertEqual(self.on_origin("memory", "boards/index.html"), "every board, rebuilt")
         self.assertIn("Finish: release notes and boards rebuilt", git(self.base / "memory.git", "log", "--format=%s", "main"))

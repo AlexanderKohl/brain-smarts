@@ -74,6 +74,9 @@ BOARDS_CONFIG = "memory/skills/owner-board/config/boards.json"
 BUILD_STATUS = "shared/skills/owner-board/scripts/build_status.py"
 RECONCILE = "shared/skills/owner-board/scripts/reconcile.py"
 REFRESH_MESSAGE = "Finish: release notes and boards rebuilt\n\nTool: session.py finish\n"
+# The refresh commit needs a Co-Authored-By trailer too (SMART-RULE-0009): from this variable
+# when set, else from the newest commit in the repository that carries one; never invented.
+CO_AUTHOR_ENV = "BRAIN_CO_AUTHOR"
 
 
 def git(repo: Path, *args: str) -> subprocess.CompletedProcess:
@@ -379,13 +382,38 @@ def refresh(copy: Path) -> dict:
     return found
 
 
+def co_author(repo: Path) -> str | None:
+    """The Co-Authored-By value for a refresh commit: BRAIN_CO_AUTHOR, else the newest one in
+    the repository's history, else None (the caller says so; a model is never invented)."""
+    value = os.environ.get(CO_AUTHOR_ENV, "").strip()
+    if value.lower().startswith("co-authored-by:"):
+        value = value.split(":", 1)[1].strip()
+    if value:
+        return value
+    done = git(repo, "log", "-n", "1", "-i", "--grep=^co-authored-by:",
+               "--format=%(trailers:key=Co-Authored-By,valueonly)")
+    found = [line.strip() for line in (done.stdout or "").splitlines() if line.strip()] if done.returncode == 0 else []
+    return found[0] if found else None
+
+
+def refresh_message(repo: Path) -> str | None:
+    """The refresh commit's message with both trailers, or None when no co-author is known."""
+    author = co_author(repo)
+    return f"{REFRESH_MESSAGE}Co-Authored-By: {author}\n" if author else None
+
+
 def commit_regenerated(repos: list[tuple[str, Path, Path]]) -> None:
     """Commit what the refresh regenerated in each session worktree, so the finish carries it."""
     for repo_name, _, path in repos:
         if not git(path, "status", "--porcelain").stdout.strip():
             continue
+        message = refresh_message(path)
+        if message is None:
+            print(f"{repo_name}: could not commit the regenerated files – no Co-Authored-By trailer "
+                  f"to give it: set {CO_AUTHOR_ENV} or commit with one first (SMART-RULE-0009)")
+            continue
         git(path, "add", "-A")
-        committed = git(path, "commit", "--quiet", "-m", REFRESH_MESSAGE)
+        committed = git(path, "commit", "--quiet", "-m", message)
         if committed.returncode:
             print(f"{repo_name}: could not commit the regenerated files – {last_line(committed)}")
         else:
