@@ -37,7 +37,10 @@ fi
 
 governance_re='^(CONTRACT\.md|RULES\.md|BOOTSTRAP\.md|governance/|shared/skills/repository-preflight/)'
 gov=$(printf '%s\n' "$staged" | grep -E "$governance_re" || true)
-other=$(printf '%s\n' "$staged" | grep -vE "$governance_re" | grep -v '^repository-manifest\.json$' || true)
+# The worker brief belongs to neither side: it digests rules and changes in the same commit as a
+# rule it digests (SMART-RULE-0007), so it never counts as work elsewhere.
+brief='^shared/skills/delegate-work/templates/worker-brief\.template\.md$'
+other=$(printf '%s\n' "$staged" | grep -vE "$governance_re" | grep -v '^repository-manifest\.json$' | grep -vE "$brief" || true)
 
 if [ -n "$gov" ] && [ -n "$other" ]; then
   echo "pre-commit: this commit reaches across two territories, which is what a sweep looks like."
