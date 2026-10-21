@@ -27,6 +27,12 @@ It never rebases, resets, stashes or discards anything, and never forces a push.
 do not count as changes; a fast-forward that would overwrite one fails in Git and is reported.
 Exit code 0 when every repository is up to date (or was fast-forwarded or merged), 1 when one
 needs attention or could not be checked.
+
+After the repositories it also nudges: a cloned repository under the owner's `project_repos_root`
+that carries `brain/JOINING.md` (a shared project's joining manifest) but has no pointer node in
+this memory, or a shared board the manifest lists that is not registered, is reported as
+`not joined` with the join command (`/shared/skills/join-project/`). A nudge never changes the
+exit code: joining is the person's own step.
 """
 
 from __future__ import annotations
@@ -126,6 +132,24 @@ def sync_one(name: str, repo: Path, merge_from: Path | None = None, project: boo
     return result("up to date", "", True)
 
 
+def not_joined(root: Path) -> list[dict]:
+    """Shared projects cloned under `project_repos_root` that this brain has not joined (the nudge).
+
+    One result per repository, in the shape of `sync_one`'s, state `not joined`, `ok` True. The
+    decision of what "joined" means lives in `/shared/skills/join-project/scripts/joining.py`
+    (SMART-RULE-0018), found from this script's own brain root so a test root needs no copy of it.
+    """
+    scripts = (brain_root(Path(__file__).resolve().parent) or root) / "shared" / "skills" / "join-project" / "scripts"
+    if not (scripts / "joining.py").is_file():
+        return []
+    if str(scripts) not in sys.path:
+        sys.path.insert(0, str(scripts))
+    import joining  # noqa: E402
+    return [{"name": nudge["name"], "path": nudge["path"], "state": "not joined",
+             "detail": f"{nudge['detail']}; run: {nudge['command']}", "ok": True}
+            for nudge in joining.not_joined(root)]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--root", type=Path, default=None, help="the brain root (default: found from here)")
@@ -145,6 +169,7 @@ def main(argv: list[str] | None = None) -> int:
     results = [sync_one(name, repo, merge_from=None if args.no_merge else root)
                if index < brain else sync_one(name, repo, project=True)
                for index, (name, repo) in enumerate(repositories(root, args.also))]
+    results += not_joined(root)
     if args.json:
         print(json.dumps(results, indent=2))
     else:
