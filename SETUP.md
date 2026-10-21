@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-23T13:00:00+10:00
-updated: 2026-09-29T08:50:29+10:00
+updated: 2026-10-21T12:53:40+10:00
 owner: brain-owner
 skill_refs:
   - /shared/skills/manage-credentials
@@ -76,6 +76,9 @@ The agent may show the **last four characters** of a stored secret for confirmat
   (CONTRACT §10.5); the person may have several.
 - Give every shell command with an explicit `cd` first (`SMART-RULE-0006`). Before
   `/memory/OWNER.md` exists, use the chosen brain root; afterwards read `brain_root` from it.
+- Run every setup command in the shared checkout, never in a session copy: setup scripts find
+  the brain from their own location, so the vault, login items and scheduled tasks would point at
+  the copy. `setup_guard.py` (section 2.2) checks this.
 - Never write owner content into the mechanics repository (CONTRACT §3.4). Everything about the
   person goes under `/memory/`.
 
@@ -125,6 +128,10 @@ settings are per machine, while the repositories and skill choices are per owner
 ### 2.2 Resume procedure
 
 1. Find the brain root (walk up to `CONTRACT.md`). If none is found, start at step A.
+   When one is found, run `python shared/skills/repository-preflight/scripts/setup_guard.py` from
+   it first. It refuses a session copy (a linked worktree under the sessions folder,
+   `SMART-RULE-0038`): anything set up from one points at that copy and breaks when it is removed.
+   On a refusal, stop and run setup from the shared checkout the message names.
 2. If `/memory/STATE.md` has a `## Setup` section, continue from the first row that is not
    `done` or `skipped` on this machine. For a new machine, run the per-machine steps (A, B2, D
    vault and connections, E, F, G, H) and skip the per-owner ones already `done`.
