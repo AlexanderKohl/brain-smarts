@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 node_type: skill_library
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-10-15T08:21:34+10:00
+updated: 2026-10-21T11:55:16+10:00
 ---
 
 # Core Skills
@@ -33,6 +33,10 @@ Contains the code map: a deterministic map of a code repository (files, function
 ##### `delegate-work/`
 
 Contains the delegated-work protocol: a conductor agent writes bounded packets that reference canonical files, workers return compressed result records, and `scripts/delegation.py` creates, dispatches, validates and summarises a run under `/temp/delegation/runs/`. Workers are isolated, read-only and credential-free by default; at most four per run, depth one. Host dispatch notes in `hosts/`. Not a queue or task system.
+
+##### `join-project/`
+
+Contains the way a brain joins a project repository shared with other brains (CONTRACT §16): the repository's `brain/JOINING.md` manifest says what the project needs, and `scripts/join.py` syncs, checks versions, clones, checks out the working branch, makes the pointer node in the person's own memory, registers the shared boards, checks each vault entry by name and prints the person's own steps (their key, their companion), changing nothing with `--dry-run`. `sync.py` nudges with it. Tests in `tests/` run on a fictional project.
 
 ##### `learning-maintenance/`
 
