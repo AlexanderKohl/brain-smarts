@@ -426,7 +426,8 @@ __SHAREDJS__
        extension page, for example) is copied instead: pasting it into the address bar is a
        navigation the person started, which the browser allows. Whether it copies is decided
        by the address itself, never by which field produced it. */
-    if (item.where) {
+    // An empty `where` (every card file carries the three keys) is no place to go.
+    if (item.where && (item.where.text || item.where.href)) {
       var w = el('p', 'where');
       w.appendChild(el('b', null, 'Where: '));
       var href = typeof item.where.href === 'string' ? item.where.href : '';
@@ -493,6 +494,8 @@ __SHAREDJS__
     rev.appendChild(el('b', null, item.state === 'yours' || item.state === 'waiting_on_you' ? L.ownerTurn + ': ' : 'To check: '));
     rev.appendChild(document.createTextNode(item.review));
     body.appendChild(rev);
+    // Asked, branch, version, the task and the history (card_detail.py).
+    if (window.BoardDetail) window.BoardDetail.draw(item, body);
 
     if (item.fold === 'conflict' && !moved) conflictBox(item, c);
     // A card already handed over is not decided again; the verdict rides on it as a tag.

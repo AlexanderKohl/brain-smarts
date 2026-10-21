@@ -37,6 +37,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import board_config  # noqa: E402
 import build_boards  # noqa: E402
+import card_detail  # noqa: E402
 import cards  # noqa: E402
 import events  # noqa: E402
 import page_js  # noqa: E402
@@ -205,11 +206,13 @@ def build(config: board_config.Config, board: dict, directory: bool = True) -> d
     derived["adrift"] += problems
     resolve_links(board, derived)
     inlined = inline_images(board, derived)
+    shown = page_data(derived)
+    card_detail.attach(config, board, shown, derived)
     out = os.path.join(str(board["folder"]), "status.html")
     page = (
         PAGE.replace("__TOKENS__", task_board.TOKENS)
-        .replace("__TASKCSS__", task_board.CSS + page_js.CSS + page_notes.CSS)
-        .replace("__SHAREDJS__", page_js.SHARED_JS + "\n" + page_js.TASKS_JS)
+        .replace("__TASKCSS__", task_board.CSS + page_js.CSS + page_notes.CSS + card_detail.CSS)
+        .replace("__SHAREDJS__", page_js.SHARED_JS + "\n" + page_js.TASKS_JS + "\n" + card_detail.JS)
         .replace("__FAVICON__", board_config.favicon_link(config, board))
         .replace("__TITLE__", html.escape(board["title"]))
         .replace("__MAIN__", html.escape(board.get("main") or "main"))
@@ -217,7 +220,7 @@ def build(config: board_config.Config, board: dict, directory: bool = True) -> d
         .replace("__GENERATED__", html.escape(cards._now()[:16].replace("T", " ")))
         .replace("__CONFIG__", _json(page_config(board, derived)))
         .replace("__TASKS__", tasks_html + notes_html)
-        .replace("__DATA__", _json(page_data(derived)))
+        .replace("__DATA__", _json(shown))
     )
     if board.get("shared"):
         # A collaborator cannot resolve a /memory/ path, and tasks are each owner's own.
