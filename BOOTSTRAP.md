@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-08-04T23:16:08+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-10-21T12:40:44+10:00
 owner: brain-owner
 ---
 
@@ -23,6 +23,6 @@ Use these instructions when an agent or person is given a repository directory, 
 6. Treat machine-specific absolute paths as location hints only. The owner's own local paths are recorded in `/memory/OWNER.md`.
 7. If two hints resolve to different contracts, or no contract can be read, stop and report the ambiguity.
 8. If `/memory/` is absent, work only on the mechanics and say so. To set up a memory for a new owner, follow `/README.md` § Setting up a memory.
-9. Inside an external project repository (`/CONTRACT.md` §16), bootstrap from the brain root, then read the repository's `brain/README.md` and `brain/STATE.md` as the active node.
+9. Inside an external project repository (`/CONTRACT.md` §16), bootstrap from the brain root, then read the repository's `brain/README.md` and `brain/STATE.md` as the active node. When the repository carries `brain/JOINING.md` and this brain has no pointer node for it, join first (`python shared/skills/join-project/scripts/join.py <path> --dry-run`, then without `--dry-run`), so the pointer node and boards exist before work starts.
 
 The repository-root path `/CONTRACT.md` is canonical after discovery. External bootstrap instructions should name the exact contract file when a fixed absolute path is necessary; they should not name a directory and call it a file.

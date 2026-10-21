@@ -4,10 +4,13 @@ title: A shared project carries a joining manifest, and bootstrap joins from it
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: proposed
+status: implemented
 owner: brain-owner
 created: 2026-10-21T12:12:20+10:00
-updated: 2026-10-21T12:12:20+10:00
+updated: 2026-10-21T12:40:44+10:00
+accepted_by: brain-owner
+accepted_at: 2026-10-21T12:40:44+10:00
+implemented_at: 2026-10-21T12:40:44+10:00
 previous_contract_version: 2.6.0
 new_contract_version: 2.7.0
 target_files:
@@ -76,4 +79,4 @@ against each shared repository with a fictional memory.
 
 ## Acceptance
 
-Pending the owner's explicit acceptance of this proposal as shown.
+Accepted by the owner as shown on 2026-10-21; implemented the same day (contract 2.6.0 to 2.7.0). The owner's record is in `/memory/governance/proposals/`.
