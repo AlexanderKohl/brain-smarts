@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-10-14T19:50:39+10:00
-updated: 2026-10-14T19:50:39+10:00
+updated: 2026-10-21T22:00:10+10:00
 owner: brain-owner
 ---
 
@@ -22,6 +22,8 @@ governance and will validate, stage and commit your work; you never commit, neve
 log, state or index file the packet does not name, and never write outside the paths the packet
 names (SMART-RULE-0024). If you cannot complete the packet, report what blocked you; that is your
 only escalation. Do not ask questions: decide, and list each decision in your report.
+If your work touches stored data, logins or permissions, money, or more than one module and the
+packet names no approved plan, stop with status blocked and say so (SMART-RULE-0024).
 
 Markdown conventions for every .md file you create (CONTRACT §8, §4; MEMORY-RULE-0001):
 1. Front matter first. Copy this block and fill it in; keep every line:
