@@ -21,6 +21,7 @@ sys.path.insert(0, str(SCRIPTS))
 
 import apply_events  # noqa: E402
 import build_boards  # noqa: E402
+import board_config  # noqa: E402
 import build_status  # noqa: E402
 import cards  # noqa: E402
 import events  # noqa: E402
@@ -255,6 +256,100 @@ class RepositoryBoardTests(unittest.TestCase):
         self.assertIn('parent: "example-garden:brain"', text)
         self.assertRegex(text, r"\ncreated: \"?2026-02-01T\d\d:00:00[+-]\d\d:\d\d\"?\n")   # local time with its offset
         self.assertNotIn("/memory/", text)
+
+
+class IndexLinkTests(unittest.TestCase):
+    """The index links a repository board so the link resolves from the index's own folder,
+    both when built in the shared checkout and when built in a session copy of it."""
+
+    def setUp(self):
+        import tempfile
+        self.brain = Brain(shared=True)
+        self.top = Path(tempfile.mkdtemp(prefix="owner-board-repos-"))
+        # The brain inside project_repos_root, beside the repository that holds the board.
+        shutil.move(str(self.brain.root), str(self.top / "brain"))
+        shutil.move(str(self.brain.repos / "example-garden"), str(self.top / "example-garden"))
+        self.root = self.top / "brain"
+        owner = self.root / "memory" / "OWNER.md"
+        owner.write_text(owner.read_text(encoding="utf-8").replace(str(self.brain.repos), str(self.top)), encoding="utf-8")
+        (self.top / "example-garden" / "brain" / "status" / "status.html").write_text("<p>board</p>", encoding="utf-8")
+
+    def tearDown(self):
+        shutil.rmtree(self.top, ignore_errors=True)
+        shutil.rmtree(self.brain.repos, ignore_errors=True)
+
+    def links(self, root: Path) -> list:
+        import re
+        out = quiet(build_boards.build, board_config.Config(root))
+        page = Path(out[0] if isinstance(out, tuple) else out).read_text(encoding="utf-8")
+        return re.findall(r'<a href="([^"]+)"', page)
+
+    def assert_resolve(self, hrefs: list, folder: Path) -> None:
+        self.assertTrue(any("example-garden/brain/status/status.html" in h for h in hrefs), hrefs)
+        for href in hrefs:
+            self.assertTrue((folder / href).resolve().is_file(), href + " does not resolve from " + str(folder))
+
+    def test_every_link_resolves_from_the_shared_checkout(self):
+        hrefs = self.links(self.root)
+        self.assertIn("../../../example-garden/brain/status/status.html", hrefs)
+        self.assert_resolve(hrefs, self.root / "memory" / "boards")
+
+    def test_a_session_copy_links_as_the_shared_checkout_will_open_it(self):
+        copy = self.top / "brain-sessions" / "copy"
+        copy.parent.mkdir()
+        shutil.copytree(str(self.root), str(copy))
+        (copy / ".git").write_text("gitdir: " + (self.root / ".git" / "worktrees" / "copy").as_posix() + "\n", encoding="utf-8")
+        (copy / "memory" / ".git").write_text(
+            "gitdir: " + (self.root / "memory" / ".git" / "worktrees" / "m1").as_posix() + "\n", encoding="utf-8")
+        hrefs = self.links(copy)
+        external = [h for h in hrefs if "example-garden/brain/status" in h]
+        self.assertEqual(external, ["../../../example-garden/brain/status/status.html"])
+        # Opened from the shared checkout once merged; the in-brain links resolve in either place.
+        (self.root / "memory" / "boards").mkdir(exist_ok=True)
+        for href in external:
+            self.assertTrue((self.root / "memory" / "boards" / href).resolve().is_file(), href)
+        for href in hrefs:
+            if href not in external:
+                self.assertTrue((copy / "memory" / "boards" / href).resolve().is_file(), href)
+
+
+class PageSizeTests(unittest.TestCase):
+    """A board with many release notes and many loose commits stays small: the option list of
+    notes is written once per project, not once per commit."""
+
+    def setUp(self):
+        self.brain = Brain()
+        boards = self.brain.memory / "skills" / "owner-board" / "config" / "boards.json"
+        raw = json.loads(boards.read_text(encoding="utf-8"))
+        raw["boards"][0]["release_notes"] = ["garden-app"]
+        boards.write_text(json.dumps(raw), encoding="utf-8")
+
+    def tearDown(self):
+        self.brain.close()
+
+    def test_the_page_stays_small_with_many_notes_and_loose_commits(self):
+        import types
+        import page_notes
+        notes = [{"slug": "note-%03d" % i, "body": "A fictional change number %d." % i, "conflicts": [],
+                  "front": {"title": "Fictional garden change number %d, described at some length" % i,
+                            "kind": "changed", "visibility": "undecided"}} for i in range(400)]
+        loose = [{"hash": "%08x" % (0xabc000 + i), "author": "Test", "subject": "Fictional commit %d" % i}
+                 for i in range(400)]
+        project = {"id": "garden-app", "label": "Garden app"}
+        fake = types.SimpleNamespace(
+            load_config=lambda brain: types.SimpleNamespace(projects={"garden-app": project}),
+            collect_unreleased=lambda cfg, p: (notes, [], []),
+            collect_loose=lambda cfg, p, n: loose,
+            collect_released=lambda cfg, p: {})
+        config = self.brain.config()
+        board = config.board("garden")
+        with mock.patch.object(page_notes, "skill_module", lambda brain: fake):
+            quiet(build_status.build, config, board)
+        page = (board["folder"] / "status.html").read_text(encoding="utf-8")
+        self.assertIn("Fictional commit 399", page)
+        self.assertIn('data-project="garden-app">', page)
+        self.assertEqual(page.count('value="note-123"'), 1)
+        self.assertLess(len(page.encode("utf-8")), 1_000_000)
 
 
 class MigrationTests(unittest.TestCase):

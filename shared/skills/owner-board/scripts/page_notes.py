@@ -93,13 +93,21 @@ JS = r"""<script>
   document.querySelectorAll('.notes [contenteditable]').forEach(function (f) { f.addEventListener('input', function () {
     entry(f.closest('.note'))[f.dataset.f] = f.innerText.trim(); store();
   }); });
+  function fill(s) {
+    if (!s || s.dataset.filled) return;
+    var t = document.querySelector('template.note-opts[data-project="' + s.dataset.opts + '"]');
+    if (t) s.appendChild(t.content.cloneNode(true));
+    s.dataset.filled = '1';
+  }
   document.querySelectorAll('.notes li[data-hash]').forEach(function (li) {
     if (saved.commits[li.dataset.hash]) li.classList.add('done');
+    var sel = li.querySelector('select');
+    ['pointerdown', 'mousedown', 'focus', 'keydown'].forEach(function (ev) { sel.addEventListener(ev, function () { fill(sel); }); });
     li.addEventListener('click', function (e) {
       stop(e);
       var b = e.target.closest('button'); if (!b) return;
       var a = { project: li.dataset.project, hash: li.dataset.hash, subject: li.dataset.subject, action: b.dataset.a };
-      if (a.action === 'add') { var s = li.querySelector('select'); if (!s.value) { s.focus(); return; } a.slug = s.value; }
+      if (a.action === 'add') { var s = li.querySelector('select'); if (!s.value) { fill(s); s.focus(); return; } a.slug = s.value; }
       saved.commits[a.hash] = a;
       li.classList.add('done');
       store();
@@ -164,16 +172,20 @@ def note_html(project: dict, note: dict) -> str:
 def loose_html(project: dict, notes: list, loose: list) -> str:
     if not loose:
         return ""
-    options = '<option value="">choose a note…</option>' + "".join(
+    # One option list per project in a <template>; each select is filled from it when first used,
+    # so the page carries the list once rather than once per loose commit.
+    options = "".join(
         '<option value="%s">%s</option>' % (esc(n["slug"]), esc(n["front"].get("title"))) for n in notes)
+    blank = '<option value="">choose a note…</option>'
     items = "".join(
         '<li data-project="%s" data-hash="%s" data-subject="%s"><code>%s</code> %s – %s '
         '<button type="button" data-a="new">New note</button>'
-        '<select>%s</select><button type="button" data-a="add">Add to an existing note</button>'
+        '<select data-opts="%s">%s</select><button type="button" data-a="add">Add to an existing note</button>'
         '<button type="button" data-a="skip">Not user-visible</button></li>' % (
             esc(project["id"]), esc(c["hash"]), esc(c["subject"]), esc(c["hash"]), esc(c["author"]),
-            esc(c["subject"]), options) for c in loose)
-    return ('<details class="loose"><summary><b>%d commit%s in no note</b> – would a user notice %s?'
+            esc(c["subject"]), esc(project["id"]), blank) for c in loose)
+    return ('<template class="note-opts" data-project="%s">%s</template>' % (esc(project["id"]), options)
+            + '<details class="loose"><summary><b>%d commit%s in no note</b> – would a user notice %s?'
             '</summary><ul>%s</ul></details>' % (len(loose), "" if len(loose) == 1 else "s",
                                                  "it" if len(loose) == 1 else "them", items))
 
