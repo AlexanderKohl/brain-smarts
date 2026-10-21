@@ -6,26 +6,32 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 scope: shared
+version: 1.0.0
 script_paths:
-  - /shared/skills/owner-board/scripts/apply_verdicts.py
+  - /shared/skills/owner-board/scripts/apply_events.py
   - /shared/skills/owner-board/scripts/board_config.py
   - /shared/skills/owner-board/scripts/build_boards.py
   - /shared/skills/owner-board/scripts/build_status.py
   - /shared/skills/owner-board/scripts/card.py
   - /shared/skills/owner-board/scripts/cards.py
+  - /shared/skills/owner-board/scripts/events.py
+  - /shared/skills/owner-board/scripts/migrate_board.py
+  - /shared/skills/owner-board/scripts/page_html.py
   - /shared/skills/owner-board/scripts/page_js.py
+  - /shared/skills/owner-board/scripts/page_notes.py
   - /shared/skills/owner-board/scripts/reconcile.py
   - /shared/skills/owner-board/scripts/task_actions.py
   - /shared/skills/owner-board/scripts/task_board.py
-  - /shared/skills/owner-board/scripts/verdicts.py
+  - /shared/skills/owner-board/scripts/team_lanes.py
 created: 2026-09-18T11:05:00+10:00
-updated: 2026-10-21T07:47:25+10:00
+updated: 2026-10-21T10:14:49+10:00
 owner: brain-owner
 project_refs:
   - /memory/projects/brain-development
 skill_refs:
   - /shared/skills/delegate-work
   - /shared/skills/tasks
+  - /library/skills/release-notes
 ---
 
 # Owner Board
@@ -36,7 +42,9 @@ sees what is in play, and how the owner's decision gets back into the files.**
 
 It is optional: an owner switches it on by listing `owner-board` in `active_skills` in
 `/memory/OWNER.md` (see `/SETUP.md`, step C). The owner's own boards, configuration and history
-are in `/memory/skills/owner-board/`.
+are in `/memory/skills/owner-board/`. A board for a project that more than one brain works on
+lives in that project's repository instead, in `brain/status/`, and every such brain is a peer
+(CONTRACT section 16.2; **Two brains on one board** below).
 
 ## Purpose
 
@@ -46,9 +54,9 @@ rather than as text they copy into a message and a conductor retypes. The same b
 owner's **tasks**: every open task record appears on exactly one board – its project's, or the
 personal board – read from `/memory/tasks/` each time, never copied into a card.
 
-The board is not a status report the conductor writes. **It is generated from the records**,
-and a check runs on every regeneration comparing it against git. A board a conductor could
-keep by hand is a board that can be quietly wrong, which is worse than a list.
+The board is not a status report the conductor writes. **It is derived from the records**, and
+a check runs on every regeneration comparing it against git. A board a conductor could keep by
+hand is a board that can be quietly wrong, which is worse than a list.
 
 ## Where things live
 
@@ -57,20 +65,18 @@ There is **one implementation**, in this skill's `scripts/` folder, and it serve
 
     /shared/skills/owner-board/scripts/          the scripts (this skill)
     /memory/skills/owner-board/config/boards.json the owner's registry and per-board settings
-    /memory/<node>/status/                        one board per node: cards, board.md, page
+    /memory/<node>/status/                        a memory board: board.json, cards/, events/, the pages
+    <repository>:brain/status/                    a shared board, the same layout, in the project repository
     /memory/boards/index.html                     the directory above every board (generated)
     /memory/boards/personal.html                  the personal task board (generated)
-    /memory/boards/projects/<slug>.html           automatic task boards, when switched on (generated)
+    /memory/boards/projects/<slug>.html           task pages: automatic boards, and the tasks of each shared board (generated)
     /memory/tasks/                                the task records boards show and reconcile against
+    /memory/skills/owner-board/applied/           saved verdict files once their events are written (this brain's own)
 
 The scripts find the brain root by moving upwards to `CONTRACT.md` from the current folder (or
 from their own folder), then read `memory/skills/owner-board/config/boards.json` beneath it
 (CONTRACT section 3.5). Every command also takes `--root <brain root>` and
 `--config <file>`. No script names a machine path.
-
-A board's folder is usually `/memory/projects/<node>/status/`; a project that lives in its own
-repository keeps its board in the pointer node's `status/` folder and names its product
-checkout in the configuration.
 
 ## Configuration
 
@@ -96,9 +102,12 @@ example; each names its file relative to the directory folder. A full example:
     {
       "id": "garden",
       "label": "Garden Planner",
-      "status": "projects/example-garden/status",
+      "status": "example-garden:brain/status",
+      "node": "/memory/projects/example-garden",
       "blurb": "The planting app, in the words the owner would use",
       "repo": "{project_repos_root}/example-garden",
+      "production": "origin/main",
+      "release_notes": ["garden-app"],
       "committed_version": {"file": "package.json", "key": "version"},
       "built_version": {"file": "dist/manifest.json", "key": "version"},
       "where_view_href": "example-app://{appId}/index.html[?plot={plotId}]#{view}"
@@ -122,17 +131,18 @@ Board keys, alphabetical. Only `id`, `label` and `status` are required.
 | `label` | required | What the owner calls the project. |
 | `main` | `main` | The product's main branch. |
 | `merge_version_pattern` | `N.N.N` | How check 8 recognises a version in a merge subject. |
-| `node` | from `status` | Repository-root path of the owning node; written into each card's `parent`. |
+| `node` | from `status` | Repository-root path of the owning memory node: where this owner's tasks about the project route. A memory board derives it from `status`; a shared board names its pointer node here, and its cards carry the repository's own node (`<repository>:brain`) as `parent`. |
 | `placeholder_pattern` | `temp`, `wip`, `fixup`, `squash` | Check 2: a main head commit message that was never written. |
 | `production` | `origin/main` | The branch releases go to. After a hotfix it is ahead of `main`; check 4 never reports it as pushed and unmerged, and check 6 never calls its checkout a stray. |
+| `release_notes` | `[]` | Project ids from `/memory/skills/release-notes/config/release-notes.json` whose notes this board draws, in the order drawn (**Release notes on the board**). |
 | `remote` | `origin` | The product remote. |
 | `repo` | none | Product checkout. `{project_repos_root}` and `{brain_root}` are filled from `/memory/OWNER.md`; a relative path is taken under `project_repos_root`. Without it only the task checks run. |
-| `status` | required | The board folder, relative to the memory root. |
+| `status` | required | The board folder: relative to the memory root (`projects/<node>/status`), or `<repository>:brain/status` for a board shared through a project repository found under `project_repos_root`. |
 | `storage_prefix` | `<id>-status` | Browser storage keys; keep it stable or saved but unapplied verdicts in the browser are lost. |
 | `title` | `<label>: where we are` | Page title. |
 | `verdict_prefix` | `<id>-verdicts-` | Saved verdict file names. |
 | `verdict_schema` | `owner-board/verdicts/v1` | The `schema` value inside a verdict file. |
-| `where_view_href` | none | Builds a card's link from its `where_view`. `{view}` is the card's value; any other `{name}` is a top-level field of `board.md`'s JSON; a part in `[...]` is dropped when a field it uses is empty. |
+| `where_view_href` | none | Builds a card's link from its `where_view`. `{view}` is the card's value; any other `{name}` is a top-level field of `board.json`; a part in `[...]` is dropped when a field it uses is empty. |
 
 `directory` keys, alphabetical: `favicon` (the tab icon of every generated page – an SVG string,
 a `data:` URI, or a file path relative to the directory folder; default a neutral three-column
@@ -145,7 +155,7 @@ stops the build), `folder` (default `boards`, under the memory root) and `title`
 | Key | Default | Meaning |
 |---|---|---|
 | `auto_boards` | `false` | Off: a task whose projects have no registered board goes to the personal board. On: its first project under `auto_roots` gets a generated task-only board. |
-| `auto_folder` | `projects` | Where automatic boards are written, under the directory folder. |
+| `auto_folder` | `projects` | Where automatic boards and the task pages of shared boards are written, under the directory folder. |
 | `auto_roots` | `["/memory/projects/"]` | Which references may get an automatic board. |
 | `board_declined` | `[]` | Projects the owner said need no board of their own; the build stops suggesting one for them or any folder beneath them (`SMART-RULE-0035`). |
 | `completed_days` | `14` | How long a completed or cancelled task stays in *Completed recently*. |
@@ -161,32 +171,42 @@ and, for the git checks, a working checkout of the product repository the board 
 
 ## Data sources
 
-- `<board>/cards/*.md` – **one card per owner request**. The truth.
-- `<board>/board.md` – what belongs to the board and to no single card, in one fenced JSON
-  block: `id`, `label`, `tracks` (each with `label`, `task`, `done`, `of`), `closed`,
-  `abandoned` (branch -> a one-line reason, as a mapping or a list of `branch: reason`
-  strings; a named branch is silenced by checks 4 and 6), `elsewhere`, and any identifiers
-  `where_view_href` uses. The product's version on the page (`mainVersion`) is read from git
-  on every build and is never kept in `board.md`.
+- `<board>/cards/*.md` – **one card per owner request**, named `<author>-<UTC stamp>`. The
+  truth of what was asked and what landed. `<board>/cards/closed/` holds retired cards.
+- `<board>/events/*.json` – **one file per decision**, append-only: what each person decided
+  about a card, and which versions a release retired (**The events**).
+- `<board>/board.json` – what a person keeps by hand and rarely: `tracks` (each with `label`,
+  `task`, `done`, `of`), `production`, `release_notes`, `abandoned` (branch -> a one-line
+  reason; a named branch is silenced by checks 4 and 6), `elsewhere`, and any identifiers
+  `where_view_href` uses. Nothing derived lives here: the product's version comes from git on
+  every build, and the `closed` register is folded from the events.
+- `<board>/state.json` and `<board>/status.html` – **derived** on every build, never kept by
+  hand, never merged; on a shared board both are ignored by Git and rebuilt after every pull.
 - The product repository, read by `reconcile.py`: branches, worktrees, merges, built output.
-- `<board>/verdicts-in/*.json` – what the owner saved from the board; the owner's Downloads
-  folder is read as a fallback.
+- The owner's Downloads folder and every folder directly inside it – what the owner saved
+  from a board, until `apply_events.py` turns it into events.
 - `/memory/skills/owner-board/config/boards.json` – every board that exists.
 
 ## Allowed operations and permissions
 
-Write under a board's folder and the directory folder only. Never edit a card to record a
-verdict the owner has not given. Never close a card on the owner's behalf – see **A card is
-closed only by the owner**. No credentials. The only product-repository operations are reads
-and `git fetch`.
+Write under a board's folder and the directory folder only. A card's body is written only by
+its author; an event is written once and never edited, moved or deleted. Never close a card on
+the owner's behalf – see **A verdict or a release retires a card**. No credentials. The only
+product-repository operations are reads, `git fetch`, and `git mv` of a card into
+`cards/closed/` by the author whose event retired it. A shared board's folder never receives a
+`/memory/` path or a task; the build refuses to write a page that would carry one.
 
 ## Procedure
 
 ### Making a board
 
-1. Copy `/shared/skills/owner-board/templates/board.template.md` to `<node>/status/board.md`,
-   fill it as its first paragraph says, create an empty `cards/` folder beside it, and add
-   `status/` to the node's `README.md` (CONTRACT section 4).
+1. Copy `/shared/skills/owner-board/templates/board.template.json` to `<board>/board.json`,
+   set `id` and `label` to the board's registry values, add the tracks, and create empty
+   `cards/` and `events/` folders beside it. A memory board lives at `<node>/status/` and
+   `status/` is added to the node's `README.md` (CONTRACT section 4). A shared board lives at
+   `<repository>:brain/status/`, `status/` is added to `brain/README.md`, and
+   `brain/status/status.html` and `brain/status/state.json` are added to the repository's
+   `.gitignore`.
 2. **Register it** in `boards.json`. Creating a board is not finished until it is registered:
    a board missing from the directory is one the owner never opens, which is the same as not
    having one.
@@ -206,30 +226,34 @@ be wrong.**
 
 ### The lifecycle
 
-    queued -> building -> needs_review -> (the owner accepts) -> closed
+    queued -> building -> needs_review -> (a verdict, or the production release) -> closed
                               |
                               +-> rework -> building
 
 A card is created when the owner asks for something. It moves to `needs_review` when the work
-merges, carrying the version the owner can load. **Only the owner's verdict retires it.** A
+merges, carrying the version the owner can load. **A verdict or a release retires it.** A
 `yours` card is something the owner does elsewhere; `waiting_on_you` is drawn with
-`needs_review`.
+`needs_review`. Two folds sit above the columns: **Conflict**, for a card two people decided
+differently, and **Released**, for a card whose version reached testing and that nobody has
+judged yet.
 
 ### Writing a card
 
 Always through `card.py`, never by editing the file by hand:
 
-    python shared/skills/owner-board/scripts/card.py --board <id> new <card-id> --track <track> \
+    python shared/skills/owner-board/scripts/card.py --board <id> new --track <track> \
         --branch fix/x --title "<the owner's words>" --landed "..." --review "..." \
-        --where-text "Product - Page" --where-href "<link>"
+        --where-text "Product - Page" --where-href "<link>" [--note <release-note slug>]
     python shared/skills/owner-board/scripts/card.py --board <id> set <card-id> \
         --state needs_review --version 1.4.0 --branch -
     python shared/skills/owner-board/scripts/card.py --board <id> list
 
-It writes the card, regenerates the page and the directory and runs the reconciliation in one
-act, so a card cannot change without the check seeing it. `--branch -` clears the branch, which
-is what merging means. `--board` may be left out inside a board's folder or when only one board
-is registered.
+It names the card `<author>-<UTC stamp>` from this brain's `owner_short_name`, writes it,
+regenerates the page, `state.json` and the directory, and runs the reconciliation in one act, so
+a card cannot change without the check seeing it. `--branch -` clears the branch, which is what
+merging means. `--note` names the release note the change belongs to. `--board` may be left out
+inside a board's folder or when only one board is registered. `set` and `drop` refuse a card
+another author wrote: that author's brain changes it, or you save an `amend` event.
 
 **What goes in each field:**
 
@@ -245,34 +269,112 @@ is registered.
 
 ### Taking the verdict back
 
-The owner decides on the card face and presses **Save my verdicts**, which hands the browser one
-JSON file naming its board, as a download, and says in the bar which file it was. Any folder
-inside Downloads will do: `apply_verdicts.py` reads Downloads and every folder directly inside
-it, as well as `<board>/verdicts-in/`, so whichever folder the save dialog offers is fine. A
+The owner decides on the card face – *Accepted*, *Send back*, *Not now* – and presses **Save my
+verdicts**, which hands the browser one JSON file naming its board, as a download, and says in
+the bar which file it was. Any folder inside Downloads will do: `apply_events.py` reads Downloads
+and every folder directly inside it, so whichever folder the save dialog offers is fine. A
 folder remembered through the File System Access API was tried on 26 September 2026 and failed
 twice on a real owner's Chrome for a page opened from disk; it was removed rather than kept as a
 second path.
 
 A screenshot pasted into a card's reason box travels with the verdict. The page shrinks it to at
 most 1600px wide, shows it as a thumbnail with a remove button, and puts it in the saved file.
-Applying a *rework* writes it to `<board>/img/<card>-<saved>-<n>.<ext>` and adds it as an image
-line under the owner's words, where the board draws it. Only `data:image/` PNG, JPEG, WebP or
-GIF is kept.
+Applying writes it to `<board>/img/<event-id>-<n>.<ext>`, named by the event so two brains never
+write one name, and the board draws it under the owner's words. Only `data:image/` PNG, JPEG,
+WebP or GIF is kept.
 
 The owner then sends one short message, and the conductor runs:
 
-    python shared/skills/owner-board/scripts/apply_verdicts.py            # every saved file
-    python shared/skills/owner-board/scripts/apply_verdicts.py --dry-run  # say, change nothing
+    python shared/skills/owner-board/scripts/apply_events.py            # every saved file, then settle
+    python shared/skills/owner-board/scripts/apply_events.py --dry-run  # say, change nothing
+    python shared/skills/owner-board/scripts/apply_events.py --settle   # effects only, after a pull
 
-- *accepted* retires the card: version and title into `board.md` under `closed`, card file
-  deleted.
-- *rework* sets the card to `rework` and keeps **the owner's words verbatim**, under their own
-  heading (`## <owner> sent it back`) above the conductor's line.
-- A verdict whose signature no longer matches the card is **refused and reported**, and a file
-  from another board is refused: card ids are only unique within a board.
-- Applied files move to `<board>/verdicts-applied/`.
+Each verdict becomes **one event file** under `<board>/events/`, after three fences: the card
+still exists; its signature is the one the verdict was given against; and the page had seen the
+card's latest event (`seen_through`). A verdict that fails a fence is **refused and reported** –
+"pull, rebuild, decide again" for a stale page – and a file from another board is refused: card
+ids are only unique within a board. Then the fold runs and this brain does its share of the
+effects (**Two brains on one board**). The saved file moves to
+`/memory/skills/owner-board/applied/`, this brain's own record of what it handed over.
 
-`verdicts.py --board <id> [file]` applies one file to one board.
+- *accepted* retires the card: its version and title enter the derived `closed` register and the
+  card file moves to `cards/closed/`.
+- *sent back* sets the card to `rework` and keeps **the owner's words verbatim**: on the page
+  from the event, and in the card under its own heading (`## <owner> sent it back`) once the
+  card's own brain has run `apply_events.py`.
+- *not now* leaves the card where it is, tagged with who deferred it and why.
+
+### Two brains on one board
+
+Two brains, no hierarchy, one shared truth: the board folder in the project repository. Each
+conductor **pulls, builds its own page, saves verdicts and adds cards, applies what it saved,
+commits and pushes**; the other side pulls, and its next build derives the same state
+(CONTRACT 16.3).
+
+**Records that never clash.** Every card and every event is one file named
+`<author>-<UTC stamp>`, the author being `owner_short_name` from that brain's `/memory/OWNER.md`,
+lowercased; two saves by one author in one second get `-2`, `-3`. Two authors cannot produce
+one name, so Git never sees two versions of a new file. A card's body is edited only by its
+author; another author who wants a change saves an `amend` event with the text, drawn on the
+card. An event is written once and never edited, moved or deleted: "applied" is not a place a
+file is moved to, it is a fact each brain derives.
+
+**The events.** Kinds: `accept`, `reject`, `defer`, `amend`, `released`, `resolve`. Each names
+`card`, `by`, `saved_at`, the card signature it was decided against and `seen_through`, the id
+of the last event on that card the page had seen. Events sort by `(saved_at, author, id)` and
+cards by `(created, author)`, the same on both machines; the fold (`events.fold`) is recomputed
+from the whole log on every build, so it gives one answer whatever order the files arrived in.
+An outcome overlays the card while the card still carries the signature it was decided against;
+once its author acts on it (sets it building again after a reject), the old event no longer
+applies.
+
+**When both act on one card.** Both events are kept. **The earliest event decides**; a later
+event with a different outcome does not change the state but marks the card `conflict`. The page
+draws it in the *Conflict* fold on both sides, showing both verdicts with author and time, until
+either person saves a `resolve` naming every conflicting event id and the outcome; a `resolve`
+that does not name every one is refused (the resolver must have seen them). A same-outcome
+duplicate is not a conflict; the second is drawn as "also accepted by <author>".
+
+**Catching a brain that has not pulled.** Three fences, in the order they bite: at save, the
+page embeds `seen_through` on every card and the commit it was built from; at apply,
+`apply_events.py` refuses an event whose `seen_through` is not the card's current last event, or
+whose signature no longer matches; at push, `session.py finish`
+(`/shared/skills/repository-preflight/`) fetches first, rebuilds, reruns the apply, and only
+then pushes.
+
+**Applying is each brain's own share.** After the fold, `apply_events.py` does only the side
+effects that belong to the brain running it, each idempotent: a card retired by an event of
+*this* author is moved (`git mv`) to `cards/closed/`, and the other brain receives the move by
+pull; the words of a reject are written into the card when *this* brain is the card's author;
+task actions change this brain's own task records. A card already in `cards/closed/` is left
+alone. If both authors save the same outcome before either pulls, both move the same file to the
+same name with the same content, which Git merges clean.
+
+**What never enters the repository.** Each owner's tasks about the project stay in that owner's
+`/memory/tasks/`, drawn on a page of their own at `/memory/boards/projects/<board id>.html`,
+never on the shared page; `build_status.py` refuses to write a shared page that carries a
+`/memory/` path or a task section. The generated `status.html` and `state.json` are ignored by
+Git and rebuilt after every pull.
+
+### Release notes on the board
+
+A board whose entry carries `release_notes: ["<project id>", ...]` draws, below its cards, a
+**Release notes** section for those projects (`/library/skills/release-notes/`): every
+unreleased note with its visibility choice and in-place editing, the commits no note claims
+(**New note**, **Add to an existing note**, **Not user-visible**), and a lane per environment
+of what has been released to testing and to production. The choices save with the verdicts
+(`releaseNotes` in the same file) and `apply_events.py` hands them to
+`release_choices.apply_choices`, which writes one append-only choice event each. A card names
+its note with `--note <slug>`; check 11 asks for one when a version raised the first or middle
+number. The library skill is imported from the brain root only when a board names projects, so
+owner-board stays a core skill with an optional dependency.
+
+**The release retires cards.** `release_notes.py release <version> --env testing|production`
+writes one `released` event per open card at or below that version on every board that draws
+the project: a testing release puts the card in the *Released* fold, where **Accept all
+released** saves an accept for each; a production release retires it on both brains at the
+next build. A card nobody judged before the production release is retired by the release, not
+by a verdict; the note is what remains of it.
 
 ### Tasks on the boards
 
@@ -305,12 +407,13 @@ personal board`. The agent then asks the owner once, with a suggested answer. A 
 which silences it for good. Branch count is not visible to the build (a project without a board
 names no repository), so the agent watches for three or more branches itself.
 
-**Where they are drawn.** A registered board shows its tasks in a *Tasks* section below the
-cards on its own `status.html` – still one link. The personal and automatic boards are pages of
-their own beside the directory, rewritten by `build_boards.py` on every regeneration of any
-board. The directory lists the personal board first, then the registered boards (each with an
-open-task count), then automatic boards by label; tasks past due or due for review are counted
-in the warning colour.
+**Where they are drawn.** A memory board shows its tasks in a *Tasks* section below the cards
+on its own `status.html` – still one link. A shared board's tasks are this owner's own and are
+drawn on `/memory/boards/projects/<board id>.html`, linked from the directory beside the board.
+The personal and automatic boards are pages of their own beside the directory, rewritten by
+`build_boards.py` on every regeneration of any board. The directory lists the personal board
+first, then the registered boards (each with an open-task count), then automatic boards by
+label; tasks past due or due for review are counted in the warning colour.
 
 **Columns and order.** Inbox, Ready, In progress, Waiting, Scheduled, Blocked, Completed
 recently – the way a task travels. In the action columns (inbox, ready, in progress, blocked)
@@ -337,7 +440,7 @@ Saving hands them to the agent. On a board, **Save my verdicts** adds a `tasks` 
 (`{id, action, note, shots, title}`) to the verdicts file, and the tally and *Copy instead*
 include them. The personal and automatic pages have the same bar and save
 `task-actions-<savedAt>.json` (schema `owner-board/task-actions/v1`, board `tasks`). Whatever was
-saved or copied leaves the browser's storage. `apply_verdicts.py` finds both kinds of file in the
+saved or copied leaves the browser's storage. `apply_events.py` finds both kinds of file in the
 same folders and applies each task through the tasks skill (`tasks.complete`, `tasks.do_now`,
 `tasks.add_note` – the one way a task changes):
 
@@ -350,9 +453,8 @@ same folders and applies each task through the tasks skill (`tasks.complete`, `t
 
 Screenshots are written to `/memory/tasks/img/<task>-<saved>-<n>.<ext>` and linked in the History
 entry; only PNG, JPEG, WebP or GIF data is kept. An unknown task id is reported and skipped.
-`apply_verdicts.py` ends with a **Do now** list: act on it first. Applied task-actions files
-move to `/memory/tasks/actions-applied/`; the task actions inside a verdicts file are filed with
-it under `verdicts-applied/`. Verdicts on request cards work exactly as before.
+`apply_events.py` ends with a **Do now** list: act on it first. Applied task-actions files move
+to `/memory/tasks/actions-applied/`.
 
 The browser code both page kinds share – shrinking a pasted screenshot, the thumbnails and
 lightbox, the download, the task controls and the task pages' save bar – is written once, in
@@ -400,26 +502,30 @@ Run from the brain root. Alphabetical.
 
 | Script | Job |
 | --- | --- |
-| `apply_verdicts.py` | Route every saved verdicts file to the board it names, apply it and its task actions, apply every task-actions file, print the Do now list, rebuild. |
-| `board_config.py` | Find the brain root and memory, read and validate `boards.json`. Imported by the others. |
+| `apply_events.py` | Turn every saved verdicts file into events after the fences, hand release-note choices and task actions on, settle this brain's effects, print the Do now list, rebuild. `--settle` after a pull. |
+| `board_config.py` | Find the brain root and memory, read and validate `boards.json`, resolve a `<repository>:brain/status` board. Imported by the others. |
 | `build_boards.py` | Generate `/memory/boards/index.html` from the registry. |
-| `build_status.py` | Generate a board's `status.html` (`--all` for every board), then the directory. |
+| `build_status.py` | Fold the events and generate a board's `status.html` and `state.json` (`--all` for every board), then the directory. |
 | `card.py` | Create, change, show, list or drop one card, then rebuild and reconcile. |
-| `cards.py` | Read and write card records; owns the signature. Imported by the others. |
+| `cards.py` | Read and write card records and `board.json`; owns the signature; writes `state.json`. Imported by the others. |
+| `events.py` | Ids, the append-only event files, the fold and the fences. Imported by the others and by the release-notes skill. |
+| `migrate_board.py` | Convert a board from `board.md` and verdict folders to `board.json` and events, in place or into a repository; `--dry-run` first (**Migrating a board**). |
+| `page_html.py` | The status page: HTML, CSS and the board's own browser code, including the folds. Imported by `build_status.py`. |
 | `page_js.py` | The browser code every board page shares: screenshots, lightbox, download, task controls, the task pages' save bar. Imported by the builders. |
+| `page_notes.py` | The release-notes section of a board page. Imported by `build_status.py`. |
 | `reconcile.py` | Compare a board with git and the task records. Called by every build. |
-| `task_actions.py` | Apply the owner's saved task actions through the tasks skill. Imported by `apply_verdicts.py` and `verdicts.py`. |
+| `task_actions.py` | Apply the owner's saved task actions through the tasks skill. Imported by `apply_events.py`. |
 | `task_board.py` | Route task records to boards and draw them: `route`, `build [--for <task>]`, `check`. |
-| `verdicts.py` | Apply one saved verdicts file to one board. |
+| `team_lanes.py` | The per-team work-in-progress line above a board's task columns. Imported by `task_board.py`. |
 
 Common options: `--root`, `--config`, `--no-fetch`, and `--board` where a command acts on one
-board. Tests (fictional data only):
+board. Tests (fictional data only, authors `sam` and `bob`):
 
     python -m unittest discover -s shared/skills/owner-board/scripts/tests -v
 
 ## What the reconciliation checks
 
-Numbered as in `reconcile.py`; checks 1 to 9 need `repo`.
+Numbered as in `reconcile.py`; checks 1 to 8 need `repo`.
 
 1. A merge left in progress in the product checkout.
 2. A main-branch head commit with a placeholder message.
@@ -433,44 +539,54 @@ Numbered as in `reconcile.py`; checks 1 to 9 need `repo`.
 8. A version merged into main with no card, not in `closed`, and whose merge subject names no
    task that exists under `/memory/tasks/` (open or completed): a merge such as
    `Merge 1.4.0: paths (TASK-2026-0903)` is the task flow's own record and counts as seen.
-9. A static `mainVersion` left in `board.md`: the version is read from git on every build, so a
-   kept copy can only go stale and is reported until the field is removed.
+9. A derived key (`closed`, `mainVersion`, `generated`) kept by hand in `board.json`: the
+   version is read from git and the register is folded from the events on every build, so a
+   kept copy can only go stale and is reported until the key is removed.
 10. A track's task has no record, is missing from `/memory/tasks/STATE.md`, or still says
-    `ready` while the track has landed work or a card in flight.
+    `ready` while the track has landed work or a card in flight. Memory boards only: a shared
+    board's tracks may name a task the other brain does not have.
+11. On a board that draws release notes: a card ready for review whose version raised the
+    first or middle number above every closed version and that names no release note.
 
 ## Templates
 
 | Template | Copied to |
 |---|---|
-| `templates/board.template.md` | `<node>/status/board.md`, when a board is made |
+| `templates/board.template.json` | `<board>/board.json`, when a board is made |
 
 ## Outputs
 
-`status.html`, regenerated in place at the permanent path; card records under `cards/`;
-`closed` entries in `board.md`; applied verdict files under `verdicts-applied/`;
-`/memory/boards/index.html`, `/memory/boards/personal.html` and any automatic task boards,
-refreshed on every regeneration.
+`status.html` and `state.json`, regenerated in place at the permanent path; card records under
+`cards/` and `cards/closed/`; event records under `events/`; screenshots under `img/`;
+`/memory/boards/index.html`, `/memory/boards/personal.html`, the task pages of shared boards
+and any automatic task boards, refreshed on every regeneration; saved verdict files filed under
+`/memory/skills/owner-board/applied/`.
 
 ## Failure behaviour
 
-A card that cannot be parsed **raises** rather than being skipped: a card that vanishes quietly
-is the exact failure this machinery exists to end. A reconciliation that cannot run is drawn on
-the page as an error rather than as silence, and a missing product checkout is said, not
-skipped. A verdict on a card that has changed is refused. A missing or invalid configuration
-stops the command with one plain line and exit code 2.
+A card or an event that cannot be parsed **raises** rather than being skipped: a record that
+vanishes quietly is the exact failure this machinery exists to end. A reconciliation that
+cannot run is drawn on the page as an error rather than as silence, and a missing product
+checkout is said, not skipped. A verdict on a card that has changed, or decided on a page that
+had not seen the card's latest event, is refused and says so. A shared page that would carry a
+`/memory/` path or a task is refused, not written. A missing or invalid configuration stops the
+command with one plain line and exit code 2.
 
 ## Logging and state, knowledge and task updates
 
-Commit card changes with named paths (`git commit -- <paths>`); other sessions share the memory
-repository. After a packet lands, update the parent task's status word and its row in
-`/memory/tasks/STATE.md` on the same pass – see **A status word is written when work starts and
-never when it finishes** in `/shared/skills/delegate-work/SKILL.md`.
+Commit card and event changes with named paths (`git commit -- <paths>`); other sessions share
+the memory repository, and the other brain shares the project repository. After a packet lands,
+update the parent task's status word and its row in `/memory/tasks/STATE.md` on the same pass –
+see **A status word is written when work starts and never when it finishes** in
+`/shared/skills/delegate-work/SKILL.md`.
 
 ## The five rules this was built out of
 
-**1. A card is closed only by the owner.** A conductor that deletes cards on merge removes work
-the owner has never seen at the moment it becomes theirs to look at. Merging moves a card to
-`needs_review` and sets its version. Nothing else retires it.
+**1. A verdict or a release retires a card.** A conductor that deletes cards on merge removes
+work the owner has never seen at the moment it becomes theirs to look at. Merging moves a card
+to `needs_review` and sets its version. Only a person's verdict, or the production release that
+carries the version to everyone, retires it – and either is an event in the log, never a
+deletion.
 
 **2. The board holds what the conductor is *not* doing, too.** Work in the owner's other
 threads, work committed to main by another session, branches abandoned with the version that
@@ -479,8 +595,9 @@ the rest of the board is.
 
 **3. There is one truth, and it is the files.** A hand-kept status file beside task records
 beside an index is three lists that must agree with nothing keeping them in step. **A generated
-copy of the truth is still a second list**, so there is none. Cards are Markdown records so
-`preflight.py` validates them like everything else.
+copy of the truth is still a second list**, so the state is derived from the cards and the
+events on every build and never kept. Cards are Markdown records so `preflight.py` validates
+them like everything else.
 
 **4. The check runs whether the conductor wants it or not.** Every build calls
 `reconcile.py`, so reconciliation happens on every regeneration and its findings are drawn at
@@ -493,6 +610,16 @@ connect back. A board that only ever reports success teaches the owner to check 
 themselves, which is the cost the board exists to remove.
 
 ## Migrating a board, and the way a migration lies
+
+`migrate_board.py --board <id> [--to <repository>:brain/status] [--dry-run]` converts a board
+from the hand-kept layout (`board.md`, slug-named cards, `verdicts-in/`, `verdicts-applied/`) to
+this one: `board.json` with only the hand-kept keys, cards renamed `<author>-<UTC created>`, one
+event per applied verdict, and one `accept` event without a card per version of the old `closed`
+register, so the register stays honest and derived. With `--to` it writes into the repository,
+adds the generated files to its `.gitignore`, repoints the board's `status` in `boards.json`, and
+leaves the old folder for the conductor to `git mv` out of memory with its removed-files note;
+it then lists any file that still says `/memory/`. Run it with `--dry-run` first and read the
+plan.
 
 A converter that compares the fields its author had in mind can report *round trip: clean*
 while losing a field nobody listed – for example the page reference a card's link is built

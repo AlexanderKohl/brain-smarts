@@ -1,14 +1,18 @@
-"""One card, one file – and every board is generated from them.
+"""One card, one file – and every board is derived from them and the events.
 
 A card is the record of one thing the owner asked for: a Markdown file under
-`<node>/status/cards/<id>.md` whose front matter the repository validator checks like any
-other record. What belongs to the board rather than to one card (tracks and their parent
-tasks, closed versions, abandoned branches, product identifiers used to build links) lives in
-`<node>/status/board.md`, in its fenced JSON block.
+`<board>/cards/<id>.md` whose front matter the repository validator checks like any other
+record. Its id is `<author>-<UTC stamp>` (`events.new_id`), and its body is edited only by its
+author; another author who wants a change saves an `amend` event. What belongs to the board
+rather than to one card – the tracks and their parent tasks, the `production` branch, the
+release-notes projects the board draws, abandoned branches, identifiers links are built from –
+is `<board>/board.json`, edited by hand and rarely. A retired card is moved to
+`<board>/cards/closed/` by the author of the event that retired it.
 
-There is no generated `status.json`: a generated copy of the truth is still a second list.
+The card states, the `closed` register and the page are derived (`events.fold`) and written to
+`<board>/state.json`, which is generated on every build and never merged or edited.
 
-    data = cards.load(board)      # the shape build_status.py and reconcile.py want
+    data = cards.load(board)      # board.json plus every card, open and closed, signed
     cards.write(board, card)      # create or update a single card
 
 Loading is tolerant of field order and strict about nothing else: a card that cannot be
@@ -26,7 +30,8 @@ import re
 from pathlib import Path
 
 # The order a card's front matter is written in: identity first, then where the card sits on
-# the board, then when it moved, then where the owner goes to look.
+# the board, then when it moved, then where the owner goes to look. `author` and
+# `release_note` follow alphabetically with any other key (`/shared/schemas/card-schema.md`).
 FIELD_ORDER = [
     "id", "title", "type", "schema_version", "contract", "parent",
     "created", "updated", "owner",
@@ -41,6 +46,10 @@ META = {"type", "schema_version", "contract", "parent", "title"}
 # Fields that are genuinely lists. Any other empty value is an empty string.
 LIST_FIELDS = {"area"}
 
+# What a person edits by hand in board.json. Anything derived is refused there (check 9).
+BOARD_KEYS = ("id", "label", "tracks", "production", "release_notes", "abandoned", "elsewhere")
+DERIVED_KEYS = ("closed", "generated", "mainVersion")
+
 # A screenshot the owner pasted when sending a card back is an image line in that section.
 SHOT_LINE = re.compile(r"^!\[[^\]]*\]\(([^)\s]+)\)\s*$", re.M)
 
@@ -52,8 +61,16 @@ def cards_folder(board: dict) -> str:
     return os.path.join(str(board["folder"]), "cards")
 
 
+def closed_folder(board: dict) -> str:
+    return os.path.join(cards_folder(board), "closed")
+
+
 def board_file(board: dict) -> str:
-    return os.path.join(str(board["folder"]), "board.md")
+    return os.path.join(str(board["folder"]), "board.json")
+
+
+def state_file(board: dict) -> str:
+    return os.path.join(str(board["folder"]), "state.json")
 
 
 def sent_back_heading(board: dict) -> str:
@@ -77,7 +94,7 @@ def sign(data: dict) -> dict:
     """Give each card a signature over what a reader would notice.
 
     The page remembers a verdict as handed over until the signature changes, and
-    `verdicts.py` refuses a verdict whose signature no longer matches the card. `area` and
+    `apply_events.py` refuses an event whose signature no longer matches the card. `area` and
     `increment` are left out: moving a card between workers does not make a verdict stale.
     """
     for item in data["items"]:
@@ -148,6 +165,8 @@ def _card_from_file(path: str) -> dict:
     if isinstance(card.get("area"), str):
         card["area"] = [card["area"]]
     card.setdefault("area", [])
+    if not card.get("author"):
+        card["author"] = str(card.get("id", "")).split("-", 1)[0]
     return card
 
 
@@ -164,21 +183,24 @@ def _dump(value) -> str:
     return '"' + text + '"' if (":" in text or text.startswith(("[", "{", "*", "&", "#"))) else text
 
 
-def write(board: dict, card: dict) -> str:
-    """Write one card to its own file, creating `cards/` if it is not there yet."""
-    os.makedirs(cards_folder(board), exist_ok=True)
+def write(board: dict, card: dict, closed: bool = False) -> str:
+    """Write one card to its own file, creating the folder if it is not there yet."""
+    target = closed_folder(board) if closed or card.get("closed") else cards_folder(board)
+    os.makedirs(target, exist_ok=True)
     where = card.get("where") or {}
     flat = dict(card)
-    flat.pop("where", None)
-    flat.pop("sig", None)
+    for derived in ("where", "sig", "closed", "events", "last_event", "decided", "also_by", "conflict",
+                    "fold", "amendments", "released_to", "deferred"):
+        flat.pop(derived, None)
     flat["where_text"] = where.get("text", "")
     flat["where_view"] = where.get("view", "")
     flat["where_href"] = where.get("href", "")
     flat["type"] = "board_card"
     flat["schema_version"] = "0.2"
     flat["contract"] = "/CONTRACT.md"
-    flat["parent"] = board.get("node") or ""
+    flat["parent"] = board.get("card_parent") or board.get("node") or ""
     flat["owner"] = board.get("owner") or "brain-owner"
+    flat["author"] = flat.get("author") or str(card["id"]).split("-", 1)[0]
     # `created` is the moment the owner asked and is kept for the life of the card; `updated`
     # moves on every write. The validator requires both.
     flat["created"] = flat.get("created") or _stamp(flat.get("startedAt") or flat.get("asked"))
@@ -207,7 +229,7 @@ def write(board: dict, card: dict) -> str:
         lines += ["![Screenshot " + str(n) + "](" + rel + ")" for n, rel in enumerate(shots, 1)]
         if shots:
             lines.append("")
-    path = os.path.join(cards_folder(board), card["id"] + ".md")
+    path = os.path.join(target, card["id"] + ".md")
     # Render fully before opening: opening with "w" truncates, so a failure while rendering
     # must happen before anything on disk has changed.
     text = "\n".join(str(line) for line in lines)
@@ -216,38 +238,65 @@ def write(board: dict, card: dict) -> str:
     return path
 
 
-def read_board_json(board: dict) -> tuple[str, re.Match, dict]:
-    text = Path(board_file(board)).read_text(encoding="utf-8")
-    found = re.search(r"```json\n(.*?)\n```", text, re.S)
-    if not found:
-        raise ValueError(board_file(board) + " has no fenced json block")
-    return text, found, json.loads(found.group(1))
+def read_board(board: dict) -> dict:
+    """`board.json`: what a person keeps by hand. A board still on `board.md` is told to migrate."""
+    path = board_file(board)
+    if not os.path.isfile(path):
+        old = os.path.join(str(board["folder"]), "board.md")
+        hint = (" - it still has board.md: run migrate_board.py --board " + str(board.get("id", "")))\
+            if os.path.isfile(old) else ""
+        raise ValueError("no board.json at " + path + hint)
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    except ValueError as err:
+        raise ValueError(path + " is not valid JSON: " + str(err)) from err
+    data.setdefault("tracks", {})
+    return data
+
+
+def write_board(board: dict, data: dict) -> str:
+    path = board_file(board)
+    with open(path, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+    return path
 
 
 def load(board: dict) -> dict:
-    """The board, assembled from `board.md` and every file under `cards/`.
+    """The board, assembled from `board.json` and every file under `cards/` and `cards/closed/`.
 
-    Card order is the order the owner asked for them – `asked`, then `id` – so a board read
-    twice reads the same way and a card added today does not reshuffle yesterday's.
+    Card order is `(created, author)`, the same on every machine, so a board read twice reads
+    the same way and a card added today does not reshuffle yesterday's.
     """
-    _, _, data = read_board_json(board)
+    data = read_board(board)
     items = []
-    folder = cards_folder(board)
-    if os.path.isdir(folder):
-        for name in sorted(os.listdir(folder)):
+    for sub, closed in ((cards_folder(board), False), (closed_folder(board), True)):
+        if not os.path.isdir(sub):
+            continue
+        for name in sorted(os.listdir(sub)):
             if name.endswith(".md"):
-                items.append(_card_from_file(os.path.join(folder, name)))
-    items.sort(key=lambda c: (str(c.get("asked") or ""), str(c.get("id") or "")))
+                card = _card_from_file(os.path.join(sub, name))
+                card["closed"] = closed
+                items.append(card)
+    items.sort(key=lambda c: (str(c.get("created") or ""), str(c.get("author") or ""), str(c.get("id") or "")))
     data["items"] = items
     return sign(data)
 
 
-def close_in_board(board: dict, version: str, title: str, dry: bool) -> None:
-    """Record an accepted card's version under `closed` in `board.md`."""
-    text, found, data = read_board_json(board)
-    data.setdefault("closed", {})
-    if version and version not in data["closed"]:
-        data["closed"][version] = title
-    if not dry:
-        with open(board_file(board), "w", encoding="utf-8", newline="\n") as fh:
-            fh.write(text[:found.start(1)] + json.dumps(data, indent=2, ensure_ascii=False) + text[found.end(1):])
+def write_state(board: dict, state: dict) -> str:
+    """The derived state, for a reader or a tool; regenerated on every build, never merged."""
+    slim = {
+        "board": board["id"],
+        "generated": _now(),
+        "last_event": state.get("last_event", ""),
+        "closed": state.get("closed", {}),
+        "items": [{k: item.get(k) for k in ("id", "author", "title", "state", "version", "branch", "track",
+                                            "fold", "decided", "also_by", "last_event", "released_to", "sig")}
+                  for item in state.get("items", [])],
+        "conflicts": [item["id"] for item in state.get("conflicts", [])],
+        "retired": [item["id"] for item in state.get("retired", [])],
+        "adrift": state.get("adrift", []),
+    }
+    path = state_file(board)
+    with open(path, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(json.dumps(slim, indent=2, ensure_ascii=False) + "\n")
+    return path

@@ -41,10 +41,15 @@ BOARD_DEFAULTS: dict[str, Any] = {
     "merge_version_pattern": r"[0-9]+\.[0-9]+\.[0-9]+",
     "placeholder_pattern": r"\b(temp|wip|fixup|squash)\b",
     "production": None,
+    "release_notes": [],
     "remote": "origin",
     "repo": None,
     "where_view_href": None,
 }
+
+# A board kept in a project repository (CONTRACT section 16.2) names its folder as
+# `<repository>:brain/status`; the repository is found under the owner's `project_repos_root`.
+SHARED_STATUS = re.compile(r"^([A-Za-z0-9_.-]+):(.+)$")
 
 DIRECTORY_DEFAULTS: dict[str, Any] = {"favicon": None, "folder": "boards", "title": "Boards"}
 
@@ -194,12 +199,31 @@ class Config:
         board.setdefault("verdict_prefix", board["id"] + "-verdicts-")
         board.setdefault("verdict_schema", "owner-board/verdicts/v1")
         board.setdefault("storage_prefix", board["id"] + "-status")
-        board.setdefault("node", "/memory/" + board["status"].rsplit("/status", 1)[0])
-        board["folder"] = self.memory / board["status"].replace("/", os.sep)
-        board["memory"] = self.memory
-        board["owner"] = self.owner
         values = {"brain_root": str(self.brain), "memory_root": str(self.memory),
                   "project_repos_root": self.profile.get("project_repos_root", "")}
+        shared = SHARED_STATUS.match(str(board["status"])) if "/" not in str(board["status"]).split(":")[0] else None
+        if shared and not re.match(r"^[A-Za-z]:[\\/]", str(board["status"])):
+            # `<repository>:brain/status`: the board lives in the project repository, shared
+            # with every brain that works on it. Tasks never go there (CONTRACT 16.2).
+            repo_name, inside = shared.group(1), shared.group(2).strip("/")
+            base = values["project_repos_root"] or str(self.brain.parent)
+            board["shared"] = True
+            board["repo_name"] = repo_name
+            board["folder"] = Path(base) / repo_name / inside.replace("/", os.sep)
+            # `node` stays the owner's pointer node in memory (task routing); a card's `parent`
+            # is the repository's own node, which a collaborator can resolve.
+            board.setdefault("node", "")
+            board["card_parent"] = repo_name + ":" + inside.rsplit("/status", 1)[0]
+        else:
+            board["shared"] = False
+            board["repo_name"] = ""
+            board.setdefault("node", "/memory/" + board["status"].rsplit("/status", 1)[0])
+            board["card_parent"] = board["node"]
+            board["folder"] = self.memory / board["status"].replace("/", os.sep)
+        board["memory"] = self.memory
+        board["owner"] = self.owner
+        board["author"] = re.sub(r"[^a-z0-9]", "", self.owner.lower())
+        board["release_notes"] = [str(p) for p in (board.get("release_notes") or [])]
         if board.get("repo"):
             repo = Path(_fill(str(board["repo"]), values))
             if not repo.is_absolute():
@@ -224,6 +248,17 @@ class Config:
             return self.boards[0]
         raise ConfigError("name a board with --board; registered: "
                           + ", ".join(b["id"] for b in self.boards))
+
+
+def git_head(folder: str | os.PathLike) -> str:
+    """The short commit the folder's repository is at; empty when it is not in one."""
+    import subprocess
+    try:
+        out = subprocess.run(["git", "-C", str(folder), "rev-parse", "--short", "HEAD"],
+                             capture_output=True, text=True, encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    return out.stdout.strip() if out.returncode == 0 else ""
 
 
 def favicon_href(config: "Config", board: dict | None = None) -> str:

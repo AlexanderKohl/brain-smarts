@@ -1,7 +1,11 @@
-"""The status page's HTML and CSS template, filled in by build_status.build.
+"""The status page's HTML, CSS and browser code, filled in by build_status.build.
 
-Moved unchanged from build_status.py. build_status.py imports these names back, so everything that
-uses build_status sees the same names.
+Two folds sit above the columns. **Conflict** holds every card two people decided differently:
+both verdicts are shown with author and time, and the card stays there on both brains until
+someone saves a *resolve* that names both. **Released** holds cards whose version has reached
+the testing environment and that nobody has judged yet, with *Accept all released*. A verdict
+carries the card's signature and the id of the last event the page had seen (`seen_through`),
+so a decision taken on a stale page is refused rather than applied.
 """
 
 from __future__ import annotations
@@ -47,7 +51,14 @@ h1 { font-size:20px; margin:0; letter-spacing:-.01em; }
   padding:0 7px; font-size:11px; letter-spacing:0; color:var(--ink);
 }
 .colh.act { color:var(--accent); }
-
+.fold { border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:10px;
+  background:var(--col); padding:10px 12px; margin:0 0 14px; }
+.fold.conflict { border-left-color:var(--warn); }
+.fold .colh { margin-bottom:8px; }
+.fold .cards { display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:10px; }
+.fold .cards .card { margin-bottom:0; }
+.fold .hint { color:var(--muted); font-size:12.5px; margin:0 0 8px; }
+.fold button.all { font-size:12.5px; padding:4px 10px; margin-left:auto; }
 .card {
   background:var(--surface); border:1px solid var(--line); border-left:3px solid var(--line);
   border-radius:8px; padding:9px 11px; margin-bottom:8px; box-shadow:var(--shadow); cursor:pointer;
@@ -72,6 +83,7 @@ h1 { font-size:20px; margin:0; letter-spacing:-.01em; }
 .tag.v { color:var(--ink); }
 .tag.yes { background:var(--accent); color:#fff; }
 .tag.no { background:var(--warn); color:#fff; }
+.tag.by { text-transform:none; letter-spacing:0; }
 .ask { font-weight:600; font-size:13.5px; margin:0; }
 .card:not(.open) .ask {
   display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden;
@@ -82,6 +94,9 @@ h1 { font-size:20px; margin:0; letter-spacing:-.01em; }
 .rev { margin:0; font-size:13px; }
 .rev b { font-weight:600; }
 .verdict { display:flex; flex-wrap:wrap; gap:14px; margin-top:9px; padding-top:8px; border-top:1px dashed var(--line); }
+.both { margin:8px 0 0; padding:8px 10px; border:1px dashed var(--warn); border-radius:6px; font-size:12.5px; }
+.both p { margin:0 0 4px; }
+.both b { font-weight:600; }
 label.opt { display:flex; gap:6px; align-items:center; font-size:13px; cursor:pointer; }
 label.opt input { width:15px; height:15px; accent-color:var(--accent); cursor:pointer; }
 textarea.why {
@@ -128,6 +143,7 @@ __TASKCSS__
     <div class="sub">__MAIN__ __VERSION__ &middot; updated __GENERATED__ &middot; click a card for the detail</div>
   </header>
   <div class="tracks" id="tracks"></div>
+  <div id="folds"></div>
   <div class="board" id="board"></div>
   __TASKS__
 </div>
@@ -170,19 +186,8 @@ __SHAREDJS__
     { key: 'handed', label: 'Back with the conductor', quiet: true }
   ];
   var DECIDABLE = { needs_review: true, waiting_on_you: true, yours: true };
-
-  /* Why a queued card has not started: another card in flight holds the same `area`.
-     A card with no `area` declares nothing and can always start. */
-  function blockers(item) {
-    var mine = item.area || [];
-    if (!mine.length) return [];
-    var busy = DATA.items.filter(function (o) {
-      return o.id !== item.id && (o.state === 'building' || o.state === 'rework');
-    });
-    return busy.filter(function (o) {
-      return (o.area || []).some(function (a) { return mine.indexOf(a) >= 0; });
-    }).map(function (o) { return o.id; });
-  }
+  var WORDS = { accept: 'accepted', reject: 'sent back', defer: 'deferred' };
+  var OPTIONS = [['accepted', 'Accepted'], ['rework', 'Send back'], ['defer', 'Not now']];
 
   /* A handed-over verdict moves its card only while the card still carries the signature it
      was decided against. Once the conductor records the verdict and regenerates, the
@@ -195,10 +200,14 @@ __SHAREDJS__
   }
   function placeOf(item) { return handedTo(item) || item.state; }
 
-  // Shared with the task pages (page_js.py): one copy of each.
+  // Shared with the task pages (page_js.py): one copy of each. A board that draws no
+  // release notes has no BoardNotes, so an empty stand-in keeps the save path one path.
   var P = window.BoardPage, TASKS = window.BoardTasks;
+  var NOTES = window.BoardNotes || { entries: function () { return { notes: [], commits: [] }; },
+    count: function () { return 0; }, lines: function () { return []; }, forget: function () {}, onChange: function () {} };
   var el = P.el, lightbox = P.lightbox;
   function store(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  function when(iso) { return (iso || '').slice(0, 16).replace('T', ' ') + 'Z'; }
 
   var tracks = document.getElementById('tracks');
   Object.keys(DATA.tracks || {}).forEach(function (k) {
@@ -220,6 +229,7 @@ __SHAREDJS__
   }
 
   var board = document.getElementById('board');
+  var folds = document.getElementById('folds');
 
   // Nothing may vanish from this page: a state with no column is named loudly instead.
   var held = {};
@@ -229,11 +239,49 @@ __SHAREDJS__
   });
   var lost = DATA.items.filter(function (i) { return !held[i.state]; });
 
+  /* The two folds above the columns. A card in a fold is drawn there and nowhere else. */
+  function fold(key, label, hint, rows, action) {
+    if (!rows.length) return;
+    var box = el('div', 'fold ' + key);
+    var h = el('div', 'colh' + (key === 'conflict' ? '' : ' act'));
+    h.appendChild(el('span', null, label));
+    h.appendChild(el('span', 'n', String(rows.length)));
+    if (action) h.appendChild(action);
+    box.appendChild(h);
+    box.appendChild(el('p', 'hint', hint));
+    var grid = el('div', 'cards');
+    rows.forEach(function (item) { grid.appendChild(card(item)); });
+    box.appendChild(grid);
+    folds.appendChild(box);
+  }
+
   function draw() {
     board.textContent = '';
+    folds.textContent = '';
+    var inFold = {};
+    var conflicts = DATA.items.filter(function (i) { return i.fold === 'conflict'; });
+    var released = DATA.items.filter(function (i) { return i.fold === 'released' && !handedTo(i); });
+    conflicts.concat(released).forEach(function (i) { inFold[i.id] = true; });
+    fold('conflict', 'Conflict', 'Two people decided differently. The earliest verdict stands until one of you resolves it below, naming both.', conflicts);
+    var all = null;
+    if (released.length) {
+      all = el('button', 'all', 'Accept all released');
+      all.type = 'button';
+      all.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        released.forEach(function (item) {
+          saved[item.id] = saved[item.id] || {};
+          saved[item.id].verdict = 'accepted';
+          saved[item.id].title = item.title;
+        });
+        store(KEY, saved);
+        draw();
+      });
+    }
+    fold('released', 'Released', 'Released to testing and not yet judged. The production release retires these on both boards; a verdict retires one now.', released, all);
     COLUMNS.forEach(function (c) {
       var states = [c.key].concat(c.also || []);
-      var rows = DATA.items.filter(function (i) { return states.indexOf(placeOf(i)) >= 0; });
+      var rows = DATA.items.filter(function (i) { return !inFold[i.id] && states.indexOf(placeOf(i)) >= 0; });
       // The resting place only earns a column once something is in it.
       if (c.quiet && !rows.length) return;
       var col = el('div', 'col');
@@ -280,11 +328,58 @@ __SHAREDJS__
       var c2 = el('div', 'card open alarm');
       c2.appendChild(el('p', 'ask', lost.length + ' item(s) have a state no column draws: ' +
         lost.map(function (i) { return i.id + ' (' + i.state + ')'; }).join(', ')));
-      c2.appendChild(el('p', 'did', 'Add the state to COLUMNS in build_status.py.'));
+      c2.appendChild(el('p', 'did', 'Add the state to COLUMNS in page_html.py.'));
       w.appendChild(c2);
       board.insertBefore(w, board.firstChild);
     }
     tally();
+  }
+
+  /* Who decided what, as tags: the standing verdict with its author, anyone who said the
+     same, and an amendment another author asked for. */
+  function decisionTags(item, meta) {
+    var d = item.decided;
+    if (d && !item.conflict.length) {
+      meta.appendChild(el('span', 'tag by ' + (d.kind === 'accept' ? 'yes' : 'no'), WORDS[d.kind] + ' by ' + d.by));
+      (item.also_by || []).forEach(function (who) { meta.appendChild(el('span', 'tag by', 'also ' + WORDS[d.kind] + ' by ' + who)); });
+    }
+    (item.released_to && item.released_to.testing) ? meta.appendChild(el('span', 'tag', 'on testing ' + item.released_to.testing)) : null;
+  }
+
+  /* Both verdicts, with author and time, and the way out: an outcome that names both. */
+  function conflictBox(item, c) {
+    var box = el('div', 'both');
+    box.appendChild(el('p', null, 'Conflict: the earliest verdict stands, the later one does not change the state.'));
+    var all = [{ kind: item.decided.kind, by: item.decided.by, saved_at: item.decided.at, why: item.decided.why, id: item.decided.id }]
+      .concat(item.conflict);
+    all.forEach(function (e) {
+      var p = el('p');
+      p.appendChild(el('b', null, WORDS[e.kind] + ' by ' + e.by));
+      p.appendChild(document.createTextNode(' at ' + when(e.saved_at) + (e.why ? ': \\u201c' + e.why + '\\u201d' : '')));
+      box.appendChild(p);
+    });
+    var ids = all.map(function (e) { return e.id; });
+    var mine = saved[item.id] || {};
+    var row = el('div', 'verdict');
+    [['accept', 'Accepted'], ['reject', 'Send back'], ['defer', 'Not now']].forEach(function (o) {
+      var lab = el('label', 'opt');
+      var cb = document.createElement('input');
+      cb.type = 'radio';
+      cb.name = 'r-' + item.id;
+      cb.checked = mine.verdict === 'resolve' && mine.outcome === o[0];
+      cb.addEventListener('change', function (ev) {
+        ev.stopPropagation();
+        saved[item.id] = { verdict: 'resolve', outcome: o[0], resolves: ids, title: item.title, why: (saved[item.id] || {}).why || '' };
+        store(KEY, saved);
+        tally();
+      });
+      lab.addEventListener('click', function (ev) { ev.stopPropagation(); });
+      lab.appendChild(cb);
+      lab.appendChild(document.createTextNode('Resolve: ' + o[1]));
+      row.appendChild(lab);
+    });
+    box.appendChild(row);
+    c.appendChild(box);
   }
 
   function card(item) {
@@ -303,10 +398,12 @@ __SHAREDJS__
     if (item.increment != null) {
       meta.appendChild(el('span', 'tag', 'inc ' + item.increment + (tr && tr.of ? '/' + tr.of : '')));
     }
+    if (item.author && item.author !== CONFIG.author) meta.appendChild(el('span', 'tag by', 'by ' + item.author));
+    decisionTags(item, meta);
     var mine = saved[item.id] || {};
     if (mine.verdict) {
       meta.appendChild(el('span', 'tag ' + (mine.verdict === 'accepted' ? 'yes' : 'no'),
-        mine.verdict === 'accepted' ? 'accepted' : 'sent back'));
+        mine.verdict === 'resolve' ? 'resolve: ' + WORDS[mine.outcome] : mine.verdict === 'accepted' ? 'accepted' : mine.verdict === 'defer' ? 'not now' : 'sent back'));
     }
     c.appendChild(meta);
     c.appendChild(el('p', 'ask', '\\u201c' + item.title + '\\u201d'));
@@ -369,7 +466,7 @@ __SHAREDJS__
     // The owner's words when they sent it back, above the conductor's line.
     if (item.sent_back) {
       var said = el('p', 'rev owner');
-      said.appendChild(el('b', null, L.sentBack + ': '));
+      said.appendChild(el('b', null, (item.decided && item.decided.kind === 'reject' ? item.decided.by + ' sent it back' : L.sentBack) + ': '));
       said.appendChild(document.createTextNode(item.sent_back));
       body.appendChild(said);
       if (item.sent_back_images && item.sent_back_images.length) {
@@ -384,17 +481,26 @@ __SHAREDJS__
         body.appendChild(shown);
       }
     }
+    (item.amendments || []).forEach(function (e) {
+      var p = el('p', 'rev owner');
+      p.appendChild(el('b', null, e.by + ' asks: '));
+      p.appendChild(document.createTextNode(e.why || ''));
+      body.appendChild(p);
+    });
+    if (item.deferred) body.appendChild(el('p', 'did', 'Deferred by ' + item.deferred.by + (item.deferred.why ? ': ' + item.deferred.why : '')));
 
     var rev = el('p', 'rev');
     rev.appendChild(el('b', null, item.state === 'yours' || item.state === 'waiting_on_you' ? L.ownerTurn + ': ' : 'To check: '));
     rev.appendChild(document.createTextNode(item.review));
     body.appendChild(rev);
 
+    if (item.fold === 'conflict' && !moved) conflictBox(item, c);
     // A card already handed over is not decided again; the verdict rides on it as a tag.
-    if (DECIDABLE[item.state] && !moved) {
+    else if (DECIDABLE[item.state] && !moved) {
       var box = el('div', 'verdict');
       var why = el('textarea', 'why');
-      [['accepted', item.state === 'yours' ? 'Done' : 'Accepted'], ['rework', 'Send back']].forEach(function (o) {
+      OPTIONS.forEach(function (o) {
+        if (o[0] === 'defer' && item.state === 'yours') return;
         var lab = el('label', 'opt');
         var cb = document.createElement('input');
         cb.type = 'radio';
@@ -407,20 +513,20 @@ __SHAREDJS__
           saved[item.id].title = item.title;
           store(KEY, saved);
           tally();
-          var tg = c.querySelector('.tag.yes, .tag.no');
+          var tg = c.querySelector('.tag.yes:not(.by), .tag.no:not(.by)');
           if (!tg) { tg = el('span', ''); c.querySelector('.meta').appendChild(tg); }
           tg.className = 'tag ' + (o[0] === 'accepted' ? 'yes' : 'no');
-          tg.textContent = o[0] === 'accepted' ? 'accepted' : 'sent back';
+          tg.textContent = o[0] === 'accepted' ? 'accepted' : o[0] === 'defer' ? 'not now' : 'sent back';
         });
         lab.addEventListener('click', function (ev) { ev.stopPropagation(); });
         lab.appendChild(cb);
-        lab.appendChild(document.createTextNode(o[1]));
+        lab.appendChild(document.createTextNode(o[0] === 'accepted' && item.state === 'yours' ? 'Done' : o[1]));
         box.appendChild(lab);
       });
       c.appendChild(box);
       why.placeholder = item.state === 'yours'
-        ? 'What happened, or what is in the way (optional) \u2013 you can paste a screenshot here'
-        : 'Anything to add, either way (optional) \u2013 you can paste a screenshot here';
+        ? 'What happened, or what is in the way (optional) – you can paste a screenshot here'
+        : 'Anything to add, either way (optional) – you can paste a screenshot here';
       why.value = mine.why || '';
       why.addEventListener('click', function (ev) { ev.stopPropagation(); });
       why.addEventListener('input', function () {
@@ -449,7 +555,7 @@ __SHAREDJS__
     if (moved) {
       var h2 = handed[item.id];
       var tagged = el('span', 'tag ' + (h2.verdict === 'accepted' ? 'yes' : 'no'),
-        h2.verdict === 'accepted' ? L.accepted : L.sentBack);
+        h2.verdict === 'accepted' ? L.accepted : h2.verdict === 'defer' ? 'not now' : L.sentBack);
       c.querySelector('.meta').appendChild(tagged);
       if (h2.verdict === 'rework' && h2.why) body.appendChild(el('p', 'did', '\\u201c' + h2.why + '\\u201d'));
     }
@@ -459,7 +565,7 @@ __SHAREDJS__
     c.appendChild(body);
     c.appendChild(hint);
     // Ask, decide, then the detail for anyone who wants it.
-    var ctl = c.querySelector('.verdict');
+    var ctl = c.querySelector('.verdict, .both');
     if (ctl) {
       c.insertBefore(ctl, body);
       var w2 = c.querySelector('.why'); if (w2) c.insertBefore(w2, body);
@@ -480,25 +586,27 @@ __SHAREDJS__
   function lines() {
     return Object.keys(saved).filter(function (k) { return saved[k].verdict; }).map(function (k) {
       var v = saved[k];
-      var s = (v.verdict === 'accepted' ? 'ACCEPTED' : 'REWORK') + ' \\u00b7 ' + k;
-      if (v.verdict === 'rework' && v.why) s += NL + '    ' + v.why.split(NL).join(NL + '    ');
+      var s = (v.verdict === 'accepted' ? 'ACCEPTED' : v.verdict === 'defer' ? 'NOT NOW' : v.verdict === 'resolve' ? 'RESOLVE ' + WORDS[v.outcome].toUpperCase() : 'REWORK') + ' \\u00b7 ' + k;
+      if (v.why) s += NL + '    ' + v.why.split(NL).join(NL + '    ');
       if (v.shots && v.shots.length) s += NL + '    (' + v.shots.length + ' screenshot(s): use Save my verdicts to send them)';
       return s;
     });
   }
 
-  /* Task actions (Do now, Done, a note) travel with the verdicts: they are the owner's word too.
-     They are kept under one key for every page, so whatever is pending is saved from here. */
+  /* Task actions and release-note choices travel with the verdicts: they are the owner's word
+     too. Each is kept under its own key, so whatever is pending is saved from here. */
   function tally() {
-    var n = lines().length, t = TASKS.entries().length;
+    var n = lines().length, t = TASKS.entries().length, r = NOTES.count();
     var parts = [];
     if (n) parts.push(n + ' decision' + (n === 1 ? '' : 's'));
     if (t) parts.push(t + ' task action' + (t === 1 ? '' : 's'));
+    if (r) parts.push(r + ' release-note choice' + (r === 1 ? '' : 's'));
     document.getElementById('tally').textContent =
-      parts.length ? parts.join(' and ') + ' ready. Saving writes them to a file for the conductor and clears them here.'
-        : 'Decide on a card or a task, then save. One message in the thread is enough to make the conductor read it.';
+      parts.length ? parts.join(', ') + ' ready. Saving writes them to a file for the conductor and clears them here.'
+        : 'Decide on a card, a task or a note, then save. One message in the thread is enough to make the conductor read it.';
   }
   TASKS.onChange(tally);
+  NOTES.onChange(tally);
 
   /* Handing over moves only what was actually saved or copied: a card that left the review
      column without the verdict reaching the conductor is a decision silently lost. */
@@ -517,12 +625,10 @@ __SHAREDJS__
   }
 
   /* Where the verdicts go. A page opened from disk cannot write a file, so it hands the browser
-     a download. A folder remembered through the File System Access API was tried on
-     26 September 2026 and failed twice on the owner's Chrome, in ways that could not be
-     reproduced, so it was removed: the download is the one path. `apply_verdicts.py` reads
-     Downloads and every folder directly inside it, so whichever folder the save dialog offers
-     is fine. The file names its board in its name and its body; the signature rides along so
-     a verdict on a card that has since changed is refused rather than applied. */
+     a download; `apply_events.py` reads Downloads and every folder directly inside it. The file
+     names its board in its name and its body; each verdict carries the card's signature and
+     the last event the page had seen, so a decision on a card that has since changed, or taken
+     on a page that had not pulled, is refused rather than applied. */
   function note(text) {
     document.getElementById('savenote').textContent = text;
   }
@@ -531,26 +637,35 @@ __SHAREDJS__
   document.getElementById('save').addEventListener('click', function () {
     var decided = Object.keys(saved).filter(function (k) { return saved[k].verdict; });
     var tasks = TASKS.entries();
-    if (!decided.length && !tasks.length) { window.alert('Nothing decided yet.'); return; }
+    var choices = NOTES.entries();
+    if (!decided.length && !tasks.length && !NOTES.count()) { window.alert('Nothing decided yet.'); return; }
     var byId = {};
     DATA.items.forEach(function (i) { byId[i.id] = i; });
     var out = {
       schema: CONFIG.schema,
       board: DATA.id || CONFIG.board,
+      by: CONFIG.author,
       savedAt: new Date().toISOString(),
       mainVersion: DATA.mainVersion || '',
+      seenThrough: CONFIG.seenThrough,
       verdicts: decided.map(function (id) {
+        var v = saved[id], item = byId[id] || {};
         return {
           id: id,
-          verdict: saved[id].verdict,
-          why: saved[id].why || '',
-          sig: (byId[id] || {}).sig || '',
-          version: (byId[id] || {}).version || '',
-          shots: saved[id].shots || []
+          verdict: v.verdict,
+          outcome: v.outcome || '',
+          resolves: v.resolves || [],
+          why: v.why || '',
+          sig: item.sig || '',
+          seen_through: item.last_event || '',
+          version: item.version || '',
+          shots: v.shots || []
         };
       }),
       // Every pending task action, whichever page it was given on: {id, action, note, shots, title}.
-      tasks: tasks
+      tasks: tasks,
+      // Release-note choices made in the section below: {notes: [...], commits: [...]}.
+      releaseNotes: choices
     };
     var name = CONFIG.prefix + (out.board ? out.board + '-' : '')
       + out.savedAt.slice(0, 19).replace(/[:T]/g, '-') + '.json';
@@ -561,17 +676,18 @@ __SHAREDJS__
     btn.textContent = 'Saved - tell the conductor';
     setTimeout(function () { btn.textContent = 'Save my verdicts'; }, 2600);
     TASKS.forget(taskIds(tasks));
+    NOTES.forget();
     handOver(decided);
   });
 
   document.getElementById('copy').addEventListener('click', function () {
     var decided = Object.keys(saved).filter(function (k) { return saved[k].verdict; });
     var tasks = TASKS.entries();
-    var l = lines().concat(TASKS.lines());
+    var l = lines().concat(TASKS.lines()).concat(NOTES.lines());
     if (!l.length) { window.alert('Nothing decided yet.'); return; }
     var text = [CONFIG.label + ' review, ' + new Date().toISOString().slice(0, 10), '', l.join(NL)].join(NL);
     var btn = this;
-    function over() { TASKS.forget(taskIds(tasks)); handOver(decided); }
+    function over() { TASKS.forget(taskIds(tasks)); NOTES.forget(); handOver(decided); }
     function done() {
       btn.textContent = 'Copied';
       setTimeout(function () { btn.textContent = 'Copy instead'; }, 1400);
@@ -586,10 +702,11 @@ __SHAREDJS__
   });
 
   document.getElementById('reset').addEventListener('click', function () {
-    if (!window.confirm('Clear every verdict, including the ones you have handed over, and every unsaved task action?')) return;
+    if (!window.confirm('Clear every verdict, including the ones you have handed over, every unsaved task action and every release-note choice?')) return;
     saved = {};
     handed = {};
     TASKS.forget(taskIds(TASKS.entries()));
+    NOTES.forget();
     try { localStorage.removeItem(KEY); localStorage.removeItem(HANDKEY); } catch (e) {}
     location.reload();
   });
@@ -605,7 +722,7 @@ __SHAREDJS__
 
   setInterval(function () {
     var el2 = document.activeElement;
-    var typing = el2 && (el2.tagName === 'TEXTAREA' || el2.tagName === 'INPUT');
+    var typing = el2 && (el2.tagName === 'TEXTAREA' || el2.tagName === 'INPUT' || el2.isContentEditable);
     if (typing || document.querySelector('.lb')) return;
     try { sessionStorage.setItem(SCROLLKEY, String(window.scrollY)); } catch (e) {}
     location.reload();

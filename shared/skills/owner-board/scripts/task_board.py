@@ -236,9 +236,14 @@ def boards(config: board_config.Config) -> dict[str, dict]:
     folder = config.directory_folder
     out: dict[str, dict] = {}
     for board in config.boards:
+        # A board shared through a project repository holds no tasks (CONTRACT 16.2): this
+        # owner's tasks about it are drawn on a page of their own beside the automatic boards.
+        shared = bool(board.get("shared"))
+        page = (config.directory_folder / str(config.tasks["auto_folder"]) / (board["id"] + ".html")) if shared \
+            else Path(board["folder"]) / "status.html"
         out[board["id"]] = {"key": board["id"], "kind": "registered", "label": board["label"],
-                            "node": _norm(board["node"]), "blurb": board.get("blurb", ""),
-                            "page": Path(board["folder"]) / "status.html"}
+                            "node": _norm(board["node"]) if board.get("node") else None,
+                            "blurb": board.get("blurb", ""), "page": page, "shared": shared}
     p = config.personal
     out[p["id"]] = {"key": p["id"], "kind": "personal", "label": p["label"], "node": None,
                     "blurb": p.get("blurb", ""), "page": folder / p["page"]}
@@ -258,7 +263,7 @@ def _auto_board(config: board_config.Config, ref: str) -> dict | None:
 def board_for(config: board_config.Config, task: task_store.Task, known: dict[str, dict]) -> tuple[dict, str | None]:
     """The one board a task is shown on, and the reference that put it there."""
     refs = _refs(task)
-    registered = [b for b in known.values() if b["kind"] == "registered"]
+    registered = [b for b in known.values() if b["kind"] == "registered" and b["node"]]
     for raw in refs:
         ref = _norm(raw)
         owners = [b for b in registered if ref == b["node"] or ref.startswith(b["node"] + "/")]
@@ -447,7 +452,8 @@ def write_pages(config: board_config.Config, routed: dict[str, dict], now: str,
     """Write the personal board and every automatic board. Registered boards draw their own."""
     if not enabled(config):
         return []
-    written = [_write_page(config, board, now, today) for board in routed.values() if board["kind"] != "registered"]
+    written = [_write_page(config, board, now, today) for board in routed.values()
+               if board["kind"] != "registered" or board.get("shared")]
     # An automatic board whose tasks have all gone keeps its page (it may be bookmarked), drawn
     # empty, rather than going on showing tasks that have moved.
     auto_dir = config.directory_folder / str(config.tasks["auto_folder"])

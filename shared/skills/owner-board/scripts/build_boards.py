@@ -24,7 +24,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import board_config  # noqa: E402
-import cards  # noqa: E402
+import events  # noqa: E402
 import reconcile  # noqa: E402
 import task_board  # noqa: E402
 
@@ -96,7 +96,7 @@ project that has one, otherwise on the personal board.</p>
 
 
 def read_board(board: dict) -> dict:
-    data = cards.load(board)
+    data = events.state(board)
     try:
         data["adrift"] = reconcile.check(board, data)
     except Exception as err:
@@ -148,11 +148,25 @@ def block(config: board_config.Config, board: dict, data: dict, tally: dict | No
                      " back" if key == "rework" and n else
                      " zero" if not n else "")
         pills.append('<span class="' + cls + '"><b>' + str(n) + "</b>" + html.escape(label) + "</span>")
+    # Folds first: a conflict needs both people, a released card needs one.
+    folded = {}
+    for card in data["items"]:
+        if card.get("fold"):
+            folded[card["fold"]] = folded.get(card["fold"], 0) + 1
+    for key, label in (("conflict", "In conflict"), ("released", "Released")):
+        if folded.get(key):
+            pills.insert(0, '<span class="n back"><b>' + str(folded[key]) + "</b>" + label + "</span>")
     adrift = data.get("adrift") or []
+    tasks_link = ""
+    if board.get("shared") and tally is not None:
+        # A repository board holds no tasks; this owner's are on a page of their own in memory.
+        page = config.directory_folder / str(config.tasks["auto_folder"]) / (board["id"] + ".html")
+        tasks_link = ('<p class="blurb">Tasks: <a href="' + html.escape(os.path.relpath(str(page), str(config.directory_folder)).replace(os.sep, "/"))
+                      + '">your own tasks page</a> (the board is shared; tasks are not)</p>')
     return ('<div class="b' + (" act" if waiting else "") + '">'
             '<h2><a href="' + html.escape(href) + '">' + html.escape(board["label"]) + "</a></h2>"
-            '<p class="blurb">' + html.escape(board.get("blurb", "")) + "</p>"
-            '<div class="counts">' + "".join(pills) + task_pills(tally) + "</div>"
+            '<p class="blurb">' + html.escape(board.get("blurb", "")) + "</p>" + tasks_link
+            + '<div class="counts">' + "".join(pills) + task_pills(tally) + "</div>"
             + ('<p class="adrift">' + str(len(adrift)) + " thing(s) adrift - open the board</p>" if adrift else "")
             + "</div>")
 

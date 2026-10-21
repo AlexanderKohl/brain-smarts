@@ -30,6 +30,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import board_config  # noqa: E402
 import cards  # noqa: E402
+import events  # noqa: E402
 
 
 class Repo:
@@ -116,6 +117,15 @@ def repo_version(board: dict) -> str:
     return _version_in(repo.git("show", repo.main + ":" + committed["file"]), committed)
 
 
+def production_version(board: dict) -> str:
+    """The product's version on the board's production branch, read from git; empty without one."""
+    committed = board.get("committed_version") or {}
+    if not board.get("repo") or not committed.get("file") or not os.path.isdir(str(board["repo"])):
+        return ""
+    repo = Repo(board)
+    return _version_in(repo.git("show", repo.production + ":" + committed["file"]), committed)
+
+
 def task_exists(board: dict, task_id: str) -> bool:
     """A task record under /memory/tasks/, open or completed, whichever folder holds it."""
     tasks = Path(str(board["memory"])) / "tasks"
@@ -128,19 +138,52 @@ def check(board: dict, data: dict | None = None) -> list:
     """Every way git, the task records and the board can disagree, as plain sentences."""
     said: list = []
     try:
-        data = data if data is not None else cards.load(board)
+        data = data if data is not None else events.state(board)
     except Exception:
         data = {}
     main_version = None
     if board.get("repo"):
         git_said, main_version = _git_checks(board, data)
         said += git_said
-    said += _task_checks(board, data)
-    # 9. A static mainVersion left in board.md. The version is read from git on every build,
-    # so a kept copy can only go stale: it is reported until it is removed.
-    if board.get("repo") and data.get("mainVersion"):
-        said.append("board.md still carries mainVersion " + str(data["mainVersion"]) + "; the version is read from git ("
-                    + (main_version or "?") + ") on every build - remove the field.")
+    # Each owner's tasks live in that owner's memory: a shared board's tracks may name a task
+    # the other brain does not have, so the task checks run only on a memory board.
+    if not board.get("shared"):
+        said += _task_checks(board, data)
+    # 9. A derived value kept by hand in board.json. The version is read from git and the
+    # closed register is folded from the events on every build, so a kept copy can only go
+    # stale: it is reported until the key is removed.
+    try:
+        kept = cards.read_board(board)
+    except Exception:
+        kept = {}
+    for key in cards.DERIVED_KEYS:
+        if key in kept:
+            said.append("board.json still carries " + key + "; it is derived on every build"
+                        + (" (git says " + (main_version or "?") + ")" if key == "mainVersion" else "") + " - remove the key.")
+    said += _note_checks(board, data)
+    return said
+
+
+def _note_checks(board: dict, data: dict) -> list:
+    """11. A card ready for review whose version raised the first or middle number, on a board
+    that draws release notes, and that names no note: the change a user would notice has no
+    note to be chosen from."""
+    if not board.get("release_notes"):
+        return []
+    said: list = []
+    known = [events.version_key(v) for v in (data.get("closed") or {})]
+    for item in data.get("items", []):
+        if item.get("state") != "needs_review" or not item.get("version") or item.get("release_note"):
+            continue
+        mine = events.version_key(item["version"])
+        if mine[0] != 0:
+            continue
+        below = [k for k in known if k[0] == 0 and k < mine]
+        if not below:
+            continue
+        if mine[1:3] > max(below)[1:3]:
+            said.append(item["id"] + " landed " + item["version"] + ", which raised the first or middle number, and names no"
+                        " release note - card.py set " + item["id"] + " --note <slug>.")
     return said
 
 

@@ -1,21 +1,23 @@
-"""Generate a board's `status.html` from its card files – a kanban of what is in play.
+"""Generate a board's `status.html` and `state.json` from its cards and events.
 
 The card lifecycle, enforced by `reconcile.py` rather than remembered:
 
-    queued -> building -> needs_review -> (the owner accepts) -> closed
+    queued -> building -> needs_review -> (a verdict, or the production release) -> closed
                               |
                               +-> rework -> building
 
 A card is never deleted because the work landed. A merge moves the card to `needs_review` and
-sets its version; only the owner's verdict retires it, and retiring writes the version into
-`closed` so the reconciliation knows it was seen rather than lost.
+sets its version; a verdict or a release retires it, and retiring puts the version into the
+derived `closed` register so the reconciliation knows it was seen rather than lost.
 
-The page inlines the data rather than fetching it, because a `file://` page cannot fetch a
-sibling file and the owner opens the board by double-clicking it. The inlined copy is
-generated on every run, never kept by hand. After writing the page, the directory above every
-board (`build_boards.py`) is regenerated too, so it can never be older than any board.
+The state is folded from the event log on every build (`events.fold`), so two brains that share
+a board derive the same page from the same files. Both outputs are generated, never kept by
+hand, and on a repository board are ignored by Git and rebuilt after every pull. A repository
+board draws no tasks and carries nothing from `/memory/`: the build refuses to write a page
+that would (CONTRACT section 16.2). After writing the page, the directory above every board
+(`build_boards.py`) is regenerated too, so it can never be older than any board.
 
-    python build_status.py [--board <id>] [--no-fetch]
+    python build_status.py [--board <id> | --all] [--no-fetch]
 """
 
 from __future__ import annotations
@@ -36,15 +38,25 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import board_config  # noqa: E402
 import build_boards  # noqa: E402
 import cards  # noqa: E402
+import events  # noqa: E402
 import page_js  # noqa: E402
+import page_notes  # noqa: E402
 import reconcile  # noqa: E402
 import task_board  # noqa: E402
 from page_html import PAGE  # noqa: E402
 
-def page_config(board: dict) -> dict:
+MEMORY_PATH = re.compile(r"/memory/")
+
+
+class Refused(Exception):
+    """The page would carry something a repository board may not hold."""
+
+
+def page_config(board: dict, derived: dict) -> dict:
     """Everything the page needs that is not card data, from the board's configuration."""
     owner = board.get("owner") or ""
     return {
+        "author": board["author"],
         "board": board["id"],
         "copyOnly": list(board.get("copy_only_prefixes") or []),
         "label": board["label"],
@@ -57,6 +69,8 @@ def page_config(board: dict) -> dict:
         },
         "prefix": board["verdict_prefix"],
         "schema": board["verdict_schema"],
+        "seenThrough": {"lastEvent": derived.get("last_event", ""), "commit": board_config.git_head(board["folder"])},
+        "shared": bool(board.get("shared")),
         "storage": board["storage_prefix"],
     }
 
@@ -65,8 +79,8 @@ def view_href(template: str, view: str, data: dict) -> str:
     """Build a card's address from `where_view_href` and the board's own fields.
 
     `{view}` is the card's `where_view`; any other `{name}` is a top-level field of the
-    board's JSON block. A part in square brackets is left out when a field it uses is empty;
-    a missing field outside brackets means no address can be built, and the card keeps its
+    board's JSON. A part in square brackets is left out when a field it uses is empty; a
+    missing field outside brackets means no address can be built, and the card keeps its
     plain words.
     """
     def value(name: str) -> str:
@@ -92,8 +106,14 @@ def resolve_links(board: dict, data: dict) -> None:
         where["href"] = view_href(template, where["view"], data)
 
 
+def _data_uri(path: str) -> str:
+    mime = mimetypes.guess_type(path)[0] or "image/png"
+    with open(path, "rb") as fh:
+        return "data:" + mime + ";base64," + base64.b64encode(fh.read()).decode("ascii")
+
+
 def inline_images(board: dict, data: dict) -> int:
-    """Turn each card's `image` path into a data URI, so the page survives being sent as one file.
+    """Turn each card's image paths into data URIs, so the page survives being sent as one file.
 
     A path that does not exist is reported rather than left as a broken image.
     """
@@ -105,9 +125,7 @@ def inline_images(board: dict, data: dict) -> int:
             if not os.path.exists(path):
                 print("  MISSING screenshot for " + item["id"] + ": " + rel)
                 continue
-            mime = mimetypes.guess_type(path)[0] or "image/png"
-            with open(path, "rb") as fh:
-                shots.append("data:" + mime + ";base64," + base64.b64encode(fh.read()).decode("ascii"))
+            shots.append(_data_uri(path))
             done += 1
         item["sent_back_images"] = shots
         src = item.get("image")
@@ -118,9 +136,7 @@ def inline_images(board: dict, data: dict) -> int:
             print("  MISSING image for " + item["id"] + ": " + src)
             item.pop("image", None)
             continue
-        mime = mimetypes.guess_type(path)[0] or "image/png"
-        with open(path, "rb") as fh:
-            item["image"] = "data:" + mime + ";base64," + base64.b64encode(fh.read()).decode("ascii")
+        item["image"] = _data_uri(path)
         done += 1
     return done
 
@@ -129,58 +145,84 @@ def _json(value) -> str:
     return json.dumps(value, ensure_ascii=False).replace("</", "<\\/")
 
 
-def build(config: board_config.Config, board: dict, directory: bool = True) -> dict:
-    """Write `status.html` for one board and, unless told not to, the directory page.
+def _slim(event: dict) -> dict:
+    return {k: event.get(k) for k in ("id", "kind", "by", "saved_at", "why", "outcome") if event.get(k) is not None}
 
-    Below the cards, the page draws the task records routed to this board (`task_board.py`):
-    read from `/memory/tasks/` on every build, never copied into cards.
+
+def page_data(derived: dict) -> dict:
+    """What the page inlines: the open cards with compact overlays, never the whole event log."""
+    out = {k: v for k, v in derived.items() if k not in ("items", "retired", "conflicts")}
+    out["items"] = []
+    for item in derived["items"]:
+        slim = {k: v for k, v in item.items() if k not in ("events", "closed")}
+        slim["conflict"] = [_slim(e) for e in item.get("conflict") or []]
+        slim["amendments"] = [_slim(e) for e in item.get("amendments") or []]
+        out["items"].append(slim)
+    out["conflicts"] = [i["id"] for i in derived.get("conflicts", [])]
+    out["retired"] = [i["id"] for i in derived.get("retired", [])]
+    return out
+
+
+def build(config: board_config.Config, board: dict, directory: bool = True) -> dict:
+    """Write `status.html` and `state.json` for one board and, unless told not to, the directory.
+
+    A memory board draws the task records routed to it (`task_board.py`) below the cards; a
+    repository board never does, because each owner's tasks stay in that owner's memory.
     """
-    data = cards.load(board)
+    derived = events.state(board)
     tasks_html = ""
-    if task_board.enabled(config):
+    if task_board.enabled(config) and not board.get("shared"):
         routed = task_board.route(config)
         tasks_html = task_board.section(routed[board["id"]], Path(board["folder"]))
     # Run every time, so the conductor cannot choose not to; a reconciliation that cannot run
     # must say so rather than vanish.
     try:
-        data["adrift"] = reconcile.check(board, data)
+        derived["adrift"] = reconcile.check(board, derived)
     except Exception as err:
-        data["adrift"] = ["The reconciliation against git could not run: " + str(err)]
-    # The version on the page is git's, read now; board.md keeps no copy of it.
+        derived["adrift"] = ["The reconciliation against git could not run: " + str(err)]
+    # The version on the page is git's, read now; board.json keeps no copy of it.
     if board.get("repo"):
         try:
-            data["mainVersion"] = reconcile.repo_version(board) or "?"
+            derived["mainVersion"] = reconcile.repo_version(board) or "?"
         except Exception:
-            data["mainVersion"] = "?"
-    resolve_links(board, data)
-    inlined = inline_images(board, data)
+            derived["mainVersion"] = "?"
+    notes_html, problems = page_notes.section(config, board)
+    derived["adrift"] += problems
+    resolve_links(board, derived)
+    inlined = inline_images(board, derived)
     out = os.path.join(str(board["folder"]), "status.html")
     page = (
         PAGE.replace("__TOKENS__", task_board.TOKENS)
-        .replace("__TASKCSS__", task_board.CSS + page_js.CSS)
+        .replace("__TASKCSS__", task_board.CSS + page_js.CSS + page_notes.CSS)
         .replace("__SHAREDJS__", page_js.SHARED_JS + "\n" + page_js.TASKS_JS)
         .replace("__FAVICON__", board_config.favicon_link(config, board))
         .replace("__TITLE__", html.escape(board["title"]))
         .replace("__MAIN__", html.escape(board.get("main") or "main"))
-        .replace("__VERSION__", html.escape(str(data.get("mainVersion", "?"))))
-        .replace("__GENERATED__", html.escape(str(data.get("generated", "?"))[:16].replace("T", " ")))
-        .replace("__CONFIG__", _json(page_config(board)))
-        .replace("__TASKS__", tasks_html)
-        .replace("__DATA__", _json(data))
+        .replace("__VERSION__", html.escape(str(derived.get("mainVersion", "?"))))
+        .replace("__GENERATED__", html.escape(cards._now()[:16].replace("T", " ")))
+        .replace("__CONFIG__", _json(page_config(board, derived)))
+        .replace("__TASKS__", tasks_html + notes_html)
+        .replace("__DATA__", _json(page_data(derived)))
     )
+    if board.get("shared"):
+        # A collaborator cannot resolve a /memory/ path, and tasks are each owner's own.
+        if MEMORY_PATH.search(page) or 'id="tasks"' in page:
+            raise Refused("refused to write " + out + ": a repository board may carry no /memory/ path and no tasks")
     with open(out, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(page)
+    cards.write_state(board, derived)
     counts: dict = {}
-    for item in data["items"]:
-        counts[item["state"]] = counts.get(item["state"], 0) + 1
+    for item in derived["items"]:
+        key = item.get("fold") or item["state"]
+        counts[key] = counts.get(key, 0) + 1
     print("wrote", out, "(" + str(inlined) + " image(s) embedded)")
-    print(", ".join(k + ": " + str(v) for k, v in sorted(counts.items())))
-    if data["adrift"]:
-        print("  " + str(len(data["adrift"])) + " thing(s) adrift - see the top of the page")
+    print(", ".join(k + ": " + str(v) for k, v in sorted(counts.items())) or "no open cards")
+    if derived["adrift"]:
+        print("  " + str(len(derived["adrift"])) + " thing(s) adrift - see the top of the page")
     if directory:
         # The directory refreshes whenever any board does, reusing this board's answer.
-        build_boards.build(config, known={board["id"]: data})
-    return data
+        build_boards.build(config, known={board["id"]: derived})
+    return derived
 
 
 def main(argv=None) -> int:

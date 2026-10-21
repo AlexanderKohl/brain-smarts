@@ -21,11 +21,11 @@ SCRIPTS = Path(__file__).resolve().parents[1]
 BRAIN = SCRIPTS.parents[3]  # the brain root: owner-board is a core skill beside tasks
 sys.path.insert(0, str(SCRIPTS))
 
-import apply_verdicts  # noqa: E402
+import apply_events  # noqa: E402
 import build_boards  # noqa: E402
 import build_status  # noqa: E402
 import task_board  # noqa: E402
-import verdicts  # noqa: E402
+
 from board_fixtures import Brain, quiet  # noqa: E402
 
 
@@ -297,8 +297,8 @@ class TaskBoardTests(unittest.TestCase):
         return folder
 
     def apply_all(self):
-        with mock.patch.object(verdicts, "downloads", return_value=str(self.downloads().parent)):
-            return quiet(apply_verdicts.route, self.brain.config(), False)
+        with mock.patch.object(apply_events, "downloads", return_value=str(self.downloads().parent)):
+            return quiet(apply_events.route, self.brain.config(), False)
 
     def test_task_actions_saved_from_a_task_page_are_applied_through_the_tasks_skill(self):
         store = self.brain.memory / "tasks"
@@ -357,8 +357,8 @@ class TaskBoardTests(unittest.TestCase):
                 "tasks": [{"id": "TASK-2026-0912", "action": "done", "note": "", "shots": [], "title": "x"}]}
         saved = self.downloads() / "task-actions-dry.json"
         saved.write_text(json.dumps(body), encoding="utf-8")
-        with mock.patch.object(verdicts, "downloads", return_value=str(self.downloads().parent)):
-            changed, out = quiet(apply_verdicts.route, self.brain.config(), True)
+        with mock.patch.object(apply_events, "downloads", return_value=str(self.downloads().parent)):
+            changed, out = quiet(apply_events.route, self.brain.config(), True)
         self.assertEqual(changed, [])
         self.assertTrue(saved.exists())
         self.assertTrue((self.brain.memory / "tasks" / "open" / "TASK-2026-0912-fictional.md").is_file())
