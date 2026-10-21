@@ -239,6 +239,14 @@ class RepositoryBoardTests(unittest.TestCase):
             quiet(build_status.build, self.config, self.board)
         self.assertFalse((self.board["folder"] / "status.html").exists())
 
+    def test_the_build_refuses_a_repository_board_whose_card_says_memory(self):
+        path = sorted((self.board["folder"] / "cards").glob("*.md"))[0]
+        path.write_text(path.read_text(encoding="utf-8") + "\nSee /memory/projects/example-garden/STATE.md\n", encoding="utf-8")
+        with self.assertRaises(build_status.Refused) as caught:
+            quiet(build_status.build, self.config, self.board)
+        self.assertIn("cards/" + path.name, str(caught.exception))
+        self.assertFalse((self.board["folder"] / "status.html").exists())
+
     def test_a_new_card_on_a_repository_board_names_the_repository_node(self):
         with mock.patch.object(events, "utc", return_value=events.utc("2026-02-01T00:00:00Z")):
             import card as card_cli
@@ -321,15 +329,46 @@ id: x
         self.assertTrue((target / "board.json").exists())
         self.assertEqual(len(list((target / "cards").glob("*.md"))), 3)
         self.assertEqual(len(list((target / "events").glob("*.json"))), 3)
-        self.assertIn("brain/status/status.html\nbrain/status/state.json\n", (repo / ".gitignore").read_text(encoding="utf-8"))
+        self.assertEqual((repo / ".gitignore").read_text(encoding="utf-8"), "node_modules/\n")   # nothing outside brain/
+        self.assertEqual((target / ".gitignore").read_text(encoding="utf-8"), "status.html\nstate.json\n")
+        outside = [p.name for p in repo.rglob("*") if p.is_file() and "brain" not in p.relative_to(repo).parts]
+        self.assertEqual(outside, [".gitignore"])
+        for path in (target / "cards").glob("*.md"):
+            self.assertIn('parent: "example-garden:brain"', path.read_text(encoding="utf-8"))
         raw = json.loads((self.brain.memory / "skills" / "owner-board" / "config" / "boards.json").read_text(encoding="utf-8"))
         self.assertEqual(raw["boards"][0]["status"], "example-garden:brain/status")
         self.assertEqual(raw["boards"][0]["node"], "/memory/projects/example-garden")
         self.assertIn("git mv", out)
-        self.assertIn("WARNING cards/", out)   # the old parent still says /memory/: said, not hidden
+        self.assertNotIn("WARNING", out)
+        self.assertEqual(migrate_board.check_no_memory_paths(target), [])
         board = self.brain.board()
         self.assertTrue(board["shared"])
         self.assertTrue((self.board["folder"] / "board.md").exists())   # the old folder is the conductor's to move
+        quiet(build_status.build, self.brain.config(), board)
+
+    def test_a_board_converted_in_place_moves_with_its_events(self):
+        quiet(migrate_board.main, ["--root", str(self.brain.root), "--board", "garden"])
+        source = self.board["folder"]
+        held = sorted(p.name for p in (source / "events").glob("*.json"))
+        repo = self.brain.repos / "example-garden"
+        (repo / "brain").mkdir(parents=True)
+        _, dry = quiet(migrate_board.main, ["--root", str(self.brain.root), "--board", "garden",
+                                            "--to", "example-garden:brain/status", "--dry-run"])
+        self.assertIn("would: copy event " + held[0], dry)
+        self.assertFalse((repo / "brain" / "status").exists())
+        _, out = quiet(migrate_board.main, ["--root", str(self.brain.root), "--board", "garden", "--to", "example-garden:brain/status"])
+        target = repo / "brain" / "status"
+        self.assertEqual(sorted(p.name for p in (target / "events").glob("*.json")), held)
+        for name in held:
+            self.assertEqual((target / "events" / name).read_bytes(), (source / "events" / name).read_bytes())
+        self.assertEqual(events.state(self.brain.board())["closed"], {"0.9.0": "beta", "1.0.0": "first release"})
+        self.assertNotIn("WARNING", out)
+        self.assertFalse((repo / ".gitignore").exists())
+
+    def test_a_target_outside_the_repository_brain_is_refused(self):
+        with self.assertRaises(Exception):
+            migrate_board.main(["--root", str(self.brain.root), "--board", "garden", "--to", "example-garden:docs/status"])
+        self.assertFalse((self.brain.repos / "example-garden" / "docs").exists())
 
 
 class ReleaseNotesSectionTests(unittest.TestCase):

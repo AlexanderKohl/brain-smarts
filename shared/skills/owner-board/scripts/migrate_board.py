@@ -10,8 +10,11 @@ card per version of the old `closed` register, so the register stays honest and 
     python migrate_board.py --board <id> [--to <repository>:brain/status] [--dry-run]
 
 Without `--to` the board is converted where it is. With `--to` the converted board is written
-into the named repository's folder (made if absent), `status.html` and `state.json` are added to
-that repository's `.gitignore`, the board's entry in `boards.json` is pointed at it, and the old
+into the named folder under the repository's `brain/` (made if absent): the cards with their
+`parent` set to `<repository>:brain`, every event the old folder already holds, and a `.gitignore`
+beside them naming `status.html` and `state.json`. Nothing outside `brain/` is touched, and a
+board file that still says `/memory/` makes the run end in error. The board's entry in
+`boards.json` is pointed at the folder, and the old
 folder is left for the conductor to `git mv` out of memory with its removed-files note. The
 task actions inside old verdict files were applied to this memory at the time and are not
 shared; they are not copied. `--dry-run` prints every step and writes nothing.
@@ -30,11 +33,11 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import board_config  # noqa: E402
+import build_status  # noqa: E402
 import cards  # noqa: E402
 import events  # noqa: E402
 
-IGNORE_LINES = ("brain/status/status.html", "brain/status/state.json")
-MEMORY_PATH = re.compile(r"/memory/")
+IGNORE_LINES = build_status.GENERATED   # written to the board folder's own .gitignore
 
 
 def read_board_md(path: Path) -> dict:
@@ -90,7 +93,7 @@ def plan(config: board_config.Config, board: dict, target: Path | None) -> dict:
         taken_cards.add(new_id)
         steps["cards"].append({"from": name, "to": new_id + ".md", "id": new_id, "old_id": card["id"]})
     renamed = {c["old_id"]: c["id"] for c in steps["cards"]}
-    taken_events: set = set(events.ids_in({"folder": dest}))
+    taken_events: set = set(events.ids_in({"folder": dest})) | set(events.ids_in({"folder": source}))
     for sub in ("verdicts-applied",):
         vfolder = source / sub
         for name in sorted(os.listdir(vfolder)) if vfolder.is_dir() else []:
@@ -119,6 +122,10 @@ def plan(config: board_config.Config, board: dict, target: Path | None) -> dict:
         repo = Path(board["folder"]).parents[1] if board.get("shared") else target.parents[1]
         steps["ignore"] = [line for line in IGNORE_LINES]
         steps["repo"] = str(repo)
+        # A board already converted in place keeps its events as files: they move with it.
+        have = set(os.listdir(dest / "events")) if (dest / "events").is_dir() else set()
+        held = os.listdir(source / "events") if (source / "events").is_dir() else []
+        steps["copy_events"] = sorted(name for name in held if name.endswith(".json") and name not in have)
     return steps
 
 
@@ -136,6 +143,8 @@ def run(config: board_config.Config, board: dict, steps: dict, dry_run: bool) ->
         if (source / "board.md").is_file() and dest == source:
             os.remove(source / "board.md")
     target_board = dict(board, folder=dest)
+    if steps.get("card_parent"):
+        target_board.update(card_parent=steps["card_parent"], shared=True)
     for step in steps["cards"]:
         out.append("card " + step["from"] + " -> cards/" + step["to"])
         if dry_run:
@@ -152,6 +161,10 @@ def run(config: board_config.Config, board: dict, steps: dict, dry_run: bool) ->
         out.append("event " + event["id"] + " " + event["kind"] + " " + str(event.get("card") or event.get("version")))
         if not dry_run and not (dest / "events" / (event["id"] + ".json")).exists():
             events.write(target_board, event)
+    for name in steps.get("copy_events", []):
+        out.append("copy event " + name)
+        if not dry_run:
+            shutil.copy2(source / "events" / name, dest / "events" / name)
     if dest == source:
         for sub in ("verdicts-in", "verdicts-applied"):
             if (source / sub).is_dir():
@@ -163,12 +176,13 @@ def run(config: board_config.Config, board: dict, steps: dict, dry_run: bool) ->
         if not dry_run:
             shutil.copytree(source / "img", dest / "img", dirs_exist_ok=True)
     if steps.get("repo"):
-        ignore = Path(steps["repo"]) / ".gitignore"
+        ignore = dest / ".gitignore"
         have = ignore.read_text(encoding="utf-8").splitlines() if ignore.is_file() else []
         missing = [line for line in steps["ignore"] if line not in have]
         if missing:
             out.append(".gitignore += " + ", ".join(missing))
             if not dry_run:
+                ignore.parent.mkdir(parents=True, exist_ok=True)
                 with open(ignore, "a", encoding="utf-8", newline="\n") as fh:
                     fh.write(("" if not have or have[-1] == "" else "\n") + "\n".join(missing) + "\n")
         out.append("boards.json: status -> " + steps["status"])
@@ -187,11 +201,7 @@ def run(config: board_config.Config, board: dict, steps: dict, dry_run: bool) ->
 
 def check_no_memory_paths(folder: Path) -> list:
     """Files under a repository board that still say /memory/: a collaborator cannot resolve them."""
-    hits = []
-    for path in sorted(folder.rglob("*")):
-        if path.is_file() and path.suffix in (".md", ".json") and MEMORY_PATH.search(path.read_text(encoding="utf-8", errors="replace")):
-            hits.append(str(path.relative_to(folder)).replace(os.sep, "/"))
-    return hits
+    return build_status.memory_mentions(folder)
 
 
 def main(argv=None) -> int:
@@ -208,11 +218,15 @@ def main(argv=None) -> int:
         found = board_config.SHARED_STATUS.match(args.to)
         if not found:
             raise board_config.ConfigError("--to must look like <repository>:brain/status")
+        inside = found.group(2).strip("/")
+        if not inside.startswith("brain/"):
+            raise board_config.ConfigError("--to must name a folder under the repository's brain/, such as <repository>:brain/status")
         base = config.profile.get("project_repos_root") or str(config.brain.parent)
-        target = Path(base) / found.group(1) / found.group(2).strip("/").replace("/", os.sep)
+        target = Path(base) / found.group(1) / inside.replace("/", os.sep)
     steps = plan(config, board, target)
     if target is not None:
         steps["status"] = args.to
+        steps["card_parent"] = found.group(1) + ":" + inside.rsplit("/status", 1)[0]
     for line in run(config, board, steps, args.dry_run):
         print(("would: " if args.dry_run else "did: ") + line)
     if target is not None and not args.dry_run:

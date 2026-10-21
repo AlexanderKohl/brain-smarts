@@ -46,6 +46,21 @@ import task_board  # noqa: E402
 from page_html import PAGE  # noqa: E402
 
 MEMORY_PATH = re.compile(r"/memory/")
+GENERATED = ("status.html", "state.json")
+
+
+def memory_mentions(folder) -> list:
+    """Files a repository board holds (board.json, cards, events) that say /memory/.
+
+    A collaborator cannot resolve such a path. The generated page is checked as it is built.
+    """
+    folder = Path(folder)
+    hits = []
+    for path in sorted(folder.rglob("*")):
+        if (path.is_file() and path.suffix in (".md", ".json") and path.name not in GENERATED
+                and MEMORY_PATH.search(path.read_text(encoding="utf-8", errors="replace"))):
+            hits.append(path.relative_to(folder).as_posix())
+    return hits
 
 
 class Refused(Exception):
@@ -206,6 +221,10 @@ def build(config: board_config.Config, board: dict, directory: bool = True) -> d
     )
     if board.get("shared"):
         # A collaborator cannot resolve a /memory/ path, and tasks are each owner's own.
+        leaked = memory_mentions(board["folder"])
+        if leaked:
+            raise Refused("refused to write " + out + ": " + ", ".join(leaked)
+                          + " mention /memory/; a repository board may carry no /memory/ path")
         if MEMORY_PATH.search(page) or 'id="tasks"' in page:
             raise Refused("refused to write " + out + ": a repository board may carry no /memory/ path and no tasks")
     with open(out, "w", encoding="utf-8", newline="\n") as fh:
