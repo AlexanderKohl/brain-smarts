@@ -4,13 +4,13 @@ title: One structure for every project node, with its own tasks, sources and fac
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: draft
+status: accepted
 owner: brain-owner
 created: 2026-10-22T15:46:11+10:00
 updated: 2026-10-22T16:33:25+10:00
 rule_id: null
-accepted_by: null
-accepted_at: null
+accepted_by: brain-owner
+accepted_at: 2026-10-23T06:34:06+10:00
 implemented_at: null
 previous_contract_version: 2.7.0
 new_contract_version: 3.0.0
@@ -858,9 +858,7 @@ keep the others as references.
 ## Acceptance
 
 The owner accepted P1 to P12 of the earlier draft on 22 October 2026 (record in the owner's
-memory); they were never applied. This amended set has not yet been presented. Ask one direct
-question that identifies this proposal and its amendment of 22 October. Do not treat the earlier
-acceptance, silence, adjacent approval or general agreement as acceptance of the amended set.
+memory); they were never applied. The owner accepted this amended set, texts P1 to P25 with choices A and B, on 2026-10-23T06:34:06+10:00, in answer to the direct question "Do you accept PROPOSAL-shared-project-tasks-in-the-repository as amended on 22 October, texts P1 to P25, with A and B?" (record in the owner's memory). Not yet applied.
 
 ## Implementation record
 
