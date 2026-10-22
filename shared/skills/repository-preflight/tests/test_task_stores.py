@@ -59,8 +59,18 @@ class StoreBrain(Brain):
         self.write_repo("brain/tasks/README.md", md("example-project-tasks", "# Tasks\n", type="node_readme"))
         self.state()
 
-    def write_repo(self, relative: str, text: str) -> Path:
-        path = self.checkout / relative
+    def add_repository(self, name: str) -> Path:
+        """A second pointer node and its checked-out repository."""
+        self.write(f"memory/projects/{name}/README.md",
+                   readme(f"{name}-pointer", [], node_type="project", default_branch="main",
+                          repo_url=f"https://example.com/bob/{name}.git"))
+        checkout = self.repos / name
+        self.write_repo("brain/README.md", md(f"{name}-brain", "# Another project\n", type="node_readme"), checkout)
+        self.write_repo("brain/tasks/README.md", md(f"{name}-tasks", "# Tasks\n", type="node_readme"), checkout)
+        return checkout
+
+    def write_repo(self, relative: str, text: str, checkout: Path | None = None) -> Path:
+        path = (checkout or self.checkout) / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
         return path
@@ -122,13 +132,40 @@ class P25FailureTests(StoreTestCase):
         brain.state()
         self.assertError(brain.run(), "duplicate id TASK-sam-2026-0001")
 
-    def test_an_identifier_used_in_memory_and_a_repository_is_named(self) -> None:
+    def test_an_identifier_used_in_memory_and_a_repository_fails_in_both_modes(self) -> None:
         brain = self.brain()
         brain.write("memory/tasks/open/TASK-sam-2026-0001.md", task("TASK-sam-2026-0001"))
         brain.write_repo("brain/tasks/open/TASK-sam-2026-0001.md", task("TASK-sam-2026-0001", refs=[f"{REPO}:brain"]))
         brain.state()
-        self.assertTrue(any("identifier TASK-sam-2026-0001 is also used by /memory/tasks" in w
-                            for w in brain.run().warnings))
+        root = brain.run()
+        # From the brain root a clash between stores stays an error: the repository cannot see it.
+        self.assertError(root, f"{REPO}:brain/tasks/open/TASK-sam-2026-0001.md",
+                         "identifier TASK-sam-2026-0001 is also used by /memory/tasks/open/")
+        self.assertEqual({message_layer(e) for e in root.errors}, {"memory"})
+        self.assertError(brain.project(), f"{REPO}:brain/tasks/open/TASK-sam-2026-0001.md",
+                         "is also used by /memory/tasks/open/TASK-sam-2026-0001.md")
+
+    def test_an_identifier_used_in_two_repositories_fails_in_both_modes(self) -> None:
+        brain = self.brain()
+        other = brain.add_repository("another-project")
+        brain.write_repo("brain/tasks/open/TASK-bob-2026-0001.md",
+                         task("TASK-bob-2026-0001", refs=[f"{REPO}:brain"], author="bob"))
+        brain.write_repo("brain/tasks/open/TASK-bob-2026-0001.md",
+                         task("TASK-bob-2026-0001", refs=["another-project:brain"], author="bob"), checkout=other)
+        brain.state()
+        self.assertError(brain.run(), "TASK-bob-2026-0001.md", "identifier TASK-bob-2026-0001 is also used by")
+        self.assertError(brain.project(REPO), f"{REPO}:brain/tasks/open/TASK-bob-2026-0001.md",
+                         "is also used by another-project:brain/tasks/open/TASK-bob-2026-0001.md")
+        self.assertError(brain.project("another-project"), "another-project:brain/tasks/open/TASK-bob-2026-0001.md",
+                         f"is also used by {REPO}:brain/tasks/open/TASK-bob-2026-0001.md")
+
+    def test_a_repository_checked_alone_does_not_clash_with_itself(self) -> None:
+        brain = self.brain()
+        brain.write_repo("brain/tasks/open/TASK-bob-2026-0001.md",
+                         task("TASK-bob-2026-0001", refs=[f"{REPO}:brain"], author="bob"))
+        brain.state()
+        self.assertEqual(brain.project(REPO).errors, [])
+        self.assertEqual(brain.project(str(brain.checkout)).errors, [])
 
     def test_a_record_whose_first_reference_names_another_node_fails(self) -> None:
         brain = self.brain()
@@ -287,6 +324,60 @@ class RawStoreSkipTests(StoreTestCase):
         brain = self.brain()
         brain.write("memory/projects/garden/sources/raw/notes.md", "No front matter.\n")
         self.assertError(brain.run(), "/memory/projects/garden/sources/raw/notes.md")
+
+
+class RepositoryReferenceTests(StoreTestCase):
+    """CONTRACT §16.2: a memory file names a repository file `<repository>:brain/<path>`."""
+
+    def note(self, brain: StoreBrain, *refs: str, where: str = "memory/projects/garden/NOTE.md") -> str:
+        brain.write(where, md("garden-note", "# Note\n", source_refs=list(refs)))
+        return "/" + where
+
+    def test_a_reference_that_resolves_in_the_checkout_passes(self) -> None:
+        brain = self.brain()
+        brain.write_repo("brain/sources/source-0001.md", md("source-0001", "# Source\n\n## Summary\n", type="source"))
+        self.note(brain, f"{REPO}:brain/sources/source-0001.md", f"{REPO}:brain/sources/source-0001.md#Summary",
+                  f"{REPO}:brain")
+        self.assertEqual(brain.run().errors, [])
+
+    def test_a_missing_file_or_anchor_in_a_reachable_checkout_fails(self) -> None:
+        brain = self.brain()
+        brain.write_repo("brain/sources/source-0001.md", md("source-0001", "# Source\n", type="source"))
+        note = self.note(brain, f"{REPO}:brain/sources/source-0002.md", f"{REPO}:brain/sources/source-0001.md#Nowhere")
+        result = brain.run()
+        self.assertIn(f"{note}: broken source_refs reference {REPO}:brain/sources/source-0002.md", result.errors)
+        self.assertIn(f"{note}: broken source_refs anchor {REPO}:brain/sources/source-0001.md#Nowhere", result.errors)
+
+    def test_a_repository_not_checked_out_is_a_warning(self) -> None:
+        brain = self.brain()
+        brain.write("memory/projects/elsewhere/README.md",
+                    readme("elsewhere-pointer", [], node_type="project", default_branch="main",
+                           repo_url="https://example.com/bob/elsewhere.git"))
+        note = self.note(brain, "elsewhere:brain/sources/source-0003.md")
+        result = brain.run()
+        self.assertEqual(result.errors, [])
+        self.assertIn(f"{note}: source_refs reference elsewhere:brain/sources/source-0003.md not checked: "
+                      "the repository is not checked out here", result.warnings)
+
+    def test_a_repository_no_pointer_names_fails(self) -> None:
+        brain = self.brain()
+        note = self.note(brain, "unknown-project:brain/sources/source-0004.md")
+        self.assertIn(f"{note}: source_refs reference unknown-project:brain/sources/source-0004.md names a "
+                      "repository no pointer node gives", brain.run().errors)
+
+    def test_a_malformed_value_is_still_refused(self) -> None:
+        brain = self.brain()
+        note = self.note(brain, f"{REPO}:src/app.py", "sources/source-0005.md", f"{REPO}:brainy/x.md")
+        errors = brain.run().errors
+        for value in (f"{REPO}:src/app.py", "sources/source-0005.md", f"{REPO}:brainy/x.md"):
+            self.assertIn(f"{note}: source_refs value must be a repository-root path: {value}", errors)
+
+    def test_a_mechanics_file_may_not_use_the_repository_form(self) -> None:
+        brain = self.brain()
+        brain.write_repo("brain/sources/source-0001.md", md("source-0001", "# Source\n", type="source"))
+        brain.write("shared/NOTE.md", md("shared-note", "# Note\n", source_refs=[f"{REPO}:brain/sources/source-0001.md"]))
+        self.assertIn(f"/shared/NOTE.md: source_refs value must be a repository-root path: "
+                      f"{REPO}:brain/sources/source-0001.md", brain.run().errors)
 
 
 if __name__ == "__main__":

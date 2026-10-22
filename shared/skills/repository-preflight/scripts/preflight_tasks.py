@@ -20,6 +20,7 @@ message carries a path of this machine (SMART-RULE-0008).
 
 from __future__ import annotations
 
+import re
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -74,6 +75,50 @@ def project_raw(checkout: Path, path: Path) -> bool:
     """With --project: the repository's `brain/raw/`."""
     parts = path.relative_to(checkout).parts
     return len(parts) > 2 and parts[0] == "brain" and parts[1] == RAW
+
+
+# ---------------------------------------------------------------------------- repository references
+
+# CONTRACT §16.2: a file outside a project repository names a file in it `<repository>:brain/<path>`,
+# `<repository>` being the remote's name a pointer node gives (the same in every brain).
+REPOSITORY_REF_RE = re.compile(r"^(?P<repository>[A-Za-z0-9][A-Za-z0-9._-]*):(?P<path>brain(?:/[^\s#:]+)*/?)"
+                               r"(?:#(?P<anchor>.+))?$")
+
+
+def repository_checkouts(root: Path) -> dict[str, tuple[Path | None, str | None]]:
+    """Each repository a pointer node names: (its checkout when reachable, else None, and why not)."""
+    found: dict[str, tuple[Path | None, str | None]] = {}
+    for pointer in task_stores.pointers(root):
+        if pointer.repository in found:
+            continue
+        if pointer.checkout is None:
+            found[pointer.repository] = (None, "not checked out here")
+        elif not (pointer.checkout / "brain").is_dir():
+            found[pointer.repository] = (None, "checked out without a brain/ folder")
+        else:
+            found[pointer.repository] = (pointer.checkout, None)
+    return found
+
+
+def resolve_repository_ref(value: str, checkouts: dict) -> tuple[str, Path | None, str | None, str]:
+    """(kind, target, anchor, detail) for a `<repository>:brain/<path>` value.
+
+    kind is "malformed" (not that form), "unknown" (no pointer names the repository),
+    "unreachable" (detail says why) or "resolved" (target is the file or folder it names)."""
+    match = REPOSITORY_REF_RE.match(value)
+    if not match:
+        return "malformed", None, None, ""
+    name = match.group("repository")
+    entry = checkouts.get(name)
+    if entry is None:
+        folded = [k for k in checkouts if k.casefold() == name.casefold()]
+        entry = checkouts[folded[0]] if folded else None
+    if entry is None:
+        return "unknown", None, None, name
+    checkout, why = entry
+    if checkout is None:
+        return "unreachable", None, None, why or "not reachable"
+    return "resolved", checkout.joinpath(*match.group("path").strip("/").split("/")), match.group("anchor"), name
 
 
 # ---------------------------------------------------------------------------- the stores
@@ -146,6 +191,31 @@ def _memory_unmerged(root: Path, result: Result) -> list[Path] | None:
     return _unmerged_in(memory, memory, result.warnings, "/memory/")
 
 
+def _duplicate(message: str) -> bool:
+    """`task_check`'s message for an identifier another store checked earlier also uses."""
+    _where_part, _sep, rest = message.partition(": identifier ")
+    return bool(rest) and " is also used by " in rest
+
+
+def _same_store(store, other) -> bool:
+    if other.kind != "repository" or store.checkout is None or other.checkout is None:
+        return False
+    return other.checkout.resolve() == store.checkout.resolve()
+
+
+def _ids_elsewhere(root: Path, store) -> dict[str, str]:
+    """Every identifier in every other reachable store, with where it is: `--project` checks one
+    store, and a clash with another store is still a failure (proposal Risk 6)."""
+    seen: dict[str, str] = {}
+    for other in task_stores.stores(root):
+        if _same_store(store, other) or not other.reachable or not other.path.is_dir():
+            continue
+        for task in load_tasks(other.path, owner=other):
+            if task.meta.get("id") and task.tid not in seen:
+                seen[task.tid] = _where(other, task.path)
+    return seen
+
+
 def _already_reported(message: str) -> bool:
     """A duplicate identifier between two memory files: the general duplicate-id check names it."""
     where, _sep, rest = message.partition(": identifier ")
@@ -167,9 +237,11 @@ def validate_task_stores(root: Path, records: dict[Path, dict[str, Any]], result
                 continue
             unmerged = _unmerged_in(store.checkout, store.path, result.warnings, f"{store.node}: {store.label}")
             report = check_one(root, store, seen, unmerged)
-            # The repository runs its own check; from here its failures are warnings.
+            # The repository runs its own check; from here its failures are warnings, except an
+            # identifier also used in another store: the repository alone cannot see that clash.
+            result.errors += [f"{store.node}: {m}" for m in report.errors if _duplicate(m)]
             result.warnings += [f"{store.node}: {m} (checked as an error by the repository's own "
-                                "`preflight.py --project`)" for m in report.errors]
+                                "`preflight.py --project`)" for m in report.errors if not _duplicate(m)]
             result.warnings += [f"{store.node}: {m}" for m in report.warnings]
             continue
         if store.kind == "owner" and not store.path.is_dir():
@@ -221,12 +293,13 @@ def project_store(root: Path, target: str):
 
 
 def validate_project_store(root: Path, store, result: Result) -> None:
-    """With --project: that repository's store alone; every failure is an error."""
+    """With --project: that repository's store; every failure is an error. The identifiers of
+    every other reachable store are known first, so a clash with one of them fails here too."""
     if not store.path.is_dir():
         result.warnings.append(f"{store.repository}:brain/tasks: no task store yet")
         return
     unmerged = _unmerged_in(store.checkout, store.path, result.warnings, f"{store.repository}:brain/tasks")
-    report = check_one(root, store, {}, unmerged)
+    report = check_one(root, store, _ids_elsewhere(root, store), unmerged)
     result.errors += report.errors
     result.warnings += report.warnings
 
