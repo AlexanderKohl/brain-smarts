@@ -85,8 +85,20 @@ class MemoryBoardDetail(unittest.TestCase):
         link = item["taskLinks"][0]
         self.assertEqual(link["id"], "TASK-2026-0901")
         target = (Path(self.board["folder"]) / link["href"]).resolve()
-        self.assertEqual(target, (self.brain.memory / "tasks" / "open" / "TASK-2026-0901-beds.md").resolve())
+        garden = self.brain.memory / "projects" / "example-garden" / "tasks"     # the board node's own store
+        self.assertEqual(target, (garden / "open" / "TASK-2026-0901-beds.md").resolve())
         self.assertIsInstance(item["history"], list)
+
+    def test_a_task_outside_the_boards_stores_is_named_with_a_note(self):
+        # A record in the owner store is not this board's, so its id is not linked.
+        (self.brain.memory / "tasks" / "open" / "TASK-2026-0905-x.md").write_text(
+            "---\nid: TASK-2026-0905\nstatus: ready\n---\n", encoding="utf-8")
+        name_task(self.board, SOIL, "TASK-2026-0905")
+        quiet(build_status.build, self.config, self.board)
+        links = page_items(self.board)[SOIL]["taskLinks"]
+        self.assertEqual(links[0], {"id": "TASK-2026-0905", "note": card_detail.MISSING_NOTE})
+        self.assertEqual(links[1]["id"], "TASK-2026-0901")
+        self.assertIn("href", links[1])
 
     def test_an_empty_where_draws_no_bare_label_and_the_click_opens_the_detail(self):
         seen = open_detail(self.board, SOIL)
@@ -105,28 +117,35 @@ class RepositoryBoardDetail(unittest.TestCase):
         self.brain = Brain(shared=True)
         self.config = self.brain.config()
         self.board = self.brain.board()
-        name_task(self.board, SOIL, "TASK-2026-0901")
+        # 0901 is in the repository's brain/tasks/; the owner's private task, in the pointer node, is not.
+        private = self.brain.memory / "projects" / "example-garden" / "tasks" / "open"
+        private.mkdir(parents=True)
+        (private / "TASK-sam-2026-0002-x.md").write_text("---\nid: TASK-sam-2026-0002\nstatus: ready\n---\n",
+                                                         encoding="utf-8")
+        name_task(self.board, SOIL, "TASK-2026-0901, TASK-sam-2026-0002")
         quiet(build_status.build, self.config, self.board)
 
     def tearDown(self):
         self.brain.close()
 
-    def test_the_task_is_named_by_id_with_a_note_and_no_memory_path(self):
+    def test_a_repository_task_links_inside_the_repository_and_another_is_named_with_a_note(self):
         item = page_items(self.board)[SOIL]
-        self.assertEqual(item["taskLinks"], [{"id": "TASK-2026-0901", "note": card_detail.REPO_NOTE}])
+        self.assertEqual(item["taskLinks"], [
+            {"id": "TASK-2026-0901", "href": "../tasks/open/TASK-2026-0901-beds.md", "title": "Beds"},
+            {"id": "TASK-sam-2026-0002", "note": card_detail.REPO_NOTE}])
         self.assertEqual(dict(item["facts"])["Version"], "1.1.0")
         page = (Path(self.board["folder"]) / "status.html").read_text(encoding="utf-8")
         self.assertNotIn("/memory/", page)
 
-    def test_the_click_opens_the_detail_with_the_task_id_and_no_link(self):
+    def test_the_click_opens_the_detail_with_the_repository_link_only(self):
         seen = open_detail(self.board, SOIL)
         if seen is None:
             self.skipTest("no headless browser here")
         self.assertEqual(seen["errors"], [])
         self.assertEqual(seen["display"], "block")
-        self.assertIn("TASK-2026-0901", seen["text"])
-        self.assertIn("owner's own brain", seen["text"])
-        self.assertEqual(seen["hrefs"], [])
+        self.assertIn("TASK-sam-2026-0002", seen["text"])
+        self.assertIn("a brain's own memory", seen["text"])
+        self.assertEqual(seen["hrefs"], ["../tasks/open/TASK-2026-0901-beds.md"])
 
 
 LONG_BRANCH = "robin-example-a-very-long-branch-name-that-is-wider-than-any-card-on-the-board"

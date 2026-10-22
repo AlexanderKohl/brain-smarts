@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 scope: shared
-version: 1.1.1
+version: 2.0.0
 script_paths:
   - /shared/skills/owner-board/scripts/apply_events.py
   - /shared/skills/owner-board/scripts/board_config.py
@@ -24,7 +24,7 @@ script_paths:
   - /shared/skills/owner-board/scripts/task_board.py
   - /shared/skills/owner-board/scripts/team_lanes.py
 created: 2026-09-18T11:05:00+10:00
-updated: 2026-10-22T16:47:15+10:00
+updated: 2026-10-23T08:23:52+10:00
 owner: brain-owner
 project_refs:
   - /memory/projects/brain-development
@@ -52,7 +52,8 @@ Give the owner **one link that never changes**, showing every request they have 
 state it is in, and what they have to look at – and let their verdict travel back as data
 rather than as text they copy into a message and a conductor retypes. The same boards show the
 owner's **tasks**: every open task record appears on exactly one board – its project's, or the
-personal board – read from `/memory/tasks/` each time, never copied into a card.
+personal board – read from every task store the brain can reach each time (the tasks skill's
+`task_stores`), never copied into a card.
 
 The board is not a status report the conductor writes. **It is derived from the records**, and
 a check runs on every regeneration comparing it against git. A board a conductor could keep by
@@ -69,8 +70,9 @@ There is **one implementation**, in this skill's `scripts/` folder, and it serve
     <repository>:brain/status/                    a shared board, the same layout, in the project repository
     /memory/boards/index.html                     the directory above every board (generated)
     /memory/boards/personal.html                  the personal task board (generated)
-    /memory/boards/projects/<slug>.html           task pages: automatic boards, and the tasks of each shared board (generated)
-    /memory/tasks/                                the task records boards show and reconcile against
+    /memory/boards/projects/<slug>.html           task pages: automatic boards, and the owner's private tasks of each shared board (generated)
+    every task store (/shared/skills/tasks)       the task records boards show and reconcile against: /memory/tasks/,
+                                                  each node's tasks/, each pointer node's private tasks/, <repository>:brain/tasks/
     /memory/skills/owner-board/applied/           saved verdict files once their events are written (this brain's own)
 
 The scripts find the brain root by moving upwards to `CONTRACT.md` from the current folder (or
@@ -131,7 +133,7 @@ Board keys, alphabetical. Only `id`, `label` and `status` are required.
 | `label` | required | What the owner calls the project. |
 | `main` | `main` | The product's main branch. |
 | `merge_version_pattern` | `N.N.N` | How check 8 recognises a version in a merge subject. |
-| `node` | from `status` | Repository-root path of the owning memory node: where this owner's tasks about the project route. A memory board derives it from `status`; a shared board names its pointer node here, and its cards carry the repository's own node (`<repository>:brain`) as `parent`. |
+| `node` | from `status` | Repository-root path of the owning memory node: the tasks of the stores of this node and the nodes beneath it route here. A memory board derives it from `status`; a shared board names its pointer node here (its repository's `brain/tasks/` and the pointer's private `tasks/` route here), and its cards carry the repository's own node (`<repository>:brain`) as `parent`. |
 | `placeholder_pattern` | `temp`, `wip`, `fixup`, `squash` | Check 2: a main head commit message that was never written. |
 | `production` | `origin/main` | The branch releases go to. After a hotfix it is ahead of `main`; check 4 never reports it as pushed and unmerged, and check 6 never calls its checkout a stray. |
 | `release_notes` | `[]` | Project ids from `/memory/skills/release-notes/config/release-notes.json` or, for a shared board, the repository's `brain/status/release-notes.json`, whose notes this board draws, in the order drawn (**Release notes on the board**). |
@@ -161,7 +163,7 @@ stops the build), `folder` (default `boards`, under the memory root) and `title`
 | `completed_days` | `14` | How long a completed or cancelled task stays in *Completed recently*. |
 | `enabled` | `true` | `false` draws no tasks anywhere. |
 | `personal` | see the example | The personal board: `id` (must not be a registered board id), `label`, `page` (relative to the directory folder), `blurb`. |
-| `store` | `tasks` | The task store, relative to the memory root. |
+| `store` | `tasks` | The owner store, relative to the memory root: tasks are drawn only when it exists, and applied task-actions files are filed under it. Every other store comes from the tasks skill. |
 | `wip_limit` | `2` | How many cards one team may hold *in progress* at once. Each board page lists every team present above the columns as `team · in progress n / limit`, in the warning colour when n exceeds it. |
 
 ## Invocation and required inputs
@@ -194,7 +196,8 @@ its author; an event is written once and never edited, moved or deleted. Never c
 the owner's behalf – see **A verdict or a release retires a card**. No credentials. The only
 product-repository operations are reads, `git fetch`, and `git mv` of a card into
 `cards/closed/` by the author whose event retired it. A shared board's folder never receives a
-`/memory/` path or a task; the build refuses to write a page that would carry one.
+`/memory/` path; the build refuses to write a page that would carry one. Its page draws the
+repository's own tasks and nothing from memory.
 
 ## Procedure
 
@@ -346,15 +349,21 @@ then pushes.
 effects that belong to the brain running it, each idempotent: a card retired by an event of
 *this* author is moved (`git mv`) to `cards/closed/`, and the other brain receives the move by
 pull; the words of a reject are written into the card when *this* brain is the card's author;
-task actions change this brain's own task records. A card already in `cards/closed/` is left
+task actions change the records they name, in whichever store holds each – a repository's
+`brain/tasks/` included – with a History entry naming this brain's author. A card already in `cards/closed/` is left
 alone. If both authors save the same outcome before either pulls, both move the same file to the
 same name with the same content, which Git merges clean.
 
-**What never enters the repository.** Each owner's tasks about the project stay in that owner's
-`/memory/tasks/`, drawn on a page of their own at `/memory/boards/projects/<board id>.html`,
-never on the shared page; `build_status.py` refuses to write a shared page that carries a
-`/memory/` path or a task section. The generated `status.html` and `state.json` are ignored by
-Git and rebuilt after every pull.
+**What never enters the repository.** The project's tasks live in the repository's
+`brain/tasks/` and the shared page draws them, linked relative to the repository, so every brain
+on the project sees the same list. Each owner's private tasks, notes and sources about the
+project stay in that owner's memory – the pointer node's own `tasks/`, memory nodes beneath it,
+the companion files in `/memory/tasks/private/` – and are drawn only on a page of the owner's own
+at `/memory/boards/projects/<board id>.html`, never on the shared page. `build_status.py` refuses
+to write a shared page that carries a `/memory/` path, whichever file or task record it came
+from. A note typed on a repository task goes into that record's History, which every reader of
+the repository sees; the note box says so. The generated `status.html` and `state.json` are
+ignored by Git and rebuilt after every pull.
 
 ### Release notes on the board
 
@@ -386,18 +395,31 @@ by a verdict; the note is what remains of it.
 
 ### Tasks on the boards
 
-The task record in `/memory/tasks/` stays the only record of a task (CONTRACT sections 3.3 and
-9). `task_board.py` reads the records at every regeneration and draws them; nothing is copied
-into `cards/`, so there is no second list to fall out of step.
+The task record stays the only record of a task (CONTRACT sections 3.3 and 9). It lives in one
+of the brain's task stores, which the tasks skill lists in one place (`task_stores.stores`): the
+owner store `/memory/tasks/` for tasks of no project, a memory node's `tasks/`, a pointer node's
+private `tasks/`, and a project repository's `brain/tasks/`. `task_board.py` reads every
+reachable store at every regeneration and draws the records; nothing is copied into `cards/`, so
+there is no second list to fall out of step. A store that cannot be read (a repository not
+checked out here) is named on the directory and in the build's report, never left out quietly.
+A record that cannot be read or carries a Git conflict marker is drawn in the warning colour,
+without controls, until it is resolved by hand.
 
-**Routing** – one rule, in one function, used by every page:
+**Routing** – one rule, in one function, used by every page, by the node of the store that holds
+the task:
 
-1. Walk the task's `project_refs` in order. The first reference that is a registered board's
-   `node`, or a folder beneath it, decides (the deepest matching node wins).
-2. With `auto_boards` on, a first reference under `auto_roots` with no registered board gets an
+1. A task in the owner store belongs to no project: the **personal board**,
+   `/memory/boards/personal.html`. A reference such an old record still names is only a tag.
+2. Otherwise the deepest registered board whose `node` is the store's node or a folder above it.
+   On a shared board, a record of the repository that holds the board is drawn on the board's
+   own `status.html`; every other task routed to it – the pointer node's private tasks, the
+   tasks of memory nodes beneath the pointer – on the owner's page for the board.
+3. With `auto_boards` on, a store node under `auto_roots` with no registered board gets an
    automatic task-only board at `/memory/boards/projects/<slug>.html`.
-3. Otherwise – no references, or only projects without a board – the **personal board**,
-   `/memory/boards/personal.html`.
+4. Otherwise the personal board.
+
+A task for several projects is several records, one per store (`tasks.py new --project P
+--project Q`), so each is drawn once, on its own project's board.
 
 `auto_boards` is off by default, and that is the recommendation: a board is something the owner
 opens, and a directory full of one-task boards is one they stop reading. The personal board tags
@@ -407,8 +429,9 @@ regeneration. An automatic page whose tasks have all gone is kept, drawn empty, 
 be bookmarked.
 
 **When a project outgrows the personal board** (`SMART-RULE-0035`). Every regeneration counts,
-for each project under `auto_roots`, its open tasks on the personal board; a task that names two
-projects counts for both, and each project counts on its own, not with its parent. At five or
+for each project under `auto_roots`, its open tasks on the personal board – by the node of the
+task's store and every project the task names, so an old record that names two projects counts
+for both – and each project counts on its own, not with its parent. At five or
 more, `build_boards.py` prints `suggest a board: <project> (<path>) has <n> open tasks on the
 personal board`. The agent then asks the owner once, with a suggested answer. A "yes" is
 **Making a board**; a "no" adds the project's path to `tasks.board_declined` in `boards.json`,
@@ -416,9 +439,10 @@ which silences it for good. Branch count is not visible to the build (a project 
 names no repository), so the agent watches for three or more branches itself.
 
 **Where they are drawn.** A memory board shows its tasks in a *Tasks* section below the cards
-on its own `status.html` – still one link. A shared board's tasks are this owner's own and are
-drawn on `/memory/boards/projects/<board id>.html`, linked from the directory beside the board.
-The personal and automatic boards are pages of their own beside the directory, rewritten by
+on its own `status.html` – still one link. A shared board shows the repository's tasks the same
+way on its `status.html`, each linked relative to the repository; the owner's private tasks about
+the project are drawn on `/memory/boards/projects/<board id>.html`, linked from the directory
+beside the board with their open count. The personal and automatic boards are pages of their own beside the directory, rewritten by
 `build_boards.py` on every regeneration of any board. The directory lists the personal board
 first, then the registered boards (each with an open-task count), then automatic boards by
 label; tasks past due or due for review are counted in the warning colour.
@@ -446,23 +470,27 @@ rule, 26 September 2026).
 
 Saving hands them to the agent. On a board, **Save my verdicts** adds a `tasks` array
 (`{id, action, note, shots, title}`) to the verdicts file, and the tally and *Copy instead*
-include them. The personal and automatic pages have the same bar and save
+include them. The personal, automatic and owner's shared-board pages have the same bar and save
 `task-actions-<savedAt>.json` (schema `owner-board/task-actions/v1`, board `tasks`). Whatever was
 saved or copied leaves the browser's storage. `apply_events.py` finds both kinds of file in the
 same folders and applies each task through the tasks skill (`tasks.complete`, `tasks.do_now`,
-`tasks.add_note` – the one way a task changes):
+`tasks.add_note` – the one way a task changes). The tasks skill finds the task in whichever store
+holds it, refuses a store that may not be written now (a repository is fetched first and refused
+when behind, on another branch or unmerged), sets `updated` and appends a History entry
+`- <timestamp> – <author>: <what changed>` naming this brain's author, so a change one brain makes
+to a shared task says who made it, and regenerates that store's `STATE.md`:
 
-- **done** – status `completed`, `updated` stamped, a History entry with the owner's note, the
-  record moved to `completed/`, its `STATE.md` row removed and the open-task count corrected, and
-  a line at the top of `STATE.md`'s *Recently completed* where that section exists;
+- **done** – status `completed`, the record moved to its store's `completed/`, the entry
+  `done (completed)` with the owner's note;
 - **do now** – priority `high`, status `ready` unless already `in_progress` (an inbox task moves
-  to `open/` and gains its row), a History entry *Asked for now* with the note;
-- **a note alone** – a History entry with the note.
+  to `open/`), the entry `asked for now` with the note;
+- **a note alone** – the entry `note` with the note.
 
-Screenshots are written to `/memory/tasks/img/<task>-<saved>-<n>.<ext>` and linked in the History
-entry; only PNG, JPEG, WebP or GIF data is kept. An unknown task id is reported and skipped.
-`apply_events.py` ends with a **Do now** list: act on it first. Applied task-actions files move
-to `/memory/tasks/actions-applied/`.
+Screenshots are written to the `img/` folder of the task's own store,
+`<store>/img/<task>-<saved>-<n>.<ext>`, and linked in the History entry; only PNG, JPEG, WebP or
+GIF data is kept. An unknown task id (with any store that could not be read), a task in two
+places or a refused store is reported and skipped. `apply_events.py` ends with a **Do now** list:
+act on it first. Applied task-actions files move to `/memory/tasks/actions-applied/`.
 
 The browser code both page kinds share – shrinking a pasted screenshot, the thumbnails and
 lightbox, the download, the task controls and the task pages' save bar – is written once, in
@@ -545,14 +573,16 @@ Numbered as in `reconcile.py`; checks 1 to 8 need `repo`.
 6. A worktree no card mentions.
 7. A worktree whose branch is already merged.
 8. A version merged into main with no card, not in `closed`, and whose merge subject names no
-   task that exists under `/memory/tasks/` (open or completed): a merge such as
-   `Merge 1.4.0: paths (TASK-2026-0903)` is the task flow's own record and counts as seen.
+   task that exists in any reachable task store (open or completed): a merge such as
+   `Merge 1.4.0: paths (TASK-sam-2026-0903)` is the task flow's own record and counts as seen.
 9. A derived key (`closed`, `mainVersion`, `generated`) kept by hand in `board.json`: the
    version is read from git and the register is folded from the events on every build, so a
    kept copy can only go stale and is reported until the key is removed.
-10. A track's task has no record, is missing from `/memory/tasks/STATE.md`, or still says
-    `ready` while the track has landed work or a card in flight. Memory boards only: a shared
-    board's tracks may name a task the other brain does not have.
+10. A track's task has no open record in the store of the board's node, is missing from that
+    store's `STATE.md`, or still says `ready` while the track has landed work or a card in
+    flight. On a shared board that store is the repository's `brain/tasks/`, which every brain
+    on the project has; the sentence names the store by its label, so it carries no `/memory/`
+    path.
 11. On a board that draws release notes: a card ready for review whose version raised the
     first or middle number above every closed version and that names no release note.
 
@@ -566,8 +596,8 @@ Numbered as in `reconcile.py`; checks 1 to 8 need `repo`.
 
 `status.html` and `state.json`, regenerated in place at the permanent path; card records under
 `cards/` and `cards/closed/`; event records under `events/`; screenshots under `img/`;
-`/memory/boards/index.html`, `/memory/boards/personal.html`, the task pages of shared boards
-and any automatic task boards, refreshed on every regeneration; saved verdict files filed under
+`/memory/boards/index.html`, `/memory/boards/personal.html`, the owner's page of each shared
+board and any automatic task boards, refreshed on every regeneration; saved verdict files filed under
 `/memory/skills/owner-board/applied/`.
 
 ## Failure behaviour
@@ -577,15 +607,19 @@ vanishes quietly is the exact failure this machinery exists to end. A reconcilia
 cannot run is drawn on the page as an error rather than as silence, and a missing product
 checkout is said, not skipped. A verdict on a card that has changed, or decided on a page that
 had not seen the card's latest event, is refused and says so. A shared page that would carry a
-`/memory/` path or a task is refused, not written. A missing or invalid configuration stops the
-command with one plain line and exit code 2.
+`/memory/` path – from a board file or from one of the repository's task records – is refused,
+not written; the record is fixed first. A shared board whose pointer node names another checkout
+than the one holding the board draws no repository task and says so at the top of the page. A
+task store that cannot be read is named on the directory; a task action on a store that may not
+be written now is skipped with the tasks skill's reason and the command that fixes it. A missing
+or invalid configuration stops the command with one plain line and exit code 2.
 
 ## Logging and state, knowledge and task updates
 
 Commit card and event changes with named paths (`git commit -- <paths>`); other sessions share
 the memory repository, and the other brain shares the project repository. After a packet lands,
-update the parent task's status word and its row in `/memory/tasks/STATE.md` on the same pass –
-see **A status word is written when work starts and never when it finishes** in
+update the parent task's status word through `tasks.py` on the same pass (its store's `STATE.md`
+is generated from the records) – see **A status word is written when work starts and never when it finishes** in
 `/shared/skills/delegate-work/SKILL.md`.
 
 ## The five rules this was built out of

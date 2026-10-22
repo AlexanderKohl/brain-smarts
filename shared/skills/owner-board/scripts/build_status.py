@@ -12,9 +12,9 @@ derived `closed` register so the reconciliation knows it was seen rather than lo
 
 The state is folded from the event log on every build (`events.fold`), so two brains that share
 a board derive the same page from the same files. Both outputs are generated, never kept by
-hand, and on a repository board are ignored by Git and rebuilt after every pull. A repository
-board draws no tasks and carries nothing from `/memory/`: the build refuses to write a page
-that would (CONTRACT section 16.2). After writing the page, the directory above every board
+hand, and on a repository board are ignored by Git and rebuilt after every pull. A repository board draws the tasks of
+its repository's own store (`brain/tasks/`, linked relative to the repository) and carries
+nothing from `/memory/`: the build refuses to write a page that would (CONTRACT section 16.2). After writing the page, the directory above every board
 (`build_boards.py`) is regenerated too, so it can never be older than any board.
 
     python build_status.py [--board <id> | --all] [--no-fetch]
@@ -182,12 +182,13 @@ def page_data(derived: dict) -> dict:
 def build(config: board_config.Config, board: dict, directory: bool = True) -> dict:
     """Write `status.html` and `state.json` for one board and, unless told not to, the directory.
 
-    A memory board draws the task records routed to it (`task_board.py`) below the cards; a
-    repository board never does, because each owner's tasks stay in that owner's memory.
+    Every board draws the task records routed to it (`task_board.py`) below the cards. On a
+    repository board those are the records of that repository's store only; the owner's private
+    tasks about the project are drawn on the owner's page for the board, in memory.
     """
     derived = events.state(board)
     tasks_html = ""
-    if task_board.enabled(config) and not board.get("shared"):
+    if task_board.enabled(config):
         routed = task_board.route(config)
         tasks_html = task_board.section(routed[board["id"]], Path(board["folder"]))
     # Run every time, so the conductor cannot choose not to; a reconciliation that cannot run
@@ -196,6 +197,9 @@ def build(config: board_config.Config, board: dict, directory: bool = True) -> d
         derived["adrift"] = reconcile.check(board, derived)
     except Exception as err:
         derived["adrift"] = ["The reconciliation against git could not run: " + str(err)]
+    store_problem = task_board.shared_store_problem(config, board)
+    if store_problem:
+        derived["adrift"].append(store_problem)
     # The version on the page is git's, read now; board.json keeps no copy of it.
     if board.get("repo"):
         try:
@@ -223,13 +227,15 @@ def build(config: board_config.Config, board: dict, directory: bool = True) -> d
         .replace("__DATA__", _json(shown))
     )
     if board.get("shared"):
-        # A collaborator cannot resolve a /memory/ path, and tasks are each owner's own.
+        # A collaborator cannot resolve a /memory/ path, and the owner's memory is private: the
+        # page may carry the repository's own tasks, never anything from memory.
         leaked = memory_mentions(board["folder"])
         if leaked:
             raise Refused("refused to write " + out + ": " + ", ".join(leaked)
                           + " mention /memory/; a repository board may carry no /memory/ path")
-        if MEMORY_PATH.search(page) or 'id="tasks"' in page:
-            raise Refused("refused to write " + out + ": a repository board may carry no /memory/ path and no tasks")
+        if MEMORY_PATH.search(page):
+            raise Refused("refused to write " + out + ": a repository board may carry no /memory/ path"
+                          " (a task record of the repository that names one is fixed in the record)")
     with open(out, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(page)
     cards.write_state(board, derived)

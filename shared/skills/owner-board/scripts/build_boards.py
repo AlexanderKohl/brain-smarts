@@ -4,7 +4,8 @@ The owner bookmarks this one page. It lists the personal task board, every regis
 any automatic task board, with how many cards on each are waiting and how many tasks are open,
 read from the card files and the task records at the moment it runs, so a project nobody has
 opened in a fortnight cannot go quiet without the count saying so. The personal and automatic
-task pages (`task_board.py`) are written here too, on every run.
+task pages and the owner's page of each shared board (`task_board.py`) are written here too, on
+every run, and a task store that could not be read is named.
 
 Boards are registered in `/memory/skills/owner-board/config/boards.json`. A board missing from
 the registry never appears here, and a board that never appears here is one nobody opens.
@@ -175,7 +176,9 @@ def task_block(config: board_config.Config, board: dict, tally: dict) -> str:
             '<div class="counts">' + "".join(pills) + "</div></div>")
 
 
-def block(config: board_config.Config, board: dict, data: dict, tally: dict | None = None) -> str:
+def block(config: board_config.Config, board: dict, data: dict, tally: dict | None = None,
+          own: dict | None = None) -> str:
+    """One registered board on the directory; `own` is the tally of the owner's page of a shared board."""
     counts: dict = {}
     for card in data["items"]:
         counts[card.get("state")] = counts.get(card.get("state"), 0) + 1
@@ -198,11 +201,12 @@ def block(config: board_config.Config, board: dict, data: dict, tally: dict | No
             pills.insert(0, '<span class="n back"><b>' + str(folded[key]) + "</b>" + label + "</span>")
     adrift = data.get("adrift") or []
     tasks_link = ""
-    if board.get("shared") and tally is not None:
-        # A repository board holds no tasks; this owner's are on a page of their own in memory.
-        page = config.directory_folder / str(config.tasks["auto_folder"]) / (board["id"] + ".html")
-        tasks_link = ('<p class="blurb">Tasks: <a href="' + html.escape(os.path.relpath(str(page), str(config.directory_folder)).replace(os.sep, "/"))
-                      + '">your own tasks page</a> (the board is shared; tasks are not)</p>')
+    if board.get("shared") and own is not None:
+        # A repository board draws the repository's tasks; this owner's private tasks about the
+        # project are on a page of their own in memory.
+        page = task_board.own_page(config, board["id"])
+        tasks_link = ('<p class="blurb">Private tasks: <a href="' + html.escape(os.path.relpath(str(page), str(config.directory_folder)).replace(os.sep, "/"))
+                      + '">your own page</a> &middot; ' + str(own["open"]) + " open (never in the repository)</p>")
     return ('<div class="b' + (" act" if waiting else "") + '">'
             '<h2><a href="' + html.escape(href) + '">' + html.escape(board["label"]) + "</a></h2>"
             '<p class="blurb">' + html.escape(board.get("blurb", "")) + "</p>" + tasks_link
@@ -240,9 +244,14 @@ def build(config: board_config.Config, known: dict | None = None, now: str | Non
                           '<p class="blurb">' + html.escape(board.get("blurb", "")) + "</p>"
                           '<p class="adrift">This board could not be read: ' + html.escape(str(err)) + "</p></div>")
             continue
-        blocks.append(block(config, board, data, tallies.get(board["id"])))
+        blocks.append(block(config, board, data, tallies.get(board["id"]), tallies.get(task_board.OWN + board["id"])))
     for auto in sorted((b for b in routed.values() if b["kind"] == "auto"), key=lambda b: b["label"].lower()):
         blocks.append(task_block(config, auto, tallies[auto["key"]]))
+    # A store that could not be read is said, never left out quietly (a repository not checked out).
+    missing = task_board.unread(config)
+    if missing:
+        blocks.append('<p class="adrift">Task stores not read: ' + html.escape(
+            "; ".join(s.label + " (" + str(s.reason) + ")" for s in missing)) + "</p>")
     if not blocks:
         blocks = ['<p class="none">No boards registered yet.</p>']
     page = (PAGE.replace("__FAVICON__", board_config.favicon_link(config))
@@ -255,6 +264,8 @@ def build(config: board_config.Config, known: dict | None = None, now: str | Non
         fh.write(page)
     print("wrote", out, "(" + str(len(config.boards)) + " board(s)"
           + (", " + str(sum(t["open"] for t in tallies.values())) + " open task(s)" if routed else "") + ")")
+    for store in missing:
+        print("task store not read: " + store.label + " (" + str(store.reason) + ")")
     # SMART-RULE-0035: say which projects have outgrown the personal board, so the agent asks.
     for node, title, n in task_board.outgrown(config, routed):
         print("suggest a board: " + title + " (" + node + ") has " + str(n) + " open tasks on the personal board."

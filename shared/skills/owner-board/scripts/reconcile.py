@@ -27,10 +27,14 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# The task stores have one reader, the tasks skill's own (SMART-RULE-0018), beside this skill.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tasks" / "scripts"))
 
 import board_config  # noqa: E402
 import cards  # noqa: E402
 import events  # noqa: E402
+import task_stores  # noqa: E402
+from task_records import ID_IN_TEXT as TASK_ID  # noqa: E402  (the one identifier pattern)
 
 
 class Repo:
@@ -89,8 +93,6 @@ def young(item: dict, minutes: int) -> bool:
     return (now - began).total_seconds() < minutes * 60
 
 
-TASK_ID = re.compile(r"TASK-\d{4}-\d{4}")
-
 
 def abandoned_branches(data: dict) -> dict:
     """`abandoned` as branch -> reason, whether the board file keeps it as a mapping or as a
@@ -126,12 +128,27 @@ def production_version(board: dict) -> str:
     return _version_in(repo.git("show", repo.production + ":" + committed["file"]), committed)
 
 
-def task_exists(board: dict, task_id: str) -> bool:
-    """A task record under /memory/tasks/, open or completed, whichever folder holds it."""
-    tasks = Path(str(board["memory"])) / "tasks"
-    if not tasks.is_dir():
-        return False
-    return any(p.is_dir() and any(p.glob(task_id + "*.md")) for p in tasks.iterdir())
+def _brain(board: dict) -> Path:
+    return Path(str(board["memory"])).parent
+
+
+def task_ids(board: dict) -> set:
+    """The identifiers of every task record in every reachable store, open or completed."""
+    return {t.tid for t in task_stores.load_all(_brain(board))}
+
+
+def task_exists(board: dict, task_id: str, known: set | None = None) -> bool:
+    """A task record in any reachable store of the brain, whichever folder holds it."""
+    return task_id in (known if known is not None else task_ids(board))
+
+
+def board_store(board: dict):
+    """The store of the board's node: on a shared board its repository's store, on a memory
+    board the node's own (`task_stores.store_for`). None when the board names no node."""
+    node = str(board.get("node") or "").strip()
+    if not node:
+        return None
+    return task_stores.store_for(_brain(board), "/" + node.strip("/"))
 
 
 def check(board: dict, data: dict | None = None) -> list:
@@ -145,10 +162,9 @@ def check(board: dict, data: dict | None = None) -> list:
     if board.get("repo"):
         git_said, main_version = _git_checks(board, data)
         said += git_said
-    # Each owner's tasks live in that owner's memory: a shared board's tracks may name a task
-    # the other brain does not have, so the task checks run only on a memory board.
-    if not board.get("shared"):
-        said += _task_checks(board, data)
+    # 10 reads the store of the board's node: on a shared board the repository's, which every
+    # brain on the project has.
+    said += _task_checks(board, data)
     # 9. A derived value kept by hand in board.json. The version is read from git and the
     # closed register is folded from the events on every build, so a kept copy can only go
     # stale: it is reported until the key is removed.
@@ -289,11 +305,12 @@ def _git_checks(board: dict, data: dict) -> tuple:
 
     # 8. A version that landed and has no card. Closing a card writes its version into
     # `closed`, so anything merged and neither carded nor closed has gone quiet. A merge whose
-    # subject names a task that exists under /memory/tasks/ (open or completed) is the task
+    # subject names a task that exists in any reachable store (open or completed) is the task
     # flow's own record of it, and counts as seen.
     closed = set(data.get("closed", {}) or {})
     carded = {(i.get("version") or "") for i in items}
     pattern = board.get("merge_version_pattern")
+    known: set | None = None
     if pattern:
         for line in repo.git("log", "--merges", "-25", "--format=%s", main).splitlines():
             found = re.search("(" + pattern + ")", line)
@@ -302,7 +319,10 @@ def _git_checks(board: dict, data: dict) -> tuple:
             ver = found.group(1)
             if ver in carded or ver in closed:
                 continue
-            if any(task_exists(board, t) for t in TASK_ID.findall(line)):
+            named = TASK_ID.findall(line)
+            if named and known is None:
+                known = task_ids(board)
+            if any(task_exists(board, t, known) for t in named):
                 continue
             said.append(ver + " is merged into " + main + " and has no card - the owner has not seen it.")
     return said, main_version
@@ -311,30 +331,36 @@ def _git_checks(board: dict, data: dict) -> tuple:
 def _task_checks(board: dict, data: dict) -> list:
     """10. A task record whose status word is stale: a status is written when work starts and
     never when it finishes. A track with landed work or a card in flight cannot have a task
-    that still says nobody has begun."""
+    that still says nobody has begun. The track's task is looked for in the store of the board's
+    node and named by the store's label (a repository's label carries no /memory/ path)."""
     said: list = []
-    tasks_dir = os.path.join(str(board["memory"]), "tasks", "open")
-    state_file = os.path.join(str(board["memory"]), "tasks", "STATE.md")
-    index = Path(state_file).read_text(encoding="utf-8", errors="replace") if os.path.exists(state_file) else ""
+    tracks = {k: t for k, t in (data.get("tracks") or {}).items() if t.get("task")}
+    if not tracks:
+        return said
+    shared = bool(board.get("shared"))
+    try:
+        store = board_store(board)
+    except ValueError as err:
+        # The reason names memory nodes, which a shared page may not carry.
+        return ["The task checks could not run: " + ("more than one pointer node names this "
+                "repository; one of them must stop being a pointer" if shared else str(err))]
+    if store is None:
+        return said
+    if shared and store.kind != "repository":
+        return ["The task checks could not run: the board's node in boards.json is not a pointer node with repo_url."]
+    if not store.reachable:
+        return ["The task checks could not read " + store.label + ": " + str(store.reason) + "."]
+    state_file = store.path / "STATE.md"
+    index = state_file.read_text(encoding="utf-8", errors="replace") if state_file.is_file() else ""
+    records = {t.tid: t for t in task_stores.load_tasks(store.path, ("open", "recurring"), owner=store)}
 
-    def status_of(task_id: str):
-        if not os.path.isdir(tasks_dir):
-            return None
-        for name in sorted(os.listdir(tasks_dir)):
-            if not name.startswith(task_id):
-                continue
-            head = Path(os.path.join(tasks_dir, name)).read_text(encoding="utf-8", errors="replace")[:1200]
-            found = re.search(r"^status:\s*(\S+)", head, re.M)
-            return found.group(1) if found else "?"
-        return None
-
-    for key, track in (data.get("tracks") or {}).items():
+    for key, track in tracks.items():
         task_id = track.get("task")
-        if not task_id:
-            continue
-        status = status_of(task_id)
+        record = records.get(task_id)
+        status = (record.get("status") or "?") if record is not None else None
         if status is None:
-            said.append(task_id + " is the task for the " + key + " track and has no record in /memory/tasks/open.")
+            said.append(task_id + " is the task for the " + key + " track and has no open record in "
+                        + store.label + ".")
             continue
         moving = (track.get("done") or 0) > 0 or any(
             i.get("track") == key and i.get("state") not in ("queued", "yours") for i in data.get("items", []))
@@ -342,7 +368,8 @@ def _task_checks(board: dict, data: dict) -> list:
             said.append(task_id + " still says ready, but the " + key
                         + " track has landed work or has a card in flight.")
         if index and task_id not in index:
-            said.append(task_id + " is the task for the " + key + " track and is not listed in /memory/tasks/STATE.md.")
+            said.append(task_id + " is the task for the " + key + " track and is not listed in "
+                        + store.label + "/STATE.md.")
     return said
 
 

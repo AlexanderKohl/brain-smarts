@@ -1,30 +1,38 @@
 """Tasks on the boards: every task record is shown on exactly one board.
 
-The task record under `/memory/tasks/` is the single source (CONTRACT section 9). A board never
-copies a task into a card: this module reads the records each time a page is generated and
-draws them, so a status changed in the record is what the board shows at the next regeneration.
-Every task on a board links to its file. An open task card also carries two toggles, *Do now*
-and *Done*, and a note box that takes pasted screenshots (`page_js.py`); the page only records
-the owner's choice in the browser, and saving hands it to the agent, who applies it to the record
-through the tasks skill (`apply_verdicts.py`). The page itself never changes a record.
+The task record is the single source (CONTRACT section 9). It lives in one of the brain's task
+stores, which the tasks skill lists (`task_stores.stores`): the owner store `/memory/tasks/`, a
+memory node's `tasks/`, a pointer node's private `tasks/`, or a project repository's
+`brain/tasks/`. A board never copies a task into a card: this module reads every reachable store
+each time a page is generated and draws the records, so a status changed in a record is what the
+board shows at the next regeneration. Every task on a board links to its file. An open task card
+also carries two toggles, *Do now* and *Done*, and a note box that takes pasted screenshots
+(`page_js.py`); the page only records the owner's choice in the browser, and saving hands it to
+the agent, who applies it to the record through the tasks skill (`apply_events.py`). The page
+itself never changes a record.
 
-Routing, in one place so every page gives the same answer:
+Routing, in one place so every page gives the same answer, by the node of the store that holds
+the task (`Task.store.node`):
 
-1. Walk the task's `project_refs` in order. The first reference that belongs to a registered
-   board (the board's `node`, or a folder beneath it; the deepest such node wins) decides.
-2. With `tasks.auto_boards` on, the first reference under one of `tasks.auto_roots` that has
-   no registered board gets a generated task-only board of its own.
-3. Anything else – no `project_refs`, or projects without a board – goes to the owner's
-   personal board.
+1. A task in the owner store belongs to no project: the personal board.
+2. Otherwise the deepest registered board whose `node` is the store's node or a folder above it
+   decides. A board shared through a project repository has two pages: its own `status.html` in
+   the repository draws the tasks of that repository's store, and the owner's page for it in
+   memory draws every other task routed to it (the pointer node's private tasks, and the tasks of
+   memory nodes beneath the pointer).
+3. With `tasks.auto_boards` on, a store node under one of `tasks.auto_roots` with no registered
+   board gets a generated task-only board of its own.
+4. Anything else goes to the personal board.
 
 Where each board is drawn:
 
 - a registered board: a "Tasks" section at the foot of its own `status.html`;
+- the owner's page for a shared board: `/memory/<directory>/<auto_folder>/<board id>.html`;
 - the personal board: `/memory/<directory>/<personal.page>` (default `personal.html`);
 - an automatic board: `/memory/<directory>/<auto_folder>/<slug>.html`.
 
-The personal and automatic pages are written by `build_boards.py` on every regeneration of any
-board, beside the directory, so they cannot be older than it.
+The personal, automatic and owner's shared-board pages are written by `build_boards.py` on every
+regeneration of any board, beside the directory, so they cannot be older than it.
 
     python task_board.py route [--json]          which board each open task is on
     python task_board.py build [--for <task>]    regenerate the pages that show tasks
@@ -53,6 +61,7 @@ import board_config  # noqa: E402
 import page_js  # noqa: E402
 import team_lanes  # noqa: E402
 import tasks as task_store  # noqa: E402
+import task_stores  # noqa: E402
 
 # Left to right is the way a task travels. The action columns come first; `completed` shows
 # only what finished within `tasks.completed_days`.
@@ -179,14 +188,52 @@ def enabled(config: board_config.Config) -> bool:
 
 
 def load(config: board_config.Config) -> list[task_store.Task]:
-    """Every task record the boards can show: inbox, open and completed."""
+    """Every task record the boards can show, from every reachable store, each carrying its store."""
     if not enabled(config):
         return []
-    return task_store.load_tasks(config.task_store)
+    return task_stores.load_all(config.brain)
+
+
+def unread(config: board_config.Config) -> list:
+    """The stores the boards could not read (a repository not checked out here), with the reason."""
+    if not enabled(config):
+        return []
+    return task_stores.unreachable(config.brain)
 
 
 def is_open(task: task_store.Task) -> bool:
-    return task.folder in ("inbox", "open")
+    return task.folder in ("inbox", "open", "recurring")
+
+
+def store_node(task: task_store.Task) -> str | None:
+    """The node of the store that holds the task; None for the owner store."""
+    store = getattr(task, "store", None)
+    return _norm(store.node) if store is not None and store.node else None
+
+
+def is_repository(task: task_store.Task) -> bool:
+    store = getattr(task, "store", None)
+    return store is not None and store.kind == "repository"
+
+
+def _inside(path: Path, folder: Path) -> bool:
+    try:
+        Path(path).resolve().relative_to(Path(folder).resolve())
+    except ValueError:
+        return False
+    return True
+
+
+def repository_folder(board: dict) -> Path:
+    """The checkout that holds a shared board: the board folder is `<checkout>/brain/status`."""
+    return Path(board["folder"]).parents[1]
+
+
+def on_shared_page(board: dict, task: task_store.Task) -> bool:
+    """A task is drawn on a shared board's own page only when it is a record of the repository
+    that holds that page, so its link stays inside the repository."""
+    return (is_repository(task) and store_node(task) == board.get("node")
+            and _inside(task.path, repository_folder(board)))
 
 
 def _node_title(config: board_config.Config, node: str) -> str:
@@ -221,7 +268,8 @@ def outgrown(config: board_config.Config, routed: dict[str, dict]) -> list[tuple
     for task, _ in personal.get("tasks") or []:
         if not is_open(task):
             continue
-        for ref in {_norm(r) for r in _refs(task)}:
+        named = {_norm(r) for r in _refs(task) if str(r).startswith("/")}
+        for ref in named | ({store_node(task)} if store_node(task) else set()):
             if not any(ref.startswith(root) and len(ref) > len(root) for root in roots):
                 continue
             if any(ref == d or ref.startswith(d + "/") for d in declined):
@@ -231,19 +279,32 @@ def outgrown(config: board_config.Config, routed: dict[str, dict]) -> list[tuple
     return sorted(found, key=lambda row: (-row[2], row[0]))
 
 
+OWN = "own:"   # the key prefix of the owner's page for a shared board
+
+
+def own_page(config: board_config.Config, board_id: str) -> Path:
+    """The owner's page for a shared board, in memory beside the automatic boards."""
+    return config.directory_folder / str(config.tasks["auto_folder"]) / (board_id + ".html")
+
+
 def boards(config: board_config.Config) -> dict[str, dict]:
-    """Every board a task can land on, by key: registered boards, then the personal board."""
+    """Every board a task can land on, by key: registered boards, then the personal board.
+
+    A board shared through a project repository is two entries: the board itself, whose
+    `status.html` in the repository draws that repository's tasks, and `own:<id>`, the owner's
+    page for it in memory, which draws the owner's private tasks about the project."""
     folder = config.directory_folder
     out: dict[str, dict] = {}
     for board in config.boards:
-        # A board shared through a project repository holds no tasks (CONTRACT 16.2): this
-        # owner's tasks about it are drawn on a page of their own beside the automatic boards.
         shared = bool(board.get("shared"))
-        page = (config.directory_folder / str(config.tasks["auto_folder"]) / (board["id"] + ".html")) if shared \
-            else Path(board["folder"]) / "status.html"
-        out[board["id"]] = {"key": board["id"], "kind": "registered", "label": board["label"],
-                            "node": _norm(board["node"]) if board.get("node") else None,
-                            "blurb": board.get("blurb", ""), "page": page, "shared": shared}
+        node = _norm(board["node"]) if board.get("node") else None
+        out[board["id"]] = {"key": board["id"], "kind": "registered", "label": board["label"], "node": node,
+                            "blurb": board.get("blurb", ""), "page": Path(board["folder"]) / "status.html",
+                            "shared": shared, "folder": Path(board["folder"])}
+        if shared:
+            out[OWN + board["id"]] = {"key": OWN + board["id"], "kind": "own", "board_id": board["id"],
+                                      "label": board["label"] + " – your private tasks", "node": node,
+                                      "blurb": board.get("blurb", ""), "page": own_page(config, board["id"])}
     p = config.personal
     out[p["id"]] = {"key": p["id"], "kind": "personal", "label": p["label"], "node": None,
                     "blurb": p.get("blurb", ""), "page": folder / p["page"]}
@@ -261,19 +322,58 @@ def _auto_board(config: board_config.Config, ref: str) -> dict | None:
 
 
 def board_for(config: board_config.Config, task: task_store.Task, known: dict[str, dict]) -> tuple[dict, str | None]:
-    """The one board a task is shown on, and the reference that put it there."""
-    refs = _refs(task)
+    """The one board a task is shown on, and the node that put it there (module docstring)."""
+    node = store_node(task)
+    if node is None:
+        # The owner store holds the tasks of no project; a reference one still names is a tag only.
+        refs = [r for r in _refs(task) if str(r).startswith("/")]
+        return known[config.personal["id"]], (_norm(refs[0]) if refs else None)
     registered = [b for b in known.values() if b["kind"] == "registered" and b["node"]]
-    for raw in refs:
-        ref = _norm(raw)
-        owners = [b for b in registered if ref == b["node"] or ref.startswith(b["node"] + "/")]
-        if owners:
-            return max(owners, key=lambda b: len(b["node"])), ref
-        if config.tasks.get("auto_boards"):
-            auto = _auto_board(config, ref)
-            if auto:
-                return known.setdefault(auto["key"], auto), ref
-    return known[config.personal["id"]], (_norm(refs[0]) if refs else None)
+    owners = [b for b in registered if node == b["node"] or node.startswith(b["node"] + "/")]
+    if owners:
+        board = max(owners, key=lambda b: len(b["node"]))
+        if board.get("shared") and not on_shared_page(board, task):
+            return known[OWN + board["key"]], node
+        return board, node
+    if config.tasks.get("auto_boards"):
+        auto = _auto_board(config, node)
+        if auto:
+            return known.setdefault(auto["key"], auto), node
+    return known[config.personal["id"]], node
+
+
+def shared_store_problem(config: board_config.Config, board: dict) -> str | None:
+    """Why a shared board's page draws no repository tasks, as a sentence; None when it can.
+
+    The board folder comes from boards.json (the clone's folder name, per brain) and the store
+    from the pointer node (`local_path`); when they name different checkouts the page would link
+    outside its repository, so it draws none and says so."""
+    if not board.get("shared") or not enabled(config):
+        return None
+    node = _norm(board["node"]) if board.get("node") else None
+    store = next((s for s in task_stores.stores(config.brain) if s.kind == "repository" and s.node == node), None)
+    if store is None:
+        return ("No pointer node with repo_url is named as this board's node, so its repository's tasks "
+                "are not drawn; set the board's node in boards.json.")
+    if not store.reachable:
+        return "The tasks of " + store.label + " were not read: " + str(store.reason) + "."
+    if store.checkout is not None and Path(store.checkout).resolve() != repository_folder(board).resolve():
+        return ("The pointer node names the checkout " + Path(store.checkout).as_posix() + " but this board is in "
+                + repository_folder(board).as_posix() + ", so its tasks are not drawn here; make them the same folder.")
+    return None
+
+
+def board_records(config: board_config.Config, board: dict, records: list | None = None) -> list:
+    """The records of a registered board's own stores: on a shared board, its repository's store;
+    on a memory board, every store whose node is the board's node or a folder beneath it."""
+    node = _norm(board["node"]) if board.get("node") else None
+    if not node:
+        return []
+    records = load(config) if records is None else records
+    if board.get("shared"):
+        entry = {"node": node, "folder": Path(board["folder"])}
+        return [t for t in records if on_shared_page(entry, t)]
+    return [t for t in records if store_node(t) and (store_node(t) == node or store_node(t).startswith(node + "/"))]
 
 
 def route(config: board_config.Config, records: list[task_store.Task] | None = None,
@@ -338,6 +438,13 @@ def _href(page_dir: Path, target: Path) -> str:
 def _task_html(task: task_store.Task, ref: str | None, board: dict, page_dir: Path,
                column: str, today: datetime.date) -> str:
     esc = html.escape
+    if task.problem:
+        # A record that cannot be read, or carries a Git conflict, is shown in the warning colour,
+        # with no controls: it is resolved by hand before anything else changes it.
+        return ('<article class="task late" data-task="' + esc(task.tid) + '" data-status="unknown">'
+                '<div class="tmeta"><span class="tag warn">' + esc(task.problem) + "</span></div>"
+                '<p class="ask"><a href="' + esc(_href(page_dir, task.path)) + '">' + esc(task.get("title") or task.tid)
+                + "</a></p>" + '<p class="tid">' + esc(task.tid) + "</p></article>")
     status = task.get("status") or "unknown"
     priority = (task.get("priority") or "").lower()
     due, review = task.day("due"), task.day("next_review")
@@ -371,15 +478,29 @@ def _task_html(task: task_store.Task, ref: str | None, board: dict, page_dir: Pa
             + '<p class="ask"><a href="' + esc(_href(page_dir, task.path)) + '">'
             + esc(task.get("title") or task.tid) + "</a></p>"
             + '<p class="tid">' + esc(task.tid) + "</p>" + held + wait
-            + (CONTROLS if column != "completed" else "") + "</article>")
+            + (controls(is_repository(task)) if column != "completed" else "") + "</article>")
 
 
-# What the owner can do with an open task, wired by `page_js.TASKS_JS`. Buttons and a text box,
-# never a form: nothing here submits anything or follows the title's link.
-CONTROLS = ('<div class="tact"><button type="button" class="now" data-action="do_now" aria-pressed="false">Do now</button>'
+# A note on a repository task goes into that record's History, which everyone who can read the
+# repository sees; its note box says so.
+REPOSITORY_NOTE = " (it goes into the task's History, which the repository's readers see)"
+
+
+def controls(repository: bool = False) -> str:
+    """What the owner can do with an open task, wired by `page_js.TASKS_JS`. Buttons and a text
+    box, never a form: nothing here submits anything or follows the title's link."""
+    placeholder = page_js.NOTE_PLACEHOLDER + (REPOSITORY_NOTE if repository else "")
+    return ('<div class="tact"><button type="button" class="now" data-action="do_now" aria-pressed="false">Do now</button>'
             '<button type="button" class="done" data-action="done" aria-pressed="false">Done</button></div>'
             '<textarea class="tnote-in" rows="1" aria-label="Note for the agent" placeholder="'
-            + html.escape(page_js.NOTE_PLACEHOLDER) + '"></textarea><div class="shots"></div>')
+            + html.escape(placeholder) + '"></textarea><div class="shots"></div>')
+
+
+CONTROLS = controls()
+
+# Where a section's tasks come from. A shared page names no /memory/ path: build_status refuses one.
+SHARED_NOTE = "Shown from the task records in this repository's brain/tasks/, which every brain on the project reads."
+MEMORY_NOTE = "Shown from the task records in this brain's task stores."
 
 
 def section(board: dict, page_dir: Path, today: datetime.date | None = None) -> str:
@@ -408,7 +529,7 @@ def section(board: dict, page_dir: Path, today: datetime.date | None = None) -> 
                     + (body or '<div class="tempty">Nothing here.</div>') + "</div>")
     return ('<section class="tasks" id="tasks" data-board="' + html.escape(board["key"]) + '">'
             '<h2>Tasks<span class="n">' + str(open_count) + " open</span></h2>"
-            '<p class="tnote">Shown from the task records in /memory/tasks/. Click a title to open the record. '
+            '<p class="tnote">' + (SHARED_NOTE if board.get("shared") else MEMORY_NOTE) + " Click a title to open the record. "
             "Mark a task Do now or Done, or leave a note, and save it for the agent with the bar below.</p>"
             + lanes + '<div class="tboard">' + "".join(cols) + "</div></section>")
 
@@ -449,11 +570,11 @@ def _write_page(config: board_config.Config, board: dict, now: str, today: datet
 
 def write_pages(config: board_config.Config, routed: dict[str, dict], now: str,
                 today: datetime.date | None = None) -> list[Path]:
-    """Write the personal board and every automatic board. Registered boards draw their own."""
+    """Write the personal board, the owner's page of each shared board and every automatic board.
+    Registered boards draw their own (`build_status.py`)."""
     if not enabled(config):
         return []
-    written = [_write_page(config, board, now, today) for board in routed.values()
-               if board["kind"] != "registered" or board.get("shared")]
+    written = [_write_page(config, board, now, today) for board in routed.values() if board["kind"] != "registered"]
     # An automatic board whose tasks have all gone keeps its page (it may be bookmarked), drawn
     # empty, rather than going on showing tasks that have moved.
     auto_dir = config.directory_folder / str(config.tasks["auto_folder"])
@@ -518,7 +639,7 @@ def _find(records: list[task_store.Task], which: str) -> task_store.Task:
     for task in records:
         if which in (task.tid, str(task.path), task.path.name) or Path(which).resolve() == task.path.resolve():
             return task
-    raise board_config.ConfigError("no task record " + which + " in the task store" + board_config._hint(which))
+    raise board_config.ConfigError("no task record " + which + " in any reachable task store" + board_config._hint(which))
 
 
 def main(argv=None) -> int:

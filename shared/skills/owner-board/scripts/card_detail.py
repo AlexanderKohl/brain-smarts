@@ -10,9 +10,11 @@ on the page's copy of each card, never in the card file or `state.json`:
   wrote the branch's commits that are not on the board's main branch, read from the local Git
   checkout when the page is built (`branch_authors`), and left out when Git cannot tell.
 - `taskLinks`: every task id the card names (its `task` or `tasks` field, then its title, what
-  landed and what to check, in that order, each id once). On a memory board each links to its
-  task record, relative to the page. A repository board carries no `/memory/` path (CONTRACT
-  16.1), so there the id stands alone with a note that the record is in the owner's own brain.
+  landed and what to check, in that order, each id once). An id whose record is in one of the
+  board's own stores (`task_board.board_records`: on a repository board that repository's
+  `brain/tasks/`, on a memory board the stores of its node and the nodes beneath it) links to
+  the record, relative to the page. Any other id stands alone with a note: a repository board
+  carries no `/memory/` path (CONTRACT 16.1), and a memory board links only its own records.
 - `history`: the card's events, oldest first, as kind, by, when and why.
 
 `JS` draws them inside a card's detail and `CSS` styles them; both are inlined into the page.
@@ -20,15 +22,14 @@ on the page's copy of each card, never in the card file or `state.json`:
 
 from __future__ import annotations
 
-import re
 import subprocess
 from pathlib import Path
 
 import task_board
+from task_records import ID_IN_TEXT as TASK_ID  # the one identifier pattern (SMART-RULE-0018)
 
-TASK_ID = re.compile(r"\bTASK-\d{4}-\d{4}\b")
-REPO_NOTE = "the task record is kept in the owner's own brain, not in this repository"
-MISSING_NOTE = "no task record with this id was found"
+REPO_NOTE = "no record with this id in this repository's brain/tasks/; it may be kept in a brain's own memory"
+MISSING_NOTE = "no task record with this id in this board's task stores"
 FACTS = (("asked", "Asked"), ("startedAt", "Started"), ("branch", "Branch"), ("branchAuthor", "Branch by"),
          ("version", "Version"), ("release_note", "Release note"), ("author", "Card by"))
 
@@ -111,13 +112,11 @@ def attach(config, board: dict, shown: dict, derived: dict, records=None) -> Non
     """Add facts, task links and history to each card of the page data `shown`.
 
     `derived` is the full state the page data was cut from, in the same order; it still holds
-    each card's events. `records` replaces the task store in tests.
+    each card's events. `records` replaces the loaded task records in tests; only those in the
+    board's own stores are linked.
     """
     shared = bool(board.get("shared"))
-    by_id = {}
-    if not shared:
-        loaded = records if records is not None else task_board.load(config)
-        by_id = {t.tid: t for t in loaded}
+    by_id = {t.tid: t for t in task_board.board_records(config, board, records)}
     page_dir = Path(board["folder"])
     full = {item["id"]: item for item in derived.get("items", [])}
     authors: dict = {}
@@ -130,12 +129,9 @@ def attach(config, board: dict, shown: dict, derived: dict, records=None) -> Non
             whole["branchAuthor"] = authors[branch]
         links = []
         for tid in task_ids(whole):
-            if shared:
-                links.append({"id": tid, "note": REPO_NOTE})
-                continue
             record = by_id.get(tid)
             if record is None:
-                links.append({"id": tid, "note": MISSING_NOTE})
+                links.append({"id": tid, "note": REPO_NOTE if shared else MISSING_NOTE})
             else:
                 links.append({"id": tid, "href": task_board._href(page_dir, record.path),
                               "title": record.get("title") or ""})
