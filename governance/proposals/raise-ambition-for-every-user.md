@@ -4,14 +4,14 @@ title: Raise the ambition of every request
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: proposed
+status: implemented
 owner: brain-owner
 created: 2026-10-23T07:37:45+10:00
-updated: 2026-10-23T07:37:45+10:00
-rule_id: null
-accepted_by: null
-accepted_at: null
-implemented_at: null
+updated: 2026-10-23T08:06:02+10:00
+rule_id: SMART-RULE-0044
+accepted_by: brain-owner
+accepted_at: 2026-10-23T08:06:02+10:00
+implemented_at: 2026-10-23T08:06:02+10:00
 previous_contract_version: 2.7.0
 new_contract_version: 2.7.0
 target_files:

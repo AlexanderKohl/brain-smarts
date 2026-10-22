@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-10-21T22:00:10+10:00
+updated: 2026-10-23T08:06:02+10:00
 owner: brain-owner
 ---
 
@@ -66,6 +66,7 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 | `SMART-RULE-0041` | Code files stay small | this file; `/shared/skills/code-map/` |
 | `SMART-RULE-0042` | Code repositories run the code map's checks | this file; `/shared/skills/code-map/` |
 | `SMART-RULE-0043` | Work moves between threads through cards | this file; `/shared/skills/delegate-work/`; `/shared/skills/tasks/` |
+| `SMART-RULE-0044` | Raise the ambition of every request | this file; `/shared/skills/raise-ambition/` |
 
 ## SMART-RULE-0010 – Communication efficiency
 
@@ -638,6 +639,22 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 - Start with two teams. The trial – cards closed per day, context sizes at open and close,
   merge conflicts, owner interruptions – and its decision are recorded under
   `/memory/projects/brain-development/` before a third team is added.
+
+## SMART-RULE-0044 – Raise the ambition of every request
+
+- At the intake of every request, the agent applies `/shared/skills/raise-ambition/`: it names
+  the outcome behind the request and checks whether a bigger version would serve the user better
+  – one that reaches higher (an outcome kept true, not a task done once), deeper (an expert's
+  methods and a harder, measurable target) or wider (other fields and roles, including an
+  adversarial reviewer). The user is the person whose request it is: the owner, or a
+  collaborator working in a shared project.
+- When a bigger version would serve the user better, the agent's clarifying question offers it
+  as option 1, marked recommended, with what it would take; the request as asked is option 2.
+  When no question is otherwise needed, the agent does what was asked and adds one line naming
+  the bigger version.
+- The agent never widens the work without the user's yes, does not repeat a bigger version the
+  user declined for the same request, and keeps the suggestion to a few lines. Safety, cost,
+  side-effect and governance rules are unchanged.
 
 ## Contract restatements
 
