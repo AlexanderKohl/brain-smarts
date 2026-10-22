@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 status: draft
 owner: brain-owner
 created: 2026-10-22T15:46:11+10:00
-updated: 2026-10-22T16:16:15+10:00
+updated: 2026-10-22T16:33:25+10:00
 rule_id: null
 accepted_by: null
 accepted_at: null
@@ -20,6 +20,7 @@ target_files:
   - /shared/templates/memory-skeleton/tasks/RULES.md
   - /memory/tasks/RULES.md
   - /shared/skills/repository-preflight/SKILL.md
+  - /shared/schemas/task-schema.md
 ---
 
 # One structure for every project node, with its own tasks, sources and facts
@@ -40,8 +41,11 @@ when a node needs a repository. `/memory/tasks/` keeps only tasks with no projec
 
 What will be different for the owner and agents:
 
-- **Where a task lives.** A task lives in the `tasks/` folder of the node its first project
-  reference names. Task views read every store: the review, the boards and the scheduled review.
+- **Where a task lives.** A task lives in the `tasks/` folder of the node its project reference
+  names, and a task with no project stays in `/memory/tasks/`. Work that concerns several
+  projects is split into one task per project, each in its own node's `tasks/` and each naming
+  the others in `related_tasks`. Task views read every store: the review, the boards and the
+  scheduled review.
 - **Privacy is a place.** Whatever a repository's `brain/` holds is visible to everyone who can
   read the repository. What the owner keeps private about a repository project sits in its
   pointer node, in the same layout: private tasks in `tasks/`, private sources in `sources/` and
@@ -53,12 +57,15 @@ What will be different for the owner and agents:
 - **Identifiers.** A new task's identifier names its author, `TASK-<author>-YYYY-NNNN`, in every
   store. Existing tasks keep their identifiers.
 - **Sources and facts.** A source that one node owns is kept in that node, and so is a fact about
-  one project.
+  one project. A repository project's sources go into its repository's `brain/sources/` and
+  `brain/raw/`, like its tasks, unless the owner marks one private; a private one goes to the
+  pointer node.
 - **Scheduled runs.** A task that an app runs on a schedule names the job in a `schedule` field
   and records each run in its History.
 - **Migration.** Every task with a project moves into its node, open and completed alike, and so
-  do the project sources and project facts. Anything bound for a repository moves only after the
-  owner has cleared that repository's list.
+  do the project sources and project facts. A task not yet completed that names several projects
+  is first split, and the owner clears each split. Anything bound for a repository moves only
+  after the owner has cleared that repository's list.
 
 The proposal introduces no new rule number. It amends `SMART-RULE-0011`, `SMART-RULE-0019`,
 `SMART-RULE-0024`, `SMART-RULE-0025` and `SMART-RULE-0043` in place and keeps their identifiers,
@@ -119,16 +126,30 @@ to the new ones as follows, in the order of the accepted numbers:
 New texts cover the node layout (P1, P3), project facts (P4), node creation and extraction (P6,
 P7), raw evidence in node stores (P8, P13 to P16, P24), task fields (P9) and promotion (P12).
 
-**Choices this draft makes, which the owner has not yet answered.** These are open questions in
-the plan, and the draft shows the recommended answer of each:
+**The owner's answers of 22 Oct, 16:26.** The owner answered the seven open questions of the
+plan, in question order:
 
-- A task naming several nodes goes to the node of its first reference.
-- Every new task in every store takes `TASK-<author>-YYYY-NNNN`.
-- Attribution and generated `STATE.md` apply in every store.
-- A raw source about a repository project is private, in the pointer node, unless the owner
-  chooses the repository.
-- A scheduled job is named in a `schedule` field, and each run adds a History entry.
-- The task schema stays at version 0.2 and gains its fields additively.
+1. **A task that names several projects** is split into one task per project, each in its own
+   node's `tasks/` and each naming the others in `related_tasks`. The owner chose this over the
+   recommended option, which kept such a task whole in the node of its first reference. The
+   migration splits the tasks not yet completed that name several projects the same way, and
+   lists each split for the owner to clear.
+2. **Identifiers.** Every new task in every store takes `TASK-<author>-YYYY-NNNN`.
+3. **Attribution and generated `STATE.md`** apply in every store, memory included.
+4. **Raw sources of a repository project** live in the repository's `brain/raw/` and
+   `brain/sources/` by default, like its tasks. The owner may mark one private, and a private one
+   goes to the pointer node. The owner chose this over the recommended option, which kept them in
+   the pointer node unless the owner chose the repository. Decision 6 still holds: the migration's
+   move list flags possibly-private lines, customers' data among them, for the owner to clear
+   before anything is written into a repository.
+5. **Scheduled runs.** A scheduled job is named in a `schedule` field, and each run adds a History
+   entry.
+6. **Task schema.** The task schema stays at version 0.2 and gains its fields additively.
+7. **Migration order.** As proposed: memory nodes first, then the repositories smallest first,
+   then sources, then facts.
+
+Answers 1 and 4 changed P5, P9, P10, P13, P24 and P25; the other answers confirm what the draft
+showed.
 
 ## Current problem
 
@@ -381,7 +402,7 @@ goes before `### skills/`; `### raw/` goes after `### sources/`, as the last fol
 
 > An outstanding action that must remain visible after the current interaction.
 >
-> Create or update a canonical task record in its task store (section 9): the `tasks/` folder of the node its first project reference names, or `/memory/tasks/` for a task with no project.
+> Create or update a canonical task record in its task store (section 9): the `tasks/` folder of the node its project reference names, or `/memory/tasks/` for a task with no project. Work that concerns several projects becomes one task per project (section 9).
 
 **P6. CONTRACT §7, "Before creating a node".**
 
@@ -425,14 +446,17 @@ goes before `### skills/`; `### raw/` goes after `### sources/`, as the last fol
 > schedule: null
 > project_refs:
 >   - /memory/projects/example
+> related_tasks: []
 > ```
 
-**P10. CONTRACT §9, second paragraph, replaced by four paragraphs and a list.**
+**P10. CONTRACT §9, second paragraph, replaced by five paragraphs and a list.**
 
 > Every task lives in exactly one task store, and that record is canonical:
 >
-> - the `tasks/` folder of a node (section 3.1) holds every task whose first project reference names that node: `/memory/projects/<node>/tasks/` for a node in memory, and `brain/tasks/` for a project in its own repository (section 16.2); a reference names the deepest node it is in, and a reference to a pointer node names its repository;
+> - the `tasks/` folder of a node (section 3.1) holds every task whose project reference names that node: `/memory/projects/<node>/tasks/` for a node in memory, and `brain/tasks/` for a project in its own repository (section 16.2); a reference names the deepest node it is in, and a reference to a pointer node names its repository;
 > - `/memory/tasks/` holds the tasks with no project reference.
+>
+> A task names one project. Work that concerns several projects is split into one task per project, each in the store of its own node, and each lists the identifiers of the others in its `related_tasks` field; every part records the split in a History entry. A completed record that already names several projects is not split, and is kept in the store of its first project reference.
 >
 > Every store has the same folders, record format, statuses and rules, and a `STATE.md` generated from its records, so a node moves between memory and its own repository unchanged. Task views – the task review, the boards, the scheduled review – read every store the brain can reach.
 >
@@ -454,7 +478,7 @@ goes before `### skills/`; `### raw/` goes after `### sources/`, as the last fol
 
 **P13. CONTRACT §11.1, the first paragraph, the path and the reuse sentence.**
 
-> All uploaded or imported source files must be preserved in a raw store. Raw files are owner or project evidence and never enter the mechanics repository. A source owned by one node in memory goes to that node's `raw/`. A source about a project in its own repository goes to the pointer node's `raw/`, unless the owner chooses the repository's `brain/raw/`, because raw evidence often holds other people's data. Any other source goes to `/memory/raw/`.
+> All uploaded or imported source files must be preserved in a raw store. Raw files are owner or project evidence and never enter the mechanics repository. A source owned by one node in memory goes to that node's `raw/`. A source about a project in its own repository goes to the repository's `brain/raw/`, like the project's tasks, unless the owner marks it private, when it goes to the pointer node's `raw/`. Any other source goes to `/memory/raw/`.
 >
 > ```text
 > <raw store>/YYYY/MM/<source-id>/<original-filename>
@@ -541,11 +565,11 @@ by CONTRACT §9:
 
 **P24. `/shared/skills/repository-preflight/SKILL.md`, *Failure behaviour*, the raw bullet.**
 
-> - skip immutable Markdown evidence in every raw store – `/memory/raw/` and the `raw/` folder of every memory node (and `/raw/` in a brain without a separate memory) – while companion source records remain validated
+> - skip immutable Markdown evidence in every raw store – `/memory/raw/`, the `raw/` folder of every memory node and, with `--project <repository>`, that repository's `brain/raw/` (and `/raw/` in a brain without a separate memory) – while companion source records remain validated
 
 **P25. `/shared/skills/repository-preflight/SKILL.md`, *Failure behaviour*, new bullet.**
 
-> - **task stores (CONTRACT §9):** check `/memory/tasks/`, the `tasks/` folder of every node under `/memory/projects/`, and the `brain/tasks/` of every pointer node's repository that is checked out – with `--project <repository>`, that repository's store alone. Fail on a record with missing required metadata or no `author`, an invalid status or one its folder does not hold, an identifier used twice across the stores checked, a record whose first project reference does not name the node that holds it (or, in `/memory/tasks/`, any project reference), a `/memory/` path anywhere in a repository's `brain/tasks/`, a Git conflict marker (a line beginning `<<<<<<< ` or `>>>>>>> `) in a store or a path in one that Git reports as unmerged, a record whose `updated` is later than its newest History entry of the form `- <timestamp> – <author>: <what changed>` (an edit nobody is named for), or a store's `STATE.md` that differs from the one the tasks skill generates. Run from the brain root, a failure in a repository's store is reported as a warning, because that repository runs its own check
+> - **task stores (CONTRACT §9):** check `/memory/tasks/`, the `tasks/` folder of every node under `/memory/projects/`, and the `brain/tasks/` of every pointer node's repository that is checked out – with `--project <repository>`, that repository's store alone. Fail on a record with missing required metadata or no `author`, an invalid status or one its folder does not hold, an identifier used twice across the stores checked, a record whose first project reference does not name the node that holds it (or, in `/memory/tasks/`, any project reference), a record outside a `completed/` folder whose project references name more than one node (work for several projects is split, CONTRACT §9), a `/memory/` path anywhere in a repository's `brain/tasks/`, a Git conflict marker (a line beginning `<<<<<<< ` or `>>>>>>> `) in a store or a path in one that Git reports as unmerged, a record whose `updated` is later than its newest History entry of the form `- <timestamp> – <author>: <what changed>` (an edit nobody is named for), or a store's `STATE.md` that differs from the one the tasks skill generates. Run from the brain root, a failure in a repository's store is reported as a warning, because that repository runs its own check
 
 `contract_version` 2.7.0 becomes 3.0.0: the canonical home of whole classes of existing records
 moves, and existing content needs a coordinated migration (CONTRACT §13.3, major). The manifests
@@ -595,24 +619,32 @@ memory.**
 - The author's one sequence still gives each task a short number for conversation.
 - The cost is a longer identifier for the owner's own tasks.
 
-**Why sources of a repository project default to the pointer node.** Raw evidence (bills,
-contracts, exports) often carries third parties' personal data, and a line pushed to a repository
-cannot be recalled. Facts and tasks are written by the owner's agents and can be screened as they
-are written. Raw files are not written by the owner's agents, so they are private until the owner
-says otherwise.
+**Why work for several projects is split.** The owner chose this (answers of 22 Oct, 1). Each
+part lives where its project's collaborators see it, each store holds its project's whole share
+of the work, and no task depends on the order of its references. `related_tasks` keeps the parts
+connected.
+
+**Why sources of a repository project go into the repository by default.** The owner chose this
+(answers of 22 Oct, 4): a project's evidence then travels with its tasks and facts, and a
+collaborator can read the source a task cites. Raw evidence (bills, contracts, exports) often
+carries third parties' personal data, and a file pushed to a repository cannot be recalled, so
+the owner may mark any source private, and possible personal data is flagged before anything is
+written into a repository (Risks, 2).
 
 ## Scope and behavioural consequences
 
-- **Scope.** Every node a task's first project reference names, in memory or in a repository.
+- **Scope.** Every node a task's project reference names, in memory or in a repository.
   `/memory/tasks/` keeps tasks with no project. A domain or system node that a task names holds
   that task too, by the same rule.
-- **Which store a new task goes to.** `tasks.py new` looks at the first `--project`:
+- **Which store a new task goes to.** `tasks.py new` looks at its `--project`:
   - It writes to the `tasks/` of the deepest node that reference is in.
   - For a pointer node, it writes to its repository's `brain/tasks/`, or with `--private` to the
     pointer node's own `tasks/`.
   - In a repository, `project_refs` name `<repository>:brain` and other repository references. The
     task's `/memory/` references are kept in the owner's companion file
     `/memory/tasks/private/<task id>.md`.
+  - Given several `--project` values, it creates one task per project, each in its own node's
+    store, each naming the others in `related_tasks`.
 - **Finding the stores.** One function in the tasks skill lists them: `/memory/tasks/`, every
   memory node's `tasks/`, and the `brain/tasks/` of every pointer node whose `local_path` resolves
   to a checkout. Every reader calls it: review, `check`, `next-id`, the scheduled review, the
@@ -636,7 +668,11 @@ says otherwise.
     owner's page for that board draws the pointer node's private tasks.
   - Every open task is drawn once.
 - **Sources and facts.** The raw-file-ingestion skill writes a new source to the raw store P13
-  names. A fact about one project goes to that node's `KNOWLEDGE.md` (P4).
+  names. Before it writes a source into a repository's `brain/raw/`, it names the repository and
+  flags content that looks personal (a contact detail, an amount, a personal-data pattern, an
+  owner term); when anything is flagged, it asks the owner whether to mark the source private and
+  writes nothing into the repository until the owner answers. A fact about one project goes to
+  that node's `KNOWLEDGE.md` (P4).
 - **Joining.** `brain/JOINING.md` lists `brain/tasks/STATE.md` in `read_first` after
   `brain/STATE.md#Handover`. `join.py` reports the store and the joining person's tasks.
 - **Extraction.** Extraction moves `tasks/`, `sources/` and `raw/` with the node (P7).
@@ -648,14 +684,31 @@ Ordered by severity, worst first.
 1. **Private content leaking into a repository.** A pushed line cannot be recalled from a clone.
    Mitigations:
    - Privacy is a place.
-   - Raw evidence of a repository project is private by default (P13).
+   - The owner may mark any source private, and it then goes to the pointer node (P13).
    - The migration and every extraction show the owner each repository-bound task, source and
      fact, with possibly-private lines flagged (a `/memory/` path, an amount, a contact detail, a
      personal-data pattern, an owner term). Nothing moves until the owner clears it.
    - `tasks.py` refuses a `/memory/` path in a repository record.
    - The preflight's project mode fails on one, and runs in each repository's pre-commit hook.
    - A public repository makes its tasks public, and `tasks.py new` says so once.
-2. **Two brains editing one record.** The second push meets a Git conflict. Mitigations:
+2. **Customers' personal data in a repository.** A repository project's raw evidence (bills,
+   contracts, exports) now goes into its `brain/raw/` by default (P13), where everyone who can
+   read the repository, collaborators included, can read it, and a pushed file cannot be recalled
+   from a clone. Mitigations:
+   - Decision 6 still holds: the migration's source list flags possibly-private lines, customers'
+     data among them, and nothing is written into a repository until the owner has cleared it. A
+     source the owner marks private goes to the pointer node.
+   - For a new source, the raw-file-ingestion skill names the repository before writing, flags
+     content that looks personal, and writes nothing into the repository until the owner has said
+     whether to mark it private.
+   - A public repository makes its raw evidence public, and the ingestion skill says so before
+     each write there.
+   - What remains is the risk the owner accepted with answer 4: a source that nothing flags and
+     the owner does not mark private reaches every reader of the repository.
+
+   This does not conflict with `SMART-RULE-0008`: its shareable repositories are the mechanics and
+   the skill library, not a private project repository, whose own evidence may hold real data.
+3. **Two brains editing one record.** The second push meets a Git conflict. Mitigations:
    - `tasks.py` fetches before every write and refuses a checkout that is behind.
    - The resolution is fixed by P23.
    - `tasks.py` refuses a conflicted record.
@@ -664,21 +717,23 @@ Ordered by severity, worst first.
    - Claims keep `SMART-RULE-0043`'s rule that the second commit loses.
    - Each `STATE.md` is generated, so a conflict there is resolved by generating it again
      (`SMART-RULE-0034`).
-3. **An edit nobody is named for.** Every `tasks.py` change writes the History entry. The
+4. **An edit nobody is named for.** Every `tasks.py` change writes the History entry. The
    preflight fails a record whose `updated` is later than its newest attributed entry. In memory
    this also catches hand edits by the owner; the fix is one History line.
-4. **Many stores, more places to look.** 15 task stores replace one (see the plan). Every reader
+5. **Many stores, more places to look.** 15 task stores replace one (see the plan). Every reader
    goes through one store list. The preflight fails on a task in the wrong store and on a
    duplicate identifier. A store the brain cannot reach (a repository not checked out) is not
    read, and the review says so.
-5. **Identifier sequence across stores.** An author's next number is taken across every store the
+6. **Identifier sequence across stores.** An author's next number is taken across every store the
    brain can reach and the claims folder. A repository not checked out could hold a higher number
    of the same author; the preflight's duplicate check catches the clash.
-6. **Large raw files in repositories.** A source the owner moves into `brain/raw/` adds binary
-   weight. CONTRACT §7.1 test 4 still applies, and the default keeps raw files in memory.
-7. **Version skew.** A peer brain on contract 2.7.0 keeps tasks in its own memory.
+7. **Large raw files in repositories.** A repository project's sources now go into `brain/raw/` by
+   default, which adds binary weight to every clone. CONTRACT §7.1 test 4 still applies, and the
+   migration's source dry run reports the weight each repository gains, for the owner to see when
+   clearing its list.
+8. **Version skew.** A peer brain on contract 2.7.0 keeps tasks in its own memory.
    `minimum_contract_version: 3.0.0` makes `join.py` and `sync.py` report it.
-8. **Conflicts with existing texts.** These are skill text, not protected, and change in the
+9. **Conflicts with existing texts.** These are skill text, not protected, and change in the
    build:
    - the owner-board paragraph *What never enters the repository*
    - its failure sentence about a task on a shared page
@@ -693,6 +748,20 @@ Ordered by severity, worst first.
 
 Runs after the owner accepts this amended proposal and the build is merged and tested. Each step
 names what it reads and writes, and memory and each repository are committed separately.
+
+**Split first.** Before step 1, `tasks.py migrate --split --dry-run` lists every task not yet
+completed whose project references name several nodes, with the tasks each would become. The
+owner clears each split; silence splits nothing. A cleared split, made in `/memory/tasks/`:
+
+- keeps the original record and its identifier for the first project, and drops the other
+  project references from it;
+- creates one new task for each other project, with a new identifier and the outcome narrowed to
+  that project;
+- sets `related_tasks` in every part to the others, and adds a History entry to each naming the
+  split.
+
+The parts then move in steps 1 and 2 like any other task, and a part bound for a repository is on
+that repository's list.
 
 1. **Memory nodes first.** No privacy review is needed, because nothing leaves memory.
    `tasks.py migrate --node <node> --dry-run`, then without `--dry-run`, moves every task (inbox,
@@ -717,8 +786,10 @@ names what it reads and writes, and memory and each repository are committed sep
      references.
 3. **Sources.** Each record in `/memory/sources/` whose `project_refs` name one node moves with
    its raw folder into that node's `sources/` and `raw/`. For a repository project, it moves into
-   the pointer node by default, and into `brain/` only for sources the owner names. Hashes are
-   re-verified after the move. References across memory are updated, and repository records
+   the repository's `brain/sources/` and `brain/raw/` by default, once the owner has cleared that
+   repository's source list with possibly-private lines flagged (customers' data among them); a
+   source the owner marks private moves into the pointer node. Hashes are re-verified after the
+   move. References across memory are updated, and repository records
    reference repository paths only.
 4. **Facts.** A worker lists claims in `/memory/KNOWLEDGE.md` and in pointer nodes'
    `KNOWLEDGE.md` that concern one project. The owner clears the repository-bound ones. Each
@@ -736,7 +807,8 @@ names what it reads and writes, and memory and each repository are committed sep
    - Card task links resolve.
    - Pull before pushing (CONTRACT §16.3).
 
-Tasks that name several nodes go with their first reference and keep the others as references.
+Completed tasks that name several nodes are not split: they go with their first reference and
+keep the others as references.
 
 ## Rollback
 
@@ -744,8 +816,9 @@ Tasks that name several nodes go with their first reference and keep the others 
 - **After migration:** `tasks.py migrate --reverse` (per node or repository), and the same for
   sources and facts. It moves each record back to its former home with every History entry
   others added and restores `/memory/` references from the companion file. Tasks other brains
-  created in a repository are listed for the owner and left there. Then revert the governance and
-  build commits.
+  created in a repository are listed for the owner and left there. A task split in the migration
+  is not joined again: its parts move back as separate tasks, each still naming the others in
+  `related_tasks`. Then revert the governance and build commits.
 - **What cannot be undone:** content pushed to a repository stays in its Git history and in every
   clone, which is why the owner clears every repository-bound list before any write.
 
@@ -755,11 +828,15 @@ Tasks that name several nodes go with their first reference and keep the others 
    - **tasks:** store discovery; routing of `new` by the deepest node and by pointer node; author
      identifiers across stores; refusal when behind; attributed History on every change; refusal
      of conflicted records; `--private`; generated `STATE.md` per store; `schedule` and
-     `note --run`; refusal of `/memory/` paths in a repository.
+     `note --run`; refusal of `/memory/` paths in a repository; the split of work for several
+     projects (`new` with several `--project` values, `migrate --split`), with `related_tasks`
+     and a History entry in every part.
    - **owner-board:** routing from stores; each open task once; the shared page draws repository
      tasks and refuses memory content; card task links.
    - **join-project.**
-   - **raw-file-ingestion:** the raw store chosen per P13, and the hash reused across stores.
+   - **raw-file-ingestion:** the raw store chosen per P13 (the repository by default, the pointer
+     node for a source marked private), the question asked before a flagged source is written into
+     a repository, and the hash reused across stores.
    - **repository-preflight:** each P25 failure, the P24 skip, and warning versus failure from the
      brain root.
 2. **An extraction test.** A fictional memory node with tasks, sources and a fact is extracted to
@@ -773,7 +850,8 @@ Tasks that name several nodes go with their first reference and keep the others 
 4. **The board build:** `build_status.py --all`, `task_board.py route` and `task_board.py check`.
 5. **The repository preflight:** `preflight.py` on the mechanics, library and memory, and
    `preflight.py --project <repository>` on each repository after its migration.
-6. **Migration counts, per node and folder:** before equals after. Every identifier is found
+6. **Migration counts, per node and folder:** before equals after, plus one task for each part a
+   split added. Every identifier is found
    exactly once. No repository `brain/` file contains `/memory/`. Every moved raw file's hash
    matches its record.
 
@@ -798,12 +876,13 @@ writes. The build touches stored data and several modules, so it starts from an 
   - a new `task_stores.py`: the one store list, covering memory nodes, pointer repositories and
     `/memory/tasks/`;
   - `task_records.Task` gains its store;
-  - `tasks.py`: routing of `new` by node, `--private`, author identifiers in `next-id`, the
-    attributed History entry on every change, `edit`, `note --run`, refusal of conflicted
-    records, fetch-before-write, a generated `STATE.md` per store, `review --all`, and `migrate`
-    (`--node`, `--repo`, `--dry-run`, `--reverse`);
+  - `tasks.py`: routing of `new` by node, one task per project for several `--project` values,
+    `--private`, author identifiers in `next-id`, the attributed History entry on every change,
+    `edit`, `note --run`, refusal of conflicted records, fetch-before-write, a generated
+    `STATE.md` per store, `review --all`, and `migrate` (`--split`, `--node`, `--repo`,
+    `--dry-run`, `--reverse`);
   - `scheduled_review.py` reads every store;
-  - the task template gains `author` and `schedule`;
+  - the task template gains `author`, `schedule` and `related_tasks`;
   - `SKILL.md` and tests.
 - **owner-board** (`/shared/skills/owner-board/`):
   - `task_board.py` loads every store and routes by store node;
@@ -815,6 +894,7 @@ writes. The build touches stored data and several modules, so it starts from an 
 - **join-project** (`/shared/skills/join-project/`): `joining.py` and `join.py` report the store;
   the two-brain test; `SKILL.md`.
 - **raw-file-ingestion** (`/shared/skills/raw-file-ingestion/`): choose the raw store per P13,
+  flag possible personal data and ask before writing a flagged source into a repository,
   deduplicate by hash across stores, and add a `migrate` command for sources; `SKILL.md` and
   tests.
 - **repository-preflight** (`/shared/skills/repository-preflight/`): the `--project` mode, the
