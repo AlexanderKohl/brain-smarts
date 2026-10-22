@@ -17,9 +17,13 @@ Given a repository URL or a cloned path it:
 4. registers each shared board the manifest lists in this brain's `boards.json`;
 5. checks each vault entry the manifest names exists, by name only, through the vault's `list`
    command, and prints the exact command that creates a missing one – never a value;
-6. checks the feedback companion configuration for the manifest's team inbox and prints the
+6. reports the project's task store, `<repository>:brain/tasks` (whether it is there, its open
+   and inbox counts, and the open tasks whose owner is this brain's author name), read through
+   the tasks skill's store list; and warns when the manifest's `minimum_contract_version` is
+   below 3.0.0, the contract under which a project's tasks live in its repository;
+7. checks the feedback companion configuration for the manifest's team inbox and prints the
    steps for this person's own pull key;
-7. ends with what is ready and what is this person's own step.
+8. ends with what is ready and what is this person's own step.
 
 `--dry-run` says what it would do and changes nothing. It writes only inside this brain's
 memory and the clone, never another owner's memory, never pushes, and never reads or prints a
@@ -41,11 +45,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import joining  # noqa: E402  (one implementation of the manifest and "joined", SMART-RULE-0018)
+import task_stores  # noqa: E402  (on the path through joining: the tasks skill's stores)
+from task_history import author_name, brain_author  # noqa: E402
+from task_records import id_sort_key, load_tasks  # noqa: E402
 
 TEMPLATE = Path("shared") / "templates" / "project-pointer-README.template.md"
 SYNC = Path("shared") / "skills" / "repository-preflight" / "scripts" / "sync.py"
 VAULT = Path("shared") / "skills" / "manage-credentials" / "scripts" / "vault_credentials.py"
 COMPANION = Path("memory") / "skills" / "product-feedback" / "config" / "companion.json"
+STORE_CONTRACT = (3, 0, 0)   # the first contract under which a project's tasks live in its brain/tasks/
 
 
 def git(repo: Path, *args: str) -> subprocess.CompletedProcess:
@@ -87,6 +95,7 @@ class Report:
         self.yours: list[str] = []
         self.changes: list[str] = []
         self.errors: list[str] = []
+        self.task_store: dict | None = None
 
     def done(self, text: str) -> None:
         self.ready.append(text)
@@ -107,8 +116,11 @@ class Report:
         return out
 
     def as_dict(self) -> dict:
-        return {"dry_run": self.dry_run, "ready": self.ready, "changes": self.changes,
+        data = {"dry_run": self.dry_run, "ready": self.ready, "changes": self.changes,
                 "yours": self.yours, "errors": self.errors}
+        if self.task_store is not None:
+            data["task_store"] = self.task_store
+        return data
 
 
 # -- steps --
@@ -132,6 +144,10 @@ def step_versions(root: Path, manifest: dict, report: Report) -> None:
         else:
             report.own(f"bring the brain to contract {wanted} (this copy reads {have or 'none'}): "
                        "python shared/skills/repository-preflight/scripts/sync.py")
+    if not wanted or version_tuple(wanted) < STORE_CONTRACT:
+        report.own(f"warning: the manifest's minimum_contract_version is {wanted or 'not stated'}, below 3.0.0, "
+                   "the contract under which the project's tasks live in its brain/tasks/; a brain on an older "
+                   "contract keeps them in its own memory. Ask the project to raise it in brain/JOINING.md")
     for skill in manifest.get("skills") or []:
         if not isinstance(skill, dict) or not skill.get("path"):
             continue
@@ -337,6 +353,53 @@ def step_boards(root: Path, repo: Path, manifest: dict, node: Path, report: Repo
         config.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
+def repository_store(root: Path, repo: Path, manifest: dict) -> task_stores.Store:
+    """The repository's task store as the tasks skill lists it; built from the clone when this
+    brain's pointer does not name the clone yet (a dry run, or a pointer to another folder)."""
+    name = task_stores.repository_name(str(manifest.get("repository") or repo.name))
+    for store in task_stores.stores(root):
+        if (store.kind == "repository" and store.repository == name and store.checkout is not None
+                and store.checkout.resolve() == repo.resolve()):
+            return store
+    return task_stores.Store(kind="repository", path=repo / "brain" / "tasks", node=None, repository=name,
+                             checkout=repo, branch=str(manifest.get("working_branch") or "") or None)
+
+
+def step_tasks(root: Path, repo: Path, manifest: dict, report: Report) -> None:
+    """Report the project's task store: there or not, open and inbox counts, this person's own
+    open tasks (owner, as an author name, equal to this brain's). Read only, dry run or not."""
+    store = repository_store(root, repo, manifest)
+    label = store.label
+    summary = {"label": label, "present": store.path.is_dir(), "open": 0, "inbox": 0, "yours": [], "problems": []}
+    report.task_store = summary
+    if not store.path.is_dir():
+        report.done(f"task store {label}: not there yet (no brain/tasks/ in {repo.name}); the project's first "
+                    "task creates it")
+        return
+    tasks = load_tasks(store.path, owner=store)
+    summary["open"] = sum(1 for t in tasks if t.folder in ("open", "recurring") and not t.problem)
+    summary["inbox"] = sum(1 for t in tasks if t.folder == "inbox" and not t.problem)
+    report.done(f"task store {label}: {summary['open']} open, {summary['inbox']} in the inbox "
+                f"(read {repo.name}:brain/tasks/STATE.md)")
+    for task in tasks:
+        if task.problem:
+            summary["problems"].append(f"{rel(root, task.path)}: {task.problem}")
+            report.own(f"task record {task.path.relative_to(repo).as_posix()} in {repo.name}: {task.problem}")
+    try:
+        author = brain_author(root)
+    except ValueError as err:
+        report.own(f"your own tasks in {label} cannot be picked out: {err}")
+        return
+    mine = sorted((t for t in tasks if t.folder != "completed" and not t.problem
+                   and author_name(t.get("owner") or "") == author), key=lambda t: id_sort_key(t.tid))
+    summary["yours"] = [{"id": t.tid, "status": t.get("status"), "title": t.get("title")} for t in mine]
+    if mine:
+        report.own(f"your {len(mine)} open task(s) in {label}: "
+                   + "; ".join(f"{t.tid} ({t.get('status')}) {t.get('title')}" for t in mine))
+    else:
+        report.done(f"no open task in {label} is yours ({author})")
+
+
 def vault_names(root: Path, listing: Path | None, report: Report) -> set[str] | None:
     """Entry names only, from a listing file (tests) or the vault's `list`; None when unavailable."""
     if listing is not None:
@@ -450,6 +513,7 @@ def main(argv: list[str] | None = None) -> int:
     step_branch(repo, args.branch or manifest.get("working_branch"), report)
     node = step_pointer(root, repo, manifest, report)
     step_boards(root, repo, manifest, node, report)
+    step_tasks(root, repo, manifest, report)
     step_vault(root, manifest, args.vault_listing, report)
     step_feedback(root, manifest, report)
     step_read_first(repo, manifest, report)

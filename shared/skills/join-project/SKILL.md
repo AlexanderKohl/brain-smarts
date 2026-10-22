@@ -6,14 +6,15 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 scope: shared
-version: 1.1.1
+version: 1.2.0
 script_paths:
   - /shared/skills/join-project/scripts/join.py
   - /shared/skills/join-project/scripts/joining.py
 created: 2026-10-21T11:55:16+10:00
-updated: 2026-10-22T16:47:15+10:00
+updated: 2026-10-23T08:09:42+10:00
 owner: brain-owner
 skill_refs:
+  - /shared/skills/tasks
   - /shared/skills/repository-preflight
   - /shared/skills/owner-board
   - /shared/skills/manage-credentials
@@ -62,7 +63,8 @@ project's own. The parser reads this subset of YAML only: scalars, lists of scal
 
 ## Allowed operations
 
-- read the manifest, this brain's `/memory/OWNER.md`, the pointer nodes under `/memory/projects/`,
+- read the manifest, this brain's `/memory/OWNER.md`, the pointer nodes under `/memory/projects/` at any
+  depth (the tasks skill's list, `task_stores.pointers`), the repository's task store `brain/tasks/`,
   `/memory/skills/owner-board/config/boards.json` and `/memory/skills/product-feedback/config/companion.json`
 - run `sync.py --no-merge`; clone the repository under `project_repos_root`; `git fetch` and
   `git checkout <working branch>` in a clean clone
@@ -81,6 +83,8 @@ project's own. The parser reads this subset of YAML only: scalars, lists of scal
 
 - `<repository>/brain/JOINING.md` (canonical, the project's)
 - this brain's memory files named above (the person's own)
+- `<repository>/brain/tasks/` (the project's task store), read through the tasks skill
+  (`task_stores.stores`, `task_records.load_tasks`); this brain's author name from `owner_short_name`
 - `git` for the clone, branch and status; the vault's `list` for entry names
 
 ## Scripts or commands
@@ -91,14 +95,25 @@ project's own. The parser reads this subset of YAML only: scalars, lists of scal
     python -m unittest discover -s shared/skills/join-project/tests -v         # tests (fictional data)
 
 `scripts/joining.py` is the one implementation of the manifest and of what "joined" means,
-imported by `join.py` and by `/shared/skills/repository-preflight/scripts/sync.py`.
+imported by `join.py` and by `/shared/skills/repository-preflight/scripts/sync.py`. Its list of
+pointer nodes is the tasks skill's `task_stores.pointers` (every depth, a pointer recognised by
+`repo_url`), so joining and the task stores agree on which node points at a repository.
 
 ## Outputs
 
 A report in four parts, printed in this order: **Ready** (what already holds), **Changed** or
 **Would change** (what the run did or would do), **Your own steps** (what only the person can do,
 each with the exact command or place), **Could not continue** (when the manifest could not be
-read). `--json` gives the same four lists.
+read). `--json` gives the same four lists, plus `task_store`.
+
+The report always names the project's task store, `<repository>:brain/tasks` (`<repository>` is
+the remote's name): **Ready** says it is not there yet, or gives its open count (`open/` and
+`recurring/`) and its inbox count; **Your own steps** lists the open and inbox tasks whose `owner`,
+as an author name, is this brain's (`owner_short_name`), and any record that is unreadable or
+carries a Git conflict marker. `task_store` in `--json` is `{label, present, open, inbox, yours,
+problems}`. When the manifest's `minimum_contract_version` is below 3.0.0, or not stated, a
+warning under **Your own steps** says that a brain on an older contract keeps the project's tasks
+in its own memory and asks the project to raise it in `brain/JOINING.md`.
 
 ## Permissions
 
@@ -116,6 +131,9 @@ read). `--json` gives the same four lists.
 - a clone with changed tracked files is not switched to the working branch; the person is told
 - a board registered under another status, a contract or skill below the minimum, a skill without a
   version, a locked or missing vault, a companion not configured: each is the person's step, exit 0
+- a manifest minimum contract below 3.0.0, a task record that is unreadable or conflicted, an owner
+  profile without `owner_short_name` (own tasks cannot be picked out): each is the person's step,
+  exit 0; the task store is read only, never written
 - `--dry-run` with a URL that is not cloned stops after saying it would clone, since the manifest
   cannot be read before that
 
@@ -127,17 +145,21 @@ pointer node's `LOG.md` is the usual place) and commits their memory under the i
 ## State, knowledge and task update behaviour
 
 The pointer node is the only durable record created; the project's state, rules and knowledge
-stay in the repository and are read there (`read_first`). No task is created: the **Your own
-steps** list is handed to the person, who makes a task of a step they defer.
+stay in the repository and are read there (`read_first`). The repository's tasks are read and
+counted, never written or copied into memory. No task is created: the **Your own steps** list is
+handed to the person, who makes a task of a step they defer.
 
 #### Folders
 
 ##### `scripts/`
 
 Contains `join.py` (the command) and `joining.py` (the manifest reader and the "joined" test).
-Canonical, shared, standard library only.
+Canonical, shared, standard library only; both import the tasks skill's modules from
+`/shared/skills/tasks/scripts/`.
 
 ##### `tests/`
 
-Contains `test_join.py`: an invented brain, memory and project in a temporary folder, authors
-and names fictional. Run from the brain root.
+Contains `test_join.py` (an invented brain, memory and project in a temporary folder) and
+`test_two_brains.py` (two invented brains `sam` and `bob` on one local repository: joining, a task
+completed and created across brains, private lines kept in memory, a conflict failing
+`tasks.py check` until resolved per P23). Authors and names fictional. Run from the brain root.

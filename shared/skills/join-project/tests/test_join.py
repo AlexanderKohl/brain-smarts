@@ -290,6 +290,80 @@ class JoinTests(unittest.TestCase):
         self.assertEqual(manifest["feedback"]["key_page"], "Admin, Feedback")
         self.assertEqual(manifest["read_first"], ["brain/STATE.md#Handover"])
 
+    # -- the repository's task store and the pointer list (B3) --
+
+    def test_a_pointer_at_depth_four_is_found(self):
+        node = self.root / "memory/projects/orchard/beds/north/garden-planner"
+        write(node / "README.md", "---\nid: g\ntitle: Garden Planner\ntype: node_readme\nnode_type: project\n"
+              "repo_url: https://example.com/sam/garden-app.git\nlocal_path: garden-app\n---\n")
+        self.assertEqual([path for path, _ in joining.pointer_nodes(self.root / "memory")], [node / "README.md"])
+        self.assertEqual(joining.find_pointer(self.root / "memory", "https://example.com/sam/garden-app.git",
+                                              "garden-app"), node)
+        code, out = self.run_join("--dry-run")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("would create the pointer node", out)
+        self.assertFalse((self.root / "memory/projects/garden-planner").exists())
+
+    def test_a_repository_without_a_task_store_is_reported(self):
+        code, out = self.run_join("--dry-run", "--json")
+        self.assertEqual(code, 0, out)
+        data = json.loads(out)
+        self.assertIn("task store garden-app:brain/tasks: not there yet (no brain/tasks/ in garden-app); the "
+                      "project's first task creates it", data["ready"])
+        self.assertEqual(data["task_store"]["present"], False)
+
+    def test_the_task_store_counts_and_the_persons_own_tasks_are_reported(self):
+        tasks = self.repo / "brain" / "tasks"
+        write(tasks / "open" / "TASK-sam-2026-0001-water-beds.md", task("TASK-sam-2026-0001", "Water the beds", "ready", "Sam"))
+        write(tasks / "open" / "TASK-bob-2026-0001-fix-gate.md", task("TASK-bob-2026-0001", "Fix the gate", "waiting", "Bob"))
+        write(tasks / "inbox" / "TASK-bob-2026-0002-seeds.md", task("TASK-bob-2026-0002", "Order seeds", "inbox", "Sam"))
+        write(tasks / "completed" / "TASK-sam-2026-0002-plan.md", task("TASK-sam-2026-0002", "Draw the plan", "done", "Sam"))
+        code, out = self.run_join()
+        self.assertEqual(code, 0, out)
+        self.assertIn("task store garden-app:brain/tasks: 2 open, 1 in the inbox", out)
+        self.assertIn("your 2 open task(s) in garden-app:brain/tasks: TASK-bob-2026-0002 (inbox) Order seeds; "
+                      "TASK-sam-2026-0001 (ready) Water the beds", out)
+        self.assertNotIn("Draw the plan", out)
+        self.assertNotIn("Fix the gate", out)
+        code, out = self.run_join("--json")
+        data = json.loads(out)["task_store"]
+        self.assertEqual((data["label"], data["present"], data["open"], data["inbox"]),
+                         ("garden-app:brain/tasks", True, 2, 1))
+        self.assertEqual([t["id"] for t in data["yours"]], ["TASK-bob-2026-0002", "TASK-sam-2026-0001"])
+
+    def test_a_conflicted_task_record_is_the_persons_step(self):
+        path = self.repo / "brain" / "tasks" / "open" / "TASK-sam-2026-0001-water-beds.md"
+        write(path, task("TASK-sam-2026-0001", "Water the beds", "ready", "Sam")
+              + "<<<<<<< ours\n=======\n>>>>>>> theirs\n")
+        code, out = self.run_join("--dry-run")
+        self.assertEqual(code, 0, out)
+        self.assertIn("task record brain/tasks/open/TASK-sam-2026-0001-water-beds.md in garden-app: conflicted: "
+                      "resolve by hand", out)
+        self.assertIn("task store garden-app:brain/tasks: 0 open, 0 in the inbox", out)
+
+    def test_a_minimum_contract_below_three_is_warned(self):
+        code, out = self.run_join("--dry-run")
+        self.assertIn("warning: the manifest's minimum_contract_version is 2.6.0, below 3.0.0", out)
+        write(self.root / "CONTRACT.md", "---\nid: c\ncontract_version: 3.0.0\n---\n")
+        manifest = self.repo / "brain" / "JOINING.md"
+        write(manifest, MANIFEST.replace("minimum_contract_version: 2.6.0", "minimum_contract_version: 3.0.0"))
+        code, out = self.run_join("--dry-run")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("below 3.0.0", out)
+        self.assertIn("contract 3.0.0 (manifest needs 3.0.0)", out)
+        write(manifest, MANIFEST.replace("  minimum_contract_version: 2.6.0\n", ""))
+        code, out = self.run_join("--dry-run")
+        self.assertIn("minimum_contract_version is not stated, below 3.0.0", out)
+
+
+def task(tid: str, title: str, status: str, owner: str) -> str:
+    """A fictional task record in the shape the tasks skill reads."""
+    author = tid.split("-")[1]
+    return (f"---\nid: {tid}\ntitle: {title}\ntype: task\nschema_version: 0.2\ncontract: /CONTRACT.md\n"
+            f"status: {status}\nowner: {owner}\nauthor: {author}\npriority: normal\n"
+            "created: 2026-01-06T09:00:00+10:00\nupdated: 2026-01-06T09:00:00+10:00\nproject_refs:\n"
+            f"  - garden-app:brain\n---\n\n# {title}\n\n## History\n\n- 2026-01-06T09:00:00+10:00 – {author}: captured\n")
+
 
 if __name__ == "__main__":
     unittest.main()

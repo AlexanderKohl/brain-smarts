@@ -11,6 +11,9 @@ under `/memory/projects/` whose `repo_url` names the repository or whose `local_
 clone), and every board the manifest lists is registered in `/memory/skills/owner-board/config/
 boards.json` with the status `<clone folder>:<board status>`.
 
+The list of pointer nodes is the tasks skill's (`task_stores.pointers`, every depth under
+/memory/projects/), so this skill and the task stores agree on which nodes point at a repository.
+
 Nothing here reads a secret, a vault or a `.env` file.
 """
 
@@ -18,7 +21,14 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from pathlib import Path
+
+TASKS_SCRIPTS = Path(__file__).resolve().parents[2] / "tasks" / "scripts"
+if str(TASKS_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(TASKS_SCRIPTS))
+
+import task_stores  # noqa: E402  (one list of pointer nodes, SMART-RULE-0018)
 
 MANIFEST = Path("brain") / "JOINING.md"
 BOARDS_CONFIG = Path("memory") / "skills" / "owner-board" / "config" / "boards.json"
@@ -185,16 +195,16 @@ def owner_profile(memory: Path) -> dict:
 
 
 def pointer_nodes(memory: Path) -> list[tuple[Path, dict]]:
-    """Every README under `/memory/projects/` (up to three levels) that carries `repo_url`."""
-    projects = memory / "projects"
-    if not projects.is_dir():
-        return []
+    """Every README under `/memory/projects/`, at any depth, that carries `repo_url`, by node path.
+
+    The list is `task_stores.pointers` (the tasks skill's), each with its README's front matter."""
     found = []
-    for pattern in ("*/README.md", "*/*/README.md", "*/*/*/README.md"):
-        for path in sorted(projects.glob(pattern)):
-            meta = front_matter(path.read_text(encoding="utf-8", errors="replace"))
-            if meta.get("repo_url"):
-                found.append((path, meta))
+    for pointer in task_stores.pointers(memory.parent):
+        try:
+            meta = front_matter(pointer.readme.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        found.append((pointer.readme, meta))
     return found
 
 
