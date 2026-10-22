@@ -18,7 +18,7 @@ metadata:
     - /shared/skills/owner-board
     - /shared/skills/repository-preflight
   created: 2026-09-23T13:10:00+10:00
-  updated: 2026-10-23T07:47:06+10:00
+  updated: 2026-10-23T08:25:27+10:00
 ---
 
 # Tasks
@@ -97,8 +97,12 @@ rules, CONTRACT §16.3).
    - **Several projects** make one task per project, each in its own store, titled
      `<title> (<node title>)`, each listing the others in `related_tasks` and each with the
      History entry `split: part of work for several projects (...)`.
-   - **A repository record** names `<repository>:brain` first; `/memory/` references go to the
-     companion file; a `/memory/` path in the title, outcome or next action is refused. A public
+   - **A repository record** names `<repository>:brain` first; other `/memory/` references go to
+     the companion file (made only when there is such private content); a `/memory/` path
+     anywhere else in the record (title, outcome, next action, `skill_refs`, `waiting_on`,
+     `schedule`, `owner`) is refused before a number is taken.
+   - Every `--project` names a node that exists; a reference in no node is refused, because
+     `/memory/tasks/` holds only tasks with no project reference. A public
      repository, or one whose pointer has no `repo_visibility`, is named in the output. The
      checkout must be on its store branch and not behind (procedure 6).
    - `--private` on a pointer puts the task in the pointer node's own `tasks/`.
@@ -159,6 +163,8 @@ python shared/skills/tasks/scripts/tasks.py release TASK-... [--note "..."]
   and moves into the new node's `tasks/`.
 - The owner board applies the owner's saved actions through the same functions (`complete`,
   `do_now`, `add_note`), attributed to this brain. Screenshots go to `<store>/img/`.
+- A record with more than one `## History` heading is read as one History, and the next change
+  merges them into one section, so a new entry always lands after every older one.
 
 ### 5. Check and STATE.md
 
@@ -169,9 +175,10 @@ python shared/skills/repository-preflight/scripts/preflight.py
 ```
 
 `check` fails on: missing required fields or `author`, a status its folder does not hold, a bad
-identifier, file name, date or `schedule`, an identifier used twice across stores, a first
-project reference that does not name the store's node (in `/memory/tasks/`, any reference to a
-node), references to several nodes outside `completed/`, a `/memory/` path in a repository store,
+identifier, file name, date or `schedule`, a `created` or `updated` that is not ISO 8601 with
+seconds and an offset, an `author` that is not an author name, an identifier used twice across
+stores, a first project reference that does not name the store's node (in `/memory/tasks/`, any
+project reference at all), references to several nodes outside `completed/`, a `/memory/` path in a repository store,
 a conflict marker, an `updated` later than the newest attributed History entry, and a `STATE.md`
 that differs from the generated one. It warns on waiting without `waiting_on`, no priority,
 claims that do not fit the status, and stores it could not read. `state` regenerates `STATE.md`;

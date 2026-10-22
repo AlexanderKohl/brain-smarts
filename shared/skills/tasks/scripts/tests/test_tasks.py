@@ -311,6 +311,43 @@ class TasksTest(unittest.TestCase):
             self.assertIn(said, out, setting)
         self.assertEqual(self.meta("open", "TASK-2026-0002-renew-domain")["updated"], STAMP)
 
+    # ------------------------------------------------ round 2
+
+    def test_check_refuses_bad_timestamps_and_author_names(self) -> None:
+        add = self.brain.add
+        add("open", "TASK-2026-0020-a", record("TASK-2026-0020", "Placeholder stamp", "ready",
+                                               updated="YYYY-MM-DDTHH:mm:ss+HH:MM"))
+        add("open", "TASK-2026-0021-b", record("TASK-2026-0021", "Bare date", "ready", created="2026-03-01"))
+        add("open", "TASK-2026-0022-c", record("TASK-2026-0022", "Capital author", "ready", author="Sam"))
+        self.state_now()
+        code, out = run("check", cwd=self.root)
+        self.assertEqual(code, 1)
+        self.assertIn("TASK-2026-0020-a.md: updated YYYY-MM-DDTHH:mm:ss+HH:MM is not ISO 8601", out)
+        self.assertIn("TASK-2026-0021-b.md: created 2026-03-01 is not ISO 8601", out)
+        self.assertIn("TASK-2026-0022-c.md: author Sam is not an author name", out)
+
+    def test_next_id_normalises_the_author_it_is_given(self) -> None:
+        self.assertEqual(run("next-id", "--year", "2026", "--author", "Sam", cwd=self.root)[1].strip(),
+                         "TASK-sam-2026-0008")
+        code, out = run("next-id", "--author", "!!", cwd=self.root)
+        self.assertEqual(code, 1)
+
+    def test_a_record_with_two_history_headings_is_read_and_written_as_one(self) -> None:
+        text = record("TASK-2026-0030", "Two histories", "ready").rstrip("\n") + \
+            "\n\n## History\n\n- 2026-03-05T09:00:00+10:00 – bob: second block\n\n## Notes\n\nKept.\n"
+        path = self.brain.add("open", "TASK-2026-0030-two", text)
+        self.assertEqual([e.what for e in task_history.entries(text)], ["captured", "second block"])
+        self.assertEqual(task_history.newest_attributed(text).author, "bob")
+        tasks.add_note(self.store, "TASK-2026-0030", note="After both.", now=NOW)
+        after = path.read_text(encoding="utf-8")
+        self.assertEqual(after.count("## History"), 1)
+        self.assertEqual([e.what for e in task_history.entries(after)], ["captured", "second block", "note"])
+        self.assertIn("## Notes\n\nKept.", after)
+
+    def test_a_refused_write_is_a_value_error(self) -> None:
+        import task_git
+        self.assertTrue(issubclass(task_git.WriteRefused, ValueError))
+
     def test_missing_store_exits_2(self) -> None:
         code, out = run("--tasks", "/memory/nowhere", "check", cwd=self.root)
         self.assertEqual(code, 2)

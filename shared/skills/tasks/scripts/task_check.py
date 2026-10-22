@@ -14,13 +14,14 @@ Errors and warnings are listed by store in `stores()` order, then by file path.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import task_claims
 import task_state
 import task_stores
-from task_history import newest_attributed, parse_stamp
+from task_history import AUTHOR_RE, STAMP, newest_attributed, parse_stamp
 from task_new import SCHEDULE_RE
 from task_private import MEMORY_PATH
 from task_records import FOLDER_STATUSES, ID_RE, Task, load_tasks
@@ -51,6 +52,12 @@ def _check_record(root: Path, store, task: Task, where: str, report: Report) -> 
     missing = [key for key in REQUIRED if not task.get(key)]
     if missing:
         report.errors.append(f"{where}: missing {', '.join(missing)}")
+    for key in ("created", "updated"):
+        if task.get(key) and not re.fullmatch(STAMP, task.get(key)):
+            report.errors.append(f"{where}: {key} {task.get(key)} is not ISO 8601 with seconds and an offset")
+    if task.get("author") and not AUTHOR_RE.match(task.get("author")):
+        report.errors.append(f"{where}: author {task.get('author')} is not an author name (lower case letters, "
+                             "digits and hyphens)")
     if task.get("type") not in (None, "task"):
         report.errors.append(f"{where}: type must be task")
     tid = task.get("id")
@@ -79,6 +86,9 @@ def _check_record(root: Path, store, task: Task, where: str, report: Report) -> 
     nodes = [n for n in (_ref_node(root, r) for r in refs) if n]
     if store.kind == "owner" and nodes:
         report.errors.append(f"{where}: names {nodes[0]}, so it belongs in that node's store, not /memory/tasks")
+    elif store.kind == "owner" and refs:
+        report.errors.append(f"{where}: carries the project reference {refs[0]}, which names no node; "
+                             "/memory/tasks holds only tasks with no project reference (P10)")
     elif store.kind in ("memory-node", "pointer-private") and (not refs or _ref_node(root, refs[0]) != store.node):
         report.errors.append(f"{where}: its first project reference does not name {store.node}")
     elif store.kind == "repository" and (not refs or refs[0] != f"{store.repository}:brain"):

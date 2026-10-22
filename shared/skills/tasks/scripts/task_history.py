@@ -30,7 +30,7 @@ except ImportError:  # pragma: no cover - Python before 3.9
     ZoneInfo = None  # type: ignore[assignment]
     ZoneInfoNotFoundError = Exception  # type: ignore[assignment,misc]
 
-from task_records import add_history, parse_front_matter, set_fields
+from task_records import add_history, merge_sections, parse_front_matter, set_fields
 
 STAMP = r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2})"
 ENTRY_RE = re.compile(rf"^- (?P<at>{STAMP}) – (?P<author>[a-z][a-z0-9-]{{0,31}}): (?P<what>\S.*)$")
@@ -111,8 +111,10 @@ def parse_stamp(value: str) -> datetime | None:
 
 
 def entries(text: str) -> list[Entry]:
-    """Every entry under `## History`, in file order; legacy entries carry author None."""
-    lines = text.splitlines()
+    """Every entry under `## History`, in file order; legacy entries carry author None. A record
+    with more than one `## History` heading is read as if they were merged (merge_sections), and
+    `line` counts in that merged text."""
+    lines = merge_sections(text).splitlines()
     start = next((i for i, line in enumerate(lines) if re.match(r"^## History[ \t]*$", line)), None)
     if start is None:
         return []

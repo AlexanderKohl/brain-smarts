@@ -31,7 +31,8 @@ class MigrateTest(unittest.TestCase):
         legacy = dict(author=None, history="- 2026-03-01T09:00:00+10:00 – captured by hand.")
         b.add("open", "TASK-2026-0001-beds", record("TASK-2026-0001", "Weed the beds", "ready", refs=[GARDEN], **legacy))
         b.add("open", "TASK-2026-0002-pump", record("TASK-2026-0002", "Buy a pump", "ready", refs=[GARDEN, CLUB],
-                                                    body="## Outcome\n\nA pump that runs quietly.\n\n", **legacy))
+                                                    body="## Outcome\n\nA pump that runs quietly.\n\n", **legacy)
+              .replace("\ntype: task\n", "\n# kept comment\ntype: task\n", 1))
         b.add("completed", "TASK-2026-0003-hose", record("TASK-2026-0003", "Fix the hose", "completed",
                                                          refs=[GARDEN, POINTER], **legacy))
         b.add("open", "TASK-2026-0004-login", record(
@@ -83,7 +84,10 @@ class MigrateTest(unittest.TestCase):
                       "quietly.\n", part_text)
         for text in (original.read_text(encoding="utf-8"), part_text):
             self.assertIn(split, text)
-        self.assertNotIn("captured by hand", part_text)
+        self.assertIn("## History\n\n- 2026-03-01T09:00:00+10:00 – captured by hand.\n"
+                      f"{split}\n", part_text)                    # the part keeps the record's History
+        self.assertIn("\n# kept comment\n", part_text)              # only the body's title is rewritten
+        self.assertIn("\n# Buy a pump (Pond club)\n", part_text)
         self.assertEqual(self.migrate("--split", "--dry-run")[0], 0)
         self.assertEqual(self.listing("split-all")["items"], [])       # nothing left to split
 
@@ -184,7 +188,58 @@ class MigrateTest(unittest.TestCase):
         self.assertEqual(code, 0, out)
         self.assertIn("held TASK-2026-0004", out)
         self.assertTrue((self.store / "open/TASK-2026-0004-login.md").is_file())
-        self.assertFalse(list((self.clone / "brain").glob("tasks/*/*.md")))
+        self.assertFalse((self.clone / "brain" / "tasks").exists())     # not even a STATE.md
+
+    # ------------------------------------------------ round 2
+
+    def test_paths_in_a_ledger_resolve_under_the_root_on_every_system(self) -> None:
+        import task_migrate
+        self.assertEqual(task_migrate._resolve(self.root, "/memory/tasks/open/x.md"),
+                         self.root / "memory/tasks/open/x.md")
+        outside = "/no-such-top-folder/repos/example-app/brain/tasks/open/x.md"   # a POSIX absolute path
+        self.assertEqual(task_migrate._resolve(self.root, outside).as_posix(), outside)
+
+    def test_a_node_with_nothing_to_move_gets_no_state_file(self) -> None:
+        code, out = self.migrate("--node", CLUB)
+        self.assertEqual(code, 0, out)
+        self.assertIn("nothing to move", out)
+        self.assertFalse((self.root / CLUB.strip("/") / "tasks").exists())
+
+    def test_a_repository_move_on_the_wrong_branch_writes_nothing(self) -> None:
+        from brainfix import git
+        self.migrate("--repo", "example-app", "--dry-run")
+        lst = str(self.root / "temp/migration/repository-example-app.json")
+        self.migrate("--decide", lst, "--all", "hold", "--move", "3")
+        git(self.clone, "checkout", "-q", "-b", "elsewhere")
+        code, out = self.migrate("--repo", "example-app", "--list", lst)
+        self.assertEqual(code, 1)
+        self.assertIn("not the store branch main", out)
+        self.assertTrue((self.store / "completed/TASK-2026-0005-docs.md").is_file())
+        self.assertFalse((self.clone / "brain" / "tasks").exists())
+
+    def test_reverse_checks_every_record_before_moving_any(self) -> None:
+        self.migrate("--repo", "example-app", "--dry-run")
+        lst = str(self.root / "temp/migration/repository-example-app.json")
+        self.migrate("--decide", lst, "--all", "hold", "--move", "2,3")
+        self.assertEqual(self.migrate("--repo", "example-app", "--list", lst)[0], 0)
+        late = self.clone / "brain/tasks/completed/TASK-2026-0005-docs.md"
+        late.write_text(late.read_text(encoding="utf-8") + "<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> x\n",
+                        encoding="utf-8")
+        ledger = next((self.store / "migrations").glob("*-repository-example-app.json"))
+        code, out = self.migrate("--reverse", str(ledger))
+        self.assertEqual(code, 1)
+        self.assertIn("nothing was moved back", out)
+        self.assertTrue((self.clone / "brain/tasks/open/TASK-2026-0006-fees.md").is_file())
+        self.assertFalse((self.store / "open/TASK-2026-0006-fees.md").exists())
+
+    def test_front_matter_values_are_flagged_on_the_list(self) -> None:
+        self.brain.add("open", "TASK-2026-0008-quote", record("TASK-2026-0008", "Send the $500 quote", "ready",
+                                                              refs=[POINTER], author=None))
+        self.migrate("--repo", "example-app", "--dry-run")
+        item = next(i for i in self.listing("repository-example-app")["items"] if i["id"] == "TASK-2026-0008")
+        self.assertIn("front matter title: amount (edit the record, or keep it private)", item["notes"])
+        self.assertIn("front matter title: amount",
+                      (self.root / "temp/migration/repository-example-app.md").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

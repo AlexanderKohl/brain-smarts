@@ -23,7 +23,7 @@ UNMERGED = frozenset({"DD", "AU", "UD", "UA", "DU", "AA", "UU"})
 GIT_TIMEOUT_S = 120
 
 
-class WriteRefused(Exception):
+class WriteRefused(ValueError):
     """A task write that must not happen yet; the message names the reason and the fix."""
 
 

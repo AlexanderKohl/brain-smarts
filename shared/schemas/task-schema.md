@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-10-23T07:47:06+10:00
+updated: 2026-10-23T08:25:27+10:00
 ---
 
 # Task Metadata Schema
@@ -63,14 +63,16 @@ still parses.
   ```
 
   Lines indented two spaces below an entry belong to it (a note kept verbatim, screenshot
-  links). The newest History entry therefore names who made the latest change.
+  links). The newest History entry therefore names who made the latest change. A record has one
+  `## History` section; a record with two is read as one, and the next change merges them.
 - `schedule`: when an app or the operating system runs work for the task on a schedule, one
   scalar `"<app> | <job> | <cadence>"`, else `null`. Each run is recorded as a History entry
   `run of `<job>`: <outcome>` (`tasks.py note --run <job>`).
 - `project_refs`: the first reference names the node that holds the record. In a repository
   record it is `<repository>:brain`, where `<repository>` is the remote's name, followed by other
-  `<repository>:<path>` references; a repository record never names a `/memory/` path. Work for
-  several projects is split into one task per project.
+  `<repository>:<path>` references; a repository record never names a `/memory/` path. Every
+  reference in memory is inside a node; a task in `/memory/tasks/` has no project reference. Work
+  for several projects is split into one task per project.
 - `related_tasks`: the identifiers of the other parts of a split; `[]` otherwise.
 - Do not create a separate follow-up owner.
 - Use `next_review` when the system should surface a waiting or scheduled task.

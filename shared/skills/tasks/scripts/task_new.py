@@ -16,9 +16,14 @@ preflight's duplicate check catches a clash.
 store, each listing the others in `related_tasks`, each with a History entry naming the split.
 Each part's title names its node: `<title> (<node title>)`, the form the migration's split uses.
 
-**Repository records.** The first project reference is `<repository>:brain`; a /memory/
-reference goes to the companion file (task_private.py), and a /memory/ path in the title, the
-outcome or the next action is refused. A repository that is public, or whose visibility the
+**Repository records.** The first project reference is `<repository>:brain`; another /memory/
+reference goes to the companion file (task_private.py), which is made only when there is such
+content; a /memory/ path anywhere else in the rendered record (title, outcome, next action,
+skill_refs, waiting_on, schedule, owner, ...) is refused before a number is claimed.
+
+**References.** Every --project value is a /memory/ path inside a node that exists
+(task_stores.node_of); a reference in no node is refused, because /memory/tasks/ holds only tasks
+with no project reference (P10). A repository that is public, or whose visibility the
 pointer does not record, is named once per run.
 """
 
@@ -30,12 +35,12 @@ from pathlib import Path
 from typing import Any
 
 import task_stores
-from task_git import WriteRefused, ready_to_write
+from task_git import ready_to_write
 from task_history import brain_author, entry
-from task_private import MEMORY_PATH, add_private
+from task_private import add_private
 from task_records import (DATE_RE, FRONT_MATTER_RE, add_history, parse_front_matter, parse_id, set_fields,
                           slugify, write_atomic)
-from task_write import regenerate, stamp
+from task_write import refuse_memory_paths, regenerate, stamp
 
 NEW_STATUSES = ("inbox", "ready", "in_progress", "waiting", "scheduled", "blocked")
 CLAIMS = ".claims"
@@ -56,11 +61,11 @@ def looks_path_converted(value: str) -> bool:
 
 
 def check_project_ref(value: str, root: Path | None) -> None:
-    """A --project value must be a repository-root path: /memory/..., or an existing /<path>."""
+    """A --project value must be a repository-root path /memory/... inside a node that exists."""
+    if value.startswith("/memory/") and root is not None and task_stores.node_of(root, value) is not None:
+        return
     if value.startswith("/memory/"):
-        return
-    if value.startswith("/") and root is not None and (root / value.strip("/")).exists():
-        return
+        raise ValueError(f"--project {value} is in no node (a folder under /memory/ with a node README)")
     hint = f" ({MSYS_HINT})" if looks_path_converted(value) else ""
     raise ValueError(f"--project {value} is not a repository-root path starting with /memory/{hint}")
 
@@ -182,9 +187,13 @@ def _groups(root: Path, projects: list[str], private: bool) -> list[tuple[Any, l
 
 
 def _repository_refs(store, refs: list[str]) -> tuple[list[str], list[str]]:
-    """(project_refs for the record, /memory/ references kept for the companion file)."""
+    """(project_refs for the record, /memory/ references kept for the companion file).
+
+    The pointer node itself becomes `<repository>:brain` and is not private content; only other
+    /memory/ references go to the companion file."""
     kept = [r for r in refs if not r.startswith("/memory/")]
-    return [f"{store.repository}:brain"] + kept, [r for r in refs if r.startswith("/memory/")]
+    private = [r for r in refs if r.startswith("/memory/") and r.rstrip("/") != store.node]
+    return [f"{store.repository}:brain"] + kept, private
 
 
 def create(root: Path, title: str, status: str = "inbox", priority: str = "normal",
@@ -217,25 +226,19 @@ def create(root: Path, title: str, status: str = "inbox", priority: str = "norma
     for store, _refs in groups:
         if store.kind != "repository":
             continue
-        for name, value in (("the title", title), ("the outcome", outcome), ("the next action", next_action)):
-            if value and MEMORY_PATH.search(value):
-                raise WriteRefused(f"{name} names a /memory/ path, which is never written into {store.label}")
         said += ready_to_write(store, offline=offline)
         if store.public is not False:
             said.append(f"{store.repository} is {'public' if store.public else 'of unrecorded visibility'}: "
                         f"what is written into {store.label} can be read by everyone who can read it")
     at, notes = stamp(root, now)
     said += notes
-    ids = [claim_id(root, author, year or int(at[:4])) for _ in groups]
     template_owner = (parse_front_matter(template) or {}).get("owner")
-    paths: list[Path] = []
-    for n, (store, refs) in enumerate(groups):
-        tid = ids[n]
-        others = [i for i in ids if i != tid]
-        memory_refs: list[str] = []
-        project_refs = list(refs)
-        if store.kind == "repository":
-            project_refs, memory_refs = _repository_refs(store, refs)
+
+    def render(n: int, ids: list[str]) -> tuple[str, list[str]]:
+        store, refs = groups[n]
+        tid, others = ids[n], [i for i in ids if i != ids[n]]
+        project_refs, memory_refs = (_repository_refs(store, refs) if store.kind == "repository"
+                                     else (list(refs), []))
         part = title if len(groups) == 1 else f"{title} ({task_stores.node_title(root, store.node)})"
         fields: dict[str, Any] = {
             "id": tid, "title": part, "status": status, "owner": owner or _owner_default(root, template_owner),
@@ -250,7 +253,18 @@ def create(root: Path, title: str, status: str = "inbox", priority: str = "norma
         if others:
             history.append(entry(at, author, "split: part of work for several projects ("
                                  + ", ".join(sorted(ids)) + ")"))
-        text = render_new(template, fields, history)
+        return render_new(template, fields, history), memory_refs
+
+    # The whole record is checked before a number is claimed or anything is written: a /memory/
+    # path in any field (skill_refs, waiting_on, schedule, owner, ...) never reaches a repository.
+    probe = [f"TASK-{author}-0000-{n:04d}" for n in range(len(groups))]
+    for n, (store, _refs) in enumerate(groups):
+        refuse_memory_paths(store, render(n, probe)[0], "the new task")
+    ids = [claim_id(root, author, year or int(at[:4])) for _ in groups]
+    paths: list[Path] = []
+    for n, (store, _refs) in enumerate(groups):
+        tid = ids[n]
+        text, memory_refs = render(n, ids)
         folder = "inbox" if status == "inbox" else "open"
         path = store.path / folder / f"{tid}-{slug or slugify(title)}.md"
         write_atomic(path, text)

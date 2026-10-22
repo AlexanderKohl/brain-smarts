@@ -205,8 +205,33 @@ def set_fields(text: str, fields: dict[str, Any], after: dict[str, str] | None =
     return "---\n" + "\n".join(out) + "\n---\n" + text[match.end():]
 
 
+def merge_sections(text: str, section: str = "History") -> str:
+    """One `## <section>` per record: the contents of a second or later heading of that name are
+    moved, in file order, to the end of the first, so a new entry goes after every older one and
+    a reader of the section sees them all. Text without a repeated heading is returned unchanged."""
+    found = list(re.finditer(rf"^## {re.escape(section)}[ \t]*$", text, flags=re.M))
+    if len(found) < 2:
+        return text
+    spans = []
+    for match in found:
+        after = re.search(r"^## ", text[match.end():], flags=re.M)
+        end = match.end() + after.start() if after else len(text)
+        spans.append((match.start(), end, text[match.end():end].strip("\n")))
+    kept, cursor = [], 0
+    for start, end, _ in spans[1:]:
+        kept.append(text[cursor:start])
+        cursor = end
+    stripped = "".join(kept) + text[cursor:]
+    first_start, first_end, _ = spans[0]      # before every removed span, so its offsets still hold
+    extra = "\n".join(body for _, _, body in spans[1:] if body)
+    merged = stripped[first_start:first_end].rstrip("\n") + ("\n" + extra if extra else "") + "\n"
+    tail = stripped[first_end:].lstrip("\n")
+    return (stripped[:first_start] + merged + ("\n" + tail if tail.strip() else "")).rstrip("\n") + "\n"
+
+
 def add_history(text: str, entry: str, section: str = "History") -> str:
     """Append one entry at the end of the History section (made when the record has none)."""
+    text = merge_sections(text, section)
     found = re.search(rf"^## {re.escape(section)}[ \t]*$", text, flags=re.M)
     if not found:
         return text.rstrip("\n") + f"\n\n## {section}\n\n{entry}\n"

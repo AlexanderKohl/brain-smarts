@@ -234,11 +234,11 @@ def stores(root: Path) -> list[Store]:
             else:
                 nodes.append(Store(kind="memory-node", path=folder / "tasks", node=node))
     repos: dict[str, Store] = {}
-    for pointer in by_node.values():
-        if pointer.repository not in repos:
-            repos[pointer.repository] = _repository_store(pointer)
+    for pointer in by_node.values():       # a repository's name is matched without case
+        if pointer.repository.lower() not in repos:
+            repos[pointer.repository.lower()] = _repository_store(pointer)
     found += sorted(nodes, key=lambda s: s.node or "") + sorted(private, key=lambda s: s.node or "")
-    found += [repos[name] for name in sorted(repos, key=str.lower)]
+    found += [repos[name] for name in sorted(repos)]
     return found
 
 
@@ -250,23 +250,26 @@ def store_by_label(root: Path, label: str) -> Store:
 
 
 def store_for(root: Path, ref: str | None, private: bool = False) -> Store:
-    """The store a new task with this first project reference belongs in."""
+    """The store a new task with this first project reference belongs in.
+
+    No reference gives the owner store. A reference that names no node is refused: /memory/tasks/
+    holds only tasks with no project reference (P10), so it cannot take one that has a reference."""
     if not ref:
         if private:
             raise ValueError("--private needs a --project that names a pointer node")
         return owner_store(root)
     node = node_of(root, ref)
     if node is None:
-        if private:
-            raise ValueError(f"--private: {ref} is not in a pointer node")
-        return owner_store(root)
+        raise ValueError(f"{ref} is in no node (a folder under /memory/ with a node README); name the node, "
+                         "or give no project for a task that belongs to none")
     by_node = _pointer_by_node(root)
     if node not in by_node:
         if private:
             raise ValueError(f"--private: {node} is not a pointer node; a task in memory is already private")
         return Store(kind="memory-node", path=root / node.strip("/") / "tasks", node=node)
     pointer = by_node[node]
-    others = sorted(p.node for p in by_node.values() if p.repository == pointer.repository and p.node != node)
+    others = sorted(p.node for p in by_node.values()
+                    if p.repository.lower() == pointer.repository.lower() and p.node != node)
     if others:
         raise ValueError(f"{node} and {', '.join(others)} both point at the repository {pointer.repository}; "
                          "one of them must stop being a pointer first")

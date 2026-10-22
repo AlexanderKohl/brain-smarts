@@ -45,7 +45,7 @@ import task_migrate
 import task_stores
 from task_check import REQUIRED, Report, check  # noqa: F401  (Report, REQUIRED: re-exported)
 from task_git import WriteRefused
-from task_history import author_name, brain_author, owner_now  # noqa: F401  (owner_now: re-exported)
+from task_history import AUTHOR_RE, author_name, brain_author, owner_now  # noqa: F401  (owner_now: re-exported)
 from task_new import (NEW_STATUSES, MSYS_HINT, claim_id, create, looks_path_converted,  # noqa: F401
                       next_id, schedule_job)
 from task_private import add_private
@@ -375,7 +375,9 @@ def _run(args, store: Path, root: Path) -> int:
             print(f"{'FAIL' if report.errors else 'PASS'}: {len(report.errors)} error(s), "
                   f"{len(report.warnings)} warning(s)")
         return 1 if report.errors else 0
-    author = args.author or brain_author(root)
+    author = author_name(args.author) if args.author else brain_author(root)
+    if not AUTHOR_RE.match(author):
+        raise ValueError(f"--author {args.author!r} gives no author name")
     print(next_id(root, author, args.year or date.today().year))
     return 0
 

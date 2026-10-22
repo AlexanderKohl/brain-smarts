@@ -27,7 +27,7 @@ from pathlib import Path
 
 import task_private
 import task_stores
-from task_git import ready_to_write
+from task_git import conflicted, ready_to_write
 from task_history import apply_change, brain_author
 from task_migrate_lists import decide, file_hash, load_cleared, sort_items, write_list
 from task_new import ANCHORS, claim_id
@@ -37,6 +37,8 @@ from task_write import regenerate, stamp
 
 PROPOSAL = "PROPOSAL-shared-project-tasks-in-the-repository"
 LIST_FIELDS = ("depends_on", "related_tasks", "skill_refs")
+# Front-matter values a repository's readers see, flagged on the move list like body lines.
+FLAGGED_FIELDS = ("claimed_by", "depends_on", "schedule", "skill_refs", "team", "title", "waiting_on")
 
 
 def add_parser(sub) -> None:
@@ -66,7 +68,13 @@ def _show(root: Path, path: Path) -> str:
 
 
 def _resolve(root: Path, shown: str) -> Path:
-    return root / shown.lstrip("/") if shown.startswith("/") and not Path(shown).is_absolute() else Path(shown)
+    """A path as `_show` wrote it. `/memory/...` and other paths whose first folder is one of the
+    brain root's are root-relative on every system (on Linux and macOS they also look absolute);
+    anything else, such as a checkout outside the brain, is taken as it stands."""
+    first = shown.lstrip("/").split("/", 1)[0]
+    if shown.startswith("/") and first and (root / first).is_dir():
+        return root / shown.lstrip("/")
+    return Path(shown)
 
 
 def _memory_records(root: Path) -> list:
@@ -147,10 +155,10 @@ def apply_split(root: Path, listing: dict, now: str | None) -> list[str]:
             others = [i for i in [task.tid] + ids if i != tid]
             fields = {"id": tid, "title": part["title"], "project_refs": part["refs"], "related_tasks": others,
                       "created": at, "author": author, "claimed_by": None, "claimed_at": None}
-            part_text = set_fields(head + re.split(r"^## History[ \t]*$", _outcome_part(body, task.tid, part["node"]),
-                                                   flags=re.M)[0].rstrip("\n") + "\n\n## History\n", fields, after=ANCHORS)
-            part_text = re.sub(r"^# .*$", lambda _: f"# {part['title']}", part_text, count=1, flags=re.M)
-            part_text = apply_change(part_text, {}, what, author, at)
+            part_body = re.sub(r"^# .*$", lambda _: f"# {part['title']}", _outcome_part(body, task.tid, part["node"]),
+                               count=1, flags=re.M)
+            # The part keeps every History entry of the record it came from (CONTRACT §9.3 item 10).
+            part_text = apply_change(set_fields(head + part_body, fields, after=ANCHORS), {}, what, author, at)
             path = task.store.path / task.folder / f"{tid}-{slugify(part['title'])}.md"
             write_atomic(path, part_text)
             said.append(f"created {tid}: {_show(root, path)}")
@@ -198,9 +206,11 @@ def migrate_node(root: Path, node: str, dry_run: bool, now: str | None) -> list[
         path = _move(root, task, store, f"moved into the node's tasks/ ({PROPOSAL})", author, at)
         moves.append({"id": task.tid, "from": _show(root, task.path), "to": _show(root, path)})
         said.append(f"moved {task.tid}: {_show(root, path)}")
-    said += regenerate(task_stores.owner_store(root)) + regenerate(store)
     if moves:
+        said += regenerate(task_stores.owner_store(root)) + regenerate(store)
         said.append(f"ledger: {_show(root, _ledger(root, at, 'node', node, moves))}")
+    else:
+        said.append(f"nothing to move into {store.label}")
     return said
 
 
@@ -215,7 +225,7 @@ def migrate_owner_store(root: Path, dry_run: bool, now: str | None) -> list[str]
     for task in tasks:
         write_atomic(task.path, _moved(task.path.read_text(encoding="utf-8"),
                                        f"author recorded ({PROPOSAL})", author, at))
-    return said + [f"{len(tasks)} task(s) in {owner.label} now name their author"] + regenerate(owner)
+    return said + [f"{len(tasks)} task(s) in {owner.label} now name their author"] + (regenerate(owner) if tasks else [])
 
 
 # ---------------------------------------------------------------- repository
@@ -249,6 +259,11 @@ def repo_items(root: Path, repository: str) -> tuple[list, list[dict]]:
         refs += [r for r in task.refs()[1:] if r.startswith("/memory/")]
         if refs:
             notes.append(f"{len(refs)} /memory/ reference(s) go to the companion file")
+        for key in FLAGGED_FIELDS:
+            value = " ".join(task.refs(key))
+            marked = flags(value, root, terms) if value else []
+            if marked:
+                notes.append(f"front matter {key}: {', '.join(marked)} (edit the record, or keep it private)")
         tasks.append(task)
         items.append({"id": task.tid, "title": task.get("title") or task.tid, "folder": task.folder,
                       "path": _show(root, task.path), "sha256": file_hash(task.path), "notes": notes,
@@ -266,7 +281,7 @@ def _for_repository(task, store, private_lines: list[int]) -> tuple[str, list[st
     private = [line for n, line in enumerate(lines, 1) if n in private_lines]
     refs = task.refs()
     original = {"project_refs": refs}
-    memory_refs = [r for r in refs if r.startswith("/memory/")]
+    memory_refs = [r for r in refs if r.startswith("/memory/") and r.rstrip("/") != store.node]
     fields: dict = {"project_refs": [f"{store.repository}:brain"] + [r for r in refs if not r.startswith("/memory/")]}
     for key in LIST_FIELDS:
         values = task.refs(key)
@@ -299,7 +314,7 @@ def apply_repo(root: Path, repository: str, listing: dict, now: str | None, offl
             raise ValueError(f"item {item['n']} ({task.tid}) still names /memory/ (lines {', '.join(map(str, bad)) or 'in its front matter'}); "
                              f"mark them with --private-lines {item['n']}:{','.join(map(str, bad))}, or hold it; nothing was moved")
         planned.append((item, task, (text, lines, refs, original)))
-    if any(p[2] is not None for p in planned):
+    if any(p[2] is not None for p in planned):     # before any write into the repository
         said += ready_to_write(repo, offline=offline)
     moves = []
     for item, task, prepared in planned:
@@ -322,8 +337,12 @@ def apply_repo(root: Path, repository: str, listing: dict, now: str | None, offl
         moves.append({"id": task.tid, "from": _show(root, task.path), "to": _show(root, path), "store": "repository",
                       "restore": original, "private_lines": lines, "companion": companion})
         said.append(f"moved {task.tid}: {repo.label}/{task.folder}/{path.name}")
-    said += regenerate(task_stores.owner_store(root)) + regenerate(repo)
-    if private_store.path.is_dir():
+    kinds = {m["store"] for m in moves}
+    if moves:
+        said += regenerate(task_stores.owner_store(root))
+    if "repository" in kinds:
+        said += regenerate(repo)
+    if "private" in kinds:
         said += regenerate(private_store)
     if moves:
         said.append(f"ledger: {_show(root, _ledger(root, at, 'repository', repository, moves))}")
@@ -341,14 +360,21 @@ def reverse(root: Path, ledger_path: Path, now: str | None, offline: bool) -> li
     at, said = stamp(root, now)
     owner = task_stores.owner_store(root)
     touched = {owner.label: owner}
+    found = []
     for move in ledger["moves"]:
         try:
-            task = task_stores.find(root, move["id"])
+            found.append((move, task_stores.find(root, move["id"])))
         except LookupError as err:
             said.append(f"not moved back: {err}")
-            continue
-        if task.store.kind == "repository":
-            said += ready_to_write(task.store, offline=offline, record=task.path)
+    # Every record and every repository store is checked before any record moves, so a refusal
+    # leaves the move whole rather than half reversed.
+    for _move, task in found:
+        if task.problem or conflicted(task.path.read_text(encoding="utf-8")):
+            raise ValueError(f"{task.path.as_posix()} has a Git conflict marker or cannot be read; resolve it "
+                             "by hand first; nothing was moved back")
+    for store in {t.store.label: t.store for _m, t in found if t.store.kind == "repository"}.values():
+        said += ready_to_write(store, offline=offline)
+    for move, task in found:
         touched[task.store.label] = task.store
         text = task.path.read_text(encoding="utf-8")
         fields = dict(move.get("restore") or {})
@@ -363,9 +389,10 @@ def reverse(root: Path, ledger_path: Path, now: str | None, offline: bool) -> li
         move_record(task.path, target, body)
         said.append(f"moved back {task.tid}: {_show(root, target)}"
                     + (f" (its companion file {move['companion']} stays)" if move.get("companion") else ""))
-    for store in touched.values():
-        if store.path.is_dir():
-            said += regenerate(store)
+    if found:
+        for store in touched.values():
+            if store.path.is_dir():
+                said += regenerate(store)
     if ledger["kind"] == "repository":
         repo = next((s for s in task_stores.stores(root) if s.kind == "repository"
                      and s.repository.lower() == ledger["target"].lower()), None)
