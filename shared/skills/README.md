@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 node_type: skill_library
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-10-21T11:55:16+10:00
+updated: 2026-10-23T08:06:02+10:00
 ---
 
 # Core Skills
@@ -61,6 +61,10 @@ Contains the investment-proportionate product-development process for new and ex
 ##### `raw-file-ingestion/`
 
 Contains the canonical shared executable skill for preserving raw files under `/memory/raw/` and creating traceable Markdown source records under `/memory/sources/`. It converts text, CSV, JSON, Markdown, Word and Excel files with the standard library, and PDF through `pdftotext` or `pypdf` where installed, and says in each record what was left out. It must never modify or delete an existing raw file. Tests in `tests/` run on fictional files.
+
+##### `raise-ambition/`
+
+Contains the way-of-working skill `SMART-RULE-0044` requires at the intake of every request: name the outcome behind the request and offer a bigger version – higher (an outcome kept true), deeper (an expert's methods and a harder target) or wider (other fields and roles) – as the first, recommended option of a clarifying question, never widening the work without the user's yes. No scripts, no external access.
 
 ##### `repository-preflight/`
 
