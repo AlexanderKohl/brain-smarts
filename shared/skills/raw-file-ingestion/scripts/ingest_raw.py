@@ -2,20 +2,27 @@
 """
 Ingest a source file into the Portable AI Brain.
 
+    ingest_raw.py FILE [--node NODE] [--title T] [--private | --keep-in-repository] [--offline]
+    ingest_raw.py migrate ...            move sources out of /memory/sources/ (source_migrate.py)
+
 This script:
 1. Locates the brain root by finding CONTRACT.md.
-2. Copies the source byte-for-byte into /memory/raw/YYYY/MM/<source-id>/.
-3. Computes SHA-256 and detects existing identical raw files.
-4. Creates a canonical Markdown record under /memory/sources/, or keeps the
-   record an identical earlier file already has.
-5. Optionally creates a project-local source reference.
-6. Appends the event to /memory/systems/raw-file-management/LOG.md.
+2. Chooses the raw store (CONTRACT §11.1, P13; raw_stores.choose): no node, /memory/raw/; a
+   memory node, its raw/; a pointer node, its repository's brain/raw/, or with --private the
+   pointer node's own raw/.
+3. Computes SHA-256 and looks for an identical raw file in every raw store the brain can reach;
+   one found is reused, unless it is in memory and the source is bound for a repository (exit 8).
+4. Before anything is written into a repository: names it and says who can read it, and flags
+   the converted text, the file name and the title (raw_stores.flags). Anything flagged and
+   neither --private nor --keep-in-repository given: exit 7, nothing written.
+5. Copies the source byte-for-byte into <raw store>/YYYY/MM/<source-id>/ and creates the
+   canonical Markdown record in the sources/ folder beside it, or keeps the record an identical
+   earlier file already has.
+6. Optionally creates a node-local source reference in memory.
+7. Appends the event to /memory/systems/raw-file-management/LOG.md and the node's LOG.md.
 
-Raw files, source records and the ingestion log are owner data, so they live
-in the memory checkout at <brain root>/memory/.
-
-convert.py turns the raw file into the record's Markdown. Formats it cannot
-read are preserved and marked pending_conversion.
+convert.py turns the file into the record's Markdown. Formats it cannot read are preserved and
+marked pending_conversion.
 """
 
 from __future__ import annotations
@@ -35,6 +42,8 @@ from typing import Optional
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from convert import Conversion, convert  # noqa: E402
+import raw_stores  # noqa: E402
+from raw_stores import RawStore  # noqa: E402
 
 
 def find_root(start: Path) -> Path:
@@ -100,31 +109,6 @@ def resolve_node(root: Path, value: str) -> Path:
     return node
 
 
-def find_duplicate(root: Path, file_hash: str) -> Optional[Path]:
-    raw_root = memory_root(root) / "raw"
-    if not raw_root.exists():
-        return None
-    for manifest in raw_root.rglob("manifest.json"):
-        try:
-            data = json.loads(manifest.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        if data.get("sha256") == file_hash:
-            candidate = manifest.parent / data.get("filename", "")
-            if candidate.is_file():
-                return candidate
-    return None
-
-
-def find_source_record(root: Path, source_id: str) -> Optional[Path]:
-    """The canonical source record an identical earlier file already has, if any."""
-    sources = memory_root(root) / "sources"
-    for candidate in sorted(sources.glob(f"{source_id}*.md")):
-        if candidate.stem == source_id or candidate.stem.startswith(source_id + "-"):
-            return candidate
-    return None
-
-
 def recorded_status(record: Path) -> str:
     found = re.search(r"^conversion_status:\s*(\S+)", record.read_text(encoding="utf-8"), re.M)
     return found.group(1) if found else "unknown"
@@ -177,9 +161,13 @@ def append_log(log_path: Path, line: str, timestamp: str) -> None:
     log_path.write_text(text, encoding="utf-8", newline=newline)
 
 
+
+
 def write_source_record(canonical: Path, *, source_id: str, title: str, timestamp: str,
                         raw_repo_path: str, file_hash: str, source_name: str,
-                        conversion: Conversion, node_ref: Optional[str]) -> None:
+                        conversion: Conversion, node_ref: Optional[str] = None,
+                        project_refs: Optional[list[str]] = None) -> None:
+    refs = list(project_refs) if project_refs is not None else ([node_ref] if node_ref else [])
     body = [
         "---",
         f"id: {source_id}",
@@ -197,10 +185,7 @@ def write_source_record(canonical: Path, *, source_id: str, title: str, timestam
         "conversion_skill: /shared/skills/raw-file-ingestion",
         "project_refs:",
     ]
-    if node_ref:
-        body.append(f"  - {node_ref}")
-    else:
-        body.append("  []")
+    body += [f"  - {ref}" for ref in refs] or ["  []"]
     body += [
         "---",
         "",
@@ -222,13 +207,82 @@ def write_source_record(canonical: Path, *, source_id: str, title: str, timestam
     write_lf(canonical, "\n".join(body))
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Ingest a file into the Portable AI Brain.")
-    parser.add_argument("file", type=Path, help="File to ingest")
-    parser.add_argument("--node", type=str, help="Target node inside the memory checkout, e.g. memory/projects/example")
-    parser.add_argument("--title", type=str, help="Human-readable title")
-    args = parser.parse_args()
+def write_reference(local: Path, *, source_id: str, node_name: str, node_ref: str, title: str, timestamp: str,
+                    raw_ref: str, file_hash: str, canonical_ref: str) -> None:
+    local.parent.mkdir(parents=True, exist_ok=True)
+    write_lf(local, f"""---
+id: {source_id}-{slugify(node_name)}-reference
+title: {yaml_quote(title)}
+type: source_reference
+schema_version: 0.2
+contract: /CONTRACT.md
+status: active
+created: {timestamp}
+updated: {timestamp}
+raw_source: {yaml_quote(raw_ref)}
+raw_sha256: {file_hash}
+canonical_source_md: {yaml_quote(canonical_ref)}
+project_refs:
+  - {node_ref}
+---
 
+# {title}
+
+Read `/CONTRACT.md` first.
+
+- Canonical Markdown source: `{canonical_ref}`
+- Immutable raw file: `{raw_ref}`
+- SHA-256: `{file_hash}`
+""")
+
+
+def repository_flags(root: Path, source_name: str, title: Optional[str], conversion: Conversion) -> list[dict]:
+    """What may be private in a source bound for a repository: {where, flags}, in reading order.
+
+    A file whose content could not be read is flagged too: nothing in it was checked."""
+    terms = raw_stores.personal_terms(root)
+    found = []
+    for where, text in (("file name", source_name), ("title", title or "")):
+        hit = raw_stores.flags(text, root, terms) if text else []
+        if hit:
+            found.append({"where": where, "flags": hit})
+    for item in raw_stores.flagged_lines(conversion.markdown, root, terms):
+        found.append({"where": f"content line {item['line']}", "flags": item["flags"]})
+    if conversion.status in ("pending_conversion", "failed"):
+        found.append({"where": "content", "flags": [f"not read ({conversion.status}): nothing in it was checked"]})
+    return found
+
+
+def refuse(code: int, message: str, **extra) -> int:
+    print(f"Error: {message}", file=sys.stderr)
+    if extra:
+        print(json.dumps({"written": False, "exit": code, **extra}, indent=2, ensure_ascii=False))
+    return code
+
+
+def check_repository_write(root: Path, store: RawStore, source_name: str, title: Optional[str],
+                           conversion: Conversion, keep: bool, offline: bool) -> tuple[int, list[str]]:
+    """The checks before anything is written into a repository: (exit code or 0, notes)."""
+    from task_git import WriteRefused, ready_to_write
+    notes = [f"writing into {store.repository}: {raw_stores.visibility(store)}"]
+    flagged = repository_flags(root, source_name, title, conversion)
+    if flagged and not keep:
+        return refuse(7, f"{source_name} may hold private content and {store.repository}'s readers would see it; "
+                         "nothing was written. Ask the owner: --private (the pointer node's raw/) or "
+                         "--keep-in-repository.", repository=store.repository, public=store.public,
+                      notes=notes, flags=flagged), notes
+    if flagged:
+        notes.append("kept in the repository as the owner chose, though flagged: "
+                     + "; ".join(f"{f['where']}: {', '.join(f['flags'])}" for f in flagged))
+    try:
+        # On the store branch, fetched, not behind, nothing unmerged under brain/ (task_git).
+        notes += ready_to_write(store.writable(), offline=offline)
+    except WriteRefused as err:
+        return refuse(9, str(err)), notes
+    return 0, notes
+
+
+def ingest(args) -> int:
     source = args.file.expanduser().resolve()
     if not source.is_file():
         print(f"Error: source file not found: {source}", file=sys.stderr)
@@ -239,116 +293,133 @@ def main() -> int:
         root = find_root(Path.cwd())
         memory_root(root)
     except FileNotFoundError as err:
-        print(f"Error: {err}", file=sys.stderr)
-        return 6
+        return refuse(6, str(err))
     node: Optional[Path] = None
     if args.node:
         try:
             node = resolve_node(root, args.node)
         except ValueError as err:
-            print(f"Error: {err}", file=sys.stderr)
-            return 4
+            return refuse(4, str(err))
         except FileNotFoundError as err:
-            print(f"Error: {err}", file=sys.stderr)
-            return 5
+            return refuse(5, str(err))
+    node_ref = root_path(root, node) if node else None
+    try:
+        target = raw_stores.choose(root, node_ref, args.private)
+    except ValueError as err:
+        return refuse(4, str(err))
     now = dt.datetime.now().astimezone().replace(microsecond=0)
     timestamp = now.isoformat()
-    today_dt = now.date()
     file_hash = sha256_file(source)
     source_id = f"source-{file_hash[:12]}"
     title = args.title or source.stem.replace("_", " ").replace("-", " ").strip().title()
 
-    duplicate = find_duplicate(root, file_hash)
-    if duplicate:
-        raw_path = duplicate
-    else:
-        raw_dir = memory_root(root) / "raw" / f"{today_dt.year:04d}" / f"{today_dt.month:02d}" / source_id
+    found = raw_stores.find_duplicate(root, file_hash)
+    raw_path: Optional[Path] = found[1] if found else None
+    store = found[0] if found else target
+    if found and target.kind == "repository" and not store.same_place(target):
+        # A repository cannot resolve a path outside it (P15): the owner decides what happens.
+        existing = raw_stores.find_record(store, source_id)
+        shown = store.memory_ref(root, existing or raw_path)
+        return refuse(8, f"{source.name} is already in {store.label} as {shown}; a record in "
+                         f"{target.repository} cannot name it there. Ask the owner: ingest it with --private "
+                         "to reuse it in the pointer node, or move that source with `ingest_raw.py migrate`.",
+                      existing=shown, store=store.label)
+    if not store.reachable:
+        return refuse(9, f"{store.label} cannot be written: {store.reason}")
+    existing = raw_stores.find_record(store, source_id)
+    conversion = None if existing else safe_convert(raw_path or source)
+    notes: list[str] = []
+    if store.kind == "repository" and (raw_path is None or existing is None):
+        code, notes = check_repository_write(root, store, source.name, args.title, conversion,
+                                             args.keep_in_repository, args.offline)
+        if code:
+            return code
+
+    reused_raw = raw_path is not None
+    if raw_path is None:
+        raw_dir = store.raw / f"{now.year:04d}" / f"{now.month:02d}" / source_id
         raw_dir.mkdir(parents=True, exist_ok=True)
         raw_path = raw_dir / source.name
         if raw_path.exists() and sha256_file(raw_path) != file_hash:
-            print(f"Error: conflicting file already exists: {raw_path}", file=sys.stderr)
-            return 3
+            return refuse(3, f"conflicting file already exists: {raw_path}")
         if not raw_path.exists():
             shutil.copy2(source, raw_path)
-        manifest = {
-            "source_id": source_id,
-            "filename": raw_path.name,
-            "sha256": file_hash,
-            "ingested": timestamp,
-            "original_path": str(source),
-            "mime_type": mimetypes.guess_type(source.name)[0],
-        }
+        manifest = {"source_id": source_id, "filename": raw_path.name, "sha256": file_hash, "ingested": timestamp}
+        if store.kind != "repository":
+            manifest["original_path"] = str(source)    # a machine path never enters a repository
+        manifest["mime_type"] = mimetypes.guess_type(source.name)[0]
         write_lf(raw_path.parent / "manifest.json", json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
 
     # One canonical record per raw file (CONTRACT §3.3, §11.1): an identical file ingested
     # again keeps the record it already has, whatever title it arrives with, so a manual or
     # specialised conversion made in that record since is never overwritten.
-    existing = find_source_record(root, source_id)
-    raw_repo_path = root_path(root, raw_path)
     if existing:
         canonical = existing
         conversion_status = recorded_status(existing)
     else:
-        canonical = memory_root(root) / "sources" / f"{source_id}-{slugify(title)}.md"
-        conversion = safe_convert(raw_path)
+        canonical = store.sources / f"{source_id}-{slugify(title)}.md"
         conversion_status = conversion.status
-        write_source_record(
-            canonical, source_id=source_id, title=title, timestamp=timestamp,
-            raw_repo_path=raw_repo_path, file_hash=file_hash, source_name=source.name,
-            conversion=conversion,
-            node_ref=root_path(root, node) if node else None,
-        )
-    canonical_repo_path = root_path(root, canonical)
+        refs = [f"{store.repository}:brain"] if store.kind == "repository" else ([node_ref] if node_ref else [])
+        write_source_record(canonical, source_id=source_id, title=title, timestamp=timestamp,
+                            raw_repo_path=store.ref(root, raw_path), file_hash=file_hash,
+                            source_name=source.name, conversion=conversion, project_refs=refs)
 
-    if node:
-        local_dir = node / "sources"
-        local_dir.mkdir(parents=True, exist_ok=True)
-        local = local_dir / canonical.name
+    # A reference in the node when the record lives elsewhere: in the owner store (the folder is
+    # in no node) or in another node's or a repository's store, reused by hash.
+    node_log = None
+    if node and target.kind != "repository" and (target.kind == "owner" or not store.same_place(target)):
+        local = node / "sources" / canonical.name
         if not local.exists():
-            local_text = f"""---
-id: {source_id}-{slugify(node.name)}-reference
-title: {yaml_quote(title)}
-type: source_reference
-schema_version: 0.2
-contract: /CONTRACT.md
-status: active
-created: {timestamp}
-updated: {timestamp}
-raw_source: {yaml_quote(raw_repo_path)}
-raw_sha256: {file_hash}
-canonical_source_md: {yaml_quote(canonical_repo_path)}
-project_refs:
-  - {root_path(root, node)}
----
-
-# {title}
-
-Read `/CONTRACT.md` first.
-
-- Canonical Markdown source: `{canonical_repo_path}`
-- Immutable raw file: `{raw_repo_path}`
-- SHA-256: `{file_hash}`
-"""
-            write_lf(local, local_text)
-            verb = "Referenced existing source" if existing else "Ingested source"
-            append_log(node / "LOG.md", f"- {verb} `{source.name}` as `{source_id}`.", timestamp)
+            write_reference(local, source_id=source_id, node_name=node.name, node_ref=node_ref, title=title,
+                            timestamp=timestamp, raw_ref=store.memory_ref(root, raw_path), file_hash=file_hash,
+                            canonical_ref=store.memory_ref(root, canonical))
+            node_log = "Referenced existing source" if existing else "Ingested source"
+    elif node and not existing and store.kind != "repository":
+        node_log = "Ingested source"
+    if node_log:
+        append_log(node / "LOG.md", f"- {node_log} `{source.name}` as `{source_id}`.", timestamp)
+    if store.kind == "repository" and not existing:
+        append_log(store.checkout / "brain" / "LOG.md", f"- Ingested source `{source.name}` as `{source_id}`.",
+                   timestamp)
 
     if existing:
         line = (f"- Ingested `{source.name}` again: identical to `{source_id}`; "
                 "its raw file and source record were kept.")
     else:
-        line = f"- Ingested `{source.name}` as `{source_id}` with status `{conversion_status}`."
+        line = f"- Ingested `{source.name}` as `{source_id}` into {store.label} with status `{conversion_status}`."
     append_log(memory_root(root) / "systems" / "raw-file-management" / "LOG.md", line, timestamp)
 
     print(json.dumps({
         "source_id": source_id,
-        "raw_file": raw_repo_path,
-        "canonical_markdown": canonical_repo_path,
+        "store": store.label,
+        "raw_file": store.memory_ref(root, raw_path),
+        "canonical_markdown": store.memory_ref(root, canonical),
         "conversion_status": conversion_status,
-        "duplicate_reused": duplicate is not None,
+        "duplicate_reused": reused_raw,
         "source_record_reused": existing is not None,
-    }, indent=2))
+        "notes": notes,
+    }, indent=2, ensure_ascii=False))
     return 0
+
+
+def main(argv: Optional[list[str]] = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ["migrate"]:
+        import source_migrate
+        return source_migrate.main(argv[1:])
+    parser = argparse.ArgumentParser(description="Ingest a file into the Portable AI Brain.",
+                                     epilog="`ingest_raw.py migrate --help` moves sources between stores.")
+    parser.add_argument("file", type=Path, help="File to ingest (a file named migrate: write ./migrate)")
+    parser.add_argument("--node", type=str, help="Target node inside the memory checkout, e.g. memory/projects/example")
+    parser.add_argument("--title", type=str, help="Human-readable title")
+    where = parser.add_mutually_exclusive_group()
+    where.add_argument("--private", action="store_true",
+                       help="for a pointer node: keep the source in the pointer node, out of the repository")
+    where.add_argument("--keep-in-repository", action="store_true",
+                       help="write into the repository although something was flagged (the owner's choice)")
+    parser.add_argument("--offline", action="store_true",
+                        help="skip the fetch before a write into a repository (only once the owner agrees)")
+    return ingest(parser.parse_args(argv))
 
 
 if __name__ == "__main__":
