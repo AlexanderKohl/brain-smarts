@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 scope: shared
-version: 1.1.0
+version: 1.1.1
 script_paths:
   - /shared/skills/owner-board/scripts/apply_events.py
   - /shared/skills/owner-board/scripts/board_config.py
@@ -24,7 +24,7 @@ script_paths:
   - /shared/skills/owner-board/scripts/task_board.py
   - /shared/skills/owner-board/scripts/team_lanes.py
 created: 2026-09-18T11:05:00+10:00
-updated: 2026-10-22T16:20:28+10:00
+updated: 2026-10-22T16:47:15+10:00
 owner: brain-owner
 project_refs:
   - /memory/projects/brain-development
@@ -372,8 +372,10 @@ owner-board stays a core skill with an optional dependency.
 A shared board also draws the projects its repository defines in `brain/status/release-notes.json`
 (the release-notes skill, *Projects, boards and team pages*), so a brain without the owner's
 release-notes configuration still shows the section; an entry with the same id in the owner's
-memory configuration wins. A missing library skill, an unknown project or an unreadable
-repository file is a short visible line in the section as well as a line of the build's report.
+memory configuration wins. The board loads it through the skill's `load_config`, the same
+function `release_notes.py --repo` uses. A missing library skill, an unknown project, an unreadable
+repository file or a folder that leaves the repository (through `..` or a link) is a short
+visible line in the section as well as a line of the build's report.
 
 **The release retires cards.** `release_notes.py release <version> --env testing|production`
 writes one `released` event per open card at or below that version on every board that draws

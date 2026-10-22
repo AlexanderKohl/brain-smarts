@@ -221,11 +221,12 @@ def repository_root(board: dict) -> Path | None:
 
 def skill_config(module, config, board: dict):
     """The release-notes configuration for this board: the owner's, plus its repository's own
-    projects when the board is shared. Shared with apply_events.py (one implementation)."""
+    projects when the board is shared. Shared with apply_events.py; the skill's command line loads
+    it through the same `load_config` (one implementation, SMART-RULE-0018)."""
     repository = repository_root(board)
     if repository is None or not hasattr(module, "repo_definition"):
         return module.load_config(config.brain)
-    return module.load_config(config.brain, repo_definition=module.repo_definition(repository))
+    return module.load_config(config.brain, repository=repository)
 
 
 def problem_html(problems: list) -> str:

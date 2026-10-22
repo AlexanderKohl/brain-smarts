@@ -161,11 +161,12 @@ def step_versions(root: Path, manifest: dict, report: Report) -> None:
 
 def step_library(root: Path, manifest: dict, report: Report) -> None:
     """Each library skill the project needs is checked out under /library/skills/; a missing one is
-    the person's step, with the command that adds it (a report, never a failure)."""
-    for name in manifest.get("library_skills") or []:
-        name = str(name).strip().strip("/")
-        if not name:
-            continue
+    the person's step, with the command that adds it (a report, never a failure). A value that is
+    not a list of plain skill names is reported as a malformed line of brain/JOINING.md."""
+    names, malformed = joining.library_skill_names(manifest)
+    for line in malformed:
+        report.own("malformed brain/JOINING.md line, skipped: " + line)
+    for name in names:
         if (root / "library" / "skills" / name / "SKILL.md").is_file():
             report.done(f"library skill {name} present")
         elif (root / "library" / ".git").exists():

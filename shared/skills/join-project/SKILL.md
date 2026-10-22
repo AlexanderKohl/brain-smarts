@@ -6,12 +6,12 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 scope: shared
-version: 1.1.0
+version: 1.1.1
 script_paths:
   - /shared/skills/join-project/scripts/join.py
   - /shared/skills/join-project/scripts/joining.py
 created: 2026-10-21T11:55:16+10:00
-updated: 2026-10-22T16:20:28+10:00
+updated: 2026-10-22T16:47:15+10:00
 owner: brain-owner
 skill_refs:
   - /shared/skills/repository-preflight
@@ -49,7 +49,7 @@ part. The keys of `joining:`, in the order `join.py` uses them:
 | `minimum_contract_version` | The lowest `contract_version` of `/CONTRACT.md` the project assumes. |
 | `skills` | List of `{path, minimum_version}`: brain skills the project relies on; `minimum_version` is compared with the skill's `version` field when the skill states one. |
 | `active_skills` | Library skill names the person lists in `active_skills` of their `/memory/OWNER.md`. |
-| `library_skills` | Library skill names the project needs checked out under `/library/skills/` (for example `release-notes`, which draws a shared board's release notes); a missing one is reported with the command that adds it, and the exit code stays 0. |
+| `library_skills` | Library skill names the project needs checked out under `/library/skills/` (for example `release-notes`, which draws a shared board's release notes); a missing one is reported with the command that adds it, and the exit code stays 0. Each item is a plain skill name (one path segment, no `/`, `\`, `:` or `..`); a value that is not a list of such names is reported as a malformed `JOINING.md` line and skipped. |
 | `pointer_node` | The folder name of the pointer node under `/memory/projects/`. |
 | `boards` | List of `{id, label, status}` with `status` relative to the repository (`brain/status`); registered as `<clone folder>:<status>`. |
 | `vault_entries` | List of `{entry, fields, purpose}`: entries each person creates in their own vault, by name and field names only, never a value. |

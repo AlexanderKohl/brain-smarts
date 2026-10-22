@@ -224,6 +224,22 @@ class JoinTests(unittest.TestCase):
         self.assertIn("library skill release-notes present", out)
         self.assertNotIn("git -C library pull", out)
 
+    def test_library_skills_that_are_not_plain_names_are_malformed_lines_not_a_crash(self):
+        (self.root / "library" / ".git").mkdir(parents=True)
+        manifest = self.repo / "brain" / "JOINING.md"
+        for value, shown in (("[../../shared/skills/owner-board, release-notes]", "'../../shared/skills/owner-board'"),
+                             ("[release-notes, a/b, c\\\\d]", "'a/b'"),
+                             ("true", "True"),
+                             ("release-notes", "'release-notes'")):
+            write(manifest, MANIFEST.replace("library_skills: [release-notes]", "library_skills: " + value))
+            code, out = self.run_join("--dry-run")
+            self.assertEqual(code, 0, out)
+            self.assertIn("malformed brain/JOINING.md line, skipped: library_skills", out)
+            self.assertIn(shown, out)
+            self.assertNotIn("owner-board present", out)   # a path never finds another skill's SKILL.md
+            self.assertNotIn("library skill r ", out)       # a scalar is not walked letter by letter
+            self.assertIn("git checkout testing", out)     # the rest of the report still runs
+
     def test_a_dirty_clone_is_not_switched(self):
         with (self.repo / "brain" / "JOINING.md").open("a", encoding="utf-8") as handle:
             handle.write("\nA line added here, not committed.\n")

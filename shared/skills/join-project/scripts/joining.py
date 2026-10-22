@@ -140,6 +140,28 @@ def load_manifest(repo: Path) -> dict | None:
     return joining
 
 
+SKILL_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+
+
+def library_skill_names(manifest: dict) -> tuple[list[str], list[str]]:
+    """(plain skill names, malformed lines) of the manifest's `library_skills`. A plain name is one
+    path segment: no `/`, `\\`, `:` or `..`. Anything else is a malformed line, never an exception."""
+    value = manifest.get("library_skills")
+    if value is None:
+        return [], []
+    if not isinstance(value, list):
+        return [], [f"library_skills: {value!r} – a list of skill names is needed"]
+    names, malformed = [], []
+    for item in value:
+        name = item.strip() if isinstance(item, str) else None
+        if name and SKILL_NAME.fullmatch(name) and ".." not in name:
+            names.append(name)
+        else:
+            malformed.append(f"library_skills item {item!r} – a plain skill name is needed "
+                             "(one path segment, no / \\ or ..)")
+    return names, malformed
+
+
 def normalise_url(url: str | None) -> str:
     url = (url or "").strip().lower().rstrip("/")
     return url[:-4] if url.endswith(".git") else url
