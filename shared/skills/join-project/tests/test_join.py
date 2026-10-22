@@ -341,6 +341,16 @@ class JoinTests(unittest.TestCase):
                       "resolve by hand", out)
         self.assertIn("task store garden-app:brain/tasks: 0 open, 0 in the inbox", out)
 
+    def test_the_store_is_matched_by_repository_name_without_case(self):
+        node = self.root / "memory/projects/garden-planner"
+        write(node / "README.md", "---\nid: g\ntitle: Garden Planner\ntype: node_readme\nnode_type: project\n"
+              "repo_url: https://example.com/sam/Garden-App.git\nlocal_path: garden-app\n---\n")
+        write(self.repo / "brain" / "tasks" / "open" / "TASK-sam-2026-0001-water-beds.md",
+              task("TASK-sam-2026-0001", "Water the beds", "ready", "Sam"))
+        store = join.repository_store(self.root, self.repo, joining.load_manifest(self.repo))
+        self.assertEqual(store.node, "/memory/projects/garden-planner")   # the listed store, not one built here
+        self.assertEqual(store.label, "Garden-App:brain/tasks")
+
     def test_a_minimum_contract_below_three_is_warned(self):
         code, out = self.run_join("--dry-run")
         self.assertIn("warning: the manifest's minimum_contract_version is 2.6.0, below 3.0.0", out)

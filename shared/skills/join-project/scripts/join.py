@@ -358,7 +358,8 @@ def repository_store(root: Path, repo: Path, manifest: dict) -> task_stores.Stor
     brain's pointer does not name the clone yet (a dry run, or a pointer to another folder)."""
     name = task_stores.repository_name(str(manifest.get("repository") or repo.name))
     for store in task_stores.stores(root):
-        if (store.kind == "repository" and store.repository == name and store.checkout is not None
+        if (store.kind == "repository" and str(store.repository).lower() == name.lower()
+                and store.checkout is not None
                 and store.checkout.resolve() == repo.resolve()):
             return store
     return task_stores.Store(kind="repository", path=repo / "brain" / "tasks", node=None, repository=name,

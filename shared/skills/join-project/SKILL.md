@@ -6,12 +6,12 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 scope: shared
-version: 1.2.0
+version: 1.2.1
 script_paths:
   - /shared/skills/join-project/scripts/join.py
   - /shared/skills/join-project/scripts/joining.py
 created: 2026-10-21T11:55:16+10:00
-updated: 2026-10-23T08:09:42+10:00
+updated: 2026-10-23T08:54:40+10:00
 owner: brain-owner
 skill_refs:
   - /shared/skills/tasks
@@ -162,4 +162,5 @@ Canonical, shared, standard library only; both import the tasks skill's modules 
 Contains `test_join.py` (an invented brain, memory and project in a temporary folder) and
 `test_two_brains.py` (two invented brains `sam` and `bob` on one local repository: joining, a task
 completed and created across brains, private lines kept in memory, a conflict failing
-`tasks.py check` until resolved per P23). Authors and names fictional. Run from the brain root.
+`tasks.py check` and the repository preflight's `--project` mode until resolved per P23). Authors
+and names fictional. Run from the brain root.

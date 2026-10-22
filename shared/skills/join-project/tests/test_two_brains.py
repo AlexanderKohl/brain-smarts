@@ -8,8 +8,8 @@ join, `tasks.py` to create, complete and note tasks, and `git` to share the repo
 It checks that `bob` joins and sees the repository's task store, completes `sam`'s task (the
 History names `bob`), creates `TASK-bob-2026-0001`; that `sam`'s private task and private note
 are in no file of the repository; and that a deliberate conflict fails `tasks.py check` until it
-is resolved by hand per P23 (both History entries kept in time order, STATE.md generated again).
-The repository preflight's own conflict check is the repository-preflight skill's to test.
+is resolved by hand per P23 (both History entries kept in time order, STATE.md generated again),
+and fails the repository preflight in `--project` mode (`preflight.run_project`) the same way.
 
     python -m unittest discover -s shared/skills/join-project/tests -v
 """
@@ -31,11 +31,13 @@ HERE = Path(__file__).resolve()
 SCRIPTS = HERE.parents[1] / "scripts"
 REAL_ROOT = HERE.parents[4]
 TASKS_SCRIPTS = REAL_ROOT / "shared" / "skills" / "tasks" / "scripts"
-for folder in (SCRIPTS, TASKS_SCRIPTS):
+PREFLIGHT_SCRIPTS = REAL_ROOT / "shared" / "skills" / "repository-preflight" / "scripts"
+for folder in (SCRIPTS, TASKS_SCRIPTS, PREFLIGHT_SCRIPTS):
     if str(folder) not in sys.path:
         sys.path.insert(0, str(folder))
 
 import join  # noqa: E402
+import preflight  # noqa: E402
 import tasks  # noqa: E402
 
 HAS_GIT = shutil.which("git") is not None
@@ -133,7 +135,9 @@ class TwoBrainsTests(unittest.TestCase):
         seed = self.base / "seed"
         git(self.base, "clone", "-q", str(origin), str(seed))
         write(seed / "brain/JOINING.md", MANIFEST)
-        write(seed / "brain/README.md", "---\nid: garden-brain\n---\n# Garden Planner brain\n")
+        write(seed / "brain/README.md", "---\nid: garden-brain\ntitle: Garden Planner brain\ntype: node_readme\n"
+              "schema_version: 0.2\ncontract: /CONTRACT.md\nstatus: active\ncreated: 2026-01-05T09:12:31+10:00\n"
+              "updated: 2026-01-05T09:12:31+10:00\n---\n# Garden Planner brain\n")
         git(seed, "add", "brain")
         git(seed, "commit", "-q", "-m", "manifest")
         git(seed, "push", "-q", "origin", "main")
@@ -215,6 +219,9 @@ class TwoBrainsTests(unittest.TestCase):
         code, out = self.sam.tasks("note", "TASK-sam-2026-0001", "--note", "one more",
                                    "--now", "2026-03-04T10:00:00+00:00", "--no-board")
         self.assertEqual(code, 1, out)
+        found = preflight.run_project(self.sam.root, str(self.sam.clone))
+        self.assertTrue(any("TASK-sam-2026-0001" in e and "conflict" in e.lower() for e in found.errors),
+                        found.errors)
 
         # resolved by hand per P23: bob's side, with sam's entry put back before bob's in time order
         path = self.sam.record("TASK-sam-2026-0001")
@@ -234,6 +241,8 @@ class TwoBrainsTests(unittest.TestCase):
         git(self.sam.clone, "commit", "-q", "--no-edit")
         code, out = self.sam.tasks("check", "--store", STORE)
         self.assertEqual(code, 0, out)
+        found = preflight.run_project(self.sam.root, "garden-app")
+        self.assertEqual(found.errors, [])
         text = path.read_text(encoding="utf-8")
         self.assertLess(text.index("sam: note"), text.index("bob: note"))
 
