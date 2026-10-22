@@ -14,8 +14,12 @@ script_paths:
   - /shared/skills/repository-preflight/scripts/session.py
   - /shared/skills/repository-preflight/tests/test_session.py
   - /shared/skills/repository-preflight/scripts/tests/test_session_refresh.py
+  - /shared/skills/repository-preflight/scripts/preflight_tasks.py
+  - /shared/skills/repository-preflight/tests/test_task_stores.py
+  - /shared/skills/repository-preflight/scripts/hooks.py
+  - /shared/skills/repository-preflight/tests/test_project_hook.py
 created: 2026-08-04T23:16:08+10:00
-updated: 2026-10-21T07:47:25+10:00
+updated: 2026-10-23T08:24:24+10:00
 owner: brain-owner
 ---
 
@@ -26,6 +30,8 @@ owner: brain-owner
 Validate Portable AI Brain repository invariants reproducibly before a substantive update is reported complete.
 
 The validator runs from the brain root, the mechanics repository. When the owner's memory repository is checked out at `/memory/` (CONTRACT §3.5), it validates that too, in the same pass: repository-root paths beginning `/memory/` resolve into the memory checkout, and Git change state is read from each repository separately. A missing memory checkout is a warning, not an error, so the mechanics can be validated on their own. A brain kept in one repository, without a separate memory (tasks at `/tasks/`, raw files at `/raw/`), also validates.
+
+It checks every task store (CONTRACT §9): `/memory/tasks/`, the `tasks/` folder of every memory node, and the `brain/tasks/` of every pointer node's repository that is checked out. A repository's store is checked from the brain root too, its failures reported as warnings, because the repository runs its own check: `--project <repository|path>` validates one project repository instead – the Markdown in its `brain/` and its task store, every failure an error – and `hooks.py project-hook <checkout>` installs the pre-commit block that runs it there.
 
 ## Allowed operations
 
@@ -56,16 +62,42 @@ The skill must not modify any other repository file.
 ```bash
 python shared/skills/repository-preflight/scripts/preflight.py --root .
 python shared/skills/repository-preflight/scripts/preflight.py --root . --write-manifest
+python shared/skills/repository-preflight/scripts/preflight.py --root <brain root> --project <repository|path>
+python shared/skills/repository-preflight/scripts/hooks.py project-hook <project checkout>
 python -m unittest discover -s shared/skills/repository-preflight/tests -v
 python -m unittest discover -s shared/skills/repository-preflight/scripts/tests -v
 ```
 
-The tests build fictional two-repository brains in temporary folders and need `git` for the governance cases.
+The tests build fictional two-repository brains in temporary folders and need `git` for the governance cases, the unmerged-path case and the project hook.
 
 The script uses only the Python standard library. `preflight.py` runs the checks; the basics they
 share (`preflight_base.py`), the reference checks (`preflight_references.py`), protected governance
 (`preflight_governance.py`), the manifests and the personal-data check (`preflight_manifest.py`),
-and the file-size check (`file_sizes.py`) are modules of their own.
+the task stores and raw stores (`preflight_tasks.py`), and the file-size check (`file_sizes.py`)
+are modules of their own.
+
+**Task stores.** `preflight_tasks.py` runs the tasks skill's own record and store checks
+(`task_check.check_store` over `task_stores.stores()`, `/shared/skills/tasks/`), so `tasks.py check`
+and the preflight never disagree, and adds what needs Git or belongs to the preflight: a path Git
+reports as unmerged in a store, a conflict marker in a store file that is not a record (`STATE.md`,
+a README), and a `waiting` or `scheduled` task without `next_review`. Messages about a repository's
+store begin with its pointer node's path, so they go to the memory manifest and no project name
+reaches the mechanics manifest; a repository not checked out is a warning. A brain kept in one
+repository keeps the `/tasks/STATE.md` listing check.
+
+**`--project <repository|path>`.** The repository is named by the remote's name a pointer node
+gives, this brain's clone folder name, or a checkout path; a checkout no pointer names is checked
+under its `origin` remote's name. It validates the front matter, contract reference and timestamps
+of the Markdown in `brain/` (skipping `brain/raw/` and what the repository's Git ignores) and the
+task store, and nothing of the brain itself. `--write-manifest` does not go with it. Without
+`--root` and with no brain above the current folder, `$BRAIN_ROOT` names the brain.
+
+**`hooks.py project-hook <checkout>`.** Adds one block, once, to the `pre-commit` hook in the
+folder Git uses for the repository's hooks (`core.hooksPath` when set), first after the shebang,
+keeping any lines already there. At each commit the block finds the brain (`$BRAIN_ROOT`, else a
+`brain/` folder beside the repository) and runs `preflight.py --project` on the repository, refusing
+the commit when it fails; without a brain or a Python 3.9 or later it says it skipped, so a
+collaborator without a brain commits as before.
 
 ## Starting from the latest
 
