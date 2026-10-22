@@ -19,12 +19,16 @@ A move of one source: its raw folder `<store>/raw/YYYY/MM/<source-id>/` is copie
 the copy's SHA-256 checked against the record's `raw_sha256` before the original is removed; the
 record (and a derivative reconvert.py wrote beside it) goes to the `sources/` beside that raw
 store, its paths rewritten to the store's own form, `updated` set and, in a repository,
-`project_refs` led by `<repository>:brain` with no /memory/ reference left. A reference to the
-record in the target node's `sources/` is replaced by the record itself. Then every reference to
-the old paths is rewritten: across memory (`<repository>:brain/...` for a repository) and in the
-repository's `brain/`. Raw stores, `LOG.md` files and migration ledgers are history and are never
-rewritten; a task record changed this way gets an attributed History entry (P23). Everything is
-checked before the first write. The ledger `/memory/systems/raw-file-management/migrations/
+`project_refs` led by `<repository>:brain` with no /memory/ reference left, and its manifest
+without `original_path` or any other machine path (raw_stores.repository_manifest). A reference
+to the record in the target node's `sources/` is replaced by the record itself; one in a pointer
+node whose source moves into the repository is removed (P17). Then every reference to the old
+paths is rewritten: across memory (`<repository>:brain/...` for a repository, CONTRACT §16.2) and
+in the repository's `brain/`. Raw stores, `LOG.md` files and migration ledgers are history and are
+never rewritten; a task record changed this way gets an attributed History entry (P23) and its
+store's STATE.md is generated again. A file to rewrite that carries a Git conflict marker refuses
+the move. The dry run flags a repository-bound source as a new one is flagged
+(raw_stores.source_flags). Everything is checked before the first write. The ledger `/memory/systems/raw-file-management/migrations/
 <stamp>-sources-<node>.json` is what `--reverse` reads. Commits stay with the conductor.
 """
 
@@ -46,11 +50,11 @@ import raw_stores  # noqa: E402  (puts the tasks skill's scripts on sys.path)
 import task_stores  # noqa: E402
 from ingest_raw import append_log, find_root, memory_root, resolve_node, root_path, sha256_file  # noqa: E402
 from raw_stores import MEMORY_PATH, RawStore  # noqa: E402
-from task_git import WriteRefused, ready_to_write  # noqa: E402
+from task_git import WriteRefused, conflicted, ready_to_write  # noqa: E402
 from task_history import apply_change, brain_author  # noqa: E402
 from task_migrate_lists import decide, load_cleared, write_list  # noqa: E402
 from task_records import FRONT_MATTER_RE, parse_front_matter, set_fields, slugify, write_atomic  # noqa: E402
-from task_write import stamp  # noqa: E402
+from task_write import regenerate, stamp  # noqa: E402
 
 PROPOSAL = "PROPOSAL-shared-project-tasks-in-the-repository"
 KIND = "sources"
@@ -96,10 +100,12 @@ def _source(root: Path, record: Path) -> Optional[dict]:
     refs = meta.get("project_refs") or []
     refs = [refs] if isinstance(refs, str) else list(refs)
     raw_ref = str(meta.get("raw_source") or "")
-    problems = []
-    raw_file = root / raw_ref.lstrip("/")
-    raw_root = memory_root(root) / "raw"
-    if not raw_ref.startswith("/memory/raw/") or len(raw_file.parent.relative_to(raw_root).parts) < 1:
+    problems = ["it has a Git conflict marker: resolve it by hand first"] if conflicted(text) else []
+    raw_root = (memory_root(root) / "raw").resolve()
+    raw_file = (root / raw_ref.lstrip("/")).resolve() if raw_ref else raw_root
+    raw_ok = raw_ref.startswith("/memory/raw/") and raw_file.parent.is_relative_to(raw_root) \
+        and raw_file.parent != raw_root
+    if not raw_ok:
         problems.append(f"its raw file {raw_ref or '(none)'} is not in a /memory/raw/ folder of its own")
     elif not raw_file.is_file():
         problems.append(f"its raw file {raw_ref} is missing")
@@ -110,7 +116,9 @@ def _source(root: Path, record: Path) -> Optional[dict]:
             "record": record, "text": text, "refs": refs, "raw_ref": raw_ref, "raw_file": raw_file,
             "raw_folder": raw_file.parent, "sha": str(meta.get("raw_sha256") or ""),
             "derivative": derivative if derivative.is_file() else None, "problems": problems,
-            "size": raw_file.stat().st_size if raw_file.is_file() else 0}
+            "raw_ok": raw_ok, "size": raw_file.stat().st_size if raw_ok and raw_file.is_file() else 0,
+            "filename": str(meta.get("source_filename") or raw_file.name),
+            "status": str(meta.get("conversion_status") or "")}
 
 
 def sources_for(root: Path, node: str) -> list[dict]:
@@ -135,7 +143,10 @@ def item_hash(source: dict) -> str:
 
 def plan(root: Path, source: dict, store: RawStore, at: str) -> dict:
     """Where one source goes and the texts it will have; problems listed, nothing written."""
-    rel = source["raw_folder"].relative_to(memory_root(root) / "raw")
+    if not source["raw_ok"]:
+        return {"source": source, "store": store, "text": source["text"], "derivative": None,
+                "problems": list(source["problems"])}
+    rel = source["raw_folder"].relative_to((memory_root(root) / "raw").resolve())
     new_folder = store.raw / rel
     new_record = store.sources / source["record"].name
     old_record_ref = root_path(root, source["record"])
@@ -163,6 +174,7 @@ def plan(root: Path, source: dict, store: RawStore, at: str) -> dict:
             replaced = read(new_record)
         else:
             problems.append(f"{store.memory_ref(root, new_record)} exists already")
+    stubs = []
     if store.kind == "repository":
         lines = [n for n, line in enumerate(text.splitlines(), 1) if MEMORY_PATH.search(line)]
         if derivative and MEMORY_PATH.search(derivative["text"]):
@@ -170,8 +182,28 @@ def plan(root: Path, source: dict, store: RawStore, at: str) -> dict:
         if lines:
             problems.append(f"it would still name /memory/ in {store.repository} (lines {', '.join(map(str, lines))}): "
                             "mark it private or hold it")
+        stubs = pointer_stubs(root, store.node, old_record_ref)
+        manifest = source["raw_folder"] / "manifest.json"
+        try:
+            if manifest.is_file():
+                json.loads(read(manifest))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            problems.append(f"its {root_path(root, manifest)} cannot be read, so its machine path cannot be left out")
     return {"source": source, "store": store, "folder": new_folder, "record": new_record, "text": text,
-            "derivative": derivative, "replaced": replaced, "own": own, "mem": mem, "problems": problems}
+            "derivative": derivative, "replaced": replaced, "stubs": stubs, "own": own, "mem": mem,
+            "problems": problems}
+
+
+def pointer_stubs(root: Path, node: Optional[str], record_ref: str) -> list[Path]:
+    """The source_reference files in a pointer node's sources/ that point at a record moving into
+    the repository: the pointer node keeps no copy of the project's sources (P17), so they go."""
+    folder = root / str(node or "").strip("/") / "sources"
+    found = []
+    for path in sorted(folder.glob("*.md")) if node and folder.is_dir() else []:
+        meta = parse_front_matter(read(path)) or {}
+        if meta.get("type") == "source_reference" and meta.get("canonical_source_md") == record_ref:
+            found.append(path)
+    return found
 
 
 def list_items(root: Path, node: str, sources: list[dict], store: RawStore, at: str) -> list[dict]:
@@ -184,7 +216,13 @@ def list_items(root: Path, node: str, sources: list[dict], store: RawStore, at: 
         flagged = []
         if store.kind == "repository":
             body = FRONT_MATTER_RE.sub("", planned["text"], count=1)
-            flagged = raw_stores.flagged_lines(body, root, terms)
+            derivative = FRONT_MATTER_RE.sub("", planned["derivative"]["text"], count=1) if planned["derivative"] else None
+            for found in raw_stores.source_flags(root, source["filename"], source["title"], body, source["status"],
+                                                 derivative=derivative, terms=terms):
+                if found["line"] is None:      # not a line of the record: said beside the item
+                    notes.append(f"flagged ({found['where']}): {', '.join(found['flags'])}")
+                else:
+                    flagged.append({k: found[k] for k in ("line", "text", "flags")})
         items.append({"id": source["id"], "title": source["title"], "folder": "sources",
                       "path": root_path(root, source["record"]), "sha256": item_hash(source),
                       "notes": notes, "flags": flagged})
@@ -202,6 +240,41 @@ def text_files(base: Path):
                 yield Path(folder) / name
 
 
+def conflicts(base: Path, show, pairs: list[list[str]]) -> list[str]:
+    """The files a rewrite would change that carry a Git conflict marker (P23: resolved by hand)."""
+    found = []
+    for path in text_files(base):
+        try:
+            text = read(path)
+        except (OSError, UnicodeDecodeError):
+            continue
+        if conflicted(text) and substitute(text, pairs) != text:
+            found.append(show(path))
+    return found
+
+
+def refuse_conflicts(found: list[str]) -> None:
+    if found:
+        raise Refused("these files name a moved source and carry a Git conflict marker: "
+                      + ", ".join(sorted(set(found))) + "; resolve them by hand (P23); nothing was moved")
+
+
+def regenerate_states(root: Path, entries: list[dict]) -> list[str]:
+    """Generate again the STATE.md of every task store whose records were rewritten (P23)."""
+    paths = []
+    for entry in entries:
+        if entry.get("task"):
+            try:
+                paths.append(_resolve(root, entry["path"]).resolve())
+            except Refused:
+                continue
+    said = []
+    for store in task_stores.stores(root):
+        if store.reachable and store.path.is_dir() and any(p.is_relative_to(store.path.resolve()) for p in paths):
+            said += regenerate(store)
+    return said
+
+
 def rewrite(base: Path, show, pairs: list[list[str]], author: str, at: str, what: str,
             restore: Optional[dict] = None) -> list[dict]:
     """Rewrite every reference under `base`; a task gets an attributed History entry.
@@ -214,7 +287,7 @@ def rewrite(base: Path, show, pairs: list[list[str]], author: str, at: str, what
             text = read(path)
         except (OSError, UnicodeDecodeError):
             continue
-        if substitute(text, pairs) == text:
+        if substitute(text, pairs) == text or conflicted(text):   # a conflicted file was refused beforehand
             continue
         meta = parse_front_matter(text) if path.suffix.lower() == ".md" else None
         earlier = (restore or {}).get(show(path))
@@ -295,6 +368,13 @@ def move(root: Path, node: str, listing: Optional[dict], at: str, offline: bool)
         if step["problems"]:
             raise Refused(f"{source['id']} cannot move: {'; '.join(step['problems'])}; nothing was moved")
         planned.append(step)
+    found = []
+    for step in planned:
+        found += conflicts(memory_root(root), lambda p: root_path(root, p), step["mem"])
+        if step["store"].kind == "repository":
+            found += conflicts(step["store"].checkout / "brain", lambda p, s=step["store"]: s.memory_ref(root, p),
+                               step["own"])
+    refuse_conflicts(found)
     if any(p["store"].kind == "repository" for p in planned):
         if not main.reachable:
             raise Refused(f"{main.label} cannot be written: {main.reason}")
@@ -309,6 +389,7 @@ def move(root: Path, node: str, listing: Optional[dict], at: str, offline: bool)
             entry["rewritten"] += rewrite(store.checkout / "brain", lambda p, s=store: s.memory_ref(root, p),
                                           step["own"], author, at, what)
         said.append(f"moved {entry['id']}: {entry['record']['to']}")
+    said += regenerate_states(root, [e for m in moves for e in m["rewritten"]])
     if moves:
         ledger = _ledger_path(root, at, node)
         write_atomic(ledger, json.dumps({"kind": KIND, "target": node, "at": at, "moves": moves}, indent=2,
@@ -325,6 +406,13 @@ def move_one(root: Path, step: dict, at: str) -> dict:
     if sha256_file(step["folder"] / source["raw_file"].name) != source["sha"]:
         shutil.rmtree(step["folder"])
         raise Refused(f"the copy of {source['raw_ref']} does not match raw_sha256; it was removed and the original kept")
+    manifest = step["folder"] / "manifest.json"
+    original_manifest = None
+    if store.kind == "repository" and manifest.is_file():
+        # The memory manifest names the machine path the file came from; the repository's never does.
+        original_manifest = read(manifest)
+        data = json.loads(original_manifest)
+        write_atomic(manifest, json.dumps(raw_stores.repository_manifest(data), indent=2, ensure_ascii=False) + "\n")
     write_atomic(step["record"], step["text"])
     derivative = None
     if step["derivative"]:
@@ -336,6 +424,10 @@ def move_one(root: Path, step: dict, at: str) -> dict:
         step["derivative"]["from"].unlink()
     source["record"].unlink()
     shutil.rmtree(source["raw_folder"])
+    removed = []
+    for stub in step.get("stubs", []):
+        removed.append({"path": root_path(root, stub), "text": read(stub)})
+        stub.unlink()
     meta = parse_front_matter(source["text"]) or {}
     replaced = None
     if step["replaced"] is not None:
@@ -347,6 +439,7 @@ def move_one(root: Path, step: dict, at: str) -> dict:
             "raw": {"from": root_path(root, source["raw_folder"]), "to": store.memory_ref(root, step["folder"]),
                     "file": source["raw_file"].name},
             "sha256": source["sha"], "derivative": derivative, "replaced_reference": replaced,
+            "removed_references": removed, "manifest": original_manifest,
             "own": step["own"], "mem": step["mem"]}
 
 
@@ -391,16 +484,18 @@ def reverse(root: Path, ledger_path: Path, at: str, offline: bool) -> list[str]:
         if _resolve(root, move_["raw"]["from"]).exists() or _resolve(root, move_["record"]["from"]).exists():
             raise Refused(f"{move_['id']}: {move_['record']['from']} or {move_['raw']['from']} exists again; nothing was moved back")
         checks.append((move_, record, folder))
+    inverse = [[new, old] for m in ledger["moves"] for old, new in m["mem"]]
+    refuse_conflicts(conflicts(memory_root(root), lambda p: root_path(root, p), inverse))
     repositories = {m["repository"] for m in ledger["moves"] if m["store"] == "repository"}
     for store in raw_stores.raw_stores(root):
         if store.kind == "repository" and store.repository in repositories:
             said += ready_to_write(store.writable(), offline=offline)
     for move_, record, folder in reversed(checks):
         said.append(_move_back(root, move_, record, folder, author, at))
-    inverse = [[new, old] for m in ledger["moves"] for old, new in m["mem"]]
     restore = {e["path"]: e for m in ledger["moves"] for e in m.get("rewritten", [])}
-    rewrite(memory_root(root), lambda p: root_path(root, p), inverse, author, at,
-            f"sources moved back to /memory/sources/ (migrate --reverse)", restore)
+    done = rewrite(memory_root(root), lambda p: root_path(root, p), inverse, author, at,
+                   "sources moved back to /memory/sources/ (migrate --reverse)", restore)
+    said += regenerate_states(root, done)
     for store in raw_stores.raw_stores(root):
         if store.kind == "repository" and store.repository in repositories:
             moved = [new for m in ledger["moves"] for _old, new in m["own"]]
@@ -422,6 +517,8 @@ def _move_back(root: Path, move_: dict, record: Path, folder: Path, author: str,
     if sha256_file(old_folder / move_["raw"]["file"]) != move_["sha256"]:
         shutil.rmtree(old_folder)
         raise Refused(f"{move_['id']}: the copy back does not match its hash; it was removed")
+    if move_.get("manifest") is not None:
+        write_atomic(old_folder / "manifest.json", move_["manifest"])     # with its original_path again
     text = read(record)
     unchanged = sha_text(text) == move_["record"]["after"]
     fields = {"updated": move_["record"]["updated"] if unchanged else at,
@@ -438,6 +535,10 @@ def _move_back(root: Path, move_: dict, record: Path, folder: Path, author: str,
     shutil.rmtree(folder)
     if move_.get("replaced_reference"):
         write_atomic(_resolve(root, move_["replaced_reference"]["path"]), move_["replaced_reference"]["text"])
+    for stub in move_.get("removed_references") or []:
+        path = _resolve(root, stub["path"])
+        if not path.exists():
+            write_atomic(path, stub["text"])
     return f"moved back {move_['id']}: {move_['record']['from']}"
 
 

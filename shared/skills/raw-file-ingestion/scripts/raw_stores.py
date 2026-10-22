@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -195,6 +196,42 @@ def flagged_lines(text: str, root: Path, terms: Optional[list[str]] = None) -> l
             if found:
                 out.append({"line": number, "text": line.strip(), "flags": found})
     return out
+
+
+NOT_READ = ("pending_conversion", "failed")
+MACHINE_PATH = re.compile(r"^(?:[A-Za-z]:[\\/]|\\\\|/|~[\\/])")
+
+
+def source_flags(root: Path, source_name: str, title: Optional[str], markdown: str, status: str,
+                 derivative: Optional[str] = None, terms: Optional[list[str]] = None) -> list[dict]:
+    """What may be private in a source bound for a repository, in reading order:
+    {where, line (a content line's number, else None), text, flags}.
+
+    The one check for a new source (ingest_raw.py) and a moved one (source_migrate.py): the file
+    name, the title, every line of the converted text and of a reconverted derivative, and a file
+    whose content could not be read, since nothing in it was checked."""
+    terms = personal_terms(root) if terms is None else terms
+    found = []
+    for where, text in (("file name", source_name), ("title", title or "")):
+        hit = flags(text, root, terms) if text else []
+        if hit:
+            found.append({"where": where, "line": None, "text": text, "flags": hit})
+    for item in flagged_lines(markdown, root, terms):
+        found.append({"where": f"content line {item['line']}", **item})
+    for item in flagged_lines(derivative or "", root, terms):
+        found.append({"where": f"derivative line {item['line']}", "line": None, "text": item["text"],
+                      "flags": item["flags"]})
+    if status in NOT_READ:
+        found.append({"where": "content", "line": None, "text": "",
+                      "flags": [f"not read ({status}): nothing in it was checked"]})
+    return found
+
+
+def repository_manifest(manifest: dict) -> dict:
+    """A raw folder's manifest as it may stand in a repository: no machine path in it
+    (`original_path` and any other value that is an absolute path)."""
+    return {k: v for k, v in manifest.items()
+            if k != "original_path" and not (isinstance(v, str) and MACHINE_PATH.match(v))}
 
 
 def visibility(store: RawStore) -> str:

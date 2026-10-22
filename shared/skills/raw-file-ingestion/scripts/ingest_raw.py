@@ -237,20 +237,9 @@ Read `/CONTRACT.md` first.
 
 
 def repository_flags(root: Path, source_name: str, title: Optional[str], conversion: Conversion) -> list[dict]:
-    """What may be private in a source bound for a repository: {where, flags}, in reading order.
-
-    A file whose content could not be read is flagged too: nothing in it was checked."""
-    terms = raw_stores.personal_terms(root)
-    found = []
-    for where, text in (("file name", source_name), ("title", title or "")):
-        hit = raw_stores.flags(text, root, terms) if text else []
-        if hit:
-            found.append({"where": where, "flags": hit})
-    for item in raw_stores.flagged_lines(conversion.markdown, root, terms):
-        found.append({"where": f"content line {item['line']}", "flags": item["flags"]})
-    if conversion.status in ("pending_conversion", "failed"):
-        found.append({"where": "content", "flags": [f"not read ({conversion.status}): nothing in it was checked"]})
-    return found
+    """raw_stores.source_flags for a new source, as {where, flags}: the text is not echoed."""
+    return [{"where": f["where"], "flags": f["flags"]}
+            for f in raw_stores.source_flags(root, source_name, title, conversion.markdown, conversion.status)]
 
 
 def refuse(code: int, message: str, **extra) -> int:
@@ -344,10 +333,10 @@ def ingest(args) -> int:
             return refuse(3, f"conflicting file already exists: {raw_path}")
         if not raw_path.exists():
             shutil.copy2(source, raw_path)
-        manifest = {"source_id": source_id, "filename": raw_path.name, "sha256": file_hash, "ingested": timestamp}
-        if store.kind != "repository":
-            manifest["original_path"] = str(source)    # a machine path never enters a repository
-        manifest["mime_type"] = mimetypes.guess_type(source.name)[0]
+        manifest = {"source_id": source_id, "filename": raw_path.name, "sha256": file_hash, "ingested": timestamp,
+                    "original_path": str(source), "mime_type": mimetypes.guess_type(source.name)[0]}
+        if store.kind == "repository":
+            manifest = raw_stores.repository_manifest(manifest)   # a machine path never enters a repository
         write_lf(raw_path.parent / "manifest.json", json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
 
     # One canonical record per raw file (CONTRACT §3.3, §11.1): an identical file ingested

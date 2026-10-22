@@ -24,7 +24,7 @@ script_paths:
   - /shared/skills/raw-file-ingestion/tests/test_stores.py
   - /shared/skills/raw-file-ingestion/tests/test_source_migrate.py
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-10-23T08:23:32+10:00
+updated: 2026-10-23T08:57:29+10:00
 ---
 
 # Raw File Ingestion
@@ -153,7 +153,11 @@ python shared/skills/raw-file-ingestion/scripts/ingest_raw.py migrate --reverse 
 The sources of a node are the records in `/memory/sources/` whose every `project_refs` entry is in
 that node. The list protocol is the tasks skill's (`task_migrate_lists`): the dry run writes the
 numbered list for the owner, with each source's raw size, the weight a repository gains, its
-visibility and the possibly-private lines flagged, and prints its path; `--decide` records the
+visibility and, for a repository, the flags a new source would get (`raw_stores.source_flags`, the
+one check for both): the record's lines, and beside the item its file name, its title, a
+derivative's lines and a source that was never read. A source that cannot move (its raw file
+outside `/memory/raw/`, missing or changed, a conflict marker in its record) is listed with the
+reason. The dry run prints the list's path; `--decide` records the
 owner's answer; the move follows `--list` and refuses a list whose records changed since (the
 fingerprint) or an item with no decision. A memory node needs no list (nothing leaves memory); a
 pointer node moves only what the owner cleared, `private` going to the pointer node's own `raw/`
@@ -161,14 +165,20 @@ and `sources/`. A source moves whole, so `--private-lines` is refused.
 
 Each source: its raw folder is copied unchanged and the copy's SHA-256 checked against
 `raw_sha256`; the record, and a `.reconverted.md` derivative beside it, is written in the store's
-`sources/` with its paths in the store's form and `updated` set; then the originals are removed. A
-reference to the record in the target node's `sources/` is replaced by the record. Every text file
-in memory and in the repository's `brain/` that names the old record or raw folder is rewritten: a
-task record gets an attributed History entry (P23), another file with front matter a new
-`updated`, and a CRLF file keeps its line ends. Everything is checked first: a missing raw file, a
-hash that no longer matches, a target that exists, or a repository record that would still name
-`/memory/` refuses the whole move with nothing written. `--reverse LEDGER` moves each source back
-and restores `project_refs`, the `updated` of files unchanged since and any replaced reference, so
+`sources/` with its paths in the store's form and `updated` set; then the originals are removed. In
+a repository the manifest loses `original_path` and any other machine path. A reference to the
+record in the target node's `sources/` is replaced by the record; a reference in the pointer node
+to a source moving into the repository is removed, since the pointer node keeps no copy of the
+project's sources (P17). Every text file in memory and in the repository's `brain/` that names the
+old record or raw folder is rewritten, memory files with `<repository>:brain/...` (CONTRACT §16.2):
+a task record gets an attributed History entry (P23) and its store's `STATE.md` is generated
+again, another file with front matter a new `updated`, and a CRLF file keeps its line ends.
+Everything is checked first: a missing raw file, a hash that no longer matches, a target that
+exists, an unreadable manifest, a repository record that would still name `/memory/`, or a file to
+rewrite that carries a Git conflict marker refuses the whole move with nothing written.
+`--reverse LEDGER` moves each source back and restores `project_refs`, the memory manifest, the
+`updated` of files unchanged since, any replaced or removed reference and the `STATE.md` of the
+task stores it rewrote, so
 an untouched move and its reverse leave memory byte-identical apart from task History and logs.
 Repository files still naming a moved path are listed for the owner, never rewritten to name
 `/memory/`. A ledger is reversed once. Exit 1: refused, with the reason; 6: no brain or memory.

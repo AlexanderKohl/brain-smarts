@@ -11,9 +11,12 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import sys
 from pathlib import Path
 
 from fictional_brain import STAMP, StoreTestCase
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 CLEAN = "season,trees\n2026,14\n"
 FLAGGED = "picker,owed\nOrla Fernwick,$412.50\n"
@@ -150,14 +153,22 @@ class RepositoryTests(LegacyBrain):
         press = next(i for i in self.list_items() if i["id"] == self.press["source_id"])["n"]
         pickers = next(i for i in self.list_items() if i["id"] == self.pickers["source_id"])["n"]
         listing = self.cleared("--move", str(press), "--private", str(pickers))
-        out = self.ok("--node", "memory/projects/cider-press", "--list", str(listing), "--offline")
         name = Path(self.press["canonical_markdown"]).name
+        stub = self.brain.pointer / "sources" / name
+        stub_text = stub.read_bytes()
+        manifest = next(self.brain.file(self.press["raw_file"]).parent.glob("manifest.json"))
+        manifest_bytes = manifest.read_bytes()
+        self.assertIn("original_path", manifest_bytes.decode("utf-8"))
+        out = self.ok("--node", "memory/projects/cider-press", "--list", str(listing), "--offline")
         record = (self.brain.checkout / "brain" / "sources" / name).read_text(encoding="utf-8")
         self.assertIn('raw_source: "brain/raw/', record)
         self.assertIn("project_refs:\n  - cider-press:brain\n", record)
         self.assertNotIn("/memory/", self.brain.repo_text())
-        reference = (self.brain.pointer / "sources" / name).read_text(encoding="utf-8")
-        self.assertIn(f'canonical_source_md: "cider-press:brain/sources/{name}"', reference)
+        moved_manifest = json.loads(next((self.brain.checkout / "brain" / "raw").rglob("manifest.json")).read_text(encoding="utf-8"))
+        self.assertNotIn("original_path", moved_manifest)
+        self.assertEqual(moved_manifest["sha256"], json.loads(manifest_bytes)["sha256"])
+        self.assertNotIn(str(self.brain.root.parent), self.brain.repo_text())
+        self.assertFalse(stub.exists())                  # the pointer node keeps no copy of the project's sources (P17)
         self.assertIn(f"cider-press:brain/sources/{name}", self.knowledge.read_text(encoding="utf-8"))
         private = (self.brain.pointer / "sources" / Path(self.pickers["canonical_markdown"]).name).read_text(encoding="utf-8")
         self.assertIn("type: source_document", private)
@@ -167,6 +178,8 @@ class RepositoryTests(LegacyBrain):
         self.assertTrue(self.brain.file(self.press["canonical_markdown"]).is_file())
         self.assertFalse((self.brain.checkout / "brain" / "sources" / name).exists())
         self.assertIn(self.press["canonical_markdown"], self.knowledge.read_text(encoding="utf-8"))
+        self.assertEqual(stub.read_bytes(), stub_text)
+        self.assertEqual(manifest.read_bytes(), manifest_bytes)
 
     def test_hold_keeps_a_source_in_memory(self):
         listing = self.cleared("--all", "hold")
@@ -185,6 +198,65 @@ class RepositoryTests(LegacyBrain):
 
     def list_items(self) -> list[dict]:
         return json.loads(self.dry_run("memory/projects/cider-press").read_text(encoding="utf-8"))["items"]
+
+
+class ChecksTests(LegacyBrain):
+    """The flags a source bound for a repository gets, conflicts, STATE.md and bad raw paths."""
+
+    def legacy(self, name: str, content: bytes | str, node: str, *extra: str) -> dict:
+        """A source as the brain kept it before P13: in /memory/sources/, naming `node`."""
+        result = self.brain.ingest_ok(self.brain.sample(name, content), *extra)
+        record = self.brain.file(result["canonical_markdown"])
+        text = record.read_text(encoding="utf-8").replace("project_refs:\n  []", f"project_refs:\n  - {node}")
+        record.write_text(text, encoding="utf-8", newline="\n")
+        return result
+
+    def item(self, source: dict) -> dict:
+        items = json.loads(self.dry_run("memory/projects/cider-press").read_text(encoding="utf-8"))["items"]
+        return next(i for i in items if i["id"] == source["source_id"])
+
+    def test_a_source_not_read_its_name_its_title_and_its_derivative_are_flagged_like_a_new_one(self):
+        unread = self.legacy("press.bin", b"\x00\x01fictional", "/memory/projects/cider-press")
+        self.assertIn("nothing in it was checked", " ".join(self.item(unread)["notes"]))
+        titled = self.legacy("tally.csv", "batch\n9\n", "/memory/projects/cider-press", "--title", "Tally for Sam Rowan")
+        self.assertIn("flagged (title): owner term", self.item(titled)["notes"])
+        derivative = self.brain.file(self.press["canonical_markdown"]).with_name(f"{self.press['source_id']}.reconverted.md")
+        derivative.write_text(f"---\nid: {self.press['source_id']}-reconverted\ntype: source_document\n"
+                              f"updated: {STAMP}\n---\n\nBatch 7 owed $55.00\n", encoding="utf-8")
+        notes = self.item(self.press)["notes"]
+        self.assertIn("moves with its derivative", notes)
+        self.assertTrue(any(n.startswith("flagged (derivative line") and "amount" in n for n in notes), notes)
+
+    def test_a_raw_source_outside_memory_raw_is_reported_in_the_dry_run(self):
+        record = self.brain.file(self.survey["canonical_markdown"])
+        record.write_text(record.read_text(encoding="utf-8").replace(
+            'raw_source: "/memory/raw/', 'raw_source: "/memory/projects/hedgerow/elsewhere/'), encoding="utf-8")
+        out = self.ok("--node", "memory/projects/hedgerow", "--dry-run")
+        listing = self.brain.file(re.search(r"on the list for \S+: (\S+)", out).group(1)).read_text(encoding="utf-8")
+        self.assertIn("cannot move: its raw file /memory/projects/hedgerow/elsewhere/", listing)
+        done = self.brain.migrate("--node", "memory/projects/hedgerow")
+        self.assertEqual(done.returncode, 1)
+        self.assertNotIn("Traceback", done.stderr)
+
+    def test_a_file_with_a_conflict_marker_stops_the_move_before_anything_is_written(self):
+        self.knowledge.write_text(self.knowledge.read_text(encoding="utf-8") + "<<<<<<< HEAD\n", encoding="utf-8")
+        before = self.brain.files()
+        done = self.brain.migrate("--node", "memory/projects/hedgerow")
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("/memory/KNOWLEDGE.md", done.stderr)
+        self.assertEqual(self.brain.files(), before)
+
+    def test_the_state_of_a_task_store_whose_records_were_rewritten_is_generated_again(self):
+        import raw_stores  # noqa: F401  (puts the tasks skill's scripts on sys.path)
+        import task_state
+        import task_stores
+        owner = task_stores.owner_store(self.brain.root)
+        task_state.write(owner)
+        out = self.ok("--node", "memory/projects/hedgerow")
+        self.assertIn("STATE.md: regenerated for /memory/tasks", out)
+        self.assertFalse(task_state.differs(owner))
+        self.ok("--reverse", str(self.ledger(out)))
+        self.assertFalse(task_state.differs(owner))
 
 
 if __name__ == "__main__":
