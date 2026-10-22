@@ -4,8 +4,11 @@ Since 1.0.0 a card is a file and the page inlines only a slim copy of it (`build
 the event log is left out and no card carries a link to its task. This module puts the detail back
 on the page's copy of each card, never in the card file or `state.json`:
 
-- `facts`: asked, started, branch, version, release note and author, in that order (the order a
-  card lives through them), each only when the card has it.
+- `facts`: asked, started, branch, branch by, version, release note and card by, in that order
+  (the order a card lives through them, with the branch's author beside its branch), each only
+  when the card has it. "Card by" is the card's `author`, who wrote the card; "Branch by" is who
+  wrote the branch's commits that are not on the board's main branch, read from the local Git
+  checkout when the page is built (`branch_authors`), and left out when Git cannot tell.
 - `taskLinks`: every task id the card names (its `task` or `tasks` field, then its title, what
   landed and what to check, in that order, each id once). On a memory board each links to its
   task record, relative to the page. A repository board carries no `/memory/` path (CONTRACT
@@ -18,6 +21,7 @@ on the page's copy of each card, never in the card file or `state.json`:
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
 
 import task_board
@@ -25,8 +29,8 @@ import task_board
 TASK_ID = re.compile(r"\bTASK-\d{4}-\d{4}\b")
 REPO_NOTE = "the task record is kept in the owner's own brain, not in this repository"
 MISSING_NOTE = "no task record with this id was found"
-FACTS = (("asked", "Asked"), ("startedAt", "Started"), ("branch", "Branch"), ("version", "Version"),
-         ("release_note", "Release note"), ("author", "Author"))
+FACTS = (("asked", "Asked"), ("startedAt", "Started"), ("branch", "Branch"), ("branchAuthor", "Branch by"),
+         ("version", "Version"), ("release_note", "Release note"), ("author", "Card by"))
 
 
 def task_ids(item: dict) -> list:
@@ -39,6 +43,49 @@ def task_ids(item: dict) -> list:
             if tid not in found:
                 found.append(tid)
     return found
+
+
+def _git(repo: str, *args: str) -> str:
+    try:
+        out = subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True,
+                             encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    return out.stdout.strip() if out.returncode == 0 else ""
+
+
+def checkout(board: dict) -> str:
+    """The Git checkout a card's branch lives in: the board's `repo`, else, on a repository
+    board, the repository that holds the board; empty for a memory board with no `repo`."""
+    if board.get("repo"):
+        return str(board["repo"])
+    if board.get("shared"):
+        return _git(str(board["folder"]), "rev-parse", "--show-toplevel")
+    return ""
+
+
+def branch_authors(board: dict, branch: str) -> str:
+    """Who wrote `branch`'s commits that are not on the board's main branch, most commits first
+    (ties by name), joined with commas. The local branch and its remote copy are both read and
+    each commit counted once. Empty when Git cannot tell: no checkout, no such branch, or no
+    commit off main (a merged branch)."""
+    repo = checkout(board)
+    if not repo or not branch:
+        return ""
+    main = board.get("main") or "main"
+    remote = board.get("remote") or "origin"
+    seen: dict = {}
+    for ref in (branch, remote + "/" + branch):
+        if ref == main or not _git(repo, "rev-parse", "--verify", "--quiet", ref + "^{commit}"):
+            continue
+        for line in _git(repo, "log", "--format=%H%x09%an", main + ".." + ref).splitlines():
+            sha, _, name = line.partition("	")
+            if sha and name.strip():
+                seen[sha] = name.strip()
+    counts: dict = {}
+    for name in seen.values():
+        counts[name] = counts.get(name, 0) + 1
+    return ", ".join(sorted(counts, key=lambda n: (-counts[n], n.lower())))
 
 
 def _facts(item: dict) -> list:
@@ -73,8 +120,14 @@ def attach(config, board: dict, shown: dict, derived: dict, records=None) -> Non
         by_id = {t.tid: t for t in loaded}
     page_dir = Path(board["folder"])
     full = {item["id"]: item for item in derived.get("items", [])}
+    authors: dict = {}
     for item in shown.get("items", []):
-        whole = full.get(item["id"], item)
+        whole = dict(full.get(item["id"], item))
+        branch = str(whole.get("branch") or "")
+        if branch:
+            if branch not in authors:
+                authors[branch] = branch_authors(board, branch)
+            whole["branchAuthor"] = authors[branch]
         links = []
         for tid in task_ids(whole):
             if shared:
@@ -92,8 +145,13 @@ def attach(config, board: dict, shown: dict, derived: dict, records=None) -> Non
 
 
 CSS = """
-.facts { font-size:12px; color:var(--muted); margin:6px 0; }
-.facts span { margin-right:12px; white-space:nowrap; }
+/* Each label and value is one unit that wraps as a whole; a value longer than the card (a long
+   branch name) is cut with an ellipsis and keeps its full text as a tooltip. */
+.facts { font-size:12px; color:var(--muted); margin:6px 0; display:flex; flex-wrap:wrap; gap:2px 12px;
+  min-width:0; }
+.facts span { display:inline-flex; max-width:100%; min-width:0; white-space:nowrap; }
+.facts span b { flex:none; margin-right:4px; }
+.facts span i { font-style:normal; overflow:hidden; text-overflow:ellipsis; min-width:0; }
 .facts b, .tlinks b, .hist b { color:var(--ink, inherit); font-weight:600; }
 .tlinks { font-size:12.5px; margin:6px 0; }
 .tlinks a { margin-right:8px; }
@@ -118,8 +176,10 @@ window.BoardDetail = (function () {
       var f = node('p', 'facts');
       facts.forEach(function (pair) {
         var s = node('span');
-        s.appendChild(node('b', null, pair[0] + ': '));
-        s.appendChild(document.createTextNode(pair[1]));
+        s.appendChild(node('b', null, pair[0] + ':'));
+        var v = node('i', null, pair[1]);
+        v.title = pair[0] + ': ' + pair[1];
+        s.appendChild(v);
         f.appendChild(s);
       });
       body.appendChild(f);
