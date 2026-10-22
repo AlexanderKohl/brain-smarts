@@ -42,6 +42,7 @@ import board_config  # noqa: E402
 import cards  # noqa: E402
 import events  # noqa: E402
 import page_js  # noqa: E402
+import page_notes  # noqa: E402  (the board's release-notes configuration, one implementation)
 import task_actions  # noqa: E402
 
 VERDICT_KINDS = {"accepted": "accept", "accept": "accept", "rework": "reject", "reject": "reject",
@@ -150,13 +151,8 @@ def to_events(board: dict, saved: dict, dry_run: bool = False) -> tuple:
 
 
 def release_choices_module(config: board_config.Config):
-    scripts = config.brain / "library" / "skills" / "release-notes" / "scripts"
-    if not (scripts / "release_choices.py").is_file():
-        return None
-    if str(scripts) not in sys.path:
-        sys.path.insert(0, str(scripts))
-    import release_choices  # noqa: E402  (the library skill, present only when checked out)
-    return release_choices
+    """The library skill's choices module, present only when checked out (page_notes.py finds it)."""
+    return page_notes.skill_module(config.brain)
 
 
 def apply_file(config: board_config.Config, board: dict, path: str, dry_run: bool = False) -> tuple:
@@ -169,7 +165,7 @@ def apply_file(config: board_config.Config, board: dict, path: str, dry_run: boo
         if module is None:
             skipped.append("release-note choices: the release-notes skill is not checked out under /library/")
         else:
-            applied += module.apply_choices(module.load_config(config.brain), notes, board["author"],
+            applied += module.apply_choices(page_notes.skill_config(module, config, board), notes, board["author"],
                                             saved.get("savedAt") or "", dry_run)
     now_list: list = []
     if saved.get("tasks"):

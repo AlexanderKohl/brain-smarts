@@ -517,5 +517,71 @@ class ReleaseNotesSectionTests(unittest.TestCase):
         self.assertTrue(any("names no release note" in s for s in data["adrift"]), data["adrift"])
 
 
+class SharedBoardReleaseNotesTests(unittest.TestCase):
+    """A second, fictional brain with no release-notes configuration of its own builds a shared
+    board: the section is drawn from the repository's brain/status/release-notes.json."""
+
+    def setUp(self):
+        self.brain = Brain(shared=True)
+        self.library = BRAIN / "library" / "skills" / "release-notes" / "scripts"
+        if not self.library.is_dir():
+            self.skipTest("the release-notes library skill is not checked out")
+        (self.brain.root / "shared" / "skills" / "owner-board" / "scripts").mkdir(parents=True)
+        for name in ("events.py", "cards.py", "board_config.py"):
+            shutil.copy(SCRIPTS / name, self.brain.root / "shared" / "skills" / "owner-board" / "scripts" / name)
+        self.repo = self.brain.repos / "example-garden"
+        notes = self.repo / "release-notes" / "garden" / "unreleased"
+        notes.mkdir(parents=True)
+        (notes / "frost.md").write_text("---\ntitle: Frost warnings\nkind: added\nvisibility: undecided\n---\n\n"
+                                        "Beds warn you before a frost.\n", encoding="utf-8")
+        (self.repo / "brain" / "status" / "release-notes.json").write_text(json.dumps({"projects": [
+            {"id": "garden-app", "label": "Garden app", "kind": "folder", "folder": "release-notes/garden"}]}),
+            encoding="utf-8")
+        boards = self.brain.memory / "skills" / "owner-board" / "config" / "boards.json"
+        raw = json.loads(boards.read_text(encoding="utf-8"))
+        raw["boards"][0]["release_notes"] = ["garden-app"]
+        boards.write_text(json.dumps(raw), encoding="utf-8")
+
+    def tearDown(self):
+        self.brain.close()
+
+    def copy_library(self):
+        dest = self.brain.root / "library" / "skills" / "release-notes" / "scripts"
+        dest.mkdir(parents=True)
+        for path in self.library.glob("*.py"):
+            shutil.copy(path, dest / path.name)
+
+    def test_the_section_comes_from_the_repository_and_choices_are_written_there(self):
+        self.copy_library()
+        self.assertFalse((self.brain.memory / "skills" / "release-notes").exists())
+        config = self.brain.config()
+        board = config.board("garden")
+        data, _ = quiet(build_status.build, config, board)
+        page = (board["folder"] / "status.html").read_text(encoding="utf-8")
+        self.assertIn('<section class="notes"', page)
+        self.assertIn("Frost warnings", page)
+        self.assertNotIn('class="notes-problem"', page)
+        saved = save_verdicts(board, [], self.brain.root / "saved", "n", extra={"releaseNotes": {
+            "notes": [{"project": "garden-app", "slug": "frost", "visibility": "announce"}], "commits": []}})
+        applied, skipped, _ = apply_events.apply_file(config, board, str(saved))
+        self.assertEqual(skipped, [])
+        self.assertTrue(any("garden-app/frost visibility" in line for line in applied), applied)
+        self.assertEqual(len(list((self.repo / "release-notes" / "garden" / "choices").glob("*.json"))), 1)
+
+    def test_a_missing_skill_or_project_is_a_visible_line_on_the_page(self):
+        config = self.brain.config()
+        board = config.board("garden")
+        data, _ = quiet(build_status.build, config, board)
+        page = (board["folder"] / "status.html").read_text(encoding="utf-8")
+        self.assertIn('<p class="notes-problem">The board names release-notes projects but the release-notes '
+                      'skill is not checked out', page)
+        self.assertTrue(any("not checked out" in s for s in data["adrift"]), data["adrift"])
+        self.copy_library()
+        (self.repo / "brain" / "status" / "release-notes.json").write_text('{"projects": []}', encoding="utf-8")
+        data, _ = quiet(build_status.build, config, board)
+        page = (board["folder"] / "status.html").read_text(encoding="utf-8")
+        self.assertIn('<p class="notes-problem">release_notes names garden-app, which is not a project', page)
+
+
 if __name__ == "__main__":
     unittest.main()

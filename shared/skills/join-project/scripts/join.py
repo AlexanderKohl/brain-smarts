@@ -7,7 +7,8 @@
 Given a repository URL or a cloned path it:
 
 1. brings the brain repositories up to date (`sync.py`) and checks the contract and skill
-   versions the manifest requires;
+   versions the manifest requires, and that each library skill it lists is under `/library/skills/`
+   (a missing one is the person's step, with the command that adds it);
 2. clones the repository under `project_repos_root` (from `/memory/OWNER.md`) when it is not
    there, and checks out the working branch when the clone is clean;
 3. creates the pointer node in this memory from `/shared/templates/project-pointer-README.template.md`,
@@ -156,6 +157,23 @@ def step_versions(root: Path, manifest: dict, report: Report) -> None:
             report.done(f"active skill {name}")
         else:
             report.own(f"list `{name}` under active_skills in /memory/OWNER.md")
+
+
+def step_library(root: Path, manifest: dict, report: Report) -> None:
+    """Each library skill the project needs is checked out under /library/skills/; a missing one is
+    the person's step, with the command that adds it (a report, never a failure)."""
+    for name in manifest.get("library_skills") or []:
+        name = str(name).strip().strip("/")
+        if not name:
+            continue
+        if (root / "library" / "skills" / name / "SKILL.md").is_file():
+            report.done(f"library skill {name} present")
+        elif (root / "library" / ".git").exists():
+            report.own(f"library skill {name} is not in /library/skills/; pull the skill library: "
+                       f"cd \"{root}\"; git -C library pull")
+        else:
+            report.own(f"library skill {name} is needed but /library/ is not checked out; clone your skill library "
+                       f"into it: cd \"{root}\"; git clone <your skill library URL> library")
 
 
 def step_repository(root: Path, target: str, branch_override: str | None, report: Report) -> Path | None:
@@ -427,6 +445,7 @@ def main(argv: list[str] | None = None) -> int:
         report.errors.append(f"{repo.name}:brain/JOINING.md – " + manifest["error"])
         return finish(report, args.json)
     step_versions(root, manifest, report)
+    step_library(root, manifest, report)
     step_branch(repo, args.branch or manifest.get("working_branch"), report)
     node = step_pointer(root, repo, manifest, report)
     step_boards(root, repo, manifest, node, report)

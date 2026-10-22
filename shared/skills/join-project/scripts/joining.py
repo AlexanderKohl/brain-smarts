@@ -135,6 +135,7 @@ def load_manifest(repo: Path) -> dict | None:
     joining.setdefault("boards", [])
     joining.setdefault("vault_entries", [])
     joining.setdefault("skills", [])
+    joining.setdefault("library_skills", [])
     joining.setdefault("read_first", [])
     return joining
 

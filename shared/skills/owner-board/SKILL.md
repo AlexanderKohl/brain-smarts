@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 scope: shared
-version: 1.0.0
+version: 1.1.0
 script_paths:
   - /shared/skills/owner-board/scripts/apply_events.py
   - /shared/skills/owner-board/scripts/board_config.py
@@ -24,7 +24,7 @@ script_paths:
   - /shared/skills/owner-board/scripts/task_board.py
   - /shared/skills/owner-board/scripts/team_lanes.py
 created: 2026-09-18T11:05:00+10:00
-updated: 2026-10-21T10:14:49+10:00
+updated: 2026-10-22T16:20:28+10:00
 owner: brain-owner
 project_refs:
   - /memory/projects/brain-development
@@ -134,7 +134,7 @@ Board keys, alphabetical. Only `id`, `label` and `status` are required.
 | `node` | from `status` | Repository-root path of the owning memory node: where this owner's tasks about the project route. A memory board derives it from `status`; a shared board names its pointer node here, and its cards carry the repository's own node (`<repository>:brain`) as `parent`. |
 | `placeholder_pattern` | `temp`, `wip`, `fixup`, `squash` | Check 2: a main head commit message that was never written. |
 | `production` | `origin/main` | The branch releases go to. After a hotfix it is ahead of `main`; check 4 never reports it as pushed and unmerged, and check 6 never calls its checkout a stray. |
-| `release_notes` | `[]` | Project ids from `/memory/skills/release-notes/config/release-notes.json` whose notes this board draws, in the order drawn (**Release notes on the board**). |
+| `release_notes` | `[]` | Project ids from `/memory/skills/release-notes/config/release-notes.json` or, for a shared board, the repository's `brain/status/release-notes.json`, whose notes this board draws, in the order drawn (**Release notes on the board**). |
 | `remote` | `origin` | The product remote. |
 | `repo` | none | Product checkout. `{project_repos_root}` and `{brain_root}` are filled from `/memory/OWNER.md`; a relative path is taken under `project_repos_root`. Without it only the task checks run. |
 | `status` | required | The board folder: relative to the memory root (`projects/<node>/status`), or `<repository>:brain/status` for a board shared through a project repository found under `project_repos_root`. |
@@ -368,6 +368,12 @@ of what has been released to testing and to production. The choices save with th
 its note with `--note <slug>`; check 11 asks for one when a version raised the first or middle
 number. The library skill is imported from the brain root only when a board names projects, so
 owner-board stays a core skill with an optional dependency.
+
+A shared board also draws the projects its repository defines in `brain/status/release-notes.json`
+(the release-notes skill, *Projects, boards and team pages*), so a brain without the owner's
+release-notes configuration still shows the section; an entry with the same id in the owner's
+memory configuration wins. A missing library skill, an unknown project or an unreadable
+repository file is a short visible line in the section as well as a line of the build's report.
 
 **The release retires cards.** `release_notes.py release <version> --env testing|production`
 writes one `released` event per open card at or below that version on every board that draws

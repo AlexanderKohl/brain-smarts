@@ -9,7 +9,11 @@ browser under one key until **Save my verdicts** puts them into the verdicts fil
 which records each as an append-only choice event (`release_choices.py`).
 
 The release-notes skill is a library skill; it is imported from the brain root only when a
-board names projects, so owner-board stays a core skill with an optional dependency.
+board names projects, so owner-board stays a core skill with an optional dependency. A shared
+board also draws the projects its repository defines in `brain/status/release-notes.json`, so a
+brain without the owner's release-notes configuration still shows the section; the owner's
+memory configuration overrides a repository entry with the same id. Every problem is said on
+the page as a visible line as well as in the build's report.
 """
 
 from __future__ import annotations
@@ -26,6 +30,7 @@ CSS = """
 .notes { margin-top:28px; }
 .notes h2 { font-size:16px; margin:0 0 4px; }
 .notes .sub { margin-bottom:12px; }
+.notes .notes-problem { margin:0 0 8px; font-size:12.5px; color:var(--warn); }
 .notes .proj { display:flex; flex-wrap:wrap; gap:10px; align-items:baseline; justify-content:space-between;
   border-bottom:2px solid var(--line); padding-bottom:6px; margin:18px 0 10px; }
 .notes .proj h3 { font-size:14.5px; margin:0; }
@@ -200,25 +205,57 @@ def lanes_html(released: dict) -> str:
     return '<div class="lanes">' + "".join(lanes) + "</div>"
 
 
+MISSING_SKILL = ("The board names release-notes projects but the release-notes skill is not checked out "
+                 "under /library/ (pull the skill library: git -C library pull, from the brain root).")
+
+
+def repository_root(board: dict) -> Path | None:
+    """The project repository of a shared board: the status folder's ancestor named after it."""
+    if not board.get("shared") or not board.get("repo_name") or not board.get("folder"):
+        return None
+    for folder in [Path(board["folder"])] + list(Path(board["folder"]).parents):
+        if folder.name == board["repo_name"]:
+            return folder
+    return None
+
+
+def skill_config(module, config, board: dict):
+    """The release-notes configuration for this board: the owner's, plus its repository's own
+    projects when the board is shared. Shared with apply_events.py (one implementation)."""
+    repository = repository_root(board)
+    if repository is None or not hasattr(module, "repo_definition"):
+        return module.load_config(config.brain)
+    return module.load_config(config.brain, repo_definition=module.repo_definition(repository))
+
+
+def problem_html(problems: list) -> str:
+    return "".join('<p class="notes-problem">%s</p>' % esc(p) for p in problems)
+
+
 def section(config, board: dict) -> tuple:
-    """(HTML for the section, problems). An empty string when the board names no project."""
+    """(HTML for the section, problems). An empty string when the board names no project.
+
+    Every problem is also drawn in the section as a short visible line."""
     if not board.get("release_notes"):
         return "", []
+    head = ('<section class="notes" id="notes"><h2>Release notes</h2>'
+            '<div class="sub">One note per change a user would notice · choose what the team is told, hold the rest · '
+            'testing shows what reached testing, production only what reached production</div>')
     module = skill_module(config.brain)
     if module is None:
-        return "", ["The board names release-notes projects but the release-notes skill is not checked out under /library/."]
-    problems: list = []
+        return head + problem_html([MISSING_SKILL]) + "</section>", [MISSING_SKILL]
     try:
-        cfg = module.load_config(config.brain)
+        cfg = skill_config(module, config, board)
     except Exception as err:
-        return "", ["The release-notes configuration could not be read: " + str(err)]
-    parts = ['<section class="notes" id="notes"><h2>Release notes</h2>'
-             '<div class="sub">One note per change a user would notice · choose what the team is told, hold the rest · '
-             'testing shows what reached testing, production only what reached production</div>']
+        problem = "The release-notes configuration could not be read: " + str(err)
+        return head + problem_html([problem]) + "</section>", [problem]
+    problems: list = list(getattr(cfg, "problems", None) or [])
+    parts: list = []
     for pid in board["release_notes"]:
         project = cfg.projects.get(pid)
         if not project:
-            problems.append("release_notes names " + pid + ", which is not a project in the release-notes configuration")
+            problems.append("release_notes names " + pid + ", which is not a project in the release-notes "
+                            "configuration or the repository's brain/status/release-notes.json")
             continue
         try:
             notes, broken, conflicts = module.collect_unreleased(cfg, project)
@@ -235,9 +272,9 @@ def section(config, board: dict) -> tuple:
         parts += [note_html(project, n) for n in notes] or ['<p class="empty">No notes waiting.</p>']
         parts.append(loose_html(project, notes, loose))
         parts.append(lanes_html(released))
-    parts.append("</section>")
-    parts.append(JS.replace("__KEY__", board["storage_prefix"] + "-notes"))
-    return "".join(parts), problems
+    html_out = head + problem_html(problems) + "".join(parts) + "</section>"
+    html_out += JS.replace("__KEY__", board["storage_prefix"] + "-notes")
+    return html_out, problems
 
 
 def to_json(value) -> str:

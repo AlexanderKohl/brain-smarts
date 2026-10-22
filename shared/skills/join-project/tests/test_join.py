@@ -53,6 +53,7 @@ joining:
       minimum_version: 1.0.0
   active_skills:
     - product-feedback
+  library_skills: [release-notes]
   boards:
     - id: garden
       label: Garden Planner
@@ -207,6 +208,21 @@ class JoinTests(unittest.TestCase):
         self.assertEqual(code, 0, out)
         self.assertIn("bring the brain to contract 2.6.0 (this copy reads 2.5.0)", out)
         self.assertIn("skill /shared/skills/owner-board is 0.9.0; the manifest needs 1.0.0", out)
+
+    def test_a_missing_library_skill_is_the_persons_step_with_the_command(self):
+        code, out = self.run_join("--dry-run")
+        self.assertEqual(code, 0, out)   # a report, not a failure
+        self.assertIn("library skill release-notes is needed but /library/ is not checked out", out)
+        self.assertIn("git clone <your skill library URL> library", out)
+        (self.root / "library" / ".git").mkdir(parents=True)
+        code, out = self.run_join("--dry-run")
+        self.assertEqual(code, 0, out)
+        self.assertIn("library skill release-notes is not in /library/skills/; pull the skill library", out)
+        self.assertIn("git -C library pull", out)
+        write(self.root / "library/skills/release-notes/SKILL.md", "---\nname: release-notes\n---\n")
+        code, out = self.run_join("--dry-run")
+        self.assertIn("library skill release-notes present", out)
+        self.assertNotIn("git -C library pull", out)
 
     def test_a_dirty_clone_is_not_switched(self):
         with (self.repo / "brain" / "JOINING.md").open("a", encoding="utf-8") as handle:
