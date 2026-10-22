@@ -93,6 +93,16 @@ def _moved(text: str, what: str, author: str, at: str, fields: dict | None = Non
     return apply_change(text, fields, what, author, at, after=ANCHORS)
 
 
+def _refuse_broken(tasks: list, verb: str = "moved") -> None:
+    """Refuse the whole step when any record it would move or rewrite cannot be read or carries a
+    Git conflict marker, before anything is written (as --reverse does)."""
+    broken = [t.path.as_posix() for t in tasks
+              if t.problem or conflicted(t.path.read_text(encoding="utf-8"))]
+    if broken:
+        raise ValueError(f"{', '.join(broken)}: a Git conflict marker or an unreadable record; resolve it by "
+                         f"hand first; nothing was {verb}")
+
+
 def _ledger(root: Path, at: str, kind: str, target: str, moves: list[dict]) -> Path:
     digits = re.sub(r"[^0-9]", "", at)[:14]
     path = root / "memory" / "tasks" / "migrations" / f"{digits}-{slugify(kind + '-' + target)}.json"
@@ -141,11 +151,13 @@ def apply_split(root: Path, listing: dict, now: str | None) -> list[str]:
     author = brain_author(root)
     at, said = stamp(root, now)
     moves = []
+    chosen = {item["id"]: task_stores.find(root, item["id"]) for item in listing["items"] if item["decision"] == "move"}
+    _refuse_broken(list(chosen.values()), "split")
     for item in listing["items"]:
         if item["decision"] != "move":
             said.append(f"held {item['id']}")
             continue
-        task = task_stores.find(root, item["id"])
+        task = chosen[item["id"]]
         text = task.path.read_text(encoding="utf-8")
         ids = [claim_id(root, author, int(at[:4])) for _ in item["parts"]]
         keep = [r for n, refs in _groups(root, task.refs()) if n in (None, item["keeps"]) for r in refs]
@@ -199,6 +211,7 @@ def migrate_node(root: Path, node: str, dry_run: bool, now: str | None) -> list[
                   "sha256": file_hash(t.path)} for t in tasks]
         md, _ = write_list(root, "node", node, sort_items(items, id_sort_key))
         return [f"{len(items)} task(s) would move into {store.label}: {_show(root, md)}"]
+    _refuse_broken(tasks)
     author = brain_author(root)
     at, said = stamp(root, now)
     moves = []
@@ -220,6 +233,7 @@ def migrate_owner_store(root: Path, dry_run: bool, now: str | None) -> list[str]
              if not t.get("author") and not any(task_stores.node_of(root, r) for r in t.refs())]
     if dry_run:
         return [f"{len(tasks)} task(s) with no project would gain author and an attributed entry"]
+    _refuse_broken(tasks, "changed")
     author = brain_author(root)
     at, said = stamp(root, now)
     for task in tasks:
@@ -300,6 +314,7 @@ def apply_repo(root: Path, repository: str, listing: dict, now: str | None, offl
     author = brain_author(root)
     at, said = stamp(root, now)
     by_id = {t.tid: t for t in node_items(root, node)}
+    _refuse_broken([by_id[i["id"]] for i in listing["items"] if i["decision"] in ("move", "private")])
     planned = []
     for item in listing["items"]:
         task = by_id[item["id"]]
@@ -368,10 +383,7 @@ def reverse(root: Path, ledger_path: Path, now: str | None, offline: bool) -> li
             said.append(f"not moved back: {err}")
     # Every record and every repository store is checked before any record moves, so a refusal
     # leaves the move whole rather than half reversed.
-    for _move, task in found:
-        if task.problem or conflicted(task.path.read_text(encoding="utf-8")):
-            raise ValueError(f"{task.path.as_posix()} has a Git conflict marker or cannot be read; resolve it "
-                             "by hand first; nothing was moved back")
+    _refuse_broken([task for _move, task in found], "moved back")
     for store in {t.store.label: t.store for _m, t in found if t.store.kind == "repository"}.values():
         said += ready_to_write(store, offline=offline)
     for move, task in found:

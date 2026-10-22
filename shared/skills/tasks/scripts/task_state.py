@@ -4,8 +4,10 @@
     write(store)          regenerate it; True when the file changed
     differs(store)        whether the file on disk is not what render gives (the preflight's question)
 
-No clock is read: `created` is the earliest record `created` (else the store README's) and
-`updated` the latest record `updated` (else `created`). Lists are ordered for the reader
+`created` is the earliest record `created` and `updated` the latest record `updated`. A store
+with no stamped record takes them from its existing STATE.md, else the store's README.md, else
+the parent node's README.md, and only as a last resort from the clock, so neither is ever null
+and a store that already has a STATE.md renders the same text every time. Lists are ordered for the reader
 (SMART-RULE-0027): open tasks and the inbox by identifier (`id_sort_key`), recently completed
 newest first by `updated`, then identifier. Open tasks are the records in open/ and recurring/.
 A Git conflict in the file is resolved by generating it again.
@@ -46,12 +48,24 @@ def _when(task: Task, key: str) -> datetime:
     return parse_stamp(task.get(key) or "") or EARLIEST
 
 
-def _readme_created(store) -> str | None:
-    readme = store.path / "README.md"
-    if not readme.is_file():
+def _stamp_of(path, key: str) -> str | None:
+    """A timestamp field of a file's front matter, when it is one; None otherwise."""
+    if not path.is_file():
         return None
-    value = (parse_front_matter(readme.read_text(encoding="utf-8")) or {}).get("created")
-    return str(value) if value else None
+    value = (parse_front_matter(path.read_text(encoding="utf-8")) or {}).get(key)
+    return str(value) if value and parse_stamp(str(value)) else None
+
+
+def _fallback(store, key: str) -> str:
+    """`created` or `updated` of a store with no stamped record, never null: the existing STATE.md,
+    then the store's README.md, then the parent node's README.md (its `created`), then the clock.
+    Once STATE.md is written it is the first source, so the text stays the same between runs."""
+    for path, field in ((store.path / "STATE.md", key), (store.path / "README.md", "created"),
+                        (store.path.parent / "README.md", "created")):
+        found = _stamp_of(path, field)
+        if found:
+            return found
+    return datetime.now().astimezone().replace(microsecond=0).isoformat()
 
 
 def render(store, tasks: list[Task]) -> str:
@@ -64,9 +78,10 @@ def render(store, tasks: list[Task]) -> str:
                   reverse=True)[:RECENT]
     stamped = [t for t in tasks if parse_stamp(t.get("created") or "")]
     created = (min(stamped, key=lambda t: _when(t, "created")).get("created") if stamped
-               else _readme_created(store))
+               else _fallback(store, "created"))
     touched = [t for t in tasks if parse_stamp(t.get("updated") or "")]
-    updated = max(touched, key=lambda t: _when(t, "updated")).get("updated") if touched else created
+    updated = (max(touched, key=lambda t: _when(t, "updated")).get("updated") if touched
+               else _stamp_of(store.path / "STATE.md", "updated") or created)
     lines = [
         "---",
         f"id: {state_id(store)}",

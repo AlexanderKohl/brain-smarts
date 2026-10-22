@@ -241,6 +241,51 @@ class MigrateTest(unittest.TestCase):
         self.assertIn("front matter title: amount",
                       (self.root / "temp/migration/repository-example-app.md").read_text(encoding="utf-8"))
 
+    # ------------------------------------------------ round 3
+
+    def conflict(self, stem: str, folder: str = "open"):
+        path = self.store / folder / f"{stem}.md"
+        before = path.read_text(encoding="utf-8") + "<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> x\n"
+        path.write_text(before, encoding="utf-8")
+        return path, before
+
+    def test_forward_migrations_refuse_a_conflicted_record_and_write_nothing(self) -> None:
+        # node: TASK-2026-0003 is conflicted, so TASK-2026-0001 does not move either
+        path, before = self.conflict("TASK-2026-0003-hose", "completed")
+        code, out = self.migrate("--node", GARDEN)
+        self.assertEqual(code, 1)
+        self.assertIn("nothing was moved", out)
+        self.assertTrue((self.store / "open/TASK-2026-0001-beds.md").is_file())
+        self.assertFalse((self.root / GARDEN.strip("/") / "tasks").exists())
+        self.assertEqual(path.read_text(encoding="utf-8"), before)
+        # split
+        pump, pump_before = self.conflict("TASK-2026-0002-pump")
+        self.migrate("--split", "--dry-run")
+        lst = str(self.root / "temp/migration/split-all.json")
+        self.migrate("--decide", lst, "--all", "move")
+        code, out = self.migrate("--split", "--list", lst)
+        self.assertEqual(code, 1)
+        self.assertIn("nothing was split", out)
+        self.assertEqual(pump.read_text(encoding="utf-8"), pump_before)
+        self.assertFalse(list(self.store.glob("open/TASK-sam-*")))
+        # owner store
+        tidy, tidy_before = self.conflict("TASK-2026-0007-tidy")
+        code, out = self.migrate("--owner-store")
+        self.assertEqual(code, 1)
+        self.assertIn("nothing was changed", out)
+        self.assertEqual(tidy.read_text(encoding="utf-8"), tidy_before)
+        # repository: a conflicted record set to private refuses the move of the others too
+        fees, fees_before = self.conflict("TASK-2026-0006-fees")
+        self.migrate("--repo", "example-app", "--dry-run")
+        lst = str(self.root / "temp/migration/repository-example-app.json")
+        self.migrate("--decide", lst, "--all", "hold", "--move", "3", "--private", "2")
+        code, out = self.migrate("--repo", "example-app", "--list", lst)
+        self.assertEqual(code, 1)
+        self.assertIn("nothing was moved", out)
+        self.assertEqual(fees.read_text(encoding="utf-8"), fees_before)
+        self.assertTrue((self.store / "completed/TASK-2026-0005-docs.md").is_file())
+        self.assertFalse((self.clone / "brain" / "tasks").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

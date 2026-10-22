@@ -81,6 +81,37 @@ class StateTest(unittest.TestCase):
         self.assertEqual(task_state.state_id(Store("repository", root, "/memory/projects/x", repository="Example-App")),
                          "example-app-tasks-state")
 
+    def test_an_empty_store_never_writes_null_stamps(self) -> None:
+        brain = self.brains[0]
+        node = brain.node("/memory/projects/garden", "Garden")          # README created 2026-03-01T09:00:00+10:00
+        (node / "tasks").mkdir()
+        store = task_stores.Store("memory-node", node / "tasks", "/memory/projects/garden")
+        task_state.write(store)
+        text = (node / "tasks" / "STATE.md").read_text(encoding="utf-8")
+        self.assertIn("\ncreated: 2026-03-01T09:00:00+10:00\nupdated: 2026-03-01T09:00:00+10:00\n", text)
+        self.assertNotIn("null", text)
+        # The existing STATE.md comes first, so the text stays put even if the README changes.
+        (node / "README.md").write_text("---\nid: garden\ncreated: 2026-05-05T09:00:00+10:00\n---\n", encoding="utf-8")
+        self.assertFalse(task_state.differs(store))
+        # With nothing at all to read, the clock gives a full timestamp.
+        bare = task_stores.Store("memory-node", brain.tmp / "nowhere" / "tasks", "/memory/projects/nowhere")
+        rendered = task_state.render(bare, [])
+        stamp = rendered.split("\ncreated: ")[1].split("\n")[0]
+        self.assertRegex(stamp, r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$")
+        self.assertIn(f"\nupdated: {stamp}\n", rendered)
+
+    def test_a_store_emptied_by_a_move_keeps_its_last_stamps(self) -> None:
+        brain = self.brains[0]
+        path = brain.add("open", "TASK-sam-2026-0001-x", record("TASK-sam-2026-0001", "Only one", "ready",
+                                                                 updated="2026-03-04T09:00:00+10:00"))
+        store = task_stores.owner_store(brain.root)
+        task_state.write(store)
+        path.unlink()
+        task_state.write(store)
+        text = (brain.store / "STATE.md").read_text(encoding="utf-8")
+        self.assertIn("\ncreated: 2026-03-01T09:00:00+10:00\nupdated: 2026-03-04T09:00:00+10:00\n", text)
+        self.assertIn("## Open tasks (0)", text)
+
 
 if __name__ == "__main__":
     unittest.main()
