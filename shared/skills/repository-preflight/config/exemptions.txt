@@ -15,3 +15,8 @@ value: invitations-noreply@linkedin.com  # LinkedIn's system sender address for 
 value: jobs-noreply@linkedin.com  # LinkedIn's system sender address for its notification mail, not a person's
 value: messages-noreply@linkedin.com  # LinkedIn's system sender address for its notification mail, not a person's
 value: notifications-noreply@linkedin.com  # LinkedIn's system sender address for its notification mail, not a person's
+value: Pat.Ex+a@googlemail.com  # a fictional address on Google's consumer domain, needed to test Google's documented gmail.com and googlemail.com normalisation rule for hashed conversions
+value: Pat.Example+quote@GMail.com  # a fictional address on Google's consumer domain, needed to test Google's documented gmail.com and googlemail.com normalisation rule for hashed conversions
+value: pat.example+quote@gmail.com  # a fictional address on Google's consumer domain, needed to test Google's documented gmail.com and googlemail.com normalisation rule for hashed conversions
+value: patex@googlemail.com  # a fictional address on Google's consumer domain, needed to test Google's documented gmail.com and googlemail.com normalisation rule for hashed conversions
+value: patexample@gmail.com  # a fictional address on Google's consumer domain, needed to test Google's documented gmail.com and googlemail.com normalisation rule for hashed conversions
