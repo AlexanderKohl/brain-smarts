@@ -27,17 +27,17 @@ OFFSET = re.compile(r"[+-]\d\d:\d\d$|Z$")
 class HostSettingsShapeTest(unittest.TestCase):
     def test_entries_take_claude_code_shape_and_a_matcher_only_when_the_event_has_one(self):
         self.assertEqual(hooks.host_settings(EVENTS), {"hooks": {
-            "PreCompact": [{"hooks": [{"type": "command", "command": "python example/hooks.py pre-compact"}]}],
+            "PreCompact": [{"hooks": [{"type": "command", "command": f'python "{(hooks.ROOT / "example/hooks.py").as_posix()}" pre-compact'}]}],
             "SessionStart": [{"matcher": "compact",
-                              "hooks": [{"type": "command", "command": "python example/hooks.py post-compact"}]}],
+                              "hooks": [{"type": "command", "command": f'python "{(hooks.ROOT / "example/hooks.py").as_posix()}" post-compact'}]}],
         }})
 
     def test_the_brain_list_has_both_compaction_events(self):
         generated = hooks.host_settings()["hooks"]
         self.assertEqual(generated["PreCompact"], [{"hooks": [{"type": "command",
-                         "command": "python shared/skills/repository-preflight/scripts/hooks.py pre-compact"}]}])
+                         "command": f'python "{(hooks.ROOT / "shared/skills/repository-preflight/scripts/hooks.py").as_posix()}" pre-compact'}]}])
         self.assertEqual(generated["SessionStart"], [{"matcher": "compact", "hooks": [{"type": "command",
-                         "command": "python shared/skills/repository-preflight/scripts/hooks.py post-compact"}]}])
+                         "command": f'python "{(hooks.ROOT / "shared/skills/repository-preflight/scripts/hooks.py").as_posix()}" post-compact'}]}])
 
 
 class PreCompactTest(unittest.TestCase):
