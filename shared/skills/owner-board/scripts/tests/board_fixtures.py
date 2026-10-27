@@ -17,6 +17,7 @@ from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
+sys.path.insert(0, str(SCRIPTS.parents[1] / "tasks" / "scripts"))
 
 import board_config  # noqa: E402
 import cards  # noqa: E402
@@ -81,38 +82,79 @@ def git(repo: Path, *args: str) -> str:
     return out.stdout
 
 
+NODE_README = """---
+id: {slug}
+title: {title}
+type: node_readme
+schema_version: 0.2
+contract: /CONTRACT.md
+node_type: project
+{extra}---
+
+# {title}
+"""
+
+
 class Brain:
     """A fictional brain: CONTRACT.md, memory/OWNER.md, one or two boards, optional product repo,
-    optionally a board shared through a project repository (`example-garden:brain/status`)."""
+    optionally a board shared through a project repository (`example-garden:brain/status`).
 
-    def __init__(self, with_repo: bool = False, second_board: bool = False, shared: bool = False):
+    The board nodes are memory nodes with a task store of their own. With `shared`,
+    `example-garden` is a pointer node instead and its tasks are in the repository's
+    `brain/tasks/`. The track task TASK-2026-0901 is in the garden's store; the owner store
+    `/memory/tasks/` exists and holds no record."""
+
+    def __init__(self, with_repo: bool = False, second_board: bool = False, shared: bool = False,
+                 owner: str = "Sam"):
         self.root = Path(tempfile.mkdtemp(prefix="owner-board-"))
         (self.root / "CONTRACT.md").write_text("---\nid: c\n---\n# contract\n", encoding="utf-8")
         self.memory = self.root / "memory"
         self.repos = self.root.parent / (self.root.name + "-repos")
         self.memory.mkdir()
         (self.memory / "OWNER.md").write_text(
-            "---\nid: owner-profile\nowner_short_name: Sam\nproject_repos_root: "
+            "---\nid: owner-profile\nowner_short_name: " + owner + "\nproject_repos_root: "
             + str(self.repos) + "\n---\n# Owner\n", encoding="utf-8")
-        tasks = self.memory / "tasks" / "open"
-        tasks.mkdir(parents=True)
-        (tasks / "TASK-2026-0901-beds.md").write_text("---\nid: TASK-2026-0901\nstatus: ready\n---\n", encoding="utf-8")
-        (self.memory / "tasks" / "STATE.md").write_text("| TASK-2026-0901 | ready |\n", encoding="utf-8")
+        (self.memory / "tasks" / "open").mkdir(parents=True)
         status = "example-garden:brain/status" if shared else "projects/example-garden/status"
         entries = [self.board_entry("garden", "Garden Planner", status, with_repo)]
+        self.checkout = self.repos / "example-garden"
         if shared:
             entries[0]["node"] = "/memory/projects/example-garden"
-            self.make_board(self.repos / "example-garden" / "brain" / "status", "garden", parent="example-garden:brain")
+            self.make_node("projects/example-garden", "Example Garden",
+                           repo_url="https://example.com/fictional/example-garden.git",
+                           local_path=self.checkout.as_posix(), default_branch="main")
+            self.make_board(self.checkout / "brain" / "status", "garden", parent="example-garden:brain")
         else:
+            self.make_node("projects/example-garden", "Example Garden")
             self.make_board(self.memory / "projects" / "example-garden" / "status", "garden")
+        garden = self.store_dir("/memory/projects/example-garden")
+        (garden / "open").mkdir(parents=True, exist_ok=True)
+        (garden / "open" / "TASK-2026-0901-beds.md").write_text(
+            "---\nid: TASK-2026-0901\ntitle: Beds\nstatus: ready\n---\n", encoding="utf-8")
+        (garden / "STATE.md").write_text("| TASK-2026-0901 | ready |\n", encoding="utf-8")
         if second_board:
             entries.append(self.board_entry("pond", "Pond Pump", "projects/example-pond/status", False))
+            self.make_node("projects/example-pond", "Pond Pump")
             self.make_board(self.memory / "projects" / "example-pond" / "status", "pond")
         config = self.memory / "skills" / "owner-board" / "config"
         config.mkdir(parents=True)
         (config / "boards.json").write_text(json.dumps({"boards": entries}, indent=2), encoding="utf-8")
         if with_repo:
             self.make_repo()
+
+    def make_node(self, rel: str, title: str, **extra: str) -> Path:
+        """A memory node: a folder under memory/ with a node README (`extra` adds front matter)."""
+        folder = self.memory.joinpath(*rel.split("/"))
+        folder.mkdir(parents=True, exist_ok=True)
+        lines = "".join(key + ": " + value + "\n" for key, value in extra.items())
+        (folder / "README.md").write_text(NODE_README.format(slug=rel.replace("/", "-"), title=title, extra=lines),
+                                          encoding="utf-8")
+        return folder
+
+    def store_dir(self, ref: str | None) -> Path:
+        """The tasks/ folder a task whose first project reference is `ref` belongs in."""
+        import task_stores  # the tasks skill's own store list
+        return task_stores.store_for(self.root, ref).path
 
     @staticmethod
     def board_entry(board_id: str, label: str, status: str, with_repo: bool) -> dict:

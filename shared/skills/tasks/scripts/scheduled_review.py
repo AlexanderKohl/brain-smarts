@@ -2,7 +2,9 @@
 
 Runs with no model and changes nothing that Git tracks, so it can run from the operating system's
 own scheduler while sessions work in the same tree. Output: /temp/due.md (ignored by every brain
-repository), and a desktop notification when something needs attention.
+repository), and a desktop notification when something needs attention. Its task section runs
+`tasks.py review`, which reads every task store the brain can reach (owner, node, pointer-private
+and checked-out repository stores) and names the ones it could not read.
 
   python shared/skills/tasks/scripts/scheduled_review.py              write /temp/due.md, run the morning jobs, notify
   python shared/skills/tasks/scripts/scheduled_review.py --no-notify  the same without a notification

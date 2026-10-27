@@ -100,15 +100,19 @@ class TaskBoardTests(unittest.TestCase):
             (store / folder).mkdir(parents=True, exist_ok=True)
         (store / "templates" / "TASK_TEMPLATE.md").write_text(TEMPLATE, encoding="utf-8")
         (store / "STATE.md").write_text(STATE, encoding="utf-8")
+        # Nodes without a board of their own: a shed, its roof, and a pond's filters below the pond.
+        for rel, title in (("projects/example-shed", "Example Shed"), ("projects/example-shed/roof", "Shed Roof"),
+                           ("projects/example-pond/filters", "Pond Filters")):
+            self.brain.make_node(rel, title)
         self.add("TASK-2026-0910", "open", "ready", ["/memory/projects/example-garden"], priority="low")
         self.add("TASK-2026-0911", "open", "ready", ["/memory/projects/example-garden"], priority="high",
                  due="2026-02-01")
         self.add("TASK-2026-0912", "open", "ready", ["/memory/projects/example-garden"], priority="high",
                  due="2026-01-15")
-        # The first reference has no board, the second has: the second decides.
-        self.add("TASK-2026-0913", "open", "waiting", ["/memory/projects/example-shed", "/memory/projects/example-pond"],
+        # The store decides, not a second reference: this one is in the pond's store.
+        self.add("TASK-2026-0913", "open", "waiting", ["/memory/projects/example-pond", "/memory/projects/example-shed"],
                  review="2026-01-20", waiting="Example Pumps Pty Ltd")
-        # A folder beneath a board's node belongs to that board.
+        # A node beneath a board's node belongs to that board.
         self.add("TASK-2026-0914", "open", "waiting", ["/memory/projects/example-pond/filters"],
                  review="2026-01-08", waiting="a delivery")
         self.add("TASK-2026-0915", "open", "in_progress", ["/memory/projects/example-shed"])
@@ -124,7 +128,13 @@ class TaskBoardTests(unittest.TestCase):
         text = TASK.format(id=tid, title="Fictional task " + tid[-4:], status=status, priority=priority,
                            updated=updated, due=due, review=review, waiting=waiting,
                            refs="".join("\n  - " + r for r in refs) if refs else " []")
-        (self.brain.memory / "tasks" / folder / (tid + "-fictional.md")).write_text(text, encoding="utf-8")
+        # The record goes where `tasks.py new` would put it: the store of its first reference.
+        target = self.store(refs[0] if refs else None) / folder
+        target.mkdir(parents=True, exist_ok=True)
+        (target / (tid + "-fictional.md")).write_text(text, encoding="utf-8")
+
+    def store(self, ref):
+        return self.brain.store_dir(ref)
 
     def test_the_memory_skeleton_config_draws_the_personal_board_from_the_first_task(self):
         skeleton = (BRAIN / "shared" / "templates" / "memory-skeleton" / "skills" / "owner-board"
@@ -155,22 +165,34 @@ class TaskBoardTests(unittest.TestCase):
         quiet(build_boards.build, config, None, "2026-01-10 09:00")
         return config
 
-    def test_routing_takes_the_first_reference_that_has_a_board(self):
+    def test_routing_follows_the_node_of_the_store_that_holds_the_task(self):
         placed = self.placed()
-        self.assertEqual(placed["garden"], ["TASK-2026-0910", "TASK-2026-0911", "TASK-2026-0912", "TASK-2026-0917"])
+        # 0901 is the fixture's track task, in the garden's own store.
+        self.assertEqual(placed["garden"], ["TASK-2026-0901", "TASK-2026-0910", "TASK-2026-0911", "TASK-2026-0912",
+                                            "TASK-2026-0917"])
         self.assertEqual(placed["pond"], ["TASK-2026-0913", "TASK-2026-0914"])
 
     def test_tasks_without_a_board_fall_back_to_the_personal_board(self):
         placed = self.placed()
-        # No references (0901, 0916) or only a project without a board (0915).
-        self.assertEqual(placed["personal"], ["TASK-2026-0901", "TASK-2026-0915", "TASK-2026-0916"])
+        # The owner store (0916, no project) and a node without a board (0915, the shed).
+        self.assertEqual(placed["personal"], ["TASK-2026-0915", "TASK-2026-0916"])
+
+    def test_an_owner_store_task_goes_to_the_personal_board_whatever_it_names(self):
+        # A record left in the owner store that still names a board's node (not yet migrated).
+        self.add("TASK-2026-0927", "open", "ready", [])
+        path = self.store(None) / "open" / "TASK-2026-0927-fictional.md"
+        path.write_text(path.read_text(encoding="utf-8").replace("project_refs: []",
+                        "project_refs:\n  - /memory/projects/example-garden"), encoding="utf-8")
+        placed = self.placed()
+        self.assertIn("TASK-2026-0927", placed["personal"])
+        self.assertNotIn("TASK-2026-0927", placed["garden"])
 
     def test_auto_boards_give_a_project_without_a_board_its_own_page(self):
         self.set_tasks(auto_boards=True)
         placed = self.placed()
-        # The first reference of 0913 now has a board of its own, so it decides.
-        self.assertEqual(placed["auto:example-shed"], ["TASK-2026-0913", "TASK-2026-0915"])
-        self.assertEqual(placed["pond"], ["TASK-2026-0914"])
+        # The shed's own store now has a board of its own; 0913, in the pond's store, stays there.
+        self.assertEqual(placed["auto:example-shed"], ["TASK-2026-0915"])
+        self.assertEqual(placed["pond"], ["TASK-2026-0913", "TASK-2026-0914"])
         config = self.build_all()
         self.assertTrue((self.brain.memory / "boards" / "projects" / "example-shed.html").is_file())
         self.assertEqual(task_board.check(config, TODAY), [])
@@ -195,7 +217,7 @@ class TaskBoardTests(unittest.TestCase):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             build_boards.build(config, None, "2026-01-10 09:00")
-        self.assertIn("suggest a board: example-shed (/memory/projects/example-shed) has 5 open tasks", out.getvalue())
+        self.assertIn("suggest a board: Example Shed (/memory/projects/example-shed) has 5 open tasks", out.getvalue())
         self.set_tasks(board_declined=["/memory/projects/example-shed"])
         config = self.brain.config()
         self.assertEqual(task_board.outgrown(config, task_board.route(config, today=TODAY)), [])
@@ -220,14 +242,14 @@ class TaskBoardTests(unittest.TestCase):
         self.build_all()
         text = (self.brain.memory / "projects/example-pond/status/status.html").read_text(encoding="utf-8")
         section = text[text.index('<section class="tasks"'):text.index("</section>")]
-        self.assertIn('href="../../../tasks/open/TASK-2026-0913-fictional.md"', section)
+        self.assertIn('href="../tasks/open/TASK-2026-0913-fictional.md"', section)    # the pond's own store
         self.assertIn("Waiting on: Example Pumps Pty Ltd", section)
         # Buttons and a note box, never a form or an input that could submit anything.
         self.assertNotIn("<input", section)
         self.assertNotIn("<form", section)
         index = (self.brain.memory / "boards" / "index.html").read_text(encoding="utf-8")
         self.assertIn('href="personal.html">Personal tasks</a>', index)
-        self.assertIn("<b>3</b>Open tasks", index)   # garden: 0910, 0911, 0912
+        self.assertIn("<b>4</b>Open tasks", index)   # garden: 0901, 0910, 0911, 0912
 
     # ------------------------------------------------ Do now, Done and a note
 
@@ -311,23 +333,27 @@ class TaskBoardTests(unittest.TestCase):
         saved = self.downloads() / "task-actions-2026-01-10-08-30-00.json"
         saved.write_text(json.dumps(body), encoding="utf-8")
         changed, out = self.apply_all()
-        # done: completed, moved, its STATE.md row out
-        record = store / "completed" / "TASK-2026-0910-fictional.md"
+        # done: completed and moved within the garden's own store, attributed, its STATE.md regenerated
+        garden, pond = self.store("/memory/projects/example-garden"), self.store("/memory/projects/example-pond")
+        record = garden / "completed" / "TASK-2026-0910-fictional.md"
         self.assertTrue(record.is_file())
-        self.assertFalse((store / "open" / "TASK-2026-0910-fictional.md").exists())
+        self.assertFalse((garden / "open" / "TASK-2026-0910-fictional.md").exists())
         text = record.read_text(encoding="utf-8")
         self.assertIn("status: completed", text)
-        self.assertIn("The owner's note: Finished early.", text)
+        self.assertRegex(text, r"\n- \d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d – sam: done \(completed\)\n"
+                               r"  Note: Finished early\.\n")
         self.assertIn("![Screenshot 1](../img/TASK-2026-0910-20260110083000-1.png)", text)
-        self.assertTrue((store / "img" / "TASK-2026-0910-20260110083000-1.png").is_file())
+        self.assertTrue((garden / "img" / "TASK-2026-0910-20260110083000-1.png").is_file())
+        self.assertFalse((store / "img").exists())                   # screenshots stay with their store
+        self.assertIn("`TASK-2026-0910`", (garden / "STATE.md").read_text(encoding="utf-8").split("## Recently completed")[1])
         # do now: waiting -> ready, high, and listed for the conductor
-        meta = task_board.task_store.parse_front_matter((store / "open" / "TASK-2026-0913-fictional.md").read_text(encoding="utf-8"))
+        meta = task_board.task_store.parse_front_matter((pond / "open" / "TASK-2026-0913-fictional.md").read_text(encoding="utf-8"))
         self.assertEqual((meta["status"], meta["priority"]), ("ready", "high"))
         self.assertIn("Do now (asked for by the owner):\n  TASK-2026-0913  Fictional task 0913 – The pump first.", out)
         # a note alone changes nothing but History
-        in_progress = (store / "open" / "TASK-2026-0915-fictional.md").read_text(encoding="utf-8")
+        in_progress = (self.store("/memory/projects/example-shed") / "open" / "TASK-2026-0915-fictional.md").read_text(encoding="utf-8")
         self.assertIn("status: in_progress", in_progress)
-        self.assertIn("Note from the owner.\n  The owner's note: Ask about the hinges.", in_progress)
+        self.assertRegex(in_progress, r" – sam: note\n  Note: Ask about the hinges\.\n")
         # an unknown id is reported and skipped; the file is filed with the task store
         self.assertIn("SKIPPED TASK-2026-0999: no task with that id", out)
         self.assertFalse(saved.exists())
@@ -336,20 +362,19 @@ class TaskBoardTests(unittest.TestCase):
 
     def test_task_actions_ride_in_a_verdicts_file(self):
         garden = self.brain.config().board("garden")
-        state_path = self.brain.memory / "tasks" / "STATE.md"
-        state_path.write_text(state_path.read_text(encoding="utf-8").replace(
-            "# Current State\n", "# Current State\n\n## Open tasks (2, ordered by task number ascending)\n")
-            + "| `TASK-2026-0911` | **ready** | high | - | Fictional task 0911 |\n", encoding="utf-8")
         body = {"schema": garden["verdict_schema"], "board": "garden", "savedAt": "2026-01-10T08:30:00.000Z",
                 "verdicts": [], "tasks": [{"id": "TASK-2026-0911", "action": "done", "note": "", "shots": [], "title": "x"}]}
         (self.downloads() / (garden["verdict_prefix"] + "t.json")).write_text(json.dumps(body), encoding="utf-8")
         _, out = self.apply_all()
-        store = self.brain.memory / "tasks"
+        store = self.store("/memory/projects/example-garden")
         self.assertTrue((store / "completed" / "TASK-2026-0911-fictional.md").is_file())
+        # The store's STATE.md is generated again: 0911 has left the open table for Recently completed.
         state = (store / "STATE.md").read_text(encoding="utf-8")
-        self.assertIn("TASK-2026-0901", state)
-        self.assertNotIn("TASK-2026-0911", state)
-        self.assertIn("## Open tasks (1, ordered", state)
+        open_part, _, recent = state.partition("## Recently completed")
+        self.assertIn("## Open tasks (3)", open_part)            # 0901, 0910, 0912
+        self.assertIn("`TASK-2026-0901`", open_part)
+        self.assertNotIn("TASK-2026-0911", open_part)
+        self.assertIn("`TASK-2026-0911`", recent)
         self.assertIn("done     TASK-2026-0911", out)
 
     def test_a_dry_run_changes_no_task(self):
@@ -361,16 +386,17 @@ class TaskBoardTests(unittest.TestCase):
             changed, out = quiet(apply_events.route, self.brain.config(), True)
         self.assertEqual(changed, [])
         self.assertTrue(saved.exists())
-        self.assertTrue((self.brain.memory / "tasks" / "open" / "TASK-2026-0912-fictional.md").is_file())
+        self.assertTrue((self.store("/memory/projects/example-garden") / "open" / "TASK-2026-0912-fictional.md").is_file())
         self.assertIn("(dry run)", out)
 
     def test_column_order_is_deliberate(self):
         routed = task_board.route(self.brain.config(), today=TODAY)
         garden = task_board.section(routed["garden"], self.brain.memory, TODAY)
         ready = garden[garden.index('data-column="ready"'):garden.index('data-column="in_progress"')]
-        # Priority first, then the nearer deadline: 0912 (high, 15 Jan), 0911 (high, 1 Feb), 0910 (low).
+        # Priority first, then the nearer deadline: 0912 (high, 15 Jan), 0911 (high, 1 Feb), 0910 (low),
+        # then 0901, which names no priority.
         order = re.findall(r'data-task="(TASK-\d{4}-\d{4})"', ready)
-        self.assertEqual(order, ["TASK-2026-0912", "TASK-2026-0911", "TASK-2026-0910"])
+        self.assertEqual(order, ["TASK-2026-0912", "TASK-2026-0911", "TASK-2026-0910", "TASK-2026-0901"])
         pond = task_board.section(routed["pond"], self.brain.memory, TODAY)
         waiting = re.findall(r'data-task="(TASK-\d{4}-\d{4})"', pond)
         self.assertEqual(waiting, ["TASK-2026-0914", "TASK-2026-0913"])   # nearest review first
@@ -387,10 +413,11 @@ class TaskBoardTests(unittest.TestCase):
                                   "--status", "ready", "--priority", "high", "--project", "/memory/projects/example-pond",
                                   "--now", "2026-01-10T09:00:00+10:00"], cwd=self.brain.root)
         self.assertEqual(code, 0, out.getvalue())
-        self.assertIn("TASK-2026-0919 is on Pond Pump", out.getvalue())
-        record = self.brain.memory / "tasks" / "open" / "TASK-2026-0919-mulch-the-pond-edge.md"
+        self.assertIn("TASK-sam-2026-0919 is on Pond Pump", out.getvalue())
+        pond = self.store("/memory/projects/example-pond")
+        record = pond / "open" / "TASK-sam-2026-0919-mulch-the-pond-edge.md"
         self.assertTrue(record.is_file())
-        self.assertIn("| `TASK-2026-0919` | **ready** | high | - | Mulch the pond edge |",
-                      (self.brain.memory / "tasks" / "STATE.md").read_text(encoding="utf-8"))
+        self.assertIn("| `TASK-sam-2026-0919` | **ready** | high | - | Mulch the pond edge |",
+                      (pond / "STATE.md").read_text(encoding="utf-8"))
         page = self.brain.memory / "projects/example-pond/status/status.html"
-        self.assertIn(("TASK-2026-0919", "ready"), task_board.shown_on(page))
+        self.assertIn(("TASK-sam-2026-0919", "ready"), task_board.shown_on(page))

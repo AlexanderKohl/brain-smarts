@@ -11,8 +11,9 @@ brain under its own author, after three fences (`events.check_fences`): the card
 its signature is the one the verdict was given against, and the page had seen the card's
 latest event (`seen_through`) – otherwise the verdict is refused with "pull, rebuild, decide
 again". A `resolve` must name every conflicting event. Release-note choices saved with the
-verdicts go to the release-notes skill as events of their own; task actions change this
-brain's own task records through the tasks skill.
+verdicts go to the release-notes skill as events of their own; task actions change the task
+records through the tasks skill, in whichever store holds each (a repository's `brain/tasks/`
+included), with a History entry naming this brain's author (`task_actions.py`).
 
 Then the fold runs and the side effects that belong to the brain running it are done, each
 idempotent: a card retired by an event of this author is moved to `cards/closed/` (the other

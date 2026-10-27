@@ -5,12 +5,17 @@ Validates the mechanics repository (the brain root, where CONTRACT.md lives) and
 present, the owner's memory repository checked out at `<root>/memory/` (CONTRACT §3.5).
 Repository-root paths beginning `/memory/` resolve into the memory checkout. A missing memory
 checkout is a warning, not an error: the mechanics can be validated on their own.
+
+`--project <repository|path>` validates one project repository instead: the Markdown in its
+`brain/` (raw evidence in `brain/raw/` skipped) and its task store, every failure an error
+(P24, P25). From the brain root a repository's task store is checked too, its failures warnings.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -35,6 +40,9 @@ from preflight_manifest import (
     MANIFEST_NAME, VALIDATOR_PATH, manifest_paths, validate_manifest, write_manifests,
     shareable_repositories, validate_personal_data,
 )
+from preflight_tasks import (
+    project_raw, project_store, raw_store_skipper, validate_project_store, validate_task_stores,
+)
 
 
 REQUIRED_MARKDOWN_FIELDS = {
@@ -45,16 +53,6 @@ REQUIRED_MARKDOWN_FIELDS = {
     "contract",
     "created",
     "updated",
-}
-TASK_STATUSES = {
-    "inbox",
-    "ready",
-    "in_progress",
-    "waiting",
-    "scheduled",
-    "blocked",
-    "completed",
-    "cancelled",
 }
 # CONTRACT §8.2: a timestamp is never later than the moment it was written. Five minutes allow
 # for clocks on different machines disagreeing slightly when repositories are synced.
@@ -67,19 +65,8 @@ IGNORED_DIRS = {".git", ".claude", "node_modules", "__pycache__", ".pytest_cache
 
 # The owner value mechanics files may carry (CONTRACT §3.6).
 GENERIC_OWNER = "brain-owner"
-# Task stores: /memory/tasks/ in the three-layer layout, /tasks/ in a single-repository brain.
-TASK_ROOTS = ((MEMORY_DIR, "tasks"), ("tasks",))
 # Scratch folder at the brain root, git-ignored; skipped even when Git cannot be asked.
 SCRATCH_DIR = "temp"
-
-
-def is_raw_evidence_path(path: Path, root: Path) -> bool:
-    parts = path.relative_to(root).parts
-    if not parts:
-        return False
-    if parts[0] == "raw":
-        return True
-    return len(parts) > 1 and parts[0] == MEMORY_DIR and parts[1] == "raw"
 
 
 def parse_scalar(value: str) -> Any:
@@ -205,14 +192,15 @@ def ignored_paths(root: Path, paths: list[Path]) -> set[Path]:
 
 
 def markdown_paths(root: Path) -> list[Path]:
-    """Markdown files to validate: not raw evidence, not tool state, not the scratch folder and
-    not anything else Git ignores in the repository that holds it."""
+    """Markdown files to validate: not raw evidence in a raw store (P24), not tool state, not the
+    scratch folder and not anything else Git ignores in the repository that holds it."""
+    is_raw = raw_store_skipper(root)
     candidates = [
         path
         for path in root.rglob("*.md")
         if not any(part in IGNORED_DIRS for part in path.relative_to(root).parts)
         and path.relative_to(root).parts[0] != SCRATCH_DIR
-        and not is_raw_evidence_path(path, root)
+        and not is_raw(path)
     ]
     ignored = ignored_paths(root, candidates)
     return sorted(path for path in candidates if path not in ignored)
@@ -237,18 +225,20 @@ def ahead_of_clock(value: str, now: datetime) -> str | None:
 
 
 def validate_markdown(
-    root: Path, paths: list[Path], result: Result
+    root: Path, paths: list[Path], result: Result, label: Any = None
 ) -> dict[Path, dict[str, Any]]:
+    """`label` names a file in messages (default: its repository-root path); a project repository
+    passes its own, and names its owner freely, so the owner tripwire is off for it."""
     records: dict[Path, dict[str, Any]] = {}
     id_locations: dict[str, list[str]] = {}
     layer_ids: dict[str, set[str]] = {"mechanics": set(), "memory": set(), "library": set()}
     # A single-repository brain keeps /tasks/ at the root and names its owner everywhere; the
     # owner tripwire applies only to the split layout.
-    split_layout = memory_root(root) is not None or not (root / "tasks").is_dir()
+    split_layout = label is None and (memory_root(root) is not None or not (root / "tasks").is_dir())
     now = clock()
 
     for path in paths:
-        display = root_path(path, root)
+        display = label(path) if label else root_path(path, root)
         layer = layer_of(path, root)
         result.layer_markdown_files[layer] = result.layer_markdown_files.get(layer, 0) + 1
         try:
@@ -338,51 +328,6 @@ def validate_contract(
     result.contract_version = str(version)
 
 
-def validate_tasks(
-    root: Path, records: dict[Path, dict[str, Any]], result: Result
-) -> None:
-    open_stores: list[tuple[Path, Path, list[str]]] = []
-    for parts in TASK_ROOTS:
-        tasks_dir = root.joinpath(*parts)
-        if not tasks_dir.is_dir():
-            continue
-        state_path = tasks_dir / "STATE.md"
-        try:
-            state_lines = state_path.read_text(encoding="utf-8").splitlines()
-        except OSError:
-            state_lines = []
-        open_stores.append((tasks_dir / "open", state_path, state_lines))
-
-    for path, metadata in records.items():
-        if metadata.get("type") != "task":
-            continue
-        if is_template_path(path, root):
-            continue
-        display = root_path(path, root)
-        status = metadata.get("status")
-        if status not in TASK_STATUSES:
-            result.errors.append(f"{display}: invalid task status {status}")
-        if status in {"waiting", "scheduled"} and not metadata.get("next_review"):
-            result.errors.append(
-                f"{display}: {status} task requires next_review"
-            )
-        # SMART-RULE-0025: every open task is listed in its store's STATE.md with its status word.
-        for open_dir, state_path, state_lines in open_stores:
-            if open_dir not in path.parents or not metadata.get("id"):
-                continue
-            state_display = root_path(state_path, root)
-            task_id = str(metadata["id"])
-            listed = [line for line in state_lines if task_id in line]
-            if not listed:
-                result.errors.append(
-                    f"{display}: open task {task_id} is not listed in {state_display}"
-                )
-            elif status and not any(str(status) in line for line in listed):
-                result.errors.append(
-                    f"{display}: {state_display} lists {task_id} without its status word {status}"
-                )
-
-
 def run(root: Path, writing: bool) -> Result:
     result = Result()
     result.memory_present = memory_root(root) is not None
@@ -396,7 +341,7 @@ def run(root: Path, writing: bool) -> Result:
     validate_contract(root, records, result)
     validate_declared_references(root, records, result)
     validate_mechanics_memory_references(root, records, result)
-    validate_tasks(root, records, result)
+    validate_task_stores(root, records, result)
     validate_governance(root, records, result, clock())
     validate_personal_data(root, result)
     from checks_b import validate_knowledge_provenance, validate_knowledge_review_dates, validate_pointer_files
@@ -411,6 +356,42 @@ def run(root: Path, writing: bool) -> Result:
     return result
 
 
+def project_markdown_paths(checkout: Path) -> list[Path]:
+    """The Markdown of a project repository's brain/: not brain/raw/ evidence (P24), not tool
+    state, not anything the repository's Git ignores."""
+    candidates = [path for path in (checkout / "brain").rglob("*.md")
+                  if not any(part in IGNORED_DIRS for part in path.relative_to(checkout).parts)
+                  and not project_raw(checkout, path)]
+    ignored = git_ignored(checkout, [p.relative_to(checkout).as_posix() for p in candidates]) or set()
+    return sorted(p for p in candidates if p.relative_to(checkout).as_posix() not in ignored)
+
+
+def run_project(root: Path, target: str) -> Result:
+    """`--project`: one project repository's brain/ Markdown and its task store; failures are errors."""
+    result = Result()
+    result.memory_present = memory_root(root) is not None
+    try:
+        store = project_store(root, target)
+    except LookupError as exc:
+        result.errors.append(str(exc))
+        return result
+    checkout, name = store.checkout, store.repository
+    paths = project_markdown_paths(checkout)
+    result.markdown_files = len(paths)
+
+    def label(path: Path) -> str:
+        return f"{name}:{path.relative_to(checkout).as_posix()}"
+
+    validate_markdown(checkout, paths, result, label=label)
+    try:
+        version = read_front_matter(root / "CONTRACT.md")[0].get("contract_version")
+        result.contract_version = str(version) if version else None
+    except (OSError, UnicodeError, ValueError):
+        result.errors.append("/CONTRACT.md: missing or unreadable")
+    validate_project_store(root, store, result)
+    return result
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--root", type=Path, default=Path.cwd())
@@ -418,15 +399,23 @@ def main() -> int:
     parser.add_argument("--json", action="store_true", dest="as_json")
     parser.add_argument("--layer", choices=("mechanics", "library", "memory"),
                         help="report only this repository's errors and warnings (the pre-commit hook)")
+    parser.add_argument("--project", metavar="REPOSITORY|PATH",
+                        help="validate one project repository's brain/ and task store instead (P25)")
     args = parser.parse_args()
+    if args.project and args.write_manifest:
+        print("FAIL: --write-manifest writes the brain's manifests; it does not go with --project", file=sys.stderr)
+        return 1
 
     try:
         root = discover_root(args.root)
     except FileNotFoundError as exc:
-        print(f"FAIL: {exc}", file=sys.stderr)
-        return 1
+        brain = os.environ.get("BRAIN_ROOT")
+        if not (args.project and brain and (Path(brain) / "CONTRACT.md").is_file()):
+            print(f"FAIL: {exc}", file=sys.stderr)
+            return 1
+        root = Path(brain).resolve()
 
-    result = run(root, args.write_manifest)
+    result = run_project(root, args.project) if args.project else run(root, args.write_manifest)
     if args.layer:
         # A commit is judged on its own repository: another repository's problem, or another
         # session's, never blocks it.
@@ -435,6 +424,7 @@ def main() -> int:
     payload = {
         "status": "pass" if result.passed else "fail",
         "root": str(root),
+        "project": args.project,
         "contract_version": result.contract_version,
         "memory_present": result.memory_present,
         "markdown_files": result.markdown_files,

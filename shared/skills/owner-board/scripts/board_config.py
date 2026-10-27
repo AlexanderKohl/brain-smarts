@@ -204,13 +204,14 @@ class Config:
         shared = SHARED_STATUS.match(str(board["status"])) if "/" not in str(board["status"]).split(":")[0] else None
         if shared and not re.match(r"^[A-Za-z]:[\\/]", str(board["status"])):
             # `<repository>:brain/status`: the board lives in the project repository, shared
-            # with every brain that works on it. Tasks never go there (CONTRACT 16.2).
+            # with every brain that works on it. Its page draws the repository's own tasks and
+            # nothing from memory (CONTRACT 16.2).
             repo_name, inside = shared.group(1), shared.group(2).strip("/")
             base = values["project_repos_root"] or str(self.brain.parent)
             board["shared"] = True
             board["repo_name"] = repo_name
             board["folder"] = Path(base) / repo_name / inside.replace("/", os.sep)
-            # `node` stays the owner's pointer node in memory (task routing); a card's `parent`
+            # `node` is the owner's pointer node in memory (task routing by store); a card's `parent`
             # is the repository's own node, which a collaborator can resolve.
             board.setdefault("node", "")
             board["card_parent"] = repo_name + ":" + inside.rsplit("/status", 1)[0]

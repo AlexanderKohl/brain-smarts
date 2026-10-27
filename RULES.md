@@ -240,8 +240,8 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 - A checkpoint updates, in the owning node: `STATE.md` with the current position, what is in
   flight, what is uncommitted and where, and the exact next action; `KNOWLEDGE.md` with durable
   facts a later session could not re-derive cheaply – especially external-system behaviour
-  established by experiment; `LOG.md` with what happened and why; and `/memory/tasks/` for anything
-  outstanding.
+  established by experiment; `LOG.md` with what happened and why; and the task's store
+  (CONTRACT §9) for anything outstanding.
 - Record **open questions with enough context to act on them**, not just their titles: what is
   unknown, what was already tried, and what would settle it.
 - Record **negative findings**. What was ruled out, and the evidence that ruled it out, is as
@@ -363,7 +363,8 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 - Delegate through `/shared/skills/delegate-work/`: a work packet that references canonical
   files rather than copying prose, and a result record the worker writes back. Packets and
   results are ephemeral instrumentation under `/temp/delegation/`, not task records. Work that
-  must outlive the session is an ordinary `/memory/tasks/` record with `waiting_on` and `next_review`.
+  must outlive the session is an ordinary task record (CONTRACT §9) with `waiting_on` and
+  `next_review`.
 - A worker is an agent started with a work packet. An agent started without one – a host's
   subagent given a piece of the session's own work – is not a worker and does not take on the
   worker limits below: it does the whole job as the session would, including the state, log and
@@ -623,12 +624,12 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
   weeks. A team thread is a conductor under `SMART-RULE-0024` for the cards of its team: it
   pulls a card, dispatches the workers it needs, reviews, merges to its project's branch and
   closes the card.
-- A **card** is a task record under `/memory/tasks/` with a `team`. A team thread takes a card
-  by setting `claimed_by` to its session name, `claimed_at` from the clock and
-  `status: in_progress`, and committing that record on its own (`tasks.py claim`); a conflict
-  on that commit means another thread took it first, and the loser moves on. A card leaving
-  `in_progress` loses its claim (`tasks.py release`, or completion). The task record stays the
-  only record: who holds a card lives nowhere else.
+- A **card** is a task record in a task store (CONTRACT §9) with a `team`. A team thread takes a
+  card by setting `claimed_by` to its session name, `claimed_at` from the clock and
+  `status: in_progress`, and committing that record on its own, in the repository that holds it
+  (`tasks.py claim`); a conflict on that commit means another thread took it first, and the
+  loser moves on. A card leaving `in_progress` loses its claim (`tasks.py release`, or
+  completion). The task record stays the only record: who holds a card lives nowhere else.
 - **Work in progress is limited.** A team holds at most `tasks.wip_limit` cards in
   `in_progress` (two, until a measured trial says otherwise), and the scrum master assigns no
   card past it. A card that waits on another team's card says so in `waiting_on`; finishing
@@ -763,7 +764,7 @@ These restatements of `/CONTRACT.md` keep no separate rule identifier. Find the 
 - Keep metadata minimal, explicit and useful. (CONTRACT §8.4)
 - Preserve raw files unchanged. (CONTRACT §11.1)
 - Create Markdown source records for raw files. (CONTRACT §11.2)
-- Treat `/memory/tasks/` as the canonical task system. (CONTRACT §9)
+- Treat the task stores of CONTRACT §9 – every node's `tasks/` and `/memory/tasks/` – as the canonical task system. (CONTRACT §9)
 - Use shared skills for reusable capabilities. (CONTRACT §10.1)
 - Keep project-specific configuration inside the project, and owner-wide skill configuration in `/memory/skills/<skill>/`. (CONTRACT §3.5 / §10.1)
 - Keep personal data out of the mechanics repository; it belongs in `/memory/`. (CONTRACT §3.4)

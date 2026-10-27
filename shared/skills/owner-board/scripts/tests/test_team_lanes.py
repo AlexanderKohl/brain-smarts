@@ -114,8 +114,8 @@ class TeamLanesBoardTests(unittest.TestCase):
                       mock.patch.object(team_lanes, "local_now", return_value=NOW)):
             patch.start()
             self.addCleanup(patch.stop)
-        store = self.brain.memory / "tasks"
-        (store / "open" / "TASK-2026-0901-beds.md").unlink()
+        self.garden = self.brain.store_dir("/memory/projects/example-garden")   # the garden's own task store
+        (self.garden / "open" / "TASK-2026-0901-beds.md").unlink()
         self.add("TASK-2026-0920", "ready", "alpha")
         self.add("TASK-2026-0921", "in_progress", "alpha", "Session Alpha One", "2026-01-10T08:30:00+10:00")
         self.add("TASK-2026-0922", "in_progress", "alpha", "Session Alpha Two", "2026-01-09T09:00:00+10:00")
@@ -129,7 +129,7 @@ class TeamLanesBoardTests(unittest.TestCase):
 
     def add(self, tid, status, team, by="null", at="null"):
         text = TASK.format(id=tid, status=status, team=team, by=by, at=at)
-        (self.brain.memory / "tasks" / "open" / (tid + "-fictional.md")).write_text(text, encoding="utf-8")
+        (self.garden / "open" / (tid + "-fictional.md")).write_text(text, encoding="utf-8")
 
     def set_wip_limit(self, limit):
         path = self.brain.memory / "skills" / "owner-board" / "config" / "boards.json"
@@ -183,9 +183,9 @@ class TeamLanesBoardTests(unittest.TestCase):
         self.assertIn("in progress 3 / 3", section)
 
     def test_a_board_without_teams_draws_no_lanes_and_the_personal_page_draws_its_own(self):
-        store = self.brain.memory / "tasks" / "open"
-        for path in store.glob("TASK-2026-092*.md"):
+        for path in (self.garden / "open").glob("TASK-2026-092*.md"):
             path.unlink()
+        store = self.brain.memory / "tasks" / "open"      # the owner store: the personal board
         self.add("TASK-2026-0930", "ready", "null")
         self.assertNotIn('class="lanes"', self.page())
         # A personal-board task with a team is on the personal page's own lane line.

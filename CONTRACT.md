@@ -4,11 +4,11 @@ title: Portable AI Brain Contract
 type: contract
 status: active
 schema_version: 0.2
-contract_version: 2.7.0
+contract_version: 3.0.0
 contract: /CONTRACT.md
 canonical: true
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-10-21T12:40:44+10:00
+updated: 2026-10-27T08:46:35+11:00
 owner: brain-owner
 ---
 
@@ -89,12 +89,14 @@ RULES.md
 STATE.md
 LOG.md
 KNOWLEDGE.md
+tasks/
 skills/
 data/
 sources/
+raw/
 ```
 
-Empty folders are optional until required. The five core Markdown files are required for project, domain and system nodes.
+Empty folders are optional until required. The five core Markdown files are required for project, domain and system nodes. A project node has this one layout wherever it lives – in memory at `/memory/projects/<node>/`, or in its own repository's `brain/` folder (section 16.2) – so it moves between the two unchanged.
 
 ### 3.2 Hierarchy and network
 
@@ -132,8 +134,8 @@ The brain is made of four layers, each with its own repository and its own audie
 
 1. **Mechanics (this repository).** The contract, generic rules, bootstrap and onboarding files, the core skills the brain itself depends on (a skill a `SMART-RULE` or this contract requires, or that another core skill calls), templates, schemas, the raw-file system node and governance proposals about the mechanics. It holds **no personal data**: no owner name, client, contact, company, account, location or tenant identifier, email address, phone number, machine path or owner project name. Anyone could adopt it unchanged.
 2. **Skill library (`/library/`).** Every other reusable skill: access to an outside system, or a way of working an owner may choose. Instructions, scripts, tests and generic external-API knowledge, under the same no-personal-data condition as the mechanics. An owner uses the skills listed in `active_skills` in `/memory/OWNER.md`, and may merge skills from other libraries into their own.
-3. **Memory (`/memory/`).** Everything specific to one owner: the owner profile, owner-layer rules, tasks, in-brain projects, contacts, raw files, sources, outbox, boards, the brain-wide `STATE.md`, `LOG.md` and `KNOWLEDGE.md`, per-skill owner configuration and notes, and pointer nodes for projects that live in their own repositories.
-4. **Project repositories.** Bodies of work with their own lifecycle, each in its own repository, checked out as siblings of the brain root (section 16). The memory keeps only a small pointer node for each.
+3. **Memory (`/memory/`).** Everything specific to one owner: the owner profile, owner-layer rules, the tasks that belong to no project, in-brain projects with their own tasks, sources and knowledge, contacts, the raw files and sources that belong to no single node, outbox, boards, the brain-wide `STATE.md`, `LOG.md` and `KNOWLEDGE.md`, per-skill owner configuration and notes, and pointer nodes for projects that live in their own repositories.
+4. **Project repositories.** Bodies of work with their own lifecycle, each in its own repository, checked out as siblings of the brain root (section 16). Each holds its project node, tasks and sources included, in its `brain/` folder. The memory keeps a small pointer node for each, holding only what the owner keeps private about the project.
 
 When an item could sit in memory or in a shareable layer (the mechanics or the skill library), it belongs in memory unless it is free of every owner specific listed above and useful to another owner as it stands. A mechanism learnt from an owner incident goes to the mechanics layer in generalised form, and the original incident, with its real identifiers, stays in memory at the node that owns it.
 
@@ -243,6 +245,10 @@ with its own date. A timeless fact needs no date. The repository preflight fails
 review date has passed, so stale knowledge surfaces instead of being served as current
 (proposal `RULE-2026-0045`).
 
+### `tasks/`
+
+Contains the node's task store (section 9): `inbox/`, `open/` and `completed/`, `recurring/` when needed, and a `STATE.md` the tasks skill generates from the records.
+
 ### `skills/`
 
 Contains local capabilities, instructions and executable scripts specific to the node.
@@ -253,7 +259,11 @@ Contains structured or generated data owned by the node.
 
 ### `sources/`
 
-Contains Markdown source records or project-local references to source material. Every source record must reference its immutable raw file.
+Contains the canonical Markdown source records of the sources this node owns, and references to source material owned elsewhere. Every source record must reference its immutable raw file.
+
+### `raw/`
+
+Contains the immutable raw files of the sources this node owns, at `raw/YYYY/MM/<source-id>/<original-filename>` (section 11.1).
 
 ## 5. Input classification
 
@@ -278,7 +288,7 @@ A fact, principle, preference, definition or established relationship expected t
 
 Store it in the `KNOWLEDGE.md` file or dedicated knowledge node that owns the subject.
 
-Place knowledge according to subject ownership, not the project active when it was mentioned.
+Place knowledge according to subject ownership, not the project active when it was mentioned. A fact about one project belongs in that project node's `KNOWLEDGE.md` – in its repository when it has one – and not in `/memory/KNOWLEDGE.md` or another node, unless the owner keeps it private, when it goes to the project's pointer node (section 16.1).
 
 ### 5.3 State change
 
@@ -292,7 +302,7 @@ Create a `LOG.md` entry when the change is significant, explains a decision or i
 
 An outstanding action that must remain visible after the current interaction.
 
-Create or update a canonical task record under `/memory/tasks/`.
+Create or update a canonical task record in its task store (section 9): the `tasks/` folder of the node its project reference names, or `/memory/tasks/` for a task with no project. Work that concerns several projects becomes one task per project (section 9).
 
 ### 5.5 Mixed input
 
@@ -374,7 +384,7 @@ Before creating a node:
 4. create the five core Markdown files from templates
 5. define concise metadata
 6. record dependencies
-7. create or link relevant tasks
+7. move or create its tasks in its own `tasks/` folder
 8. log the creation in the parent node
 
 ### 7.1 In memory or in its own repository
@@ -397,8 +407,8 @@ Each test is answered yes or no and recorded, with one line of evidence, in the 
 Moving a node out of memory later is an extraction, not a copy:
 
 1. extract the node's folder into a new repository with its history
-2. move the node's own files into the repository's `brain/` folder (section 16.2)
-3. replace the node in memory with a pointer node (section 16.1)
+2. after the owner has cleared what will become visible to anyone who can read the repository, move the node's own files – its core files and its `tasks/`, `sources/`, `raw/`, `data/` and `skills/` – unchanged into the repository's `brain/` folder (section 16.2), keeping task identifiers, History and authorship
+3. replace the node in memory with a pointer node (section 16.1), which receives, in folders of the same names, whatever the owner keeps private
 4. update references to the moved files across memory
 5. log the move in the node's new `brain/LOG.md` and in the memory parent node
 
@@ -406,7 +416,7 @@ Moving a node out of memory later is an extraction, not a copy:
 
 Every Markdown file must begin with YAML front matter.
 
-Exception: immutable evidence files stored under `/memory/raw/` are exempt. Do not add or rewrite front matter on raw files. Their companion Markdown source records under `/memory/sources/` (and any project-local derivatives) carry the required metadata and must reference the raw path.
+Exception: immutable evidence files stored in a raw store (section 11.1) – `/memory/raw/` or a node's `raw/` – are exempt. Do not add or rewrite front matter on raw files. Their companion Markdown source records in the `sources/` folder beside that raw store (and any derivatives in other nodes) carry the required metadata and must reference the raw path.
 
 ### 8.1 Required fields
 
@@ -492,12 +502,15 @@ Task-specific examples:
 ```yaml
 status: ready
 owner: brain-owner
+author: brain-owner
 priority: normal
 due: 2026-08-10
 next_review: 2026-08-07
 waiting_on: null
+schedule: null
 project_refs:
   - /memory/projects/example
+related_tasks: []
 ```
 
 ### 8.4 Metadata simplicity
@@ -516,7 +529,20 @@ Update the `updated` timestamp whenever substantive content or metadata changes.
 
 Tasks are a cross-cutting operating system, not an ordinary project.
 
-The canonical task store is `/memory/tasks/`. Tasks are owner content; the mechanics of the task system (its rules and templates) are kept for new owners in `/shared/templates/memory-skeleton/tasks/`.
+Every task lives in exactly one task store, and that record is canonical:
+
+- the `tasks/` folder of a node (section 3.1) holds every task whose project reference names that node: `/memory/projects/<node>/tasks/` for a node in memory, and `brain/tasks/` for a project in its own repository (section 16.2); a reference names the deepest node it is in, and a reference to a pointer node names its repository;
+- `/memory/tasks/` holds the tasks with no project reference.
+
+A task names one project. Work that concerns several projects is split into one task per project, each in the store of its own node, and each lists the identifiers of the others in its `related_tasks` field; every part records the split in a History entry. A completed record that already names several projects is not split, and is kept in the store of its first project reference.
+
+Every store has the same folders, record format, statuses and rules, and a `STATE.md` generated from its records, so a node moves between memory and its own repository unchanged. Task views – the task review, the boards, the scheduled review – read every store the brain can reach.
+
+Every task record carries `author`, the brain that created it, which never changes. A new task takes an identifier that names its author, `TASK-<author>-YYYY-NNNN`, where `<author>` is the creating brain's `owner_short_name` in lower case and the number is the next in that author's one sequence across every store, so two brains never number two tasks alike. An existing task keeps its identifier wherever it moves.
+
+Privacy is a place, not a flag. Whatever a repository's `brain/` holds can be read by everyone who can read the repository, now or once a collaborator joins. An owner-private task about a project in its own repository is kept in the pointer node's `tasks/` folder (section 16.1), and an owner-private note about a task in a repository is kept in `/memory/tasks/private/<task id>.md`, which names the task. Neither is ever drawn into the repository.
+
+Tasks in memory are owner content; the mechanics of the task system (its rules and templates) are kept for new owners in `/shared/templates/memory-skeleton/tasks/`.
 
 A task exists once and references every relevant project, person, organisation, skill or dependency.
 
@@ -574,8 +600,9 @@ When processing tasks:
 6. add `due` only when a real deadline exists
 7. add `next_review` for waiting, scheduled or delegated work
 8. update related node state when task completion changes reality
-9. move completed records to `/memory/tasks/completed/`
+9. move completed records to the `completed/` folder of their store
 10. preserve task history in the task body and task log
+11. when an app or the operating system runs work for the task on a schedule, name the job in the task's `schedule` field (the app, the job's name and its cadence), and record the outcome of each run as a History entry
 
 ### 9.4 Task versus project
 
@@ -583,7 +610,7 @@ A task is one directly completable action or outcome.
 
 A project requires coordination of multiple tasks over time.
 
-Promote a task into a project when it gains several dependent actions, multiple contributors, meaningful risks, substantial state or its own knowledge.
+Promote a task into a project when it gains several dependent actions, multiple contributors, meaningful risks, substantial state or its own knowledge. The task then moves into the new node's `tasks/` folder.
 
 ## 10. Skills, scripts and external systems
 
@@ -662,7 +689,7 @@ Read-only discovery that lists available targets does not require prior target c
 
 ### 11.1 Immutable raw store
 
-All uploaded or imported source files must be preserved in `/memory/raw/`. Raw files are owner evidence and never enter the mechanics repository.
+All uploaded or imported source files must be preserved in a raw store. Raw files are owner or project evidence and never enter the mechanics repository. A source owned by one node in memory goes to that node's `raw/`. A source about a project in its own repository goes to the repository's `brain/raw/`, like the project's tasks, unless the owner marks it private, when it goes to the pointer node's `raw/`. Any other source goes to `/memory/raw/`.
 
 The raw file is immutable source evidence.
 
@@ -671,21 +698,21 @@ Do not edit, overwrite, normalise or delete it as part of ordinary work.
 Store raw files using a stable source ID:
 
 ```text
-/memory/raw/YYYY/MM/<source-id>/<original-filename>
+<raw store>/YYYY/MM/<source-id>/<original-filename>
 ```
 
 Record a SHA-256 hash at ingestion.
 
-If the same file is uploaded again, detect it by hash and reuse the existing canonical raw record.
+If the same file is uploaded again, detect it by hash across every raw store the brain can reach and reuse the existing canonical raw record.
 
 ### 11.2 Automatic Markdown conversion
 
 When a raw file enters the repository:
 
-1. preserve the original under `/memory/raw/`
+1. preserve the original in its raw store (section 11.1)
 2. compute and record its SHA-256 hash
-3. create a canonical Markdown representation under `/memory/sources/`
-4. create project-local source references or derivatives where needed
+3. create a canonical Markdown representation in the `sources/` folder beside that raw store
+4. create source references or derivatives in other nodes where needed
 5. link every derivative back to the raw file
 6. record conversion method, time and limitations
 7. update the relevant node log
@@ -729,9 +756,9 @@ Mark incomplete extraction, OCR uncertainty, unsupported formats or lost formatt
 
 ### 11.5 Multi-project use
 
-The raw file and canonical source Markdown are globally accessible.
+The raw file and canonical source Markdown are accessible to every node that can resolve their path.
 
-Projects should reference them.
+Other nodes should reference them. A node in a project repository cannot resolve a `/memory/` path (section 16.2), so a source it needs belongs in its own `raw/` and `sources/`.
 
 Create a project-local derivative only when the project needs annotations, excerpts, mappings or a specialised representation.
 
@@ -898,9 +925,9 @@ An agent must not claim autonomous future follow-up unless an external scheduler
 
 Before finishing a substantive update, verify:
 
-- every Markdown file outside `/memory/raw/` begins with valid YAML front matter
-- every Markdown file outside `/memory/raw/` references `/CONTRACT.md`
-- immutable `/memory/raw/` Markdown evidence remains unchanged; companion source records under `/memory/sources/` carry metadata and `raw_source`
+- every Markdown file outside a raw store begins with valid YAML front matter
+- every Markdown file outside a raw store references `/CONTRACT.md`
+- immutable Markdown evidence in a raw store remains unchanged; companion source records in the `sources/` folder beside it carry metadata and `raw_source`
 - each durable item has one canonical home
 - task owners and statuses are clear
 - waiting tasks have `next_review`
@@ -930,13 +957,13 @@ Memory keeps one small pointer node per project repository, at `/memory/projects
 - `default_branch`: the branch that holds released or agreed work
 - what lives where: which of the project's records are in the repository's `brain/` folder, which are in memory, and which external systems hold the rest
 
-The pointer node may also hold owner-private notes that must not be visible to the project's collaborators, in its own `KNOWLEDGE.md`, `STATE.md` or `LOG.md`. It holds nothing else: no copy of the project's state, rules or knowledge.
+The pointer node may also hold what the owner keeps private about the project, in the layout of section 3.1: notes in its own `KNOWLEDGE.md`, `STATE.md` or `LOG.md`, private tasks in `tasks/`, and private sources in `sources/` and `raw/`. It holds nothing else: no copy of the project's state, rules, knowledge, tasks or sources.
 
-Tasks about the project remain canonical in `/memory/tasks/` and reference the pointer node in `project_refs`. A project with collaborators may also run its own issue tracker; an owner task then links the issue instead of copying it.
+Tasks about the project, open and completed alike, are kept in the repository's `brain/tasks/` (sections 9 and 16.2), except the owner's private tasks and private notes about it. A project with collaborators may also run its own issue tracker; a task then links the issue instead of copying it.
 
 ### 16.2 The project's own node files
 
-The project's node files – `README.md`, `RULES.md`, `STATE.md`, `LOG.md` and `KNOWLEDGE.md`, and any `sources/` or `data/` it owns – live inside the project repository in a `brain/` folder, so a collaborator who clones the repository receives them. They follow this contract: YAML front matter with `contract: /CONTRACT.md`, the standard file meanings of section 4, and the timestamp rules of section 8.2. Their `RULES.md` inherits `/CONTRACT.md`, `/RULES.md` and `/memory/RULES.md` for the owner's agents; a collaborator without the brain reads it as the project's own rules. A board the owner-board skill keeps for the project lives there too, in `brain/status/`, when more than one brain works on it. A project shared between brains also carries `brain/JOINING.md`, a joining manifest that names the repository, the working branch, the contract and skill versions it assumes, its shared boards, the vault entries each person creates for themselves (names only) and the records to read first; a brain joins from it with `/shared/skills/join-project/`, in its own memory, and never by copying another brain's memory. Every such brain is a peer: its records carry its author and are rewritten by no other author, its generated pages are not committed, and each owner's tasks about the project stay in that owner's `/memory/tasks/`, drawn only in that owner's memory, never into the repository.
+The project's node files – `README.md`, `RULES.md`, `STATE.md`, `LOG.md` and `KNOWLEDGE.md`, and its `tasks/`, `sources/`, `raw/` and `data/` in the layout of section 3.1 – live inside the project repository in a `brain/` folder, so a collaborator who clones the repository receives them. They follow this contract: YAML front matter with `contract: /CONTRACT.md`, the standard file meanings of section 4, and the timestamp rules of section 8.2. Their `RULES.md` inherits `/CONTRACT.md`, `/RULES.md` and `/memory/RULES.md` for the owner's agents; a collaborator without the brain reads it as the project's own rules. A board the owner-board skill keeps for the project lives there too, in `brain/status/`, when more than one brain works on it. A project shared between brains also carries `brain/JOINING.md`, a joining manifest that names the repository, the working branch, the contract and skill versions it assumes, its shared boards, the vault entries each person creates for themselves (names only) and the records to read first; a brain joins from it with `/shared/skills/join-project/`, in its own memory, and never by copying another brain's memory. Every such brain is a peer: its records carry its author and are rewritten by no other author, a task record excepted as below, and its generated pages are not committed. Any brain that works on the project may change a task record in `brain/tasks/`; every change adds a History entry `- <timestamp> – <author>: <what changed>`, so each edit names the brain that made it, and a Git conflict in a record is resolved by hand, keeping the History entries of both sides in time order. A task whose `owner` has left the project is reassigned by the repository's maintainer, with a History entry. Each owner's private tasks, notes and sources about the project stay in that owner's memory (section 16.1) and are never drawn into the repository.
 
 References from a project repository's `brain/` files to its own files use paths relative to the repository root, prefixed with the repository name and a colon when a reader outside the repository needs them (for example `example-repo:brain/STATE.md`). References into the brain use repository-root paths such as `/shared/skills/<skill>/`. A project repository never references `/memory/` paths, because a collaborator cannot resolve them.
 

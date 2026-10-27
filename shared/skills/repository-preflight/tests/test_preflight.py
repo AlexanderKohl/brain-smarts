@@ -22,6 +22,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 import preflight  # noqa: E402
+import task_state  # noqa: E402  (the tasks skill, on the path preflight_tasks gives it)
+import task_stores  # noqa: E402
 
 TS = "2026-01-01T09:00:00+10:00"
 HAS_GIT = shutil.which("git") is not None
@@ -79,9 +81,14 @@ class Brain:
         self.write("memory/RULES.md", md("owner-rules", "# Owner rules\n", type="rules"))
         self.write("memory/tasks/README.md", readme("tasks-readme", ["open"]))
         self.write("memory/tasks/open/README.md", readme("tasks-open-readme", []))
-        self.write("memory/tasks/STATE.md", md("tasks-state", "# State\n\n| Task | Status |\n|---|---|\n",
-                                               type="state"))
+        self.state()
         self.write_manifest("memory/repository-manifest.json")
+
+    def state(self) -> None:
+        """Generate the STATE.md of every reachable task store, as `tasks.py state` does (P23)."""
+        for store in task_stores.stores(self.root):
+            if store.reachable and store.path.is_dir():
+                task_state.write(store)
 
     def write(self, relative: str, text: str) -> Path:
         path = self.root / relative
@@ -300,27 +307,7 @@ class IgnoredPathTests(BrainTestCase):
 
 
 class TaskTests(BrainTestCase):
-    def test_open_memory_task_missing_from_state_is_an_error(self) -> None:
-        brain = self.make()
-        brain.write("memory/tasks/open/TASK-2026-0001.md",
-                    md("TASK-2026-0001", type="task", status="ready", owner="Example Owner"))
-        self.assertIn("/memory/tasks/open/TASK-2026-0001.md: open task TASK-2026-0001 is not listed "
-                      "in /memory/tasks/STATE.md", brain.run().errors)
-
-    def test_open_memory_task_listed_with_its_status_passes(self) -> None:
-        brain = self.make()
-        brain.write("memory/tasks/open/TASK-2026-0001.md",
-                    md("TASK-2026-0001", type="task", status="ready", owner="Example Owner"))
-        brain.write("memory/tasks/STATE.md", md("tasks-state", "| `TASK-2026-0001` | **ready** |\n", type="state"))
-        self.assertEqual(brain.run().errors, [])
-
-    def test_open_task_listed_with_the_wrong_status_is_an_error(self) -> None:
-        brain = self.make()
-        brain.write("memory/tasks/open/TASK-2026-0001.md",
-                    md("TASK-2026-0001", type="task", status="blocked", owner="Example Owner"))
-        brain.write("memory/tasks/STATE.md", md("tasks-state", "| `TASK-2026-0001` | **ready** |\n", type="state"))
-        self.assertIn("/memory/tasks/open/TASK-2026-0001.md: /memory/tasks/STATE.md lists TASK-2026-0001 "
-                      "without its status word blocked", brain.run().errors)
+    """The task stores of a brain with a memory are tested in test_task_stores.py (P25)."""
 
     def test_waiting_task_requires_next_review(self) -> None:
         brain = self.make()

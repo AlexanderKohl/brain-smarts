@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 status: accepted
 owner: brain-owner
 created: 2026-10-22T15:46:11+10:00
-updated: 2026-10-22T16:33:25+10:00
+updated: 2026-10-27T08:47:06+11:00
 rule_id: null
 accepted_by: brain-owner
 accepted_at: 2026-10-23T06:34:06+10:00
@@ -859,6 +859,31 @@ keep the others as references.
 
 The owner accepted P1 to P12 of the earlier draft on 22 October 2026 (record in the owner's
 memory); they were never applied. The owner accepted this amended set, texts P1 to P25 with choices A and B, on 2026-10-23T06:34:06+10:00, in answer to the direct question "Do you accept PROPOSAL-shared-project-tasks-in-the-repository as amended on 22 October, texts P1 to P25, with A and B?" (record in the owner's memory). Not yet applied.
+
+## Amendment of 23 Oct
+
+**What the owner accepted.** On 23 October 2026, at about 09:15 (+10:00), the owner accepted two
+changes to the protected *Failure behaviour* section of `/shared/skills/repository-preflight/SKILL.md`,
+which the build of the repository-preflight skill (B4, second round) had found to go beyond P25 as
+accepted. The second departs from P25's wording ("a failure in a repository's store is reported as
+a warning"; "with `--project <repository>`, that repository's store alone"), so it is recorded here
+as an amendment of this proposal rather than as a sentence added without acceptance. The record of
+that acceptance belongs in the owner's memory beside the acceptance of 06:34.
+
+The two changes, verbatim:
+
+1. Added to the *Failure behaviour* bullet that begins "fail on missing required Markdown
+   metadata", inside the parenthesis after "broken declared references": "a declared reference in
+   a memory file may name a file in a project repository as `<repository>:brain/<path>` (CONTRACT
+   §16.2): it is resolved in that repository's checkout and fails when the file or anchor is
+   missing there or no pointer node names the repository, it is a warning when the repository is
+   not checked out, and any other value that is not a repository-root path fails".
+2. Appended to the last sentence of P25: "except an identifier also used in another store, which
+   fails from the brain root as well; with `--project`, the repository's identifiers are compared
+   with those of every other store the brain can reach".
+
+The target file is already listed in `target_files`, and the coverage window stays the one of the
+acceptance of 2026-10-23T06:34:06+10:00. No other text changes.
 
 ## Implementation record
 

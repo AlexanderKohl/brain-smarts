@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-10-23T07:32:44+10:00
 ---
 
 # Shared Templates
@@ -18,6 +18,8 @@ Copy these templates when creating a node or source record. Replace placeholders
 Use `governance-proposal.template.md` for any proposed semantic change to protected governance. Store a mechanics proposal under `/governance/proposals/` while it is under review, and every accepted record, and every owner-layer proposal, under `/memory/governance/proposals/`, never in the active inherited rule path (CONTRACT §13.2).
 
 Use `project-pointer-README.template.md` for the pointer node memory keeps for a project that lives in its own repository (CONTRACT §16.1). The project's own node files inside its repository's `brain/` folder use the `node-*.template.md` files.
+
+Use `node-tasks-README.template.md` for the `README.md` of a node's task store (CONTRACT §9): a memory node's `tasks/`, a pointer node's private `tasks/`, or a project repository's `brain/tasks/`. It names no `/memory/` path, so it is safe in a repository.
 
 #### Folders
 

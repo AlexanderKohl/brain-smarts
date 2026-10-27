@@ -290,7 +290,7 @@ class ReconcileTests(unittest.TestCase):
         try:
             said = reconcile.check(brain.board())
             self.assertIn("TASK-2026-0901 still says ready, but the beds track has landed work or has a card in flight.", said)
-            self.assertIn("TASK-2026-0902 is the task for the seeds track and has no record in /memory/tasks/open.", said)
+            self.assertIn("TASK-2026-0902 is the task for the seeds track and has no open record in /memory/projects/example-garden/tasks.", said)
         finally:
             brain.close()
 

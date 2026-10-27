@@ -219,15 +219,18 @@ class RepositoryBoardTests(unittest.TestCase):
     def tearDown(self):
         self.brain.close()
 
-    def test_a_repository_page_carries_no_memory_path_and_no_tasks_and_tasks_go_to_a_memory_page(self):
+    def test_a_repository_page_draws_the_repository_tasks_and_no_memory_path(self):
         quiet(build_status.build, self.config, self.board)
         page = (self.board["folder"] / "status.html").read_text(encoding="utf-8")
         self.assertNotIn("/memory/", page)
-        self.assertNotIn('id="tasks"', page)
+        self.assertIn(("TASK-2026-0901", "ready"), task_board.shown_on(self.board["folder"] / "status.html"))
         self.assertTrue((self.board["folder"] / "state.json").exists())
         routed = task_board.route(self.config)
-        self.assertEqual(routed["garden"]["page"], self.brain.memory / "boards" / "projects" / "garden.html")
-        self.assertTrue(routed["garden"]["page"].exists())
+        self.assertEqual(routed["garden"]["page"], self.board["folder"] / "status.html")
+        # The owner's private tasks about the project have a page of their own in memory.
+        own = routed[task_board.OWN + "garden"]
+        self.assertEqual(own["page"], self.brain.memory / "boards" / "projects" / "garden.html")
+        self.assertTrue(own["page"].exists())
         self.assertTrue(all(migrate_board.check_no_memory_paths(self.board["folder"]) == [] for _ in [0]))
         index = (self.brain.memory / "boards" / "index.html").read_text(encoding="utf-8")
         self.assertIn('href="projects/garden.html"', index)
