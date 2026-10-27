@@ -239,12 +239,13 @@ class DelegationTestCase(unittest.TestCase):
         self.assertIn("WARN", out)
         self.assertIn("against a budget of 5", out)
 
-    def test_worktree_worker_commits_on_its_branch(self) -> None:
+    def test_worktree_worker_never_commits(self) -> None:
         run = self.new_run()
         self.new_packet(run, "--writes", "worktree")
         _, body = delegation.load(self.root / "temp/delegation/runs" / run / "W01.md")
-        self.assertIn("Commit on your own branch", body)
-        self.assertIn("never merge", body)
+        self.assertIn("Do not commit, stage or push, in your worktree", body)
+        self.assertNotIn("Commit on your own branch", body)
+        self.assertNotIn("push that branch", body)
         self.new_packet(run)
         _, body2 = delegation.load(self.root / "temp/delegation/runs" / run / "W02.md")
         self.assertIn("Do not commit", body2)

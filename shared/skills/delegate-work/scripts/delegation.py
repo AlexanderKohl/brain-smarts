@@ -419,8 +419,9 @@ def worker_instructions(fields: dict, result_ref: str) -> str:
     lines = [
         f"1. Bootstrap: read `/CONTRACT.md` section 1. {bootstrap}",
         f"2. {write_rule}",
-        ("3. Commit on your own branch at each logical checkpoint and push that branch; never merge "
-         "into main and never touch the shared worktree. The conductor merges (`SMART-RULE-0014`)."
+        ("3. Do not commit, stage or push, in your worktree or anywhere else; leave your changes "
+         "uncommitted there and give the commit message in your result. Never touch the shared "
+         "worktree. The conductor commits and merges (`SMART-RULE-0024`, `SMART-RULE-0014`)."
          if fields["writes"] == "worktree" else
          "3. Do not commit, stage or push. The conductor owns Git (`SMART-RULE-0014`)."),
         f"4. External systems and credentials: {external}",
