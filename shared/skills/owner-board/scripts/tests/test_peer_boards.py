@@ -470,14 +470,14 @@ id: x
 
 
 class ReleaseNotesSectionTests(unittest.TestCase):
-    """A board that names a release-notes project draws the section from the library skill."""
+    """A board that names a release-notes project draws the section from the release-notes skill."""
 
     def setUp(self):
         self.brain = Brain()
-        library = BRAIN / "library" / "skills" / "release-notes" / "scripts"
+        library = BRAIN / "shared" / "skills" / "release-notes" / "scripts"
         if not library.is_dir():
-            self.skipTest("the release-notes library skill is not checked out")
-        dest = self.brain.root / "library" / "skills" / "release-notes" / "scripts"
+            self.skipTest("the release-notes skill is not present")
+        dest = self.brain.root / "shared" / "skills" / "release-notes" / "scripts"
         dest.mkdir(parents=True)
         for path in library.glob("*.py"):
             shutil.copy(path, dest / path.name)
@@ -526,9 +526,9 @@ class SharedBoardReleaseNotesTests(unittest.TestCase):
 
     def setUp(self):
         self.brain = Brain(shared=True)
-        self.library = BRAIN / "library" / "skills" / "release-notes" / "scripts"
+        self.library = BRAIN / "shared" / "skills" / "release-notes" / "scripts"
         if not self.library.is_dir():
-            self.skipTest("the release-notes library skill is not checked out")
+            self.skipTest("the release-notes skill is not present")
         (self.brain.root / "shared" / "skills" / "owner-board" / "scripts").mkdir(parents=True)
         for name in ("events.py", "cards.py", "board_config.py"):
             shutil.copy(SCRIPTS / name, self.brain.root / "shared" / "skills" / "owner-board" / "scripts" / name)
@@ -549,7 +549,7 @@ class SharedBoardReleaseNotesTests(unittest.TestCase):
         self.brain.close()
 
     def copy_library(self):
-        dest = self.brain.root / "library" / "skills" / "release-notes" / "scripts"
+        dest = self.brain.root / "shared" / "skills" / "release-notes" / "scripts"
         dest.mkdir(parents=True)
         for path in self.library.glob("*.py"):
             shutil.copy(path, dest / path.name)
