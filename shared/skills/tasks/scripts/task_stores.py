@@ -151,8 +151,10 @@ def pointers(root: Path) -> list[Pointer]:
             except (OSError, UnicodeDecodeError, ValueError) as err:
                 problem = f"brain/JOINING.md cannot be read: {err}"
         visibility = str(meta.get("repo_visibility") or "").strip().lower()
+        # brain/JOINING.md's working branch, else the README's working_branch, else default_branch.
+        branch = branch or str(meta.get("working_branch") or "").strip() or str(meta.get("default_branch") or "")
         found.append(Pointer(node=_rel(root, readme.parent), readme=readme, repository=repository,
-                             checkout=checkout, branch=branch or str(meta.get("default_branch") or ""),
+                             checkout=checkout, branch=branch,
                              public={"public": True, "private": False}.get(visibility), problem=problem))
     return sorted(found, key=lambda p: p.node)
 

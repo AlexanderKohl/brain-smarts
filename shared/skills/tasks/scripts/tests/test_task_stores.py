@@ -140,6 +140,18 @@ class StoresTest(unittest.TestCase):
         pointer = [p for p in task_stores.pointers(self.root) if p.repository == "example-app"][0]
         self.assertEqual(pointer.branch, "testing")
 
+    def test_the_store_branch_falls_back_to_the_readme_working_branch_then_default_branch(self) -> None:
+        def branch() -> str:
+            return [p for p in task_stores.pointers(self.root) if p.repository == "example-app"][0].branch
+        self.assertEqual(branch(), "main")                              # default_branch alone
+        self.brain.node(POINTER, "Example app", node_type="project_pointer",
+                        repo_url="https://example.com/sam/example-app.git", local_path="example-app",
+                        default_branch="main", working_branch="staging")
+        self.assertEqual(branch(), "staging")                           # the README's working_branch
+        (self.clone / "brain" / "JOINING.md").write_text(
+            "---\nid: joining\ntitle: Joining\njoining:\n  working_branch: testing\n---\n", encoding="utf-8")
+        self.assertEqual(branch(), "testing")                           # brain/JOINING.md wins
+
     def test_node_of_takes_the_deepest_node_and_skips_what_is_no_node(self) -> None:
         node_of = lambda ref: task_stores.node_of(self.root, ref)  # noqa: E731
         self.assertEqual(node_of("/memory/projects/garden/pond/notes.md"), "/memory/projects/garden/pond")

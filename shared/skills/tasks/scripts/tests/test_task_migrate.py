@@ -180,6 +180,45 @@ class MigrateTest(unittest.TestCase):
         self.assertTrue((self.store / "open/TASK-2026-0006-fees.md").is_file())
         self.assertFalse(moved.exists())
 
+    def add_pointer_private(self) -> None:
+        self.brain.add("open", "TASK-2026-0008-badge", record(
+            "TASK-2026-0008", "Draw the badge", "ready", refs=[POINTER]),
+            store=self.root / "memory/projects/example-app/tasks")
+
+    def test_a_record_already_in_the_pointer_private_store_is_listed_and_moves(self) -> None:
+        self.add_pointer_private()
+        code, out = self.migrate("--repo", "example-app", "--dry-run")
+        self.assertEqual(code, 0, out)
+        ids = [i["id"] for i in self.listing("repository-example-app")["items"]]
+        self.assertIn("TASK-2026-0008", ids)
+        lst = str(self.root / "temp/migration/repository-example-app.json")
+        n = ids.index("TASK-2026-0008") + 1
+        others = ",".join(str(i) for i in range(1, len(ids) + 1) if i != n)
+        self.migrate("--decide", lst, "--move", str(n), "--hold", others)
+        code, out = self.migrate("--repo", "example-app", "--list", lst)
+        self.assertEqual(code, 0, out)
+        moved = self.clone / "brain/tasks/open/TASK-2026-0008-badge.md"
+        self.assertEqual(self.meta(moved)["project_refs"], ["example-app:brain"])
+        self.assertFalse((self.root / "memory/projects/example-app/tasks/open/TASK-2026-0008-badge.md").exists())
+        self.assertNotIn("`TASK-2026-0008`", (self.root / "memory/projects/example-app/tasks/STATE.md")
+                         .read_text(encoding="utf-8"))
+
+    def test_a_private_decision_on_a_record_already_private_changes_nothing(self) -> None:
+        self.add_pointer_private()
+        source = self.root / "memory/projects/example-app/tasks/open/TASK-2026-0008-badge.md"
+        before = source.read_text(encoding="utf-8")
+        self.migrate("--repo", "example-app", "--dry-run")
+        lst = str(self.root / "temp/migration/repository-example-app.json")
+        self.migrate("--decide", lst, "--all", "hold")
+        ids = [i["id"] for i in self.listing("repository-example-app")["items"]]
+        self.assertIn("TASK-2026-0008", ids)
+        self.migrate("--decide", lst, "--private", str(ids.index("TASK-2026-0008") + 1))
+        code, out = self.migrate("--repo", "example-app", "--list", lst)
+        self.assertEqual(code, 0, out)
+        self.assertIn("already private TASK-2026-0008", out)
+        self.assertEqual(source.read_text(encoding="utf-8"), before)
+        self.assertFalse(list((self.store / "migrations").glob("*-repository-example-app.json")))
+
     def test_hold_moves_nothing(self) -> None:
         self.migrate("--repo", "example-app", "--dry-run")
         lst = str(self.root / "temp/migration/repository-example-app.json")

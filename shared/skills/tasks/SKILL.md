@@ -18,7 +18,7 @@ metadata:
     - /shared/skills/owner-board
     - /shared/skills/repository-preflight
   created: 2026-09-23T13:10:00+10:00
-  updated: 2026-10-23T08:25:27+10:00
+  updated: 2026-10-28T08:43:45+10:00
 ---
 
 # Tasks
@@ -48,7 +48,7 @@ Every task lives in exactly one store, and the scripts find it there (`scripts/t
 A node is a folder under `/memory/` with a `node_readme` README, other than `/memory/projects/`,
 anything below a `tasks`, `skills`, `data`, `sources`, `raw` or `status` folder, and collections
 and libraries. A pointer is a node whose README carries `repo_url`; its repository's store branch
-is `working_branch` in `brain/JOINING.md`, else the pointer's `default_branch`. A repository not
+is `working_branch` in `brain/JOINING.md`, else the pointer README's `working_branch`, else its `default_branch`. A repository not
 checked out here is listed and never read or written. Every store has `inbox/`, `open/`,
 `completed/` and, when needed, `recurring/`, and a `STATE.md` generated from its records.
 

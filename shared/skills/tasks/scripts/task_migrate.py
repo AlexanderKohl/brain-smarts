@@ -4,7 +4,7 @@
     migrate --split --list FILE            make the cleared splits, in place in their store
     migrate --node NODE [--dry-run]        a memory node's tasks into NODE/tasks/ (nothing leaves memory)
     migrate --owner-store [--dry-run]      `author` and an attributed entry on the tasks with no project
-    migrate --repo REPOSITORY --dry-run    the move list, possibly-private lines flagged
+    migrate --repo REPOSITORY --dry-run    the move list (owner store and pointer-private store), lines flagged
     migrate --repo REPOSITORY --list FILE  move what the owner cleared: move, private or hold
     migrate --decide FILE --all move --private 3,9 --hold 12 --private-lines 15:2,4
     migrate --reverse LEDGER               move a node or repository move back
@@ -193,6 +193,13 @@ def node_items(root: Path, node: str) -> list:
             if t.refs() and task_stores.node_of(root, t.refs()[0]) == node]
 
 
+def repo_records(root: Path, node: str) -> list:
+    """What a repository move considers: the pointer node's tasks in the owner store, then the
+    records already in its private store, so a "private" decision can still be moved later."""
+    private = task_stores.store_for(root, node, private=True)
+    return node_items(root, node) + load_tasks(private.path, owner=private)
+
+
 def _move(root: Path, task, target_store, what: str, author: str, at: str, fields: dict | None = None,
           text: str | None = None) -> Path:
     source = task.path
@@ -261,7 +268,7 @@ def repo_items(root: Path, repository: str) -> tuple[list, list[dict]]:
     except ImportError:
         terms = []
     tasks, items = [], []
-    for task in node_items(root, node):
+    for task in repo_records(root, node):
         text = task.path.read_text(encoding="utf-8")
         _, body = _body(text)
         found = [{"line": n, "text": line.strip(), "flags": flags(line, root, terms)}
@@ -313,7 +320,7 @@ def apply_repo(root: Path, repository: str, listing: dict, now: str | None, offl
     private_store = task_stores.store_for(root, node, private=True)
     author = brain_author(root)
     at, said = stamp(root, now)
-    by_id = {t.tid: t for t in node_items(root, node)}
+    by_id = {t.tid: t for t in repo_records(root, node)}
     _refuse_broken([by_id[i["id"]] for i in listing["items"] if i["decision"] in ("move", "private")])
     planned = []
     for item in listing["items"]:
@@ -337,6 +344,9 @@ def apply_repo(root: Path, repository: str, listing: dict, now: str | None, offl
             said.append(f"held {task.tid}")
             continue
         if item["decision"] == "private":
+            if task.store is not None and task.store.kind == "pointer-private":
+                said.append(f"already private {task.tid}")       # already there: nothing to move
+                continue
             path = _move(root, task, private_store, f"moved into the pointer node's private tasks/ ({PROPOSAL})",
                          author, at)
             moves.append({"id": task.tid, "from": _show(root, task.path), "to": _show(root, path), "store": "private"})
@@ -357,7 +367,9 @@ def apply_repo(root: Path, repository: str, listing: dict, now: str | None, offl
         said += regenerate(task_stores.owner_store(root))
     if "repository" in kinds:
         said += regenerate(repo)
-    if "private" in kinds:
+    left_private = any(item["decision"] == "move" and task.store is not None and task.store.kind == "pointer-private"
+                       for item, task, _ in planned)
+    if "private" in kinds or left_private:
         said += regenerate(private_store)
     if moves:
         said.append(f"ledger: {_show(root, _ledger(root, at, 'repository', repository, moves))}")
