@@ -4,10 +4,10 @@ title: One structure for every project node, with its own tasks, sources and fac
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: accepted
+status: implemented
 owner: brain-owner
 created: 2026-10-22T15:46:11+10:00
-updated: 2026-10-27T08:47:06+11:00
+updated: 2026-10-27T08:50:58+10:00
 rule_id: null
 accepted_by: brain-owner
 accepted_at: 2026-10-23T06:34:06+10:00
