@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-28T07:43:53+10:00
-updated: 2026-10-23T08:07:02+10:00
+updated: 2026-10-27T16:58:41+10:00
 owner: brain-owner
 ---
 
@@ -24,3 +24,7 @@ listed here, so every old link still leads somewhere. Rows are in removal order.
 | `/governance/proposals/one-worktree-per-session.md` | 2026-09-28 | Implemented as `SMART-RULE-0038` in `/RULES.md` and the skills it names; the decision record went to the owner's memory, `/memory/governance/proposals/` |
 | `/ONBOARDING_AGENT.md` | 2026-09-28 | Nothing was lost: its skill tables are the folder summaries in `/shared/skills/README.md` and `/library/skills/README.md`; its bootstrap steps are CONTRACT §1 and `/BOOTSTRAP.md`; its operating notes are the rules in `/RULES.md`; ports and vault names are in the skills that use them |
 | `/library/skills/raise-ambition/SKILL.md` | 2026-10-23 | Moved to `/shared/skills/raise-ambition/SKILL.md` when `SMART-RULE-0044` made it a core skill (proposal `PROPOSAL-raise-ambition-for-every-user`) |
+| `/library/skills/command-output/SKILL.md` | 2026-10-27 | Moved with its whole folder to `/shared/skills/command-output/` when `SMART-RULE-0047` made it a core skill (proposal `PROPOSAL-promote-owner-rules`) |
+| `/library/skills/release-notes/SKILL.md` | 2026-10-27 | Moved with its whole folder to `/shared/skills/release-notes/` when `SMART-RULE-0046` made it a core skill (proposal `PROPOSAL-promote-owner-rules`) |
+| `/library/skills/product-feedback/SKILL.md` | 2026-10-27 | Moved with its whole folder to `/shared/skills/product-feedback/` when `SMART-RULE-0048` made it a core skill (proposal `PROPOSAL-promote-owner-rules`) |
+| `/library/skills/release-notes/scripts/release_notes.py` | 2026-10-27 | Moved to `/shared/skills/release-notes/scripts/release_notes.py` with its skill (proposal `PROPOSAL-promote-owner-rules`) |

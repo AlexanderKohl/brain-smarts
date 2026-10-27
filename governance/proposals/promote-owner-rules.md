@@ -4,14 +4,14 @@ title: Four owner-layer rules become mechanics rules
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: proposed
+status: implemented
 owner: brain-owner
 created: 2026-10-23T08:13:29+10:00
-updated: 2026-10-23T08:13:29+10:00
-rule_id: null
-accepted_by: null
-accepted_at: null
-implemented_at: null
+updated: 2026-10-27T16:58:41+10:00
+rule_id: SMART-RULE-0045, SMART-RULE-0046, SMART-RULE-0047, SMART-RULE-0048; MEMORY-RULE-0003 amended; MEMORY-RULE-0002, MEMORY-RULE-0004, MEMORY-RULE-0005 retired
+accepted_by: brain-owner
+accepted_at: 2026-10-27T16:58:41+10:00
+implemented_at: 2026-10-27T16:58:41+10:00
 previous_contract_version: 2.7.0
 new_contract_version: 2.7.0
 target_files:

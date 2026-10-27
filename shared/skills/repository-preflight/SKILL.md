@@ -105,7 +105,7 @@ python shared/skills/repository-preflight/scripts/session.py list
   another. A name already used as a branch or folder is refused.
 - `finish` refuses a copy with uncommitted changes, then refreshes the generated views before
   anything is merged: for every git project in `/memory/skills/release-notes/config/release-notes.json`
-  it runs `release_notes.py fix`, `link <project>` and `build` (`/library/skills/release-notes/`),
+  it runs `release_notes.py fix`, `link <project>` and `build` (`/shared/skills/release-notes/`),
   rebuilds every board with `build_status.py --all --no-fetch` (`/shared/skills/owner-board/`),
   and commits the regenerated brain files in the copy so the finish carries them. A note
   repaired in a project repository is left there as a change: the repository and files that
