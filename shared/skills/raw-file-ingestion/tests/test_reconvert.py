@@ -65,9 +65,12 @@ class ReconvertTests(IngestTestCase):
         path.write_text(text, encoding="utf-8", newline="\n")
         return result, path
 
-    def assert_fields_carried(self, before: str, after: str, extra: list[str]) -> None:
+    def assert_fields_carried(self, before: str, after: str, extra: list[str], *,
+                              derivative: bool = False) -> None:
         self.assertEqual(keys(after), keys(before) + extra)
-        for key in ("id", "created", "title", "raw_source", "raw_sha256", "owner"):
+        own_id = field(before, "id").strip('"') + ("-reconverted" if derivative else "")
+        self.assertEqual(field(after, "id").strip('"'), own_id)
+        for key in ("created", "title", "raw_source", "raw_sha256", "owner"):
             self.assertEqual(field(after, key), field(before, key), key)
         self.assertIn("tags:\n  - orchard\n  - fictional\n", after)
         for ref in REFS:
@@ -109,7 +112,8 @@ class ReconvertTests(IngestTestCase):
         beside = path.with_name(path.stem + ".reconverted.md")
         self.assertEqual(json.loads(done.stdout)["written"], "/" + beside.relative_to(self.brain.root).as_posix())
         derivative = beside.read_text(encoding="utf-8")
-        self.assert_fields_carried(before.decode("utf-8"), derivative, [])   # replaced where it stood
+        self.assert_fields_carried(before.decode("utf-8"), derivative, [],   # replaced where it stood
+                                   derivative=True)
         self.assertNotIn("source-ffffffffffff-stale", derivative)
         self.assertIn(f'canonical_source_md: "{result["canonical_markdown"]}"', derivative)
         self.assertIn("Plot B-07 held by Ferren Ashgrove", extracted(derivative))
@@ -125,6 +129,17 @@ class ReconvertTests(IngestTestCase):
         self.assertIn("Plot C-12 held by Juniper Vale", extracted(second))
         self.assertNotIn("Ferren Ashgrove", extracted(second))
         self.assertEqual(second.count("canonical_source_md:"), 1)
+
+    def test_the_derivative_gets_its_own_id_so_no_two_records_share_one(self):
+        result, path = self.stale_record("ledger.txt", "Plot D-03 held by Odile Brack\n",
+                                         updated="2026-02-11T14:23:51+00:00")
+        record_id = field(path.read_text(encoding="utf-8"), "id")
+        done = self.reconvert(result["source_id"])
+        self.assertEqual(done.returncode, 0, done.stderr)
+        derivative = path.with_name(path.stem + ".reconverted.md").read_text(encoding="utf-8")
+        self.assertEqual(field(derivative, "id").strip('"'), record_id.strip('"') + "-reconverted")
+        self.assertEqual(keys(derivative).count("id"), 1)
+        self.assertEqual(field(path.read_text(encoding="utf-8"), "id"), record_id)
 
     def test_list_names_pending_records_in_id_order_and_not_a_complete_one(self):
         pending = [self.brain.ingest_ok(self.brain.sample(name, data))

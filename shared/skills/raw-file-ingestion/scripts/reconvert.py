@@ -34,6 +34,7 @@ from ingest_raw import (  # noqa: E402
 )
 
 DERIVATIVE = ".reconverted"
+DERIVATIVE_ID = "-reconverted"                   # a derivative's id: the record id plus this
 CHANGED = ("updated", "conversion_status")          # the fields a re-conversion sets
 KEY = re.compile(r"([A-Za-z_][\w-]*):(?:\s|$)")
 FORBIDDEN = re.compile(r"[/\\*?\[]")
@@ -131,7 +132,8 @@ def render(blocks: list[tuple[str, list[str]]], data: dict, *, conversion, times
 
     Every original field keeps its lines and its place; only CHANGED take the new values. Fields
     write_source_record sets that the record lacked follow. canonical_ref, for a derivative, sets
-    canonical_source_md (replacing any value); without it the record's own value is kept.
+    canonical_source_md (replacing any value) and gives the derivative its own id, the
+    record id plus -reconverted; without it the record's own value is kept.
     """
     refs = data["project_refs"]
     with tempfile.TemporaryDirectory() as scratch:
@@ -147,7 +149,8 @@ def render(blocks: list[tuple[str, list[str]]], data: dict, *, conversion, times
     if canonical_ref:
         new["canonical_source_md"] = [f"canonical_source_md: {yaml_quote(canonical_ref)}"]
         fresh = [*fresh, ("canonical_source_md", new["canonical_source_md"])]
-    changed = (*CHANGED, "canonical_source_md") if canonical_ref else CHANGED
+        new["id"] = [f"id: {yaml_quote(data['id'] + DERIVATIVE_ID)}"]   # never the record's own id
+    changed = (*CHANGED, "canonical_source_md", "id") if canonical_ref else CHANGED
     merged = [(key, new[key] if key in changed and key in new else lines) for key, lines in blocks]
     have = {key for key, _ in merged}
     merged += [(key, lines) for key, lines in fresh if key not in have]
