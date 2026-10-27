@@ -17,7 +17,7 @@ skill_refs:
   - /shared/skills/repository-preflight
   - /shared/skills/owner-board
   - /shared/skills/manage-credentials
-  - /library/skills/product-feedback
+  - /shared/skills/product-feedback
 ---
 
 # Join Project

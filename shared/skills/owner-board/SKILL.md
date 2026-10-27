@@ -31,7 +31,7 @@ project_refs:
 skill_refs:
   - /shared/skills/delegate-work
   - /shared/skills/tasks
-  - /library/skills/release-notes
+  - /shared/skills/release-notes
 ---
 
 # Owner Board
@@ -359,7 +359,7 @@ Git and rebuilt after every pull.
 ### Release notes on the board
 
 A board whose entry carries `release_notes: ["<project id>", ...]` draws, below its cards, a
-**Release notes** section for those projects (`/library/skills/release-notes/`): every
+**Release notes** section for those projects (`/shared/skills/release-notes/`): every
 unreleased note with its visibility choice and in-place editing, the commits no note claims
 (**New note**, **Add to an existing note**, **Not user-visible**), and a lane per environment
 of what has been released to testing and to production. The choices save with the verdicts

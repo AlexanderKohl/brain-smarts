@@ -143,8 +143,8 @@ def esc(value) -> str:
 
 
 def skill_module(brain: Path):
-    """The library skill's choices module, or None when the library is not checked out."""
-    scripts = brain / "library" / "skills" / "release-notes" / "scripts"
+    """The release-notes skill's choices module, or None when it is absent."""
+    scripts = brain / "shared" / "skills" / "release-notes" / "scripts"
     if not (scripts / "release_choices.py").is_file():
         return None
     if str(scripts) not in sys.path:

@@ -386,7 +386,7 @@ def step_feedback(root: Path, manifest: dict, report: Report) -> None:
     entry = str(feedback.get("vault_entry") or "")
     config = root / COMPANION
     if not config.is_file():
-        report.own(f"set up the Brain Feedback companion (/library/skills/product-feedback/SKILL.md, Joining a team inbox) "
+        report.own(f"set up the Brain Feedback companion (/shared/skills/product-feedback/SKILL.md, Joining a team inbox) "
                    f"with inbox_url {inbox}" + (f" and inbox_vault_entry {entry}" if entry else ""))
     else:
         data = json.loads(config.read_text(encoding="utf-8"))
