@@ -206,7 +206,13 @@ def host_settings(events: list[dict] | None = None) -> dict:
         entry: dict = {}
         if event.get("matcher"):
             entry["matcher"] = event["matcher"]
-        entry["hooks"] = [{"type": "command", "command": f"python {event['command']}"}]
+        # The host runs a hook in the session's current folder, which may be any folder below the
+        # brain root, and a failed PreCompact hook blocks compaction (the thread then stops with
+        # "Prompt is too long"). So the script is named by its absolute path in this brain root,
+        # which works in every shell; the settings file is local and never committed.
+        script, _sep, args = event["command"].partition(" ")
+        command = f'python "{(ROOT / script).as_posix()}" {args}'.rstrip()
+        entry["hooks"] = [{"type": "command", "command": command}]
         hooks.setdefault(event["claude_code"], []).append(entry)
     return {"hooks": hooks}
 
