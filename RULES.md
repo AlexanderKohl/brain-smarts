@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-10-23T08:06:02+10:00
+updated: 2026-10-27T16:58:41+10:00
 owner: brain-owner
 ---
 
@@ -67,6 +67,10 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 | `SMART-RULE-0042` | Code repositories run the code map's checks | this file; `/shared/skills/code-map/` |
 | `SMART-RULE-0043` | Work moves between threads through cards | this file; `/shared/skills/delegate-work/`; `/shared/skills/tasks/` |
 | `SMART-RULE-0044` | Raise the ambition of every request | this file; `/shared/skills/raise-ambition/` |
+| `SMART-RULE-0045` | Host plugin skills act under the brain | this file |
+| `SMART-RULE-0046` | A release note for every change a user would notice | this file; `/shared/skills/release-notes/` |
+| `SMART-RULE-0047` | Long command output is shortened before the model reads it | this file; `/shared/skills/command-output/` |
+| `SMART-RULE-0048` | One conversation with the owner | this file; `team_sessions_max` in `/memory/OWNER.md`; `/shared/skills/product-feedback/` |
 
 ## SMART-RULE-0010 – Communication efficiency
 
@@ -655,6 +659,99 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 - The agent never widens the work without the user's yes, does not repeat a bigger version the
   user declined for the same request, and keeps the suggestion to a few lines. Safety, cost,
   side-effect and governance rules are unchanged.
+
+## SMART-RULE-0045 – Host plugin skills act under the brain
+
+- A host plugin skill is a skill installed in one AI host rather than in the brain (for example a
+  host's engineering, marketing, design or legal plugins). It may be used as a tool inside brain
+  work. `/CONTRACT.md`, this file, `/memory/RULES.md` and the active node's rules govern it: where a
+  plugin's own instructions differ – output style, list order, record formats, sending messages,
+  external writes, commits – the brain's rule applies.
+- Work done with a plugin follows the brain skill it serves: engineering work stays inside the
+  product-development process (`SMART-RULE-0016`) with its gates, versions and checkpoint commits;
+  user-interface work inside the brain's UI skills; marketing and legal work inside the owning
+  project's node. The owner's mapping of enabled plugins to brain skills is kept in
+  `/memory/ONBOARDING_OWNER.md` § Host plugins and updated whenever a plugin is enabled or disabled.
+- Output lands in its canonical home in house style: a draft in the owning node or
+  `/memory/outbox/`, a decision in the node's `STATE.md` or `KNOWLEDGE.md`, a task in
+  `/memory/tasks/`. Messages are drafted, never sent without the owner's approval, and a plugin
+  connector's write to an outside system needs the confirmed target of CONTRACT §10.5 like any
+  other.
+- **Learnings flow into the brain.** Using a plugin skill is ordinary evidence under
+  `SMART-RULE-0028`. At the next natural checkpoint the agent records, in the owning subject's
+  knowledge store or `data/learnings/`: what the plugin produced that proved useful or wrong, the
+  owner's corrections to its output and the preference behind them, durable decisions it helped
+  reach, and failures or limits met. Each record names the host and plugin skill that produced the
+  output. Routine use that teaches nothing needs no record.
+- A plugin pattern that proves useful more than once is a candidate brain skill, suggested for
+  promotion under `SMART-RULE-0032`, so the capability becomes portable to hosts that lack the
+  plugin.
+- A plugin connector's account is recorded in the owner's credential registry as
+  `managed_by: host` when it is first used for real work; its credentials stay with the host,
+  never in the brain.
+
+## SMART-RULE-0046 – A release note for every change a user would notice
+
+- A release note records one change that someone who uses the system – staff, customers, or a
+  colleague working in a platform the brain builds in – would see, do, receive or need to watch for
+  differently. It is written from their side, in their words, with no code terms. Commits and
+  their messages stay the developer's record and are not release notes.
+- One note per user-visible outcome, never per commit. The agent opens the note when the work
+  starts and names it in each commit that belongs to it (`Release-note: <slug>` trailer). A later
+  commit that changes what a note says updates the note in the same commit. Refactors, tests,
+  tooling and fixes no user could have met get no note; a commit that needs none but would
+  otherwise be listed as missing one goes in `release-notes/not-user-visible.txt`.
+- Every version that raises the first or middle number (`SMART-RULE-0026`) names at least one note
+  in its commits. The project checks this on every push to its development branch, not only on
+  pull requests: a push with a feature version that names no note, or names one that does not
+  exist, fails.
+- A note's `commits` and `versions` are generated from the trailers by
+  `/shared/skills/release-notes/` (`release_notes.py link`), never kept by hand.
+- A note's `kind` is one of `added`, `changed`, `fixed` or `removed`, and its other fields follow
+  the release-notes skill; the project's check refuses anything else.
+- Code notes live in the project repository under `release-notes/unreleased/`. Notes for changes
+  made in a no-code platform come from that platform's export where a tool provides one, or are
+  written by hand in the owning node.
+- Every note starts as `visibility: undecided`. Only the owner moves a note to `announce`, `hold`
+  or `internal`. At release, only `announce` notes are published to the team; `undecided` and
+  `hold` notes carry forward to the next release; `internal` notes are recorded and never sent.
+- A production release is a merge to the repository's production branch, or the platform
+  equivalent the owner layer or the project's rules name.
+
+## SMART-RULE-0047 – Long command output is shortened before the model reads it
+
+- A shell command's long output reaches the model shortened by `/shared/skills/command-output/`:
+  its head and tail, every error line, and a last line naming the file that holds the full output.
+  Short output, and the output of a command the skill does not recognise, reach the model
+  unchanged.
+- On a host whose after-command hook is registered (the skill's *Hosts* section), the hook does
+  this and the agent does nothing. On any other host, the agent runs a test run, a build, an
+  install, or a long `git diff` or `git log` through the skill's wrapper, `run.py`.
+- An agent that needs more than the shortened output reads the named file. It does not run the
+  command again to see the rest.
+- When shortened output hid something an agent needed, the agent tells the owner in its next reply
+  and records the case under `/memory/projects/brain-development/` as evidence about the filter
+  (`SMART-RULE-0028`).
+
+## SMART-RULE-0048 – One conversation with the owner
+
+- The owner talks to one conductor thread at a time. The conductor answers the owner, puts every
+  question to the owner, and gets work done through workers (`SMART-RULE-0024`).
+- For a task that will take more than a day and passes several of the owner's gates, the
+  conductor may start a team session: a separate agent session that conducts that one body of work
+  with its own workers (a team thread, `SMART-RULE-0043`). At most `team_sessions_max` in
+  `/memory/OWNER.md` run at once, two when it is not set. A team session never puts a question to
+  the owner and never starts another session; it sends its questions and results to the
+  conductor, who asks the owner in the conversation. The conductor archives a team session the day
+  it hands back. No other session is started unless the owner asks for one in words, or a rule
+  names it.
+- Every packet that changes code carries the pre-merge checklist. The conductor runs it again on
+  the merged tree before every push: the full unit suite, the code map check, the build, the
+  version and release-note checks, unique migration names, and a safe fallback when a read fails.
+  A push goes only after the checks pass, and CI results are read after each push, before the next
+  merge.
+- When the conductor's context reaches its checkpoint (`SMART-RULE-0019`), it hands over to one
+  successor conductor and stops. The successor is the only thread the owner talks to.
 
 ## Contract restatements
 
