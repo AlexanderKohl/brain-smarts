@@ -68,7 +68,7 @@ GENERATED = {
 
 
 # The generated views every finish refreshes before it merges, each relative to the copy.
-RELEASE_NOTES = "library/skills/release-notes/scripts/release_notes.py"
+RELEASE_NOTES = "shared/skills/release-notes/scripts/release_notes.py"
 RELEASE_CONFIG = "memory/skills/release-notes/config/release-notes.json"
 BOARDS_CONFIG = "memory/skills/owner-board/config/boards.json"
 BUILD_STATUS = "shared/skills/owner-board/scripts/build_status.py"
