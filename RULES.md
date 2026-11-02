@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-10-27T16:58:41+10:00
+updated: 2026-11-03T09:30:23+10:00
 owner: brain-owner
 ---
 
@@ -736,16 +736,30 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 
 ## SMART-RULE-0048 – One conversation with the owner
 
-- The owner talks to one conductor thread at a time. The conductor answers the owner, puts every
-  question to the owner, and gets work done through workers (`SMART-RULE-0024`).
-- For a task that will take more than a day and passes several of the owner's gates, the
-  conductor may start a team session: a separate agent session that conducts that one body of work
-  with its own workers (a team thread, `SMART-RULE-0043`). At most `team_sessions_max` in
-  `/memory/OWNER.md` run at once, two when it is not set. A team session never puts a question to
-  the owner and never starts another session; it sends its questions and results to the
-  conductor, who asks the owner in the conversation. The conductor archives a team session the day
-  it hands back. No other session is started unless the owner asks for one in words, or a rule
-  names it.
+- The owner's work is divided into areas, each with its own lifecycle, node and data: for example
+  strategy and finance, a product, and operations in external systems. `/memory/OWNER.md` names
+  the areas in `conductor_areas`; without that field there is one area. Each area has one
+  conductor thread, the owner's one conversation for that area: it answers the owner, puts every
+  question of its area to the owner, and gets work done through workers (`SMART-RULE-0024`). At
+  most one live conductor per area, and no more areas than `conductor_areas` names. The
+  `## Handover` of `/memory/projects/brain-development/STATE.md` names every live conductor with
+  its area and the time it took over; a new thread that finds a live conductor for its area asks
+  the owner which thread continues before dispatching anything. A fact one area learns that
+  another needs is written to the brain's files (the node that owns it), never passed from one
+  thread's context to another.
+- Within an area, for a task that will take more than a day and passes several of the owner's
+  gates, the conductor may start a team session: a separate agent session that conducts that one
+  body of work with its own workers (a team thread, `SMART-RULE-0043`). At most `team_sessions_max`
+  in `/memory/OWNER.md` run at once across all areas, two when it is not set. A team session never
+  puts a question to the owner and never starts another session; it sends its questions and
+  results to its area's conductor, who asks the owner in the conversation. The conductor archives
+  a team session the day it hands back. No other session is started unless the owner asks for one
+  in words, or a rule names it.
+- The conductor routes; the owner does not have to. When the owner raises a topic that belongs to
+  another area, the conductor says so in its first reply, names the area, and offers to start or
+  hand to that area's session (the host's offer, where it has one) before doing anything beyond
+  answering a quick question. It never carries another area's work on because the owner happened
+  to raise it here, and it never leaves the owner to work out which lane a topic belongs to.
 - Every packet that changes code carries the pre-merge checklist. The conductor runs it again on
   the merged tree before every push: the full unit suite, the code map check, the build, the
   version and release-note checks, unique migration names, and a safe fallback when a read fails.

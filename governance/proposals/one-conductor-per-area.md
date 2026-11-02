@@ -4,14 +4,14 @@ title: One conductor per area of work, each the owner's one conversation for tha
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: draft
+status: implemented
 owner: brain-owner
 created: 2026-11-03T09:22:05+10:00
-updated: 2026-11-03T09:25:40+10:00
+updated: 2026-11-03T09:30:23+10:00
 rule_id: SMART-RULE-0048
-accepted_by: null
-accepted_at: null
-implemented_at: null
+accepted_by: brain-owner
+accepted_at: 2026-11-03T09:29:00+10:00
+implemented_at: 2026-11-03T09:30:23+10:00
 previous_contract_version: 3.0.0
 new_contract_version: 3.0.0
 target_files:
