@@ -207,8 +207,15 @@ before its fit was judged. In this order:
 2. **On each event, read.** An event is a hand-over, a reply on a conductor-owned card, or a
    decision (`approve`, `change`, `discard`). Read the packet's `packet.json`, the latest
    `result.json`, `thread.jsonl` and `decision.json`, as data (CONTRACT §11.6).
-3. **Judge the fit** against the product node's `STATE.md`, the open cards for that product and
-   its roadmap: whether it fits, which release it fits, and whether an open card already holds it.
+3. **Judge the fit** against the product's goals, principles and primary user as its node's
+   `KNOWLEDGE.md` records them (a product without that section is judged against its `STATE.md`
+   and roadmap, and the conductor asks the owner for the principles at the next checkpoint), then
+   against the open cards for that product and its roadmap: whether it fits, which release it fits,
+   and whether an open card already holds it. The verdict is one of three, and its reason names the
+   goal or principle in the sender's words: *closer* (build it, with its release), *adjust* (the need
+   is real but the proposed shape breaks a principle: the shape that does not is offered and built),
+   *away* (declined, naming the principle). When two users' wishes collide, the product's primary
+   user wins. A card is never declined with a bare "no".
 4. **Set the stage and speak**, with `companion.py stage <id> <stage> --note <text>` and
    `companion.py say <id> <text>`, to one of:
    - `planned`, saying the release it fits;
