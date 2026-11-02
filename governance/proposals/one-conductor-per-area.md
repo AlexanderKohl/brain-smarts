@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 status: draft
 owner: brain-owner
 created: 2026-11-03T09:22:05+10:00
-updated: 2026-11-03T09:22:05+10:00
+updated: 2026-11-03T09:25:40+10:00
 rule_id: SMART-RULE-0048
 accepted_by: null
 accepted_at: null
@@ -74,10 +74,18 @@ should be ring-fenced.
   results to its area's conductor, who asks the owner in the conversation. The conductor archives
   a team session the day it hands back. No other session is started unless the owner asks for one
   in words, or a rule names it.
+- The conductor routes; the owner does not have to. When the owner raises a topic that belongs to
+  another area, the conductor says so in its first reply, names the area, and offers to start or
+  hand to that area's session (the host's offer, where it has one) before doing anything beyond
+  answering a quick question. It never carries another area's work on because the owner happened
+  to raise it here, and it never leaves the owner to work out which lane a topic belongs to.
 ```
 
-The third and fourth bullets of the rule are unchanged; in the fourth, "the only thread the owner
-talks to" is read as "the only thread the owner talks to for that area".
+The third and fourth bullets of the current rule are unchanged and follow the three above; in the
+last, "the only thread the owner talks to" is read as "the only thread the owner talks to for that
+area". The third proposed bullet is the owner's instruction of 3 November 2026: "the conductor
+should actively tell me to start a new session when a topic is in a different lane rather than
+relying on the user getting that right".
 
 ## Reason
 
@@ -130,6 +138,6 @@ session starts under the previous wording. Nothing in the records depends on the
 
 ## Acceptance
 
-Do you accept `PROPOSAL-one-conductor-per-area`: the two bullets of `SMART-RULE-0048` above replace
-the current two, `conductor_areas` is added to `/memory/OWNER.md` as an optional owner field, and the
-worker brief's line for `SMART-RULE-0048` is updated in the same commit? Yes or no.
+Do you accept `PROPOSAL-one-conductor-per-area`: the three bullets of `SMART-RULE-0048` above
+replace the current first two, `conductor_areas` is added to `/memory/OWNER.md` as an optional owner
+field, and the worker brief's line for `SMART-RULE-0048` is updated in the same commit? Yes or no.
