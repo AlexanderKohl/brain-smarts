@@ -190,6 +190,20 @@ class LibraryTests(unittest.TestCase):
         commit_all(self.library, "local edit")
         self.assertEqual(sx.verify_installs(self.f.brain())[0][1], "changed since install")
 
+    def test_a_library_without_upstream_is_skipped_not_an_error(self):
+        # A library made from the skeleton (SETUP step B3a) has origin only: the digest covers the
+        # smarts alone, and an installed skill still goes to the library.
+        git(self.library, "remote", "remove", "upstream")
+        brain = self.f.brain()
+        changes = sx.upstream_changes(brain)
+        self.assertEqual(changes["ref"], "upstream/main")
+        self.assertEqual(changes["commits"], [])
+        self.assertEqual(changes["skills"]["new"], [])
+        self.assertIn("pond-access", sx.local_skills(brain))
+        entry = sx.record_install(brain, "compost-log", "https://example.com/someone/brain-skills",
+                                  git(self.lib_up, "rev-parse", "HEAD"))
+        self.assertEqual(entry["path"], "library/skills/compost-log")
+
 
 class ScrubTests(unittest.TestCase):
     def setUp(self):

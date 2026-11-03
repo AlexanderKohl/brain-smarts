@@ -1,0 +1,25 @@
+name: preflight
+# The brain's preflight for the skill library: the owner's public smarts repository is checked out
+# as the brain root and this library inside it. If the smarts cannot be read (made private again),
+# the job notes the gap rather than failing.
+on: [push, pull_request]
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        id: smarts
+        continue-on-error: true
+        with:
+          repository: ${{ github.repository_owner }}/brain-smarts
+          path: brain
+      - uses: actions/checkout@v7
+        with:
+          path: brain/library
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - if: steps.smarts.outcome == 'success'
+        run: python brain/shared/skills/repository-preflight/scripts/preflight.py --root brain --layer library
+      - if: steps.smarts.outcome != 'success'
+        run: echo "The smarts repository could not be checked out, so the brain checks did not run."

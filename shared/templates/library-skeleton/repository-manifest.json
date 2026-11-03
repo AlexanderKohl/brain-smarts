@@ -1,0 +1,14 @@
+{
+  "name": "Portable AI Brain – skill library",
+  "layer": "library",
+  "created": "YYYY-MM-DDTHH:mm:ss+HH:MM",
+  "updated": "YYYY-MM-DDTHH:mm:ss+HH:MM",
+  "validated_at": "YYYY-MM-DDTHH:mm:ss+HH:MM",
+  "contract_version": "3.0.0",
+  "markdown_files": 2,
+  "unique_ids": 2,
+  "validation_errors": [],
+  "validation_warnings": [],
+  "root_contract": "/CONTRACT.md",
+  "validator": "/shared/skills/repository-preflight/scripts/preflight.py"
+}

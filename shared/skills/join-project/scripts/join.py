@@ -190,7 +190,8 @@ def step_library(root: Path, manifest: dict, report: Report) -> None:
                        f"cd \"{root}\"; git -C library pull")
         else:
             report.own(f"library skill {name} is needed but /library/ is not checked out; clone your skill library "
-                       f"into it: cd \"{root}\"; git clone <your skill library URL> library")
+                       f"into it: cd \"{root}\"; git clone <your skill library URL> library "
+                       f"(no library yet: start an empty one from /shared/templates/library-skeleton/, /SETUP.md step B3a)")
 
 
 def step_repository(root: Path, target: str, branch_override: str | None, report: Report) -> Path | None:

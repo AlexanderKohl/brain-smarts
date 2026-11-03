@@ -214,6 +214,7 @@ class JoinTests(unittest.TestCase):
         self.assertEqual(code, 0, out)   # a report, not a failure
         self.assertIn("library skill release-notes is needed but /library/ is not checked out", out)
         self.assertIn("git clone <your skill library URL> library", out)
+        self.assertIn("/shared/templates/library-skeleton/", out)   # a person with no library yet
         (self.root / "library" / ".git").mkdir(parents=True)
         code, out = self.run_join("--dry-run")
         self.assertEqual(code, 0, out)
