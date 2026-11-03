@@ -330,6 +330,37 @@ class TaskTests(BrainTestCase):
         self.assertEqual(brain.run().errors, [])
 
 
+class LibrarySkeletonTests(unittest.TestCase):
+    """The empty library a person starts from when the original cannot be read (SETUP step B3a):
+    the real skeleton, read from this repository."""
+
+    SKELETON = Path(__file__).resolve().parents[3] / "templates" / "library-skeleton"
+
+    def test_skeleton_files_carry_template_ids_and_the_contract(self) -> None:
+        for name in ("README.md", "skills/README.md"):
+            with self.subTest(file=name):
+                text = (self.SKELETON / name).read_text(encoding="utf-8")
+                self.assertTrue(text.startswith("---\n"))
+                self.assertIn("\nid: template-library-", text)
+                self.assertIn("\ncontract: /CONTRACT.md\n", text)
+                self.assertIn("\ncreated: YYYY-", text)   # filled at setup, like the memory skeleton
+
+    def test_skeleton_manifest_names_the_library_layer_and_the_live_contract_version(self) -> None:
+        manifest = json.loads((self.SKELETON / "repository-manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["layer"], "library")
+        self.assertEqual(manifest["root_contract"], "/CONTRACT.md")
+        contract = (self.SKELETON.parents[2] / "CONTRACT.md").read_text(encoding="utf-8")
+        self.assertIn("\ncontract_version: " + manifest["contract_version"] + "\n", contract)
+
+    def test_skeleton_ships_no_upstream_and_the_library_dotfiles(self) -> None:
+        for name in (".gitignore", ".gitattributes", ".githooks/pre-commit", ".githooks/commit-msg",
+                     ".github/workflows/preflight.yml"):
+            with self.subTest(file=name):
+                self.assertTrue((self.SKELETON / name).is_file())
+        self.assertFalse((self.SKELETON / ".git").exists())
+        self.assertEqual(sorted(p.name for p in (self.SKELETON / "skills").iterdir()), ["README.md"])
+
+
 class OwnerTripwireTests(BrainTestCase):
     def test_named_owner_in_a_mechanics_file_is_warned(self) -> None:
         brain = self.make()
