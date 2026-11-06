@@ -53,7 +53,7 @@ class ContextGuardTestCase(unittest.TestCase):
 
     def new_packet(self, *flags: str, run: str = "RUN-TEST") -> tuple[int, str]:
         return run_cli(*self.common, "new-packet", "--run", run, "--title", "Audit skills",
-                       "--objective", "Check every SKILL.md.", *flags)
+                       "--objective", "Check every SKILL.md.", "--model-reason", "test fixture", *flags)
 
     def run_meta(self, run: str = "RUN-TEST") -> dict:
         meta, _ = delegation.load(self.root / "temp" / "delegation" / "runs" / run / "RUN.md")

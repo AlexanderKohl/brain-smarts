@@ -63,8 +63,11 @@ class DelegationTestCase(unittest.TestCase):
         return overrides.get("run_id", "RUN-TEST")
 
     def new_packet(self, run: str, *extra: str) -> tuple[int, str]:
+        # Every packet needs a model reason; a test that is about the model flags passes its own.
+        chosen = any(flag in extra for flag in ("--model", "--effort", "--model-reason"))
+        reason = () if chosen else ("--model-reason", "test fixture")
         return run_cli(*self.common, "new-packet", "--context-tokens", "1000", "--run", run,
-                       "--title", "Audit skills", "--objective", "Check every SKILL.md.", *extra)
+                       "--title", "Audit skills", "--objective", "Check every SKILL.md.", *reason, *extra)
 
     def result_path(self, run: str, short: str) -> Path:
         return self.root / "temp" / "delegation" / "runs" / run / f"{short}.result.md"
@@ -401,7 +404,24 @@ class DelegationTestCase(unittest.TestCase):
         code, out = self.new_packet(run)
         self.assertEqual(code, 0, out)
         meta, _ = delegation.load(self.root / "temp" / "delegation" / "runs" / run / "W02.md")
-        self.assertEqual((meta["model"], meta["effort"], meta["model_reason"]), ("inherit", "inherit", None))
+        self.assertEqual((meta["model"], meta["effort"], meta["model_reason"]), ("inherit", "inherit", "test fixture"))
+
+    def test_every_packet_needs_a_model_reason_even_when_it_inherits(self) -> None:
+        # Owner, 7 Nov 2026: workers ran on Fable by habit; the reason is now required on every packet.
+        run = self.new_run()
+        code, out = run_cli(*self.common, "new-packet", "--context-tokens", "1000", "--run", run,
+                            "--title", "Audit skills", "--objective", "Check every SKILL.md.")
+        self.assertEqual(code, 1, out)
+        self.assertIn("--model-reason is required", out)
+        code, out = run_cli(*self.common, "new-packet", "--context-tokens", "1000", "--run", run,
+                            "--title", "Audit skills", "--objective", "Check every SKILL.md.",
+                            "--model-reason", "   ")
+        self.assertEqual(code, 1, out)
+        code, out = self.new_packet(run, "--model", "sonnet", "--effort", "medium",
+                                    "--model-reason", "spelled-out fix, no judgement left")
+        self.assertEqual(code, 0, out)
+        meta, _ = delegation.load(self.root / "temp" / "delegation" / "runs" / run / "W01.md")
+        self.assertEqual((meta["model"], meta["effort"]), ("sonnet", "medium"))
 
     # ------------------------------------------------------------ synthesis
 

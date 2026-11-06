@@ -13,7 +13,7 @@ Commands
                    [--context-mode isolated|fork] [--fork-reason TEXT]
                    [--writes none|worktree|paths] [--path PATH ...]
                    [--external none|read|write] [--target TEXT]
-                   [--model NAME] [--effort LEVEL] [--model-reason TEXT] [--max-tool-calls N] [--max-output-words N]
+                   [--model NAME] [--effort LEVEL] --model-reason TEXT [--max-tool-calls N] [--max-output-words N]
                    [--acceptance TEXT ...] [--exclude TEXT ...]
   dispatch-prompt  --run RUN --packet W01
   validate-result  --run RUN [--packet W01]
@@ -473,9 +473,10 @@ def cmd_new_packet(args) -> int:
                                          "one worker its own worktree")
     if args.external not in EXTERNAL_MODES:
         raise SystemExit(f"error: external must be one of {sorted(EXTERNAL_MODES)}")
-    if (args.model is not None or args.effort is not None) and not (args.model_reason or "").strip():
-        raise SystemExit("error: --model-reason is required when --model or --effort is given: the conductor "
-                         "writes why it chose that model and effort for this packet")
+    if not (args.model_reason or "").strip():
+        raise SystemExit("error: --model-reason is required: the conductor chooses every packet's model and "
+                         "effort from the ladder in SKILL.md (Choosing a worker's model and effort) and writes "
+                         "why; --model inherit still needs the reason (owner, 7 Nov 2026)")
     if args.external == "write" and not args.target:
         raise SystemExit("error: --target (owner-confirmed, CONTRACT section 10.5) is required "
                          "when --external write")
@@ -669,9 +670,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--path", action="append")
     p.add_argument("--external", default="none")
     p.add_argument("--target")
-    p.add_argument("--model", default=None, help="the worker's model; give --model-reason with it")
-    p.add_argument("--effort", default=None, help="the worker's effort; give --model-reason with it")
-    p.add_argument("--model-reason", help="one line: why this model and effort for this packet")
+    p.add_argument("--model", default=None, help="the worker's model (inherit when left out)")
+    p.add_argument("--effort", default=None, help="the worker's effort (inherit when left out)")
+    p.add_argument("--model-reason", help="required: one line, why this model and effort for this packet")
     p.add_argument("--max-tool-calls", type=int, default=15)
     p.add_argument("--max-output-words", type=int, default=800)
     context_guard.add_context_arguments(p)

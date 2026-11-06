@@ -26,7 +26,7 @@ Verified with a trial run of several read-only workers launched in one turn.
 | `writes: none` | a read-only subagent type (for example `Explore`) or `general-purpose` with the packet's instructions |
 | `writes: worktree` | `isolation: "worktree"` so the worker gets its own git worktree; the conductor merges |
 | `model: inherit` | omit the model parameter; the subagent runs at the conductor's model and effort |
-| `model` and `effort` | the Agent tool's `model` (`haiku`, `sonnet`, `opus`, `fable`) and `effort` parameters on a `general-purpose` worker; the pinned types (`worker-opus-medium`, `worker-fable-medium`) remain shortcuts for their pair. Ladder on Claude Code: `sonnet` medium; `opus` medium; `opus` high or `inherit`; `fable` only for open judgement with its allowance healthy |
+| `model` and `effort` | the Agent tool's `model` (`haiku`, `sonnet`, `opus`, `fable`) and `effort` parameters on a `general-purpose` worker; the pinned types (`worker-sonnet-medium` for the ladder's first rung, `worker-opus-medium`, `worker-fable-medium`) remain shortcuts for their pair; the Agent tool's type and model must match the packet's `model`, so a packet that names Sonnet is never sent to a Fable type. Ladder on Claude Code: `sonnet` medium; `opus` medium; `opus` high or `inherit`; `fable` only for open judgement with its allowance healthy |
 | allowance | `get_usage` (`plan.windows`, per-model weekly percentages) before every `new-run` and `new-packet` |
 | parallel execution | launch every packet with `run_in_background: true` in the same turn, then wait for the completion notifications |
 

@@ -150,7 +150,7 @@ The script uses only the Python standard library.
 | `context_mode` | `isolated` (default), `fork` | Fresh context from the packet, or inherit the conductor's context. Fork needs `--fork-reason`. |
 | `writes` | `none` (default), `worktree`, `paths` | No repository writes; writes only in an isolated worktree or branch; writes only to the listed `write_paths`. |
 | `external` | `none` (default), `read`, `write` | No credentials or external systems; read-only with provenance; side effects only against `external_target`, which must be an owner-confirmed target under CONTRACT section 10.5. |
-| `model` | `inherit` (default) or a name | Honoured only where the host allows a model choice. The result records what actually ran. |
+| `model` | `inherit` (default) or a name | Honoured only where the host allows a model choice. The result records what actually ran. `--model-reason` is required on every packet, `inherit` included (7 Nov 2026). |
 | `max_tool_calls`, `max_output_words` | integers | Soft budgets the worker is told to respect. |
 | `context_refs` | repository-root paths | What the worker reads. References, never copied prose. Each must exist. |
 | `--fact LABEL=COMMAND` | repeatable | Runs the command at packet time and pastes its output into the packet. A packet quotes only facts the conductor verified by a command in the same session; a count typed from memory is a hint, and the packet says so. |
@@ -161,7 +161,9 @@ Budget: a run holds at most four packets (`max_workers`, `SMART-RULE-0024`). A r
 
 **The conductor chooses a model and an effort for every packet from what that packet needs, and
 writes the choice and a one-line reason on the packet** (`--model`, `--effort`, `--model-reason`).
-No kind of work is tied to one model.
+No kind of work is tied to one model. `new-packet` refuses a packet without `--model-reason`, so the
+choice cannot be skipped by habit (owner, 7 Nov 2026, after a day of packets sent to one pinned
+worker type ran a model's weekly allowance to 100 % and stopped three workers mid-edit).
 
 It weighs, in this order:
 

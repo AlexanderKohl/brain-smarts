@@ -45,7 +45,8 @@ class PlanBudgetTestCase(unittest.TestCase):
 
     def new_packet(self) -> tuple[int, str]:
         return run_cli(*self.common, "new-packet", "--context-tokens", "1000", "--run", "RUN-PLAN",
-                       "--title", "Build one part", "--objective", "Build the part the plan names.")
+                       "--title", "Build one part", "--objective", "Build the part the plan names.",
+                       "--model-reason", "test fixture")
 
     def run_meta(self) -> dict:
         meta, _ = delegation.load(self.root / "temp/delegation/runs/RUN-PLAN/RUN.md")
