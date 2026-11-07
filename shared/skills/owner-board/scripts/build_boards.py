@@ -218,8 +218,15 @@ def block(config: board_config.Config, board: dict, data: dict, tally: dict | No
             + "</div>")
 
 
-def build(config: board_config.Config, known: dict | None = None, now: str | None = None) -> str:
-    """Write the directory page. `known` holds board data already loaded this run, by id."""
+def build(config: board_config.Config, known: dict | None = None, now: str | None = None) -> str | None:
+    """Write the directory page. `known` holds board data already loaded this run, by id.
+
+    In the shared checkout nothing is written and None is returned: the directory and the task
+    pages are memory files, rebuilt in a session copy (`board_config.shared_checkout_hold`)."""
+    held = board_config.shared_checkout_hold(config)
+    if held:
+        print("directory and task pages " + held)
+        return None
     known = known or {}
     stamp = now or datetime.datetime.now().astimezone().strftime("%Y-%m-%d %H:%M")
     # Tasks first: route every record once, and write the personal and automatic task pages

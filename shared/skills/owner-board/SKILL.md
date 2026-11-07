@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 scope: shared
-version: 2.1.0
+version: 2.2.0
 script_paths:
   - /shared/skills/owner-board/scripts/apply_events.py
   - /shared/skills/owner-board/scripts/board_config.py
@@ -25,7 +25,7 @@ script_paths:
   - /shared/skills/owner-board/scripts/task_board.py
   - /shared/skills/owner-board/scripts/team_lanes.py
 created: 2026-09-18T11:05:00+10:00
-updated: 2026-11-07T14:10:29+10:00
+updated: 2026-11-07T15:33:34+10:00
 owner: brain-owner
 project_refs:
   - /memory/projects/brain-development
@@ -199,6 +199,17 @@ product-repository operations are reads, `git fetch`, and `git mv` of a card int
 `cards/closed/` by the author whose event retired it. A shared board's folder never receives a
 `/memory/` path; the build refuses to write a page that would carry one. Its page draws the
 repository's own tasks and nothing from memory.
+
+No generated page is written into the shared checkout's memory (`SMART-RULE-0038`): the shared
+checkout only fast-forwards, and a page rebuilt there leaves tracked files that differ from
+`HEAD` by their time alone, so the next `session.py finish` cannot update it. When the memory
+folder is a repository's own working tree (its `.git` is a folder, not the file of a session
+copy's worktree), `build_status.py`, `build_boards.py`, `card.py`, `apply_events.py` and
+`task_board.py build` write no directory, no personal or automatic task page, no owner's page of
+a shared board and no `status.html` or `state.json` of a board in memory. They say so in one
+line naming the rule and carry on; a shared board's own page in its repository is still drawn.
+The pages are rebuilt in a session copy, which `session.py finish` does. Set
+`BRAIN_SHARED_CHECKOUT=1` to write there on purpose, as for a commit there.
 
 ## Procedure
 
@@ -619,7 +630,8 @@ Numbered as in `reconcile.py`; checks 1 to 8 need `repo`.
 `status.html` and `state.json`, regenerated in place at the permanent path; card records under
 `cards/` and `cards/closed/`; event records under `events/`; screenshots under `img/`;
 `/memory/boards/index.html`, `/memory/boards/personal.html`, the owner's page of each shared
-board and any automatic task boards, refreshed on every regeneration; saved verdict files filed under
+board and any automatic task boards, refreshed on every regeneration (never in the shared
+checkout: see **Allowed operations and permissions**); saved verdict files filed under
 `/memory/skills/owner-board/applied/`.
 
 ## Failure behaviour

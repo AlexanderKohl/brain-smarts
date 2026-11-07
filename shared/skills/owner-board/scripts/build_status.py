@@ -237,6 +237,14 @@ def build(config: board_config.Config, board: dict, directory: bool = True) -> d
         if MEMORY_PATH.search(page):
             raise Refused("refused to write " + out + ": a repository board may carry no /memory/ path"
                           " (a task record of the repository that names one is fixed in the record)")
+    held = board_config.shared_checkout_hold(config, out)
+    if held:
+        # A board in memory, built from the shared checkout: its page and state.json are memory
+        # files, rebuilt in a session copy (SMART-RULE-0038). The directory says so too.
+        print(board["id"] + " status page " + held)
+        if directory:
+            build_boards.build(config, known={board["id"]: derived})
+        return derived
     with open(out, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(page)
     cards.write_state(board, derived)

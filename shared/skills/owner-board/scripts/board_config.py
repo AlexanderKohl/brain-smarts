@@ -90,6 +90,35 @@ PERSONAL_DEFAULTS: dict[str, Any] = {
 }
 
 
+# SMART-RULE-0038: the shared checkout holds only merged work and only fast-forwards. A page
+# generated there leaves tracked files changed (only the time on them differs), and the next
+# `session.py finish` cannot update it. Set to 1 to write there on purpose, as for a commit.
+SHARED_CHECKOUT_ENV = "BRAIN_SHARED_CHECKOUT"
+
+
+def shared_checkout_hold(config: "Config", target: str | os.PathLike | None = None) -> str | None:
+    """Why a generated page in memory must not be written, as one line; None when it may be.
+
+    It may not when the memory folder is the shared checkout: a repository's own working tree,
+    whose `.git` is a folder (a session copy's memory is a linked worktree, whose `.git` is a
+    file), unless BRAIN_SHARED_CHECKOUT=1. `target`, when given, is held only if it lies in
+    memory: a repository board's own page is the repository's business, not the checkout's.
+    """
+    if os.environ.get(SHARED_CHECKOUT_ENV) == "1":
+        return None
+    memory = Path(str(config.memory))
+    if not (memory / ".git").is_dir():
+        return None
+    if target is not None:
+        try:
+            Path(str(target)).resolve().relative_to(memory.resolve())
+        except ValueError:
+            return None
+    return ("not written in " + str(memory) + ": it is the shared checkout, which only fast-forwards"
+            " (SMART-RULE-0038); the pages are rebuilt in a session copy (session.py finish does it),"
+            " or set " + SHARED_CHECKOUT_ENV + "=1 to write here on purpose")
+
+
 MSYS_HINT = ("Git Bash rewrites an argument that starts with / into a Windows path; "
              "run the command with MSYS_NO_PATHCONV=1 in front")
 
