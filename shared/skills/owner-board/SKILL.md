@@ -20,11 +20,12 @@ script_paths:
   - /shared/skills/owner-board/scripts/page_js.py
   - /shared/skills/owner-board/scripts/page_notes.py
   - /shared/skills/owner-board/scripts/reconcile.py
+  - /shared/skills/owner-board/scripts/serve_boards.py
   - /shared/skills/owner-board/scripts/task_actions.py
   - /shared/skills/owner-board/scripts/task_board.py
   - /shared/skills/owner-board/scripts/team_lanes.py
 created: 2026-09-18T11:05:00+10:00
-updated: 2026-10-23T08:23:52+10:00
+updated: 2026-11-07T11:29:58+10:00
 owner: brain-owner
 project_refs:
   - /memory/projects/brain-development
@@ -550,6 +551,7 @@ Run from the brain root. Alphabetical.
 | `page_js.py` | The browser code every board page shares: screenshots, lightbox, download, task controls, the task pages' save bar. Imported by the builders. |
 | `page_notes.py` | The release-notes section of a board page. Imported by `build_status.py`. |
 | `reconcile.py` | Compare a board with git and the task records. Called by every build. |
+| `serve_boards.py` | Serve the boards over http on this machine: the directory folder at `/`, and each board's node folder at the path the directory page's link arrives at, so a status page outside the directory folder opens (the plain `python -m http.server --directory memory/boards` answers those links with 404). Nothing else of memory or a repository is served; dot paths, listings and links out of a folder are refused, and so is any Host but this machine. `--port` (8765), `--list` prints the mounts. |
 | `task_actions.py` | Apply the owner's saved task actions through the tasks skill. Imported by `apply_events.py`. |
 | `task_board.py` | Route task records to boards and draw them: `route`, `build [--for <task>]`, `check`. |
 | `team_lanes.py` | The per-team work-in-progress line above a board's task columns. Imported by `task_board.py`. |
