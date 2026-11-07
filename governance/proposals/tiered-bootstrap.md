@@ -233,9 +233,19 @@ brain (A), a repeat of A as control, and this change (B), pass marks fixed now:
 
 Total tokens processed are measured, not final context, because the two differ.
 
+Result, 7 November 2026 (the harness's `results/part6-retest-2026-11-07.md`): B3 (0ff0671) passed
+marks 1, 2 and 5 and failed 3 and 4 on S19 alone; B4 (this revision, 8220254), run on S19, S01 to
+S04 and S21 three times each, passed S19 in every run (all three delegated to three workers and
+logged; 8 of 9 checks against A2's 5 of 7), automatic adherence 94.4 against A2's 95.2 on the same
+scenarios, and S01 to S04 at 191,444 median total tokens against A2's 286,136. With B4 every mark
+passes. Two cautions: the heavy saving (21 %) is inside the A2-to-A3 noise (18 %), because
+bootstrapping runs still read `/CONTRACT.md` and `/RULES.md` whole beside the core; and the blind
+manual scores are not done yet.
+
 ## Acceptance
 
-Not yet requested. One direct acceptance question on this diff after the harness results.
+Ready for the one direct acceptance question on this diff as revised on 7 November 2026, with the
+results above.
 
 ## Implementation record
 
