@@ -22,7 +22,7 @@ This file is intentionally just a pointer, not a summary. Repository behaviour, 
 
 ## Bootstrap
 
-Follow the sequence `/CONTRACT.md` itself defines (Section 1; see also `/BOOTSTRAP.md`). Choose the tier first: an answer-only question reads only what the answer needs; anything that writes does this, before its first write:
+Follow the sequence `/CONTRACT.md` itself defines (Section 1; see also `/BOOTSTRAP.md`). Choose the tier first: an answer-only question reads only what the answer needs; anything that writes, researches beyond the brain's own files, or runs work in parallel or through workers does this first:
 
 1. Read `/CORE.md`, then `/CORE-RULES.md`, each with the Read tool
 2. Read `/memory/OWNER.md` and `/memory/RULES.md`, then any inherited `RULES.md` down to the active node

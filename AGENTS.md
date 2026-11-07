@@ -12,7 +12,7 @@ owner: brain-owner
 
 # Agent entry point
 
-**Start here:** [`/BOOTSTRAP.md`](./BOOTSTRAP.md) – choose the bootstrap tier first; a session that will write reads [`/CORE.md`](./CORE.md) and [`/CORE-RULES.md`](./CORE-RULES.md), with the host's file-reading tool (for example Read), not a shell command such as `cat`: a shell may show only the start of a long file.
+**Start here:** [`/BOOTSTRAP.md`](./BOOTSTRAP.md) – choose the bootstrap tier first; a session that will write, research beyond the brain's own files, or run work in parallel or through workers reads [`/CORE.md`](./CORE.md) and [`/CORE-RULES.md`](./CORE-RULES.md), with the host's file-reading tool (for example Read), not a shell command such as `cat`: a shell may show only the start of a long file.
 
 The canonical rules are [`/CONTRACT.md`](./CONTRACT.md) and [`/RULES.md`](./RULES.md); `/CORE.md` and `/CORE-RULES.md` are generated from them.
 
