@@ -27,6 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import board_config  # noqa: E402
 import events  # noqa: E402
+import page_js  # noqa: E402
 import reconcile  # noqa: E402
 import task_board  # noqa: E402
 
@@ -93,7 +94,9 @@ __BODY__
 <p class="foot">A new project registers its board in <code>/memory/skills/owner-board/config/boards.json</code>.
 A board that is not listed here is one nobody opens. A task is shown on the board of its first
 project that has one, otherwise on the personal board.</p>
-</div></body></html>
+</div>
+__BEHIND__
+</body></html>
 """
 
 
@@ -254,7 +257,8 @@ def build(config: board_config.Config, known: dict | None = None, now: str | Non
             "; ".join(s.label + " (" + str(s.reason) + ")" for s in missing)) + "</p>")
     if not blocks:
         blocks = ['<p class="none">No boards registered yet.</p>']
-    page = (PAGE.replace("__FAVICON__", board_config.favicon_link(config))
+    page = (PAGE.replace("__BEHIND__", page_js.BEHIND_JS)
+            .replace("__FAVICON__", board_config.favicon_link(config))
             .replace("__TITLE__", html.escape(config.directory["title"]))
             .replace("__GENERATED__", html.escape(stamp))
             .replace("__BODY__", "\n".join(blocks)))

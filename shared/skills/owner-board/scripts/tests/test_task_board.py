@@ -389,6 +389,137 @@ class TaskBoardTests(unittest.TestCase):
         self.assertTrue((self.store("/memory/projects/example-garden") / "open" / "TASK-2026-0912-fictional.md").is_file())
         self.assertIn("(dry run)", out)
 
+    # ------------------------------------------------ actions on a task already completed
+
+    def save_actions(self, name: str, entries: list) -> Path:
+        body = {"schema": "owner-board/task-actions/v1", "board": "tasks", "savedAt": "2026-01-10T08:30:00.000Z",
+                "tasks": [dict({"note": "", "shots": [], "title": "x"}, **e) for e in entries]}
+        saved = self.downloads() / ("task-actions-" + name + ".json")
+        saved.write_text(json.dumps(body), encoding="utf-8")
+        return saved
+
+    def completed_record(self) -> Path:
+        return self.store("/memory/projects/example-garden") / "completed" / "TASK-2026-0917-fictional.md"
+
+    def route(self, dry_run: bool = False):
+        with mock.patch.object(apply_events, "downloads", return_value=str(self.downloads().parent)):
+            return quiet(apply_events.route, self.brain.config(), dry_run)
+
+    def test_done_on_a_completed_task_is_a_repeat_and_changes_nothing(self):
+        before = self.completed_record().read_bytes()
+        self.save_actions("repeat", [{"id": "TASK-2026-0917", "action": "done"}])
+        _, out = self.route()
+        self.assertIn("  repeat: TASK-2026-0917 is already completed (on 2026-01-09)\n", out)
+        self.assertNotIn("SKIPPED", out)
+        self.assertIn("0 applied, 1 repeat, 0 conflicts, 0 skipped", out)
+        self.assertNotIn("Ask the owner", out)
+        self.assertEqual(self.completed_record().read_bytes(), before)
+
+    def test_do_now_on_a_completed_task_is_a_conflict_listed_for_the_owner(self):
+        before = self.completed_record().read_bytes()
+        self.save_actions("conflict", [{"id": "TASK-2026-0917", "action": "do_now", "note": "Again?"}])
+        _, out = self.route()
+        said = "conflict: TASK-2026-0917 was completed on 2026-01-09; this file asks do now – not applied, ask the owner"
+        self.assertIn("  " + said + "\n", out)
+        self.assertIn("0 applied, 0 repeats, 1 conflict, 0 skipped", out)
+        # Listed again at the very end, and never as something the owner asked for now.
+        self.assertTrue(out.rstrip().endswith("Ask the owner:\n  " + said), out)
+        self.assertNotIn("Do now (asked for by the owner)", out)
+        self.assertEqual(self.completed_record().read_bytes(), before)
+
+    def test_the_completion_date_comes_from_the_history_entry_that_completed_it(self):
+        record = self.completed_record()
+        record.write_text(record.read_text(encoding="utf-8") + "\n## History\n\n"
+                          "- 2026-01-05T16:00:00+10:00 – bob: done (completed)\n"
+                          "- 2026-01-09T10:00:00+10:00 – bob: note\n", encoding="utf-8")
+        self.save_actions("dated", [{"id": "TASK-2026-0917", "action": "done"}])
+        _, out = self.route()
+        self.assertIn("repeat: TASK-2026-0917 is already completed (on 2026-01-05)", out)
+
+    def test_a_dry_run_reports_repeats_and_conflicts_the_same_way(self):
+        self.save_actions("dry", [{"id": "TASK-2026-0917", "action": "do_now"},
+                                  {"id": "TASK-2026-0918", "action": "done"},
+                                  {"id": "TASK-2026-0912", "action": "done"}])
+        before = self.completed_record().read_bytes()
+        _, out = self.route(dry_run=True)
+        self.assertIn("conflict: TASK-2026-0917 was completed on 2026-01-09; this file asks do now – not applied, ask the owner", out)
+        self.assertIn("repeat: TASK-2026-0918 is already completed (on 2025-11-01)", out)
+        self.assertNotIn("do now   TASK-2026-0917", out)
+        self.assertIn("done     TASK-2026-0912 (dry run)", out)
+        self.assertIn("1 applied, 1 repeat, 1 conflict, 0 skipped (dry run, nothing written)", out)
+        self.assertIn("Ask the owner:", out)
+        self.assertEqual(self.completed_record().read_bytes(), before)
+
+    def test_repeats_and_conflicts_in_a_verdicts_file_are_counted_apart(self):
+        garden = self.brain.config().board("garden")
+        body = {"schema": garden["verdict_schema"], "board": "garden", "savedAt": "2026-01-10T08:30:00.000Z",
+                "verdicts": [], "tasks": [{"id": "TASK-2026-0911", "action": "done", "note": "", "shots": [], "title": "x"},
+                                          {"id": "TASK-2026-0917", "action": "done", "note": "", "shots": [], "title": "y"},
+                                          {"id": "TASK-2026-0918", "action": "do_now", "note": "", "shots": [], "title": "z"}]}
+        (self.downloads() / (garden["verdict_prefix"] + "t.json")).write_text(json.dumps(body), encoding="utf-8")
+        _, out = self.route()
+        self.assertIn("1 applied, 1 repeat, 1 conflict, 0 skipped", out)
+        self.assertIn("Ask the owner:\n  conflict: TASK-2026-0918 was completed on 2025-11-01; this file asks do now", out)
+
+    # ------------------------------------------------ the banner of a board drawn from a checkout behind
+
+    def test_every_page_kind_carries_the_behind_check_once(self):
+        self.set_tasks(auto_boards=True)          # a project page of its own: example-shed
+        self.build_all()
+        pages = {"directory": self.brain.memory / "boards" / "index.html",
+                 "personal": self.brain.memory / "boards" / "personal.html",
+                 "project": self.brain.memory / "boards" / "projects" / "example-shed.html",
+                 "status": self.brain.memory / "projects/example-garden/status/status.html"}
+        for kind, page in pages.items():
+            with self.subTest(kind):
+                text = page.read_text(encoding="utf-8")
+                self.assertEqual(text.count("window.BoardBehind"), 1)
+                self.assertEqual(text.count("'/_boards-status.json'"), 1)
+
+    def run_behind(self, protocol: str, status) -> dict:
+        script = re.search(r"<script>(.*)</script>", task_board.page_js.BEHIND_JS, re.S).group(1)
+        harness = (
+            "function node(tag) { return { tag: tag, children: [], attrs: {}, style: {}, className: '', textContent: '',"
+            " appendChild: function (c) { this.children.push(c); return c; },"
+            " insertBefore: function (c, ref) { this.children.unshift(c); return c; },"
+            " setAttribute: function (k, v) { this.attrs[k] = v; } }; }"
+            "var body = node('body'); body.firstChild = null;"
+            "var document = { body: body, createElement: node };"
+            "var fetched = [];"
+            "var window = { location: { protocol: " + json.dumps(protocol) + " },"
+            " fetch: function (url) { fetched.push(url); return Promise.resolve({ ok: true,"
+            " json: function () { return Promise.resolve(" + json.dumps(status) + "); } }); } };"
+            + script +
+            "; function text(n) { return [n.textContent || ''].concat(n.children.map(text)).join(' '); }"
+            " setTimeout(function () { console.log(JSON.stringify({ fetched: fetched, banners: body.children.length,"
+            " text: body.children.map(text).join(' '), role: (body.children[0] || { attrs: {} }).attrs.role || '' })); }, 20);")
+        path = self.brain.root / "behind-harness.js"
+        path.write_text(harness, encoding="utf-8")
+        out = subprocess.run(["node", str(path)], capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        return json.loads(out.stdout.strip().splitlines()[-1])
+
+    @unittest.skipUnless(shutil.which("node"), "needs node to run the page's own script")
+    def test_the_banner_shows_when_the_checkout_is_behind_and_names_what_blocks_it(self):
+        got = self.run_behind("http:", {"behind": 3, "changed": ["tasks/open/TASK-2026-0910-fictional.md"], "checked": "x"})
+        self.assertEqual((got["fetched"], got["banners"], got["role"]), (["/_boards-status.json"], 1, "alert"))
+        self.assertIn("This board is 3 changes behind – decisions made here may repeat ones already applied. "
+                      "Ask the conductor to update the shared checkout.", got["text"])
+        self.assertIn("tasks/open/TASK-2026-0910-fictional.md", got["text"])
+        plain = self.run_behind("http:", {"behind": 1, "changed": [], "checked": "x"})
+        self.assertIn("This board is 1 change behind", plain["text"])
+        self.assertNotIn("block", plain["text"])
+
+    @unittest.skipUnless(shutil.which("node"), "needs node to run the page's own script")
+    def test_no_banner_when_up_to_date_failed_or_opened_from_a_file(self):
+        for protocol, status in (("http:", {"behind": 0, "changed": ["a.md"], "checked": "x"}),
+                                 ("http:", {"behind": None, "error": "git rev-list failed (exit 128)"}),
+                                 ("file:", {"behind": 5, "changed": [], "checked": "x"})):
+            with self.subTest(protocol=protocol, status=status):
+                got = self.run_behind(protocol, status)
+                self.assertEqual(got["banners"], 0)
+        self.assertEqual(self.run_behind("file:", {"behind": 5})["fetched"], [])
+
     def test_column_order_is_deliberate(self):
         routed = task_board.route(self.brain.config(), today=TODAY)
         garden = task_board.section(routed["garden"], self.brain.memory, TODAY)

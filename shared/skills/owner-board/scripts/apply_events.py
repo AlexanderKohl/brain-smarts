@@ -227,13 +227,25 @@ def settle(board: dict, dry_run: bool = False) -> list:
     return done
 
 
-def report(applied: list, skipped: list, dry_run: bool) -> None:
+def _count(n: int, word: str) -> str:
+    return str(n) + " " + word + ("" if n == 1 else "s")
+
+
+def report(applied: list, skipped: list, dry_run: bool) -> list:
+    """Print what one file did; repeats and conflicts (task_actions.py) are counted apart from
+    the skipped. Returns the conflict lines, which the caller lists again at the end."""
+    repeats = [line for line in skipped if task_actions.is_repeat(line)]
+    conflicts = [line for line in skipped if task_actions.is_conflict(line)]
+    other = [line for line in skipped if line not in repeats and line not in conflicts]
     for line in applied:
         print("  " + line)
-    for line in skipped:
+    for line in repeats + conflicts:
+        print("  " + line)
+    for line in other:
         print("  SKIPPED " + line)
-    print(str(len(applied)) + " applied, " + str(len(skipped)) + " skipped"
-          + (" (dry run, nothing written)" if dry_run else ""))
+    print(str(len(applied)) + " applied, " + _count(len(repeats), "repeat") + ", " + _count(len(conflicts), "conflict")
+          + ", " + str(len(other)) + " skipped" + (" (dry run, nothing written)" if dry_run else ""))
+    return conflicts
 
 
 # ---------------------------------------------------------------- routing
@@ -243,6 +255,7 @@ def route(config: board_config.Config, dry_run: bool = False, folders: list | No
     boards = {b["id"]: b for b in config.boards}
     changed: list = []
     now_list: list = []
+    conflicts: list = []
     tasks_changed = False
     files = candidates(config, folders)
     if not files:
@@ -261,7 +274,7 @@ def route(config: board_config.Config, dry_run: bool = False, folders: list | No
             except task_actions.Refused as err:
                 print("  " + str(err))
                 continue
-            report(applied, skipped, dry_run)
+            conflicts += report(applied, skipped, dry_run)
             now_list += asked
             tasks_changed = tasks_changed or bool(applied)
             continue
@@ -282,7 +295,7 @@ def route(config: board_config.Config, dry_run: bool = False, folders: list | No
         except Refused as err:
             print("  " + str(err))
             continue
-        report(applied, skipped, dry_run)
+        conflicts += report(applied, skipped, dry_run)
         now_list += asked
         tasks_changed = tasks_changed or bool(asked) or bool(saved.get("tasks"))
         if which not in changed:
@@ -295,6 +308,7 @@ def route(config: board_config.Config, dry_run: bool = False, folders: list | No
     if tasks_changed and not dry_run:
         changed += [b for b in boards if b not in changed]
     task_actions.report_now(now_list)
+    task_actions.report_conflicts(conflicts)
     return changed
 
 
@@ -322,10 +336,11 @@ def main(argv=None) -> int:
         except Refused as err:
             print(str(err))
             return 1
-        report(applied, skipped, args.dry_run)
+        conflicts = report(applied, skipped, args.dry_run)
         for line in settle(board, args.dry_run):
             print("  " + line)
         task_actions.report_now(now_list)
+        task_actions.report_conflicts(conflicts)
         changed = [board["id"]]
     else:
         changed = route(config, args.dry_run, args.extra)

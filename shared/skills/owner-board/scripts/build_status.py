@@ -216,7 +216,8 @@ def build(config: board_config.Config, board: dict, directory: bool = True) -> d
     page = (
         PAGE.replace("__TOKENS__", task_board.TOKENS)
         .replace("__TASKCSS__", task_board.CSS + page_js.CSS + page_notes.CSS + card_detail.CSS)
-        .replace("__SHAREDJS__", page_js.SHARED_JS + "\n" + page_js.TASKS_JS + "\n" + card_detail.JS)
+        .replace("__SHAREDJS__", page_js.SHARED_JS + "\n" + page_js.TASKS_JS + "\n" + card_detail.JS
+                  + "\n" + page_js.BEHIND_JS)
         .replace("__FAVICON__", board_config.favicon_link(config, board))
         .replace("__TITLE__", html.escape(board["title"]))
         .replace("__MAIN__", html.escape(board.get("main") or "main"))

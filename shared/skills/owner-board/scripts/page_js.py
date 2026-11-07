@@ -11,6 +11,8 @@ from disk cannot load a sibling script reliably and the owner opens boards by do
 - `SHARED_JS` `window.BoardPage`: `el`, `shrink`, `lightbox`, `download`, `attachShots`
 - `TASKS_JS`  `window.BoardTasks`: Do now, Done and a note on every open task card
 - `TASK_BAR` and `TASK_SAVE_JS`  the save bar of a page that shows only tasks
+- `BEHIND_JS` `window.BoardBehind`: served by `serve_boards.py`, a banner when the shared checkout
+  the page was drawn from is behind (`/_boards-status.json`); on every page, the directory included
 
 Task actions live in the browser's storage under one key, `TASK_KEY`, shared by every page:
 a task is the same task on whichever page it is drawn. Each entry is
@@ -294,6 +296,50 @@ TASKS_JS = r"""<script>
   };
 })();
 </script>""".replace("__KEY__", TASK_KEY)
+
+BEHIND_JS = r"""<script>
+/* Every board page (page_js.py): is the shared checkout this page was drawn from behind? Served
+   by serve_boards.py, the page asks once on load; when the checkout lags, a banner at the top says
+   so, because a decision made here may repeat one already applied. Opened from disk, or when
+   the question cannot be answered, nothing is shown. */
+(function () {
+  function el(tag, text) {
+    var n = document.createElement(tag);
+    if (text != null) n.textContent = text;
+    return n;
+  }
+  function banner(status) {
+    var n = status && typeof status.behind === 'number' ? status.behind : 0;
+    if (!(n > 0)) return null;
+    var box = el('div');
+    box.className = 'behind';
+    box.setAttribute('role', 'alert');
+    box.style.cssText = 'background:#b06a00;color:#fff;padding:10px 16px;font-size:14px;line-height:1.45;';
+    box.appendChild(el('p', 'This board is ' + n + ' change' + (n === 1 ? '' : 's') + ' behind – decisions made here'
+      + ' may repeat ones already applied. Ask the conductor to update the shared checkout.'));
+    var changed = (status.changed || []).filter(function (p) { return typeof p === 'string' && p; });
+    if (changed.length) {
+      box.appendChild(el('p', 'These files changed in the shared checkout block the update:'));
+      var list = el('ul');
+      changed.forEach(function (p) { list.appendChild(el('li', p)); });
+      box.appendChild(list);
+    }
+    return box;
+  }
+  function show(status) {
+    var box = banner(status);
+    if (box) document.body.insertBefore(box, document.body.firstChild);
+    return box;
+  }
+  window.BoardBehind = { banner: banner, show: show };
+  var proto = (window.location && window.location.protocol) || '';
+  if ((proto !== 'http:' && proto !== 'https:') || !window.fetch) return;
+  window.fetch('/_boards-status.json', { cache: 'no-store' })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (s) { if (s) show(s); })
+    .catch(function () {});
+})();
+</script>"""
 
 TASK_BAR = """<div class="bar">
   <span id="tally"></span>

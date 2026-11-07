@@ -557,7 +557,8 @@ def _write_page(config: board_config.Config, board: dict, now: str, today: datet
     index = _href(page.parent, config.directory_folder / "index.html")
     text = (PAGE.replace("__TOKENS__", TOKENS).replace("__CSS__", CSS + page_js.CSS)
             .replace("__BAR__", page_js.TASK_BAR)
-            .replace("__SCRIPTS__", page_js.SHARED_JS + "\n" + page_js.TASKS_JS + "\n" + page_js.TASK_SAVE_JS)
+            .replace("__SCRIPTS__", page_js.SHARED_JS + "\n" + page_js.TASKS_JS + "\n" + page_js.TASK_SAVE_JS
+                      + "\n" + page_js.BEHIND_JS)
             .replace("__FAVICON__", board_config.favicon_link(config))
             .replace("__TITLE__", html.escape(board["label"]))
             .replace("__GENERATED__", html.escape(now))

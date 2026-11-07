@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 scope: shared
-version: 2.0.0
+version: 2.1.0
 script_paths:
   - /shared/skills/owner-board/scripts/apply_events.py
   - /shared/skills/owner-board/scripts/board_config.py
@@ -25,7 +25,7 @@ script_paths:
   - /shared/skills/owner-board/scripts/task_board.py
   - /shared/skills/owner-board/scripts/team_lanes.py
 created: 2026-09-18T11:05:00+10:00
-updated: 2026-11-07T11:29:58+10:00
+updated: 2026-11-07T14:10:29+10:00
 owner: brain-owner
 project_refs:
   - /memory/projects/brain-development
@@ -493,6 +493,26 @@ GIF data is kept. An unknown task id (with any store that could not be read), a 
 places or a refused store is reported and skipped. `apply_events.py` ends with a **Do now** list:
 act on it first. Applied task-actions files move to `/memory/tasks/actions-applied/`.
 
+**A task already completed is never changed again.** A page drawn from a stale checkout still
+shows a task that was closed since, and the owner may decide it a second time. *Done* on a task
+already completed is reported as `repeat: TASK-x is already completed (on <date>)`; any other
+action on a task in `completed/` (do now, a note, done on a cancelled task) as
+`conflict: TASK-x was completed on <date>; this file asks <action> – not applied, ask the owner`.
+The date is the History entry that closed it, otherwise its `updated`. Neither changes the
+record, and a dry run reports them the same way. Each file's summary counts them apart –
+`1 applied, 1 repeat, 1 conflict, 0 skipped` – and every conflict is listed again at the very
+end, under **Ask the owner**: put it to the owner rather than deciding it.
+
+**A board drawn from a checkout that is behind says so.** Served by `serve_boards.py`, every
+page – the directory, the personal board, each project page and each status page – asks
+`/_boards-status.json` once on load (`page_js.BEHIND_JS`). When the shared memory checkout lags
+`origin/main`, a banner at the top reads "This board is N changes behind – decisions made here
+may repeat ones already applied. Ask the conductor to update the shared checkout." and lists the
+tracked files changed or staged there, which block the fast-forward. The conductor then clears
+those files (they are another session's work: commit, move or restore them) and fast-forwards
+the checkout. No banner when it is up to date, when the answer cannot be had, or when the page
+is opened from disk.
+
 The browser code both page kinds share – shrinking a pasted screenshot, the thumbnails and
 lightbox, the download, the task controls and the task pages' save bar – is written once, in
 `page_js.py`, and inlined into each page.
@@ -551,7 +571,7 @@ Run from the brain root. Alphabetical.
 | `page_js.py` | The browser code every board page shares: screenshots, lightbox, download, task controls, the task pages' save bar. Imported by the builders. |
 | `page_notes.py` | The release-notes section of a board page. Imported by `build_status.py`. |
 | `reconcile.py` | Compare a board with git and the task records. Called by every build. |
-| `serve_boards.py` | Serve the boards over http on this machine: the directory folder at `/`, and each board's node folder at the path the directory page's link arrives at, so a status page outside the directory folder opens (the plain `python -m http.server --directory memory/boards` answers those links with 404). Nothing else of memory or a repository is served; dot paths, listings and links out of a folder are refused, and so is any Host but this machine. `--port` (8765), `--list` prints the mounts. |
+| `serve_boards.py` | Serve the boards over http on this machine: the directory folder at `/`, and each board's node folder at the path the directory page's link arrives at, so a status page outside the directory folder opens (the plain `python -m http.server --directory memory/boards` answers those links with 404). Nothing else of memory or a repository is served; dot paths, listings and links out of a folder are refused, and so is any Host but this machine. `GET /_boards-status.json` answers `{"behind": N, "changed": [at most 20 paths], "checked": <iso time>}` for the memory checkout (`git rev-list --count HEAD..origin/main`, tracked files changed or staged), worked out on each request with a short git timeout; any failure gives `{"behind": null, "error": <a short reason>}`. `--port` (8765), `--list` prints the mounts. |
 | `task_actions.py` | Apply the owner's saved task actions through the tasks skill. Imported by `apply_events.py`. |
 | `task_board.py` | Route task records to boards and draw them: `route`, `build [--for <task>]`, `check`. |
 | `team_lanes.py` | The per-team work-in-progress line above a board's task columns. Imported by `task_board.py`. |
