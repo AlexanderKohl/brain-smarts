@@ -251,3 +251,28 @@ test('move-block.js tells a route\'s own variable from a reassigned top-level on
   assert.match(read(dir, 'src/shadow.js'), /registerOwn\(router, \{\s*\}\);|registerOwn\(router, \{ {2}\}\);|registerOwn\(router, \{ \}\);/);
   assert.strictEqual(behaviour(), was);
 });
+
+test('move.js leaves a comment that trails the previous line with that line', () => {
+  // Babel attaches `// bump when …` to ENCODING_VERSION as a leading comment; it belongs to line 3.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'split-js-'));
+  const source = [
+    "'use strict';",
+    '',
+    'const PROFILE_VERSION = 2; // session profiles built from cells; bump when the conversion changes',
+    'const ENCODING_VERSION = 1;',
+    '',
+    'module.exports = { PROFILE_VERSION, ENCODING_VERSION };',
+    '',
+  ].join('\n');
+  fs.writeFileSync(path.join(dir, 'versions.js'), source);
+  const r = tool('move.js', ['versions.js', '--to', 'encoding', '--names', 'ENCODING_VERSION'], dir);
+  assert.strictEqual(r.code, 0, r.err);
+  const after = read(dir, 'versions.js');
+  assert.ok(after.includes('const PROFILE_VERSION = 2; // session profiles built from cells; bump when the conversion changes\n'), 'the previous line left the source');
+  const moved = read(dir, 'encoding.js');
+  assert.deepEqual(moved.split('\n').filter((l) => /^(const|let|var|function|class)\b/.test(l)), ['const ENCODING_VERSION = 1;']);
+  assert.doesNotMatch(moved, /PROFILE_VERSION = 2/);
+  const run = spawnSync(process.execPath, ['-e', "console.log(JSON.stringify(require('./versions')))"], { cwd: dir, encoding: 'utf8' });
+  assert.strictEqual(run.status, 0, run.stderr);
+  assert.strictEqual(run.stdout.trim(), '{"PROFILE_VERSION":2,"ENCODING_VERSION":1}');
+});

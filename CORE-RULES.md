@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-29T08:00:00+10:00
-updated: 2026-10-01T12:10:36+10:00
+updated: 2026-11-07T13:22:37+10:00
 owner: brain-owner
 generated_by: /shared/skills/repository-preflight/scripts/core.py
 canonical_sources:
@@ -67,12 +67,12 @@ that always apply, verbatim.
 | `SMART-RULE-0016` | Product-development process | this file; `/shared/skills/product-development/` | starting or continuing non-trivial software or product work, at any stage |
 | `SMART-RULE-0017` | Surface external-system configuration mismatches before coding around them | this file | an external system's configuration disagrees with what the task needs |
 | `SMART-RULE-0018` | One canonical implementation, no duplicated side effects | this file | adding a function, write, call or control-flow path in software |
-| `SMART-RULE-0019` | Context handoff checkpoint | this file | context is running low, a stage of work ends, or a session ends with work in flight |
+| `SMART-RULE-0019` | Context handoff checkpoint | this file | context is running low, a stage of work ends, a session ends with work in flight, or the context was compacted |
 | `SMART-RULE-0020` | Whole-system implementation review | this file | before reporting a non-trivial software change complete |
 | `SMART-RULE-0021` | Security designed into every implementation | this file | a software change touches an endpoint, query, permission, stored or sent data, an integration or a log; before writing to a client's live system |
 | `SMART-RULE-0022` | Tests demonstrate behaviour | this file | a behavioural software change or a bug fix |
 | `SMART-RULE-0023` | Preflight resolves heading anchors in declared references | `/shared/skills/repository-preflight/` | writing a reference that carries a `#` heading anchor |
-| `SMART-RULE-0024` | Delegated parallel work | this file; `/shared/skills/delegate-work/` | before delegating work to another agent |
+| `SMART-RULE-0024` | Delegated parallel work | this file; `/shared/skills/delegate-work/` | before delegating work to another agent; as a conductor, before reading a source rather than a result |
 | `SMART-RULE-0025` | Task state enumerates every open task | `/shared/templates/memory-skeleton/tasks/RULES.md`; `/shared/skills/repository-preflight/` | creating, changing or closing a task |
 | `SMART-RULE-0026` | Version every change, and show it | this file | a software change that reaches a build someone can load, run or deploy |
 | `SMART-RULE-0027` | Every list has a deliberate order | this file | always |
@@ -91,6 +91,12 @@ that always apply, verbatim.
 | `SMART-RULE-0040` | Dated and superseded knowledge claims | `/CONTRACT.md` §4 (`KNOWLEDGE.md`); `/shared/skills/repository-preflight/` | writing or changing a claim in a `KNOWLEDGE.md` |
 | `SMART-RULE-0041` | Code files stay small | this file; `/shared/skills/code-map/` | creating, growing or splitting a code file |
 | `SMART-RULE-0042` | Code repositories run the code map's checks | this file; `/shared/skills/code-map/` | setting up or changing a code repository's CI, or when a code-map check fails |
+| `SMART-RULE-0043` | Work moves between threads through cards | this file; `/shared/skills/delegate-work/`; `/shared/skills/tasks/` | taking, working, releasing or handing over a card; running a scrum-master or team thread |
+| `SMART-RULE-0044` | Raise the ambition of every request | this file; `/shared/skills/raise-ambition/` | always |
+| `SMART-RULE-0045` | Host plugin skills act under the brain | this file | using a skill installed in the host rather than the brain (a host plugin skill), or its connector |
+| `SMART-RULE-0046` | A release note for every change a user would notice | this file; `/shared/skills/release-notes/` | starting, committing or releasing a change someone who uses the system would notice |
+| `SMART-RULE-0047` | Long command output is shortened before the model reads it | this file; `/shared/skills/command-output/` | running a test run, build, install or long `git diff` or `git log`; command output arrives shortened |
+| `SMART-RULE-0048` | One conversation with the owner | this file; `team_sessions_max` in `/memory/OWNER.md`; `/shared/skills/product-feedback/` | a conductor thread starts or hands over, the owner raises another area's topic, before starting a team session, before pushing merged code |
 
 ## Rules that always apply
 
@@ -105,7 +111,7 @@ that always apply, verbatim.
 - In every Git repository modified during an owner-authorised task, automatically create a commit at each successful logical checkpoint. A logical checkpoint exists when an independently describable improvement, fix, document update, configuration change or tested implementation is complete. Do not wait for the entire project to finish and do not bundle unrelated logical changes.
 - A Git checkpoint is mandatory after relevant validation passes; before switching tasks, repositories, branches or workstreams; before pausing for owner input or approval while agent-owned changes remain; before asking the owner to test, reload, load-unpacked, install, or try a build; before the final response when the agent produced durable repository changes; and after 30 minutes of active work with uncommitted agent-owned changes, even if the larger task continues.
 - **Owner-test handoff:** Before asking the owner to test, reload, load-unpacked, install, or try a build, commit the agent-owned change in that product repository. That commit is the rollback point if the test fails. Do not wait for the owner to ask. If the work is a sequence of trials, commit each testable batch separately so a working version can be restored without unpicking later experiments.
-- At each checkpoint, inspect `git status` and the relevant diff, stage only agent-owned files that belong to that logical change, check that no secret or unrelated change is included, run proportionate validation, and commit with a concise message that always includes the host/tool and model in use (for example `Cursor Grok 4.6 High` or `VS Code Claude Code Sonnet 5`) and, when the agent has a specific bot name, that name as well. Do not invent a model or version. Pre-existing or concurrent dirty files do not prevent a path-scoped commit when the agent-owned change can be separated safely.
+- At each checkpoint, inspect `git status` and the relevant diff, stage only agent-owned files that belong to that logical change, check that no secret or unrelated change is included, run proportionate validation, and commit with a concise message whose subject says what changed and never names the tool or the model. Two trailers of the same commit name them: `Tool: <host or tool>` (for example `Tool: Claude Code desktop` or `Tool: Cursor`, with the agent's bot name when it has one) and `Co-Authored-By: <model> <address>` (for example `Co-Authored-By: Claude Opus 5.5 <the host's no-reply address>`). In the brain's repositories the commit-message hook refuses a commit, other than a merge, without both. Do not invent a model or version. Pre-existing or concurrent dirty files do not prevent a path-scoped commit when the agent-owned change can be separated safely.
 - Never commit secrets, credentials, vault ciphertext, private tokens, unresolved conflict markers or unrelated user changes. Do not use `--no-verify`, amend or rewrite an existing commit, force-push, or push directly to a protected `main` or `master` branch unless the owner explicitly directs that specific action. If ownership or safety is uncertain, leave the uncertain path unstaged and ask.
 - Treat commit and push as separate decisions. A push failure or unavailable remote must never prevent the local commit. Owner-test handoff commits stay local: do not push solely because the owner is being asked to test. Push accumulated agent-created commits to the tracked remote when the unit of work finishes and before the final response (except a response that is only an owner-test handoff), or after 30 minutes since the last successful push while work continues, unless the owner has prohibited pushing or repository policy requires review through another path. Also push when the owner asked to push.
 - Never silently finish with committable agent-owned changes. In the final response, report the commit hash and push status for each modified repository, or state `No commit` with the specific reason. Valid reasons include: no durable change, no Git repository, the owner explicitly prohibited committing, validation or a hook failed, a merge/rebase/conflict is active, required Git identity or permission is unavailable, or the change cannot be separated safely from uncertain or unrelated files.
@@ -195,8 +201,9 @@ that always apply, verbatim.
   keeps shared files – logs, state, task lists, indexes, version fields, build output – for
   itself. Only the conductor stages and commits. A worker gets its own worktree, branched from the
   session's branch and merged back by the conductor, only when its work cannot be kept apart: it
-  builds or tests code, it must change a file another worker also changes, or it is one of
-  several alternative attempts.
+  builds code or runs tests that write outside its own paths, it must change a file another
+  worker also changes, or it is one of several alternative attempts. Unit tests that read and
+  write only inside the worker's own paths (and their caches) run in the session copy.
 - The pre-commit hook refuses a commit on `main` in a repository's own working tree – the
   shared checkout – and names the command that makes a session copy. Session copies are linked
   worktrees on their own branches, so their commits pass; so do a `proposal/*` branch and any
@@ -205,3 +212,19 @@ that always apply, verbatim.
   checkout with `BRAIN_SHARED_CHECKOUT=1` set for its commits, re-reads each file immediately
   before changing it, and stages only its own paths. The owner uses the same variable for a
   commit made by hand there.
+
+## SMART-RULE-0044 – Raise the ambition of every request
+
+- At the intake of every request, the agent applies `/shared/skills/raise-ambition/`: it names
+  the outcome behind the request and checks whether a bigger version would serve the user better
+  – one that reaches higher (an outcome kept true, not a task done once), deeper (an expert's
+  methods and a harder, measurable target) or wider (other fields and roles, including an
+  adversarial reviewer). The user is the person whose request it is: the owner, or a
+  collaborator working in a shared project.
+- When a bigger version would serve the user better, the agent's clarifying question offers it
+  as option 1, marked recommended, with what it would take; the request as asked is option 2.
+  When no question is otherwise needed, the agent does what was asked and adds one line naming
+  the bigger version.
+- The agent never widens the work without the user's yes, does not repeat a bigger version the
+  user declined for the same request, and keeps the suggestion to a few lines. Safety, cost,
+  side-effect and governance rules are unchanged.

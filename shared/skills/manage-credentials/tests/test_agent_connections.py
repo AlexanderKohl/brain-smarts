@@ -57,6 +57,13 @@ class AgentConnectionsTest(unittest.TestCase):
         status = vault_broker_client.broker_request("status")
         self.assertIs(status["unlocked"], False)
 
+    def test_on_windows_the_runtime_folder_is_outside_appdata(self):
+        with mock.patch.object(vault_agent_runtime.os, "name", "nt"), \
+                mock.patch.dict(vault_agent_runtime.os.environ, {"USERPROFILE": r"D:\profile"}):
+            base = vault_agent_runtime.runtime_base()
+        self.assertNotIn("appdata", str(base).lower())
+        self.assertEqual(base.parts[-2:], (".portable-ai-brain", "vault-agent"))
+
     def test_the_client_refuses_the_state_of_an_agent_that_has_ended(self):
         ended = subprocess.run([sys.executable, "-c", "import os; print(os.getpid())"], capture_output=True,
                                text=True).stdout.strip()

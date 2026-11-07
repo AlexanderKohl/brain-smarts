@@ -162,6 +162,10 @@ class PortableVault:
         with _file_lock(self.lock_path):
             return self._load_unlocked(passphrase)
 
+    def entry_names(self, passphrase: str) -> list[str]:
+        """The names of the entries held, without any field name or value."""
+        return list(self.load(passphrase)["entries"])
+
     def save(self, payload: dict[str, Any], passphrase: str) -> None:
         with _file_lock(self.lock_path):
             if not self.path.exists():

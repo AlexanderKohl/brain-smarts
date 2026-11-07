@@ -7,13 +7,13 @@ contract: /CONTRACT.md
 status: proposed
 owner: brain-owner
 created: 2026-09-29T06:36:01+10:00
-updated: 2026-10-01T12:10:36+10:00
+updated: 2026-11-07T13:22:37+10:00
 rule_id: null
 accepted_by: null
 accepted_at: null
 implemented_at: null
-previous_contract_version: 2.3.0
-new_contract_version: 2.4.0
+previous_contract_version: 3.0.0
+new_contract_version: 3.1.0
 target_files:
   - /AGENTS.md
   - /BOOTSTRAP.md
@@ -29,6 +29,7 @@ target_files:
   - /shared/skills/repository-preflight/scripts/preflight.py
   - /shared/skills/repository-preflight/scripts/session.py
   - /shared/skills/repository-preflight/tests/test_core.py
+  - /shared/templates/library-skeleton/repository-manifest.json
 ---
 
 # Read the core at start-up, and each rule when it applies
@@ -41,9 +42,9 @@ bump of the library and memory manifests on the same branch name there. Nothing 
 ## Plain-language summary
 
 Today every session that may write reads the whole contract and the whole of `/RULES.md` first:
-114 KB with the owner files, about 28k tokens, whether it edits one task or builds software. After
-this change it reads two generated files, `/CORE.md` and `/CORE-RULES.md` (about 21 KB each), and
-the owner files: 51 KB, about 13k tokens, 55 % less. They hold, word for word, the contract sections
+150 KB with the owner files, about 37k tokens, whether it edits one task or builds software. After
+this change it reads two generated files, `/CORE.md` and `/CORE-RULES.md` (about 23 and 26 KB), and
+the owner files: 60 KB, about 15k tokens, 60 % less. They hold, word for word, the contract sections
 and rules that always apply, and two tables that say, for every other section and rule, the
 situation in which to read it. Each is short enough for a host to show whole, and every pointer says
 to read the bootstrap files with the host's file-reading tool, not a shell command.
@@ -80,6 +81,23 @@ if it had read the contract. The Read tool showed every file whole. The one-file
 
 Codex, Cursor and Claude Code on Windows were not probed; their limits may differ, and the retest
 records how each arm's sessions read the core.
+
+## Refresh of 7 November 2026: onto main at contract 3.0.0
+
+Refreshed onto `main` on 7 November 2026 for the part 6 retest (TASK-2026-0085), at the owner's
+request of that day; the status stays `proposed`, nothing is accepted. `main` had moved to contract
+3.0.0, so this change now takes it to 3.1.0. `main`'s wording wins everywhere except this proposal's
+own additions:
+
+1. CONTRACT §1 item 4 keeps `main`'s **Worker bootstrap** tier unchanged, between Full bootstrap
+   and Read by situation.
+2. `SMART-RULE-0043` to `0048` each have an `Applies when`; `SMART-RULE-0044` (raise the ambition
+   of every request) is `always`, because it acts at the intake of every request, before any
+   write. `SMART-RULE-0019` adds "or the context was compacted" and `SMART-RULE-0024` adds "as a
+   conductor, before reading a source rather than a result", for wording `main` added to them.
+3. The contract sections are unchanged in number, so the section table is unchanged.
+4. The parts are now 23,092 and 26,202 characters (`core.py build`), both under 28,000.
+5. The library skeleton's manifest names 3.1.0, as the preflight tests require of it.
 
 ## Current wording and exact diff
 
@@ -123,7 +141,7 @@ The branch holds the exact diff; the parts that change behaviour:
   `/RULES.md` (`core.py check`)".
 - **`/RULES.md`:** the identifier table gains an `Applies when` column; a new table lists every
   contract section with its `Applies when`. `always` rules: `SMART-RULE-0003`, `0009`, `0010`,
-  `0014`, `0027`, `0034`, `0036`, `0038`; `always` contract sections: §1, §2, §3.4–§3.6, §5, §6,
+  `0014`, `0027`, `0034`, `0036`, `0038`, `0044`; `always` contract sections: §1, §2, §3.4–§3.6, §5, §6,
   §13, §14. No rule text changes.
 - **`/BOOTSTRAP.md`, `/AGENTS.md`, `/CLAUDE.md`, delegate-work's successor steps:** choose the tier
   first; a writing session reads `/CORE.md` and `/CORE-RULES.md` with the file-reading tool, not
@@ -148,7 +166,7 @@ too, and showed how not to do it.
 
 ## Scope and behavioural consequences
 
-- Every session in every host, and new owners. Contract 2.3.0 to 2.4.0 (minor: compatible;
+- Every session in every host, and new owners. Contract 3.0.0 to 3.1.0 (minor: compatible;
   changes when rules are read).
 - An agent must notice that a situation in the tables has arisen and read the rule then.
 - A host that injects the owner's own global pointer should point to `/BOOTSTRAP.md` rather than
@@ -167,8 +185,8 @@ too, and showed how not to do it.
 ## Migration
 
 None for records. At acceptance: merge the branch in each repository, rebuild the core, write the
-manifests, update the owner's global host pointer. Contract 2.3.0 to 2.4.0:
-`PROPOSAL-placeholder-and-mirror-nodes` took 2.3.0 on 1 October 2026.
+manifests, update the owner's global host pointer. Contract 3.0.0 to 3.1.0:
+`main` is at 3.0.0 on 7 November 2026.
 
 ## Rollback
 

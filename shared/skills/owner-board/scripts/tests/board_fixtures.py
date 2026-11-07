@@ -1,7 +1,7 @@
 """The owner-board tests' fictional brain, built in a temporary folder, and their shared helpers.
 
-Moved unchanged from test_owner_board.py. test_owner_board.py imports these names back, so
-everything that uses test_owner_board sees the same names.
+Every name, product and identifier here is invented (SMART-RULE-0008). The owner is Sam
+(author `sam`); a second brain acts as `bob` by writing under its own author.
 """
 
 from __future__ import annotations
@@ -17,41 +17,29 @@ from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
+sys.path.insert(0, str(SCRIPTS.parents[1] / "tasks" / "scripts"))
 
 import board_config  # noqa: E402
+import cards  # noqa: E402
+import events  # noqa: E402
 
 
 HAS_GIT = shutil.which("git") is not None
 
-BOARD_MD = """---
-id: example-garden-board
-title: The board
-type: reference
-schema_version: 0.2
-contract: /CONTRACT.md
-created: 2026-01-05T09:00:00+10:00
-updated: 2026-01-05T09:00:00+10:00
-owner: Sam
----
+SOIL = "sam-20260105T090000Z"     # needs_review, 1.1.0
+SEED = "sam-20260106T090000Z"     # building
+FROST = "sam-20260107T090000Z"    # queued
 
-# The board
-
-```json
-{
-  "id": "garden",
-  "label": "Garden Planner",
-  "generated": "2026-01-05T09:00:00+10:00",
-  "mainVersion": "1.1.0",
-  "tracks": {
-    "beds": {"label": "Beds", "task": "TASK-2026-0901", "done": 2, "of": 5},
-    "seeds": {"label": "Seeds", "task": "TASK-2026-0902", "done": 0, "of": 3}
-  },
-  "appId": "exampleappid",
-  "abandoned": {"spike/old-layout": "superseded by 1.0.0"},
-  "closed": {"1.0.0": "first release"}
+BOARD_JSON = {
+    "id": "garden",
+    "label": "Garden Planner",
+    "tracks": {
+        "beds": {"label": "Beds", "task": "TASK-2026-0901", "done": 2, "of": 5},
+        "seeds": {"label": "Seeds", "task": "TASK-2026-0902", "done": 0, "of": 3},
+    },
+    "appId": "exampleappid",
+    "abandoned": {"spike/old-layout": "superseded by 1.0.0"},
 }
-```
-"""
 
 CARD = """---
 id: {id}
@@ -59,9 +47,9 @@ title: {title}
 type: board_card
 schema_version: 0.2
 contract: /CONTRACT.md
-parent: /memory/projects/example-garden
-created: 2026-01-05T09:00:00+10:00
-updated: 2026-01-05T09:00:00+10:00
+parent: {parent}
+created: {created}
+updated: {created}
 owner: Sam
 track: {track}
 state: {state}
@@ -72,6 +60,7 @@ area:
 where_text: Garden Planner - Beds
 where_view: {view}
 where_href:
+author: sam
 ---
 
 # {title}
@@ -93,32 +82,79 @@ def git(repo: Path, *args: str) -> str:
     return out.stdout
 
 
-class Brain:
-    """A fictional brain: CONTRACT.md, memory/OWNER.md, one or two boards, optional product repo."""
+NODE_README = """---
+id: {slug}
+title: {title}
+type: node_readme
+schema_version: 0.2
+contract: /CONTRACT.md
+node_type: project
+{extra}---
 
-    def __init__(self, with_repo: bool = False, second_board: bool = False):
+# {title}
+"""
+
+
+class Brain:
+    """A fictional brain: CONTRACT.md, memory/OWNER.md, one or two boards, optional product repo,
+    optionally a board shared through a project repository (`example-garden:brain/status`).
+
+    The board nodes are memory nodes with a task store of their own. With `shared`,
+    `example-garden` is a pointer node instead and its tasks are in the repository's
+    `brain/tasks/`. The track task TASK-2026-0901 is in the garden's store; the owner store
+    `/memory/tasks/` exists and holds no record."""
+
+    def __init__(self, with_repo: bool = False, second_board: bool = False, shared: bool = False,
+                 owner: str = "Sam"):
         self.root = Path(tempfile.mkdtemp(prefix="owner-board-"))
         (self.root / "CONTRACT.md").write_text("---\nid: c\n---\n# contract\n", encoding="utf-8")
         self.memory = self.root / "memory"
         self.repos = self.root.parent / (self.root.name + "-repos")
         self.memory.mkdir()
         (self.memory / "OWNER.md").write_text(
-            "---\nid: owner-profile\nowner_short_name: Sam\nproject_repos_root: "
+            "---\nid: owner-profile\nowner_short_name: " + owner + "\nproject_repos_root: "
             + str(self.repos) + "\n---\n# Owner\n", encoding="utf-8")
-        tasks = self.memory / "tasks" / "open"
-        tasks.mkdir(parents=True)
-        (tasks / "TASK-2026-0901-beds.md").write_text("---\nid: TASK-2026-0901\nstatus: ready\n---\n", encoding="utf-8")
-        (self.memory / "tasks" / "STATE.md").write_text("| TASK-2026-0901 | ready |\n", encoding="utf-8")
-        entries = [self.board_entry("garden", "Garden Planner", "projects/example-garden/status", with_repo)]
-        self.make_board("projects/example-garden/status", "garden")
+        (self.memory / "tasks" / "open").mkdir(parents=True)
+        status = "example-garden:brain/status" if shared else "projects/example-garden/status"
+        entries = [self.board_entry("garden", "Garden Planner", status, with_repo)]
+        self.checkout = self.repos / "example-garden"
+        if shared:
+            entries[0]["node"] = "/memory/projects/example-garden"
+            self.make_node("projects/example-garden", "Example Garden",
+                           repo_url="https://example.com/fictional/example-garden.git",
+                           local_path=self.checkout.as_posix(), default_branch="main")
+            self.make_board(self.checkout / "brain" / "status", "garden", parent="example-garden:brain")
+        else:
+            self.make_node("projects/example-garden", "Example Garden")
+            self.make_board(self.memory / "projects" / "example-garden" / "status", "garden")
+        garden = self.store_dir("/memory/projects/example-garden")
+        (garden / "open").mkdir(parents=True, exist_ok=True)
+        (garden / "open" / "TASK-2026-0901-beds.md").write_text(
+            "---\nid: TASK-2026-0901\ntitle: Beds\nstatus: ready\n---\n", encoding="utf-8")
+        (garden / "STATE.md").write_text("| TASK-2026-0901 | ready |\n", encoding="utf-8")
         if second_board:
             entries.append(self.board_entry("pond", "Pond Pump", "projects/example-pond/status", False))
-            self.make_board("projects/example-pond/status", "pond")
+            self.make_node("projects/example-pond", "Pond Pump")
+            self.make_board(self.memory / "projects" / "example-pond" / "status", "pond")
         config = self.memory / "skills" / "owner-board" / "config"
         config.mkdir(parents=True)
         (config / "boards.json").write_text(json.dumps({"boards": entries}, indent=2), encoding="utf-8")
         if with_repo:
             self.make_repo()
+
+    def make_node(self, rel: str, title: str, **extra: str) -> Path:
+        """A memory node: a folder under memory/ with a node README (`extra` adds front matter)."""
+        folder = self.memory.joinpath(*rel.split("/"))
+        folder.mkdir(parents=True, exist_ok=True)
+        lines = "".join(key + ": " + value + "\n" for key, value in extra.items())
+        (folder / "README.md").write_text(NODE_README.format(slug=rel.replace("/", "-"), title=title, extra=lines),
+                                          encoding="utf-8")
+        return folder
+
+    def store_dir(self, ref: str | None) -> Path:
+        """The tasks/ folder a task whose first project reference is `ref` belongs in."""
+        import task_stores  # the tasks skill's own store list
+        return task_stores.store_for(self.root, ref).path
 
     @staticmethod
     def board_entry(board_id: str, label: str, status: str, with_repo: bool) -> dict:
@@ -131,25 +167,31 @@ class Brain:
                           "copy_only_prefixes": ["example-app://"]})
         return entry
 
-    def make_board(self, status: str, board_id: str) -> None:
-        folder = self.memory / status
+    def make_board(self, folder: Path, board_id: str, parent: str = "/memory/projects/example-garden") -> None:
         (folder / "cards").mkdir(parents=True)
-        (folder / "board.md").write_text(BOARD_MD.replace('"garden"', '"' + board_id + '"'), encoding="utf-8")
+        (folder / "events").mkdir()
+        (folder / "board.json").write_text(json.dumps(dict(BOARD_JSON, id=board_id), indent=2), encoding="utf-8")
         for n, (cid, state, version, branch, view) in enumerate([
-                ("soil-depth", "needs_review", "1.1.0", "", "beds"),
-                ("seed-list", "building", "", "feature/seed-list", ""),
-                ("frost-dates", "queued", "", "", "")], start=1):
+                (SOIL, "needs_review", "1.1.0", "", "beds"),
+                (SEED, "building", "", "feature/seed-list", ""),
+                (FROST, "queued", "", "", "")], start=1):
             (folder / "cards" / (cid + ".md")).write_text(CARD.format(
-                id=cid, title="show me the " + cid.replace("-", " "), track="beds" if n < 3 else "seeds",
-                state=state, version=version or "null", branch=branch or "null", n=n, view=view),
-                encoding="utf-8")
+                id=cid, title="show me the " + ("soil depth", "seed list", "frost dates")[n - 1],
+                track="beds" if n < 3 else "seeds", state=state, version=version or "null",
+                branch=branch or "null", n=n, view=view, parent=parent,
+                created="2026-01-0%dT19:00:00+10:00" % (4 + n)), encoding="utf-8")
+        # The register of versions closed before any card: one accept event without a card.
+        (folder / "events" / "sam-20260104T090000Z.json").write_text(json.dumps({
+            "id": "sam-20260104T090000Z", "schema": events.SCHEMA, "kind": "accept", "by": "sam",
+            "saved_at": "2026-01-04T09:00:00Z", "card": None, "version": "1.0.0", "title": "first release"},
+            indent=2), encoding="utf-8")
 
     def make_repo(self) -> None:
         remote = self.repos / "example-garden.git"
         repo = self.repos / "example-garden"
         remote.mkdir(parents=True)
         git(remote, "init", "-q", "--bare", "-b", "main")
-        repo.mkdir()
+        repo.mkdir(exist_ok=True)
         git(repo, "init", "-q", "-b", "main")
         git(repo, "config", "user.email", "tester@example.com")
         git(repo, "config", "user.name", "Tester")
@@ -183,6 +225,27 @@ class Brain:
     def close(self) -> None:
         shutil.rmtree(self.root, ignore_errors=True)
         shutil.rmtree(self.repos, ignore_errors=True)
+
+
+def save_verdicts(board: dict, entries: list, folder: Path, name: str, board_id: str | None = None,
+                  saved_at: str = "2026-01-10T10:00:00.000Z", extra: dict | None = None) -> Path:
+    """A verdicts file as the page would save it: each entry gains the card's current signature
+    and `seen_through` unless the entry sets them itself."""
+    state = events.state(board)
+    by_id = {c["id"]: c for c in state["items"] + state["retired"]}
+    body = {"schema": board["verdict_schema"], "board": board_id if board_id is not None else board["id"],
+            "savedAt": saved_at,
+            "verdicts": [dict({"sig": by_id.get(e["id"], {}).get("sig", ""),
+                               "seen_through": by_id.get(e["id"], {}).get("last_event", "")}, **e) for e in entries]}
+    body.update(extra or {})
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / (board["verdict_prefix"] + name + ".json")
+    path.write_text(json.dumps(body), encoding="utf-8")
+    return path
+
+
+def event_files(board: dict) -> list:
+    return sorted(p.name for p in (Path(board["folder"]) / "events").glob("*.json"))
 
 
 def quiet(fn, *args, **kwargs):

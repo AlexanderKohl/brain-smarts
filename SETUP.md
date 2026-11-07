@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-23T13:00:00+10:00
-updated: 2026-09-29T08:50:29+10:00
+updated: 2026-11-03T10:03:18+10:00
 owner: brain-owner
 skill_refs:
   - /shared/skills/manage-credentials
@@ -76,6 +76,9 @@ The agent may show the **last four characters** of a stored secret for confirmat
   (CONTRACT §10.5); the person may have several.
 - Give every shell command with an explicit `cd` first (`SMART-RULE-0006`). Before
   `/memory/OWNER.md` exists, use the chosen brain root; afterwards read `brain_root` from it.
+- Run every setup command in the shared checkout, never in a session copy: setup scripts find
+  the brain from their own location, so the vault, login items and scheduled tasks would point at
+  the copy. `setup_guard.py` (section 2.2) checks this.
 - Never write owner content into the mechanics repository (CONTRACT §3.4). Everything about the
   person goes under `/memory/`.
 
@@ -125,6 +128,10 @@ settings are per machine, while the repositories and skill choices are per owner
 ### 2.2 Resume procedure
 
 1. Find the brain root (walk up to `CONTRACT.md`). If none is found, start at step A.
+   When one is found, run `python shared/skills/repository-preflight/scripts/setup_guard.py` from
+   it first. It refuses a session copy (a linked worktree under the sessions folder,
+   `SMART-RULE-0038`): anything set up from one points at that copy and breaks when it is removed.
+   On a refusal, stop and run setup from the shared checkout the message names.
 2. If `/memory/STATE.md` has a `## Setup` section, continue from the first row that is not
    `done` or `skipped` on this machine. For a new machine, run the per-machine steps (A, B2, D
    vault and connections, E, F, G, H) and skip the per-owner ones already `done`.
@@ -210,7 +217,9 @@ The brain is four layers (CONTRACT §3.4). The person gets:
 - **Smarts** – their own private copy of the mechanics repository, with the original kept as
   the `upstream` remote so improvements can be pulled in. Checked out at the brain root.
 - **Skill library** – their own private copy of the skill library, with the original kept as
-  `upstream`. Checked out at `<brain_root>/library/`.
+  `upstream`; or, when the original cannot be read, an empty library of their own made from
+  `/shared/templates/library-skeleton/`, with no `upstream` until its owner grants access.
+  Checked out at `<brain_root>/library/`.
 - **Memory** – a new private repository made from `/shared/templates/memory-skeleton/`,
   checked out at `<brain_root>/memory/`.
 - **Project repositories** – later, one per large body of work, as siblings under
@@ -288,7 +297,8 @@ no work of its own. Then:
    `upstreams` (written in B4), add each as `upstream` with push disabled – in the brain root for
    `smarts`, in `library/` for `library`:
    `git remote add upstream <address>` then `git remote set-url --push upstream DISABLED`. A brain
-   whose owner maintains the originals has none; skip it.
+   whose owner maintains the originals has none, and a library made from the skeleton (B3a) has
+   none until its owner adds one; skip what is not named.
 2. **Each computer has its own vault.** The vault is never in Git and is never shared: sign-in
    tokens change every time they are used, so a copy stops working as soon as the other computer
    refreshes it. In D.1 this computer gets a new vault with its own passphrase prompt, and in D
@@ -375,8 +385,9 @@ It points each repository at its own `.githooks/` folder. Before every commit Gi
 ### B3a. Your skill library
 
 **Done when:** `<brain_root>/library/skills/README.md` exists, and `git remote -v` in
-`<brain_root>/library/` shows `origin` pointing at the person's own repository and `upstream` at
-the original.
+`<brain_root>/library/` shows `origin` pointing at the person's own repository, and `upstream`
+at the original when the original could be read. A library made from the skeleton (**Empty
+library** below) has no `upstream` until the original's owner grants read access.
 
 **Agent does:** the original library sits beside the original smarts under the same account and
 is named `brain-skills`, so its address is the smarts' `upstream` address with the last part
@@ -392,17 +403,24 @@ git ls-remote $library HEAD
 macOS and Linux:
 `library=$(git remote get-url upstream | sed -E 's#[^/\\:]+(\.git)?[/\\]?$#brain-skills.git#'); git ls-remote "$library" HEAD`.
 
-When `ls-remote` answers, use that address. When it fails, or the smarts have no `upstream`, ask –
-without recommending the address that failed:
+When `ls-remote` answers, use that address (**Original readable** below).
 
-> **Ask:** Where is the skill library that goes with these smarts? The address I worked out
-> (`<derived address>`) does not answer.
+When it is refused – the usual reason: the original library is private and the person has no
+read access to it – the setup does not stop and does not ask for access. Tell the person, in
+one line, that the skill library of the person who shared the smarts was not readable, so they
+start with an empty library of their own; they can ask that person for read access later and
+add the original as `upstream` then (`SMART-RULE-0032`; the skeleton's `README.md` carries the
+commands). Then make the library from the skeleton (**Empty library** below) and go on with B3b.
+
+When the smarts have no `upstream` (B3 option 3), there is no address to derive; ask –
+
+> **Ask:** Where is the skill library that goes with these smarts?
 > 1. An address you give me – the person who shared the smarts will have it
-> 2. Go on without a library for now; library skills can be added later
+> 2. Start with an empty library of your own; skills can be written or merged in later
 >
 > **Suggested reply:** `1`
 
-Then, the same way as B3 option 1 (on macOS and Linux use forward slashes):
+**Original readable** – the same way as B3 option 1 (on macOS and Linux use forward slashes):
 
 ```powershell
 cd C:\dev\brain
@@ -412,6 +430,38 @@ git remote rename origin upstream
 git remote set-url --push upstream DISABLED
 gh repo create <github_account>/brain-skills --private --source . --remote origin --push
 ```
+
+**Empty library** – the clone was refused, or the person chose option 2. Copy the skeleton and
+make it the person's own repository, with `origin` and no `upstream`:
+
+```powershell
+cd C:\dev\brain
+if (-not (Test-Path library)) { Copy-Item -Recurse shared\templates\library-skeleton library }
+cd C:\dev\brain\library
+git init -b main
+```
+
+macOS and Linux: `cd ~/dev/brain && [ -e library ] || cp -R shared/templates/library-skeleton library`,
+then `cd library && git init -b main`.
+
+In `library/README.md` and `library/skills/README.md`, drop the `template-` prefix from each
+`id` and set `created` and `updated` to the current time, read from the clock as in B4 step 3;
+in `library/repository-manifest.json` set `created`, `updated` and `validated_at` the same way
+(step H rewrites it). Then commit, with the two trailers the commit-message hook requires
+(`SMART-RULE-0009`), and create the private repository the same way as the memory in B4:
+
+```powershell
+cd C:\dev\brain\library
+git add -A
+git commit -m "Empty skill library from the skeleton" -m "Tool: <host>`nCo-Authored-By: <model> <no-reply address>"
+gh repo create <github_account>/brain-skills --private --source . --remote origin --push
+```
+
+macOS and Linux: the same, with `-m $'Tool: <host>\nCo-Authored-By: <model> <no-reply address>'`.
+
+Record the row `B3a skill library | done | ... | from the skeleton; no upstream` in `## Setup`
+(section 2.1). B4 step 6 then records no library upstream, and step H commits the library's
+manifest instead of restoring it.
 
 The mechanics repository ignores `library/`, as it ignores `memory/`: each is its own repository.
 
@@ -1292,8 +1342,8 @@ board.
 > **Suggested reply:** `1`
 
 The agent makes the board by following **Making a board** in
-`/shared/skills/owner-board/SKILL.md`: copy `/shared/skills/owner-board/templates/board.template.md`
-to `<node>/status/board.md` and fill it, create `cards/` beside it, list `status/` in the node's
+`/shared/skills/owner-board/SKILL.md`: copy `/shared/skills/owner-board/templates/board.template.json`
+to `<node>/status/board.json` and fill it, create `cards/` and `events/` beside it, list `status/` in the node's
 `README.md`, and add one entry to the `boards` list in
 `/memory/skills/owner-board/config/boards.json`. For option 1 the entry is:
 
@@ -1408,6 +1458,10 @@ and library working trees are clean, and the tour is given.
 
    Both `git status --short` should now print nothing; if either lists anything else, show it to
    the person before going on.
+
+   A library made from the skeleton (B3a) has no `upstream`, so its manifest is the person's
+   own: instead of restoring it, stage `repository-manifest.json` in `library/`, commit it there
+   with the two trailers, and push to `origin`.
 4. Report the memory commit hash and its push status, and that the smarts and library are
    clean (`SMART-RULE-0014`).
 

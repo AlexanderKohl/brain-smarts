@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-23T12:00:00+10:00
+updated: 2026-11-03T10:03:18+10:00
 ---
 
 # Shared Templates
@@ -19,11 +19,17 @@ Use `governance-proposal.template.md` for any proposed semantic change to protec
 
 Use `project-pointer-README.template.md` for the pointer node memory keeps for a project that lives in its own repository (CONTRACT §16.1). The project's own node files inside its repository's `brain/` folder use the `node-*.template.md` files.
 
+Use `node-tasks-README.template.md` for the `README.md` of a node's task store (CONTRACT §9): a memory node's `tasks/`, a pointer node's private `tasks/`, or a project repository's `brain/tasks/`. It names no `/memory/` path, so it is safe in a repository.
+
 #### Folders
 
 ##### `host-pointers/`
 
 Contains the pointer files that make every host session start from `/CONTRACT.md` (user-level Claude Code and Codex pointers, memory and project-repository pointers, a Cursor rule) and the permission-settings templates for uninterrupted work. Canonical templates used by `/SETUP.md`; pointers only, never behavioural rules (`SMART-RULE-0007`).
+
+##### `library-skeleton/`
+
+Contains the empty skill library a person starts from when the original library cannot be read at setup (`/SETUP.md` step B3a): a `README.md` in the layout of the library's own, a `skills/README.md` index with no skills, a `repository-manifest.json` carrying the contract version, and the library's generic `.gitignore`, `.gitattributes`, `.githooks/` and preflight workflow. Copy the whole folder to `<brain_root>/library/`, make it a repository with `origin` and no `upstream`, and add the original as `upstream` later when its owner grants read access. Canonical template; every `id` carries a `template-` prefix so the skeleton never collides with a live library.
 
 ##### `memory-skeleton/`
 

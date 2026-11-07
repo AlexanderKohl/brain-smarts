@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-29T08:00:00+10:00
-updated: 2026-10-01T12:10:36+10:00
+updated: 2026-11-07T13:22:37+10:00
 owner: brain-owner
 generated_by: /shared/skills/repository-preflight/scripts/core.py
 canonical_sources:
@@ -34,6 +34,7 @@ Every AI agent, script or person working anywhere in the brain must:
 4. Choose a bootstrap tier for the current turn, before reading further:
    - **Scoped bootstrap** (allowed only for answer-only / read-only fact retrieval with no durable writes): read what the answer needs – injected host context, a file already read in this session, or targeted reads of known paths – and nothing else.
    - **Full bootstrap** (required before the first creation, change or deletion of brain content, a governance change, use of a skill with side effects, or when applicable policy is unclear): read `/CORE.md` and `/CORE-RULES.md`, then the owner profile `/memory/OWNER.md` and the owner-layer rules `/memory/RULES.md`, then inherited node `RULES.md` files down to the active node, then the active node's `README.md`, `STATE.md` and relevant dependencies before acting. The two files are generated from this contract and `/RULES.md`: `/CORE.md` holds, verbatim, the sections of this contract that always apply; `/CORE-RULES.md` holds the tables that say when every other section and rule applies, and, verbatim, the rules that always apply. Each is short enough for a host to show whole; read them, and every bootstrap file, with the host's file-reading tool (for example Read), not a shell command such as `cat`: a shell may show only the start of a long file.
+   - **Worker bootstrap** (allowed only for a worker executing a delegation packet under `SMART-RULE-0024`): read the worker brief the packet names, the packet itself, and the `RULES.md` of each node the packet's write paths touch. The worker writes only inside the packet's write paths, never commits, and escalates by a blocked result. The conductor that wrote the packet has completed the full bootstrap, validates the result before it is integrated, and remains accountable for routing, tasks, logs, state and commits. A worker that must act outside its packet escalates instead of bootstrapping further.
    - **Read by situation.** Before acting in a situation named under `Applies when` in those tables, read that section of this contract, or that rule in its canonical home, in full. When it is unclear whether a row applies, read it.
    - **Escalation.** A turn that began scoped escalates to full bootstrap the moment it is about to write, take a side effect, use a credential or meet policy doubt: before that first action, never after it. A write to a brain repository begins with `session.py start` (`SMART-RULE-0038`), which prints the full-bootstrap reading list, so every agent in every host meets the escalation at the same step.
 5. Stop and report the problem if the contract cannot be found or read, or if competing location hints identify different contracts.
@@ -81,8 +82,8 @@ The brain is made of four layers, each with its own repository and its own audie
 
 1. **Mechanics (this repository).** The contract, generic rules, bootstrap and onboarding files, the core skills the brain itself depends on (a skill a `SMART-RULE` or this contract requires, or that another core skill calls), templates, schemas, the raw-file system node and governance proposals about the mechanics. It holds **no personal data**: no owner name, client, contact, company, account, location or tenant identifier, email address, phone number, machine path or owner project name. Anyone could adopt it unchanged.
 2. **Skill library (`/library/`).** Every other reusable skill: access to an outside system, or a way of working an owner may choose. Instructions, scripts, tests and generic external-API knowledge, under the same no-personal-data condition as the mechanics. An owner uses the skills listed in `active_skills` in `/memory/OWNER.md`, and may merge skills from other libraries into their own.
-3. **Memory (`/memory/`).** Everything specific to one owner: the owner profile, owner-layer rules, tasks, in-brain projects, contacts, raw files, sources, outbox, boards, the brain-wide `STATE.md`, `LOG.md` and `KNOWLEDGE.md`, per-skill owner configuration and notes, and pointer nodes for projects that live in their own repositories.
-4. **Project repositories.** Bodies of work with their own lifecycle, each in its own repository, checked out as siblings of the brain root (section 16). The memory keeps only a small pointer node for each.
+3. **Memory (`/memory/`).** Everything specific to one owner: the owner profile, owner-layer rules, the tasks that belong to no project, in-brain projects with their own tasks, sources and knowledge, contacts, the raw files and sources that belong to no single node, outbox, boards, the brain-wide `STATE.md`, `LOG.md` and `KNOWLEDGE.md`, per-skill owner configuration and notes, and pointer nodes for projects that live in their own repositories.
+4. **Project repositories.** Bodies of work with their own lifecycle, each in its own repository, checked out as siblings of the brain root (section 16). Each holds its project node, tasks and sources included, in its `brain/` folder. The memory keeps a small pointer node for each, holding only what the owner keeps private about the project.
 
 When an item could sit in memory or in a shareable layer (the mechanics or the skill library), it belongs in memory unless it is free of every owner specific listed above and useful to another owner as it stands. A mechanism learnt from an owner incident goes to the mechanics layer in generalised form, and the original incident, with its real identifiers, stays in memory at the node that owns it.
 
@@ -145,7 +146,7 @@ A fact, principle, preference, definition or established relationship expected t
 
 Store it in the `KNOWLEDGE.md` file or dedicated knowledge node that owns the subject.
 
-Place knowledge according to subject ownership, not the project active when it was mentioned.
+Place knowledge according to subject ownership, not the project active when it was mentioned. A fact about one project belongs in that project node's `KNOWLEDGE.md` – in its repository when it has one – and not in `/memory/KNOWLEDGE.md` or another node, unless the owner keeps it private, when it goes to the project's pointer node (section 16.1).
 
 ### 5.3 State change
 
@@ -159,7 +160,7 @@ Create a `LOG.md` entry when the change is significant, explains a decision or i
 
 An outstanding action that must remain visible after the current interaction.
 
-Create or update a canonical task record under `/memory/tasks/`.
+Create or update a canonical task record in its task store (section 9): the `tasks/` folder of the node its project reference names, or `/memory/tasks/` for a task with no project. Work that concerns several projects becomes one task per project (section 9).
 
 ### 5.5 Mixed input
 
@@ -235,15 +236,17 @@ When uncertain:
 
 ### 13.2 Protected governance
 
-Protected governance files are:
+Protected governance is rule and contract wording:
 
 - `/CONTRACT.md`
 - every active `RULES.md`, including the owner layer `/memory/RULES.md` and node rules in memory and in project repositories
-- governance schemas and templates
+- governance schemas and templates that define the wording of a rule or a proposal
 - bootstrap instructions that determine how agents locate or load the contract and inherited rules
-- the repository preflight skill and validator that enforce this protocol
+- the statement of what the repository preflight validator enforces: the *Failure behaviour* section of its skill
 
-A substantive or semantic change to protected governance must not become active until the owner explicitly accepts an identified proposal or the exact displayed diff.
+The validator's code, tests and fixtures, the rest of its skill, and README files are not protected governance; they change as ordinary persistent changes (section 13.1). Code that changes what the validator accepts or refuses changes the rule it enforces, so the *Failure behaviour* section changes with it, under this section.
+
+A substantive or semantic change to protected governance must not become active until the owner explicitly accepts an identified proposal or the exact displayed diff. Acceptance covers that change, not later changes to the same file: each substantive change needs its own. A change that only rewrites the `updated` stamp, line endings or the dash style is not substantive.
 
 Before requesting acceptance, present:
 

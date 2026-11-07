@@ -19,3 +19,10 @@ Read `/CONTRACT.md` first.
 ##### `proposals/`
 
 Contains canonical proposals for owner-layer governance changes. Proposals are not active governance.
+
+#### Files
+
+##### `removed-files.md`
+
+The register of files removed from this memory, when, and where their content went; the repository
+preflight reads it for `/memory/` paths only.

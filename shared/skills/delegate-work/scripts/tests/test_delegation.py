@@ -54,7 +54,7 @@ class DelegationTestCase(unittest.TestCase):
     # ------------------------------------------------------------ helpers
 
     def new_run(self, **overrides) -> str:
-        args = [*self.common, "new-run", "--title", "Trial", "--why-parallel",
+        args = [*self.common, "new-run", "--context-tokens", "1000", "--title", "Trial", "--why-parallel",
                 "three independent read-only audits", "--run-id", overrides.get("run_id", "RUN-TEST")]
         if "max_workers" in overrides:
             args += ["--max-workers", str(overrides["max_workers"])]
@@ -63,8 +63,11 @@ class DelegationTestCase(unittest.TestCase):
         return overrides.get("run_id", "RUN-TEST")
 
     def new_packet(self, run: str, *extra: str) -> tuple[int, str]:
-        return run_cli(*self.common, "new-packet", "--run", run, "--title", "Audit skills",
-                       "--objective", "Check every SKILL.md.", *extra)
+        # Every packet needs a model reason; a test that is about the model flags passes its own.
+        chosen = any(flag in extra for flag in ("--model", "--effort", "--model-reason"))
+        reason = () if chosen else ("--model-reason", "test fixture")
+        return run_cli(*self.common, "new-packet", "--context-tokens", "1000", "--run", run,
+                       "--title", "Audit skills", "--objective", "Check every SKILL.md.", *reason, *extra)
 
     def result_path(self, run: str, short: str) -> Path:
         return self.root / "temp" / "delegation" / "runs" / run / f"{short}.result.md"
@@ -97,10 +100,62 @@ class DelegationTestCase(unittest.TestCase):
         self.assertNotEqual(code, 0)
 
     def test_new_run_rejects_budget_above_four(self) -> None:
-        code, out = run_cli(*self.common, "new-run", "--title", "T", "--why-parallel", "x",
-                            "--max-workers", "5")
+        code, out = run_cli(*self.common, "new-run", "--context-tokens", "1000", "--title", "T",
+                            "--why-parallel", "x", "--max-workers", "5")
         self.assertNotEqual(code, 0)
         self.assertIn("max workers is 4", out)
+
+    # ------------------------------------------------------------ MEMORY-RULE-0005 trial runs
+
+    def new_trial_run(self, *trial: str) -> tuple[int, str]:
+        return run_cli(*self.common, "new-run", "--context-tokens", "1000", "--title", "Trial",
+                       "--why-parallel", "x", "--run-id", "RUN-TRIAL", *trial)
+
+    def test_trial_run_of_seven_accepts_seven_packets_and_refuses_the_eighth(self) -> None:
+        code, out = self.new_trial_run("--trial-workers", "7", "--trial-reason", "measured trial")
+        self.assertEqual(code, 0, out)
+        for _ in range(7):
+            code, out = self.new_packet("RUN-TRIAL")
+            self.assertEqual(code, 0, out)
+        code, out = self.new_packet("RUN-TRIAL")
+        self.assertNotEqual(code, 0)
+        self.assertIn("budget is 7", out)
+
+    def test_trial_workers_above_eight_is_refused(self) -> None:
+        code, out = self.new_trial_run("--trial-workers", "9", "--trial-reason", "too many")
+        self.assertNotEqual(code, 0)
+        self.assertIn("5 to 8", out)
+
+    def test_trial_workers_without_reason_is_refused(self) -> None:
+        code, out = self.new_trial_run("--trial-workers", "6")
+        self.assertNotEqual(code, 0)
+        self.assertIn("--trial-reason is required", out)
+
+    def test_run_without_trial_flags_still_refuses_the_fifth_packet(self) -> None:
+        code, out = self.new_trial_run()
+        self.assertEqual(code, 0, out)
+        for _ in range(4):
+            self.assertEqual(self.new_packet("RUN-TRIAL")[0], 0)
+        code, out = self.new_packet("RUN-TRIAL")
+        self.assertNotEqual(code, 0)
+        self.assertIn("budget is 4", out)
+        meta, _ = delegation.load(self.root / "temp/delegation/runs/RUN-TRIAL/RUN.md")
+        self.assertNotIn("trial", meta)
+
+    def test_trial_run_records_trial_fields_and_close_and_summarise_show_them(self) -> None:
+        code, out = self.new_trial_run("--trial-workers", "6", "--trial-reason", "first measured trial")
+        self.assertEqual(code, 0, out)
+        meta, _ = delegation.load(self.root / "temp/delegation/runs/RUN-TRIAL/RUN.md")
+        self.assertEqual(meta["trial"], {"workers": "6", "reason": "first measured trial"})
+        self.assertEqual(meta["max_workers"], "6")
+        code, out = run_cli(*self.common, "summarise", "--run", "RUN-TRIAL")
+        self.assertIn("trial: workers 6; reason: first measured trial", out)
+        code, out = run_cli(*self.common, "close-run", "--run", "RUN-TRIAL", "--status", "synthesised",
+                            "--host", "Claude Code", "--parallel", "yes", "--context-tokens", "1000")
+        self.assertEqual(code, 0, out)
+        self.assertIn("trial: workers 6; reason: first measured trial", out)
+        meta, _ = delegation.load(self.root / "temp/delegation/runs/RUN-TRIAL/RUN.md")
+        self.assertEqual(meta["trial"], {"workers": "6", "reason": "first measured trial"})
 
     # ------------------------------------------------------------ packets
 
@@ -187,12 +242,13 @@ class DelegationTestCase(unittest.TestCase):
         self.assertIn("WARN", out)
         self.assertIn("against a budget of 5", out)
 
-    def test_worktree_worker_commits_on_its_branch(self) -> None:
+    def test_worktree_worker_never_commits(self) -> None:
         run = self.new_run()
         self.new_packet(run, "--writes", "worktree")
         _, body = delegation.load(self.root / "temp/delegation/runs" / run / "W01.md")
-        self.assertIn("Commit on your own branch", body)
-        self.assertIn("never merge", body)
+        self.assertIn("Do not commit, stage or push, in your worktree", body)
+        self.assertNotIn("Commit on your own branch", body)
+        self.assertNotIn("push that branch", body)
         self.new_packet(run)
         _, body2 = delegation.load(self.root / "temp/delegation/runs" / run / "W02.md")
         self.assertIn("Do not commit", body2)
@@ -331,6 +387,42 @@ class DelegationTestCase(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("model must be set", out)
 
+    def test_a_chosen_model_or_effort_needs_a_reason(self) -> None:
+        run = self.new_run()
+        code, out = self.new_packet(run, "--model", "opus", "--effort", "medium")
+        self.assertEqual(code, 1, out)
+        self.assertIn("--model-reason is required", out)
+        code, out = self.new_packet(run, "--effort", "high")
+        self.assertEqual(code, 1, out)
+        code, out = self.new_packet(run, "--model", "opus", "--effort", "medium",
+                                    "--model-reason", "bounded judgement, a person sees it")
+        self.assertEqual(code, 0, out)
+        meta, _ = delegation.load(self.root / "temp" / "delegation" / "runs" / run / "W01.md")
+        self.assertEqual(meta["model"], "opus")
+        self.assertEqual(meta["effort"], "medium")
+        self.assertEqual(meta["model_reason"], "bounded judgement, a person sees it")
+        code, out = self.new_packet(run)
+        self.assertEqual(code, 0, out)
+        meta, _ = delegation.load(self.root / "temp" / "delegation" / "runs" / run / "W02.md")
+        self.assertEqual((meta["model"], meta["effort"], meta["model_reason"]), ("inherit", "inherit", "test fixture"))
+
+    def test_every_packet_needs_a_model_reason_even_when_it_inherits(self) -> None:
+        # Owner, 7 Nov 2026: workers ran on Fable by habit; the reason is now required on every packet.
+        run = self.new_run()
+        code, out = run_cli(*self.common, "new-packet", "--context-tokens", "1000", "--run", run,
+                            "--title", "Audit skills", "--objective", "Check every SKILL.md.")
+        self.assertEqual(code, 1, out)
+        self.assertIn("--model-reason is required", out)
+        code, out = run_cli(*self.common, "new-packet", "--context-tokens", "1000", "--run", run,
+                            "--title", "Audit skills", "--objective", "Check every SKILL.md.",
+                            "--model-reason", "   ")
+        self.assertEqual(code, 1, out)
+        code, out = self.new_packet(run, "--model", "sonnet", "--effort", "medium",
+                                    "--model-reason", "spelled-out fix, no judgement left")
+        self.assertEqual(code, 0, out)
+        meta, _ = delegation.load(self.root / "temp" / "delegation" / "runs" / run / "W01.md")
+        self.assertEqual((meta["model"], meta["effort"]), ("sonnet", "medium"))
+
     # ------------------------------------------------------------ synthesis
 
     def test_summarise_lists_every_packet_and_collects_routing_sections(self) -> None:
@@ -350,12 +442,13 @@ class DelegationTestCase(unittest.TestCase):
     def test_close_run_records_host_and_parallel_flag(self) -> None:
         run = self.new_run()
         code, _ = run_cli(*self.common, "close-run", "--run", run, "--status", "synthesised",
-                          "--host", "Claude Code", "--parallel", "no")
+                          "--host", "Claude Code", "--parallel", "no", "--context-tokens", "180000")
         self.assertEqual(code, 0)
         meta, _ = delegation.load(self.root / "temp/delegation/runs" / run / "RUN.md")
         self.assertEqual(meta["status"], "synthesised")
         self.assertEqual(meta["host"], "Claude Code")
         self.assertEqual(meta["parallel"], "false")
+        self.assertEqual(meta["context_tokens_at_close"], "180000")
 
     # ------------------------------------------------------------ workers stay apart (SMART-RULE-0038)
     # Each check is also run switched off, and the fault must then get through: that shows the
@@ -398,7 +491,7 @@ class DelegationTestCase(unittest.TestCase):
         run = self.new_run()
         self.new_packet(run, "--writes", "paths", "--path", "/RULES.md")
         self.fill_result(run, "W01", changed_paths=["/OTHER.md"], validation=["ran"])
-        with mock.patch.object(delegation, "within", lambda path, scope: True):
+        with mock.patch("results.within", lambda path, scope: True):
             code, out = run_cli(*self.common, "validate-result", "--run", run)
         self.assertEqual(code, 0, out)
 

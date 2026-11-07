@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 node_type: system
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-09-23T19:34:24+10:00
+updated: 2026-11-03T10:03:18+10:00
 owner: brain-owner
 ---
 
@@ -176,7 +176,7 @@ Describes how a change to the mechanics layer is proposed (`governance/proposals
 
 ##### `library/`
 
-The skill library: a **separate repository**, checked out here and listed in this repository's `.gitignore`. Never commit anything under it to this repository. It holds the optional skills – outside systems and ways of working – each with its own `SKILL.md`, scripts and tests, and no personal data (CONTRACT §3.4). See [`/SETUP.md`](SETUP.md) step B3a to check it out.
+The skill library: a **separate repository**, checked out here and listed in this repository's `.gitignore`. Never commit anything under it to this repository. It holds the optional skills – outside systems and ways of working – each with its own `SKILL.md`, scripts and tests, and no personal data (CONTRACT §3.4). See [`/SETUP.md`](SETUP.md) step B3a to check it out, or to start an empty one from `shared/templates/library-skeleton/` when the original library cannot be read.
 
 ##### `memory/`
 
@@ -184,7 +184,7 @@ The owner's memory: a **separate repository**, checked out here and listed in th
 
 ##### `shared/`
 
-Contains the core skills the brain depends on, schemas and templates, including the skeleton for a new owner's memory (`shared/templates/memory-skeleton/`). Reusable resources belong here and must be referenced rather than copied into projects. Owner configuration for a skill lives in `/memory/skills/<skill>/`, never here.
+Contains the core skills the brain depends on, schemas and templates, including the skeletons for a new owner's memory (`shared/templates/memory-skeleton/`) and for an empty skill library (`shared/templates/library-skeleton/`). Reusable resources belong here and must be referenced rather than copied into projects. Owner configuration for a skill lives in `/memory/skills/<skill>/`, never here.
 
 ##### `systems/`
 

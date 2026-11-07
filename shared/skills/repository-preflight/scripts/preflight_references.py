@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 from typing import Any
 from preflight_base import MEMORY_PREFIX, in_memory, memory_root, library_root, layer_of, Result, root_path, git_ignored, is_template_path, is_own_repository
+from preflight_tasks import repository_checkouts, resolve_repository_ref
 
 
 # The memory skeleton every new owner starts from. A mechanics file may declare a metadata
@@ -53,8 +54,24 @@ CLOSED_PROPOSAL = {"accepted", "implemented", "verified", "withdrawn", "supersed
 
 
 def removed_files(root: Path) -> set[str]:
-    """Paths listed in /governance/removed-files.md (first column of its table)."""
-    register = root / "governance" / "removed-files.md"
+    """Paths listed as removed (first column of each register's table).
+
+    /governance/removed-files.md lists mechanics paths; /memory/governance/removed-files.md, read
+    when the memory checkout is present, lists /memory/ paths. Each register is read only for its
+    own layer, so the mechanics register never needs a /memory/ path (which could hold personal
+    data) and the memory register cannot excuse a mechanics path.
+    """
+    found = {path for path in register_paths(root / "governance" / "removed-files.md")
+             if not path.startswith(MEMORY_PREFIX)}
+    memory = memory_root(root)
+    if memory is not None:
+        found |= {path for path in register_paths(memory / "governance" / "removed-files.md")
+                  if path.startswith(MEMORY_PREFIX)}
+    return found
+
+
+def register_paths(register: Path) -> set[str]:
+    """Repository-root paths in the first column of a removed-files register's table."""
     if not register.is_file():
         return set()
     found = set()
@@ -69,6 +86,7 @@ def validate_declared_references(
     root: Path, records: dict[Path, dict[str, Any]], result: Result
 ) -> None:
     memory_present = memory_root(root) is not None
+    checkouts = None
     for path, metadata in records.items():
         display = root_path(path, root)
         is_template = is_template_path(path, root)
@@ -78,6 +96,14 @@ def validate_declared_references(
                 continue
             values = raw_values if isinstance(raw_values, list) else [raw_values]
             for value in values:
+                if (isinstance(value, str) and not value.startswith("/") and not is_template
+                        and in_memory(path, root) and ":" in value):
+                    # CONTRACT §16.2: a memory file names a file in a project repository as
+                    # <repository>:brain/<path>; resolved in that repository's checkout.
+                    if checkouts is None:
+                        checkouts = repository_checkouts(root)
+                    if validate_repository_reference(display, key, value, checkouts, result):
+                        continue
                 if not isinstance(value, str) or not value.startswith("/"):
                     if not is_template:
                         result.errors.append(
@@ -119,6 +145,23 @@ def validate_declared_references(
                     result.errors.append(
                         f"{display}: broken {key} anchor {value}"
                     )
+
+
+def validate_repository_reference(display: str, key: str, value: str, checkouts: dict, result: Result) -> bool:
+    """Check one `<repository>:brain/<path>` value; False when the value is not of that form, so
+    the caller refuses it as it refuses any other value that is not a repository-root path."""
+    kind, target, anchor, detail = resolve_repository_ref(value, checkouts)
+    if kind == "malformed":
+        return False
+    if kind == "unknown":
+        result.errors.append(f"{display}: {key} reference {value} names a repository no pointer node gives")
+    elif kind == "unreachable":
+        result.warnings.append(f"{display}: {key} reference {value} not checked: the repository is {detail}")
+    elif not target.exists():
+        result.errors.append(f"{display}: broken {key} reference {value}")
+    elif anchor and not heading_exists(target, anchor):
+        result.errors.append(f"{display}: broken {key} anchor {value}")
+    return True
 
 
 def is_local_only(root: Path, target: Path) -> bool:

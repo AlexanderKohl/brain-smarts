@@ -15,7 +15,10 @@ owner: OWNER_SHORT_NAME
 
 Read `/CONTRACT.md` first.
 
-This is the canonical cross-project task store.
+This is the owner store: the tasks with no project reference (CONTRACT §9). A task whose project
+reference names a node is kept in that node's `tasks/` folder, in memory or in the project
+repository's `brain/tasks/`; task views read every store the brain can reach. `STATE.md` is
+generated from the records by `tasks.py state` and is never edited by hand.
 
 #### Folders
 
@@ -31,6 +34,10 @@ Contains canonical captured tasks that have not yet been processed. Clarify owne
 
 Contains canonical ready, in-progress, waiting, scheduled or blocked task records. Keep status, owner, dependencies and review timestamps current.
 
+##### `private/`
+
+Contains the owner's private companion notes, `<task id>.md`, about tasks kept in a project repository. Never task records and never drawn into a repository.
+
 ##### `recurring/`
 
 Contains canonical recurrence definitions. Generated task instances must remain separately traceable and must not overwrite the recurrence definition.
@@ -41,6 +48,6 @@ Contains canonical templates local to the task system. Copy and complete a templ
 
 ## Operating principle
 
-A task exists once and references every relevant project.
+A task exists once, in one store, and names one project. Work for several projects is split into one task per project, each listing the others in `related_tasks`.
 
 Use one owner. The system performs review checks using `due` and `next_review` whenever it is invoked or when an external scheduler runs.

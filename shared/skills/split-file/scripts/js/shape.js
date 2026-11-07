@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 'use strict';
-// Shape snapshot: what the rest of an app can see of some CommonJS modules, so a split that only
-// moves code can be shown to leave it unchanged.
+// Shape snapshot: what the rest of an app can see of some CommonJS modules or ES modules, so a split
+// that only moves code can be shown to leave it unchanged.
 //
 // It records:
-// - each module's exports, and a class's prototype, with property descriptors; functions by name
+// - each module's exports (an ES module's namespace: its named exports and `default`), and a class's
+//   prototype, with property descriptors; functions by name
 //   and a hash of their source text;
 // - each router (an Express-style function with a `stack`) layer by layer in registration order:
 //   method, full path, handler name and source hash, and the options passed to the middleware
@@ -42,6 +43,7 @@ const net = require('net');
 const os = require('os');
 const path = require('path');
 const { execFileSync, spawn } = require('child_process');
+const { pathToFileURL } = require('url');
 const { parseArgs } = require('./lib/args');
 
 const USAGE = 'usage: node shape.js [--root DIR] [--config FILE] [--modules a,b] [--out FILE | --compare FILE | --compare-ref REF]';
@@ -184,6 +186,18 @@ function installFactoryTags(root, normalise) {
     Object.assign(wrapped, multer);
     wrapped.shapeTagged = true;
     require.cache[multerFile].exports = wrapped;
+  }
+}
+
+// A CommonJS file is required; an ES module (.mjs, or a .js file that Node will only import) is
+// imported, and its namespace described like an exports object.
+async function load(full) {
+  if (/\.mjs$/i.test(full)) return import(pathToFileURL(full).href);
+  try {
+    return require(full);
+  } catch (err) {
+    if (err && ['ERR_REQUIRE_ESM', 'ERR_REQUIRE_ASYNC_MODULE'].includes(err.code)) return import(pathToFileURL(full).href);
+    throw err;
   }
 }
 
@@ -346,14 +360,14 @@ async function takeSnapshot(root, config, configArgs, coldFiles) {
     const full = path.join(root, file);
     if (!fs.existsSync(full)) { snapshot.modules[file] = '(missing)'; continue; }
     let exported;
-    try { exported = require(full); } catch (err) { snapshot.modules[file] = { loadError: String(err.message).split('\n')[0].slice(0, 300) }; continue; }
+    try { exported = await load(full); } catch (err) { snapshot.modules[file] = { loadError: String(err.message).split('\n')[0].slice(0, 300) }; continue; }
     snapshot.modules[file] = describeModule(exported);
     if (isRouter(exported) && !config.routers.some((r) => r.file === file)) snapshot.routers[`${file}`] = describeRouter(exported, '');
   }
   for (const { mount, file } of config.routers) {
     const full = path.join(root, file);
     let router = null;
-    try { router = fs.existsSync(full) ? require(full) : null; } catch { /* reported with its module */ }
+    try { router = fs.existsSync(full) ? await load(full) : null; } catch { /* reported with its module */ }
     snapshot.routers[`${mount} ${file}`] = router ? describeRouter(router, mount) : ['(missing or not loaded)'];
   }
   const cold = await Promise.all(coldFiles.map((file) => coldLoad(root, configArgs, file)));
@@ -408,7 +422,7 @@ function compareSnapshots(before, after, modules) {
 function changedFiles(root, ref, config) {
   const changed = execFileSync('git', ['diff', '--name-only', '--diff-filter=AMR', ref, '--', ...config.coldDirs], { cwd: root, encoding: 'utf8' });
   const added = execFileSync('git', ['ls-files', '--others', '--exclude-standard', '--', ...config.coldDirs], { cwd: root, encoding: 'utf8' });
-  return [...new Set(`${changed}\n${added}`.split(/\r?\n/))].filter((f) => /\.c?js$/.test(f) && !config.coldIgnore.some((frag) => f.includes(frag)));
+  return [...new Set(`${changed}\n${added}`.split(/\r?\n/))].filter((f) => /\.[cm]?js$/.test(f) && !config.coldIgnore.some((frag) => f.includes(frag)));
 }
 
 async function snapshotOfRef(root, ref, configArgs) {
@@ -451,7 +465,7 @@ async function main(argv) {
 
   if (options.cold) {
     const attempts = prepareEnvironment(root, config);
-    const exported = require(path.join(root, options.cold));
+    const exported = await load(path.join(root, options.cold));
     const names = exported && (typeof exported === 'object' || typeof exported === 'function')
       ? Object.getOwnPropertyNames(exported).filter((n) => !(isRouter(exported) ? ROUTER_OWN : FUNCTION_OWN).has(n)).sort()
       : [];

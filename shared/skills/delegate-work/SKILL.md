@@ -8,8 +8,9 @@ status: active
 scope: shared
 script_paths:
   - /shared/skills/delegate-work/scripts/delegation.py
+  - /shared/skills/delegate-work/scripts/results.py
 created: 2026-09-15T07:45:00+10:00
-updated: 2026-09-29T08:00:43+10:00
+updated: 2026-11-07T13:22:37+10:00
 owner: brain-owner
 project_refs:
   - /memory/projects/brain-development
@@ -38,7 +39,9 @@ outputs through artifacts, share only summaries through agent messages.
 - Not a task system. Packets and results are ephemeral instrumentation under `/temp/`. Work
   that must outlive the session is an ordinary `/memory/tasks/` record with `waiting_on` and
   `next_review` (CONTRACT section 9.1).
-- Not cross-session or asynchronous. A run starts and ends inside one conductor session.
+- Not cross-session or asynchronous. A run starts and ends inside one conductor session. Work
+  that crosses sessions moves through **cards** (task records with a `team`), not through runs;
+  see *Team threads and the scrum master* below.
 
 ## Independent review suggestions
 
@@ -69,8 +72,10 @@ state.
 - validate a worker's result record
 - print a synthesis summary of a run
 - close a run, recording the host and whether packets actually ran in parallel
+- refuse a run or packet past the context guard or after a compaction, and clear a compaction
+  marker once the handover checkpoint is committed (`checkpoint-done`)
 
-The script writes only inside `/temp/delegation/runs/`. Workers write only their result file
+The script writes only inside `/temp/delegation/runs/` and `/temp/conductor/compacted/`. Workers write only their result file
 and artifacts inside the run folder unless a packet explicitly widens `writes`.
 
 ## Required inputs
@@ -96,18 +101,25 @@ and artifacts inside the run folder unless a packet explicitly widens `writes`.
 ```bash
 cd <brain-root>   # the folder holding CONTRACT.md (brain_root in /memory/OWNER.md)
 
-# 1. open a run (max four workers, depth one)
+# 0. read your context size from the host (see hosts/); every dispatch states it
+# 1. open a run (max four workers, depth one; up to eight with --plan); refused from 750 000 tokens
+#    or after a compaction
 python shared/skills/delegate-work/scripts/delegation.py new-run \
   --title "Audit skills, tasks and transcripts" \
   --why-parallel "three read-only audits with no shared state" \
-  --parent TASK-2026-0999
+  --parent TASK-2026-0999 --context-tokens 131000
+#    a run an approved build plan has split may hold up to eight workers: add --plan PATH
+#    --max-workers N (1 to 8); RUN.md then records plan: <repository-root path>
+#    a measured trial run: add --trial-workers N --trial-reason TEXT (never with --plan);
+#    RUN.md then records trial: {workers, reason}
 
-# 2. one packet per worker; defaults are isolated, read-only, no external access
+# 2. one packet per worker; defaults are isolated, read-only, no external access;
+#    refused from 900 000 tokens or after a compaction
 python shared/skills/delegate-work/scripts/delegation.py new-packet \
   --run RUN-20990101-090000 --title "Audit SKILL.md sections" \
   --objective "Check every /shared/skills/*/SKILL.md for the CONTRACT section 10.2 headings." \
   --context /CONTRACT.md --context /shared/skills/README.md \
-  --acceptance "one row per skill naming each missing section"
+  --acceptance "one row per skill naming each missing section" --context-tokens 133000
 
 # 3. hand each packet to the host's subagent facility (see hosts/)
 python shared/skills/delegate-work/scripts/delegation.py dispatch-prompt \
@@ -119,7 +131,11 @@ python shared/skills/delegate-work/scripts/delegation.py check-writes --run RUN-
   [--mine /memory/projects/example/LOG.md]
 python shared/skills/delegate-work/scripts/delegation.py summarise --run RUN-20990101-090000
 python shared/skills/delegate-work/scripts/delegation.py close-run \
-  --run RUN-20990101-090000 --status synthesised --host "Claude Code" --parallel yes
+  --run RUN-20990101-090000 --status synthesised --host "Claude Code" --parallel yes \
+  --context-tokens 162000
+
+# after a compaction, once the handover checkpoint is committed (the hook prints the id)
+python shared/skills/delegate-work/scripts/delegation.py checkpoint-done --session <session_id>
 
 # tests
 python -m unittest discover -s shared/skills/delegate-work/scripts/tests
@@ -134,31 +150,57 @@ The script uses only the Python standard library.
 | `context_mode` | `isolated` (default), `fork` | Fresh context from the packet, or inherit the conductor's context. Fork needs `--fork-reason`. |
 | `writes` | `none` (default), `worktree`, `paths` | No repository writes; writes only in an isolated worktree or branch; writes only to the listed `write_paths`. |
 | `external` | `none` (default), `read`, `write` | No credentials or external systems; read-only with provenance; side effects only against `external_target`, which must be an owner-confirmed target under CONTRACT section 10.5. |
-| `model` | `inherit` (default) or a name | Honoured only where the host allows a model choice. The result records what actually ran. |
+| `model` | `inherit` (default) or a name | Honoured only where the host allows a model choice. The result records what actually ran. `--model-reason` is required on every packet, `inherit` included (7 Nov 2026). |
 | `max_tool_calls`, `max_output_words` | integers | Soft budgets the worker is told to respect. |
 | `context_refs` | repository-root paths | What the worker reads. References, never copied prose. Each must exist. |
 | `--fact LABEL=COMMAND` | repeatable | Runs the command at packet time and pastes its output into the packet. A packet quotes only facts the conductor verified by a command in the same session; a count typed from memory is a hint, and the packet says so. |
 
-### Choosing a worker's model
+Budget: a run holds at most four packets (`max_workers`, `SMART-RULE-0024`). A run opened with `--plan PATH --max-workers N` may hold up to eight, when `PATH` names an approved build plan that gives each packet its own write paths, no two packets sharing one, and fixes every interface between the packets; the conductor approves the plan before the run opens, RUN.md records it as `plan:`, and `close-run` and `summarise` print it. The machine limit of `SMART-RULE-0037` still applies, and the lower number wins. `--trial-workers N --trial-reason TEXT` stays, unchanged (five to eight today), as the mechanism for a measured trial beyond eight, which `SMART-RULE-0024` asks for before eight is raised (such a trial also raises its cap); it may not be combined with `--plan`, and `close-run` and `summarise` print its `trial` fields.
 
-**`inherit` is the default and stays the default**. Name a smaller model only for a packet whose objective
-leaves no judgement, and decide that packet by packet, never as a standing rule for a class of
-work.
+### Choosing a worker's model and effort
 
-A packet leaves no judgement when every decision is already made in it: the files are named,
-the change is spelled out, the acceptance is a command that passes or fails, and nothing in it
-asks the worker to weigh evidence, choose between two reasonable shapes, or decide whether
-something could be verified. If the objective contains the words *decide*, *judge*, *check
-whether*, *if you cannot verify*, or an option for the worker to choose between, it does not
-qualify.
+**The conductor chooses a model and an effort for every packet from what that packet needs, and
+writes the choice and a one-line reason on the packet** (`--model`, `--effort`, `--model-reason`).
+No kind of work is tied to one model. `new-packet` refuses a packet without `--model-reason`, so the
+choice cannot be skipped by habit (owner, 7 Nov 2026, after a day of packets sent to one pinned
+worker type ran a model's weekly allowance to 100 % and stopped three workers mid-edit).
 
-The reason for the caution is arithmetic, not taste: a worker that misreads a packet costs a
-full re-run plus the conductor's merge time, which is more than the saving on the first run.
-The result records what actually ran, so a packet that named one model and a worker that
-reports another shows up at validation.
+It weighs, in this order:
+
+1. **What a wrong result costs.** Rework only; something a person sees; stored data, money,
+   security or production.
+2. **How much judgement the packet leaves.** None: the files, the change and the acceptance are
+   spelled out. Bounded: one area, a few reasonable choices. Open: design, trade-offs, research
+   that must weigh evidence.
+3. **How much the worker must read.** A large reading load favours the model that is cheapest per
+   token at the quality the first two need.
+4. **The allowance left.** The conductor reads the host's usage before dispatching (the host note
+   says how). A model past 75 % of its period's allowance is chosen only when no other fits, and
+   the reason says so.
+
+The ladder, lowest first; the host note maps it to model names:
+
+| Packet | Model and effort |
+|---|---|
+| no judgement, rework only | the cheapest model that writes code reliably; low or medium effort |
+| bounded judgement, or a person sees the result | the current Opus-class model; medium effort |
+| open judgement, or data, money, security or production | the Opus-class model at high effort, or the conductor's own model and effort (`inherit`) |
+| open judgement where a specialised model is known to do better, and its allowance is healthy | that model; the reason names why |
+
+**Effort rises before the model does:** the next step up for a packet is the same model at a
+higher effort, then the next model. A worker that comes back weak is resumed or re-run one step up
+the ladder, and the run's log says so. Repeated step-ups for one kind of packet are a learning
+(`SMART-RULE-0028`) and move that kind's default up the ladder.
+
+The reason for weighing cost first is arithmetic: a worker that misreads a packet costs a full
+re-run plus the conductor's merge time, which is more than the saving on the first run. The
+result records what actually ran, so a packet that named one model and a worker that reports
+another shows up at validation.
 
 A read-only packet lets the worker use the scoped bootstrap tier from CONTRACT section 1. A
-packet that allows writes tells the worker to complete the full bootstrap first.
+packet that allows writes names the worker brief (`templates/worker-brief.template.md`, with the
+owner's values filled in by the conductor) and tells the worker to use the worker bootstrap
+tier: the brief, the packet, and the `RULES.md` of each node its write paths touch.
 
 ## Outputs
 
@@ -258,7 +300,18 @@ fix is one more theory, and the symptom can survive all of them.
 
 ## Failure behaviour
 
-- `new-packet` refuses a fifth packet, a fork without a reason, a `paths` write mode without
+- `new-run`, `new-packet` and `close-run` refuse to run without exactly one of
+  `--context-tokens N` and `--context-unknown REASON`. `new-run` is refused from 750 000 tokens
+  (drain), `new-packet` from 900 000 (stop), and both while a compaction marker younger than
+  24 hours exists under `/temp/conductor/compacted/` in the session copy or in the shared
+  checkout named by `brain_root` in `/memory/OWNER.md`, unless `--session ID` names this thread
+  and no marker carries that id. `--owner-override REASON` passes every check and is recorded
+  on the run and the packet. A marker whose time cannot be read blocks on its file's age.
+- `new-run` refuses `--plan` naming no file (`error: --plan names no file: <path>`), more than
+  eight workers with `--plan` (the message names `SMART-RULE-0024` and the trial option), and
+  `--plan` combined with `--trial-workers`. Without `--plan`, more than four is refused as before.
+- `new-packet` refuses a packet beyond the run's `max_workers` (a fifth, unless the run names a
+  plan or a trial), a fork without a reason, a `paths` write mode without
   paths, a `paths` packet naming a file (or a folder around a file) another packet of the run
   already names, an external write without a confirmed target, and a context reference that
   does not exist.
@@ -423,9 +476,91 @@ constraints specific to this work, and what done looks like. It also carries wha
 housekeeping the next thread would otherwise discover the hard way - stale worktrees, merged
 branches, the current version.
 
+## The conductor reads results, not sources
+
+The conductor's context is for coordination (`SMART-RULE-0024`, proposed amendment in
+`PROPOSAL-conductor-stays-small`). It writes packets, reads result records, routes them, reviews
+diffs, merges, writes the shared files and commits. What fills a context is reading sources and
+tool output, and the moment a conductor decides a task is "small enough to do myself" it spends
+more context on that one detour than on ten dispatches. So:
+
+- a source file, a transcript, a log, a page, a tool's long output: a worker reads it and returns
+  a compressed result, however small the job looks;
+- the conductor itself reads only packets, results, diffs it is about to stage, and the shared
+  files it owns;
+- when it does read a source, the run's log entry says which and why, and the context size
+  recorded on the run shows what it cost.
+
+A conductor that conducts grows by roughly ten to twenty thousand tokens per worker cycle and
+lives for days at a size where its judgement is still good. That, not the guard rail below, is
+what keeps a thread alive.
+
+## When to stop dispatching
+
+The guard rail (`SMART-RULE-0019`, proposed amendment): the conductor reads its context size
+from the host before every dispatch (hosts/ says how), states it in the dispatch line
+(`Dispatching 3 workers · context 131k`), and passes it to the script, which refuses past the
+thresholds. The thresholds are in tokens because quality falls with the length of the context,
+not with how full the window is; a 1 000 000-token window is headroom, not a budget.
+
+| Context size | What the conductor does |
+| --- | --- |
+| below 750 000 | dispatches normally |
+| from 750 000 | **drains**: no new run; workers in flight finish; merge their results; checkpoint; handover prompt |
+| from 900 000 | no new packet and no new stage of its own work until the checkpoint is committed |
+| any compaction | a missed checkpoint: re-read the bootstrap files and `## Handover`, checkpoint, commit, `checkpoint-done`, tell the owner |
+
+- `new-run` is refused from 750 000, `new-packet` from 900 000, both while a compaction marker
+  exists (`/temp/conductor/compacted/<session_id>.json`, written by the host's pre-compaction
+  hook). The owner, and only the owner, overrides a refusal for a named run or packet with
+  `--owner-override "<reason>"`; the reason is recorded in the run.
+- Reaching a threshold is a finding: the conductor was reading sources. Say so in the log entry.
+- On a host with no reading, pass `--context-unknown "<reason>"` and drain at the first
+  compaction or after the fourth run in the thread, whichever comes first.
+- `close-run` records the context size too. The pairs (open, close) on every run are the data
+  the thresholds are tuned from; never adjust them by feel.
+
+**Draining**: stop opening runs; let the workers in flight finish; validate, route, merge and
+commit their results; write the checkpoint (next section); give the prompt. A worker that cannot
+finish in time is left running and named under `## Handover` with its packet and result file;
+the successor reads the result file when it appears (a completion notice reaches only the thread
+that launched it, so the successor polls the file, not the host).
+
+## Team threads and the scrum master
+
+Trial under `PROPOSAL-conductor-stays-small` (the proposed rule *Work moves between threads
+through cards*). Several threads share one body of work through the board, not through runs:
+
+- **The scrum master** is one long-lived thread with a tiny context. It owns the boards,
+  priorities and the owner's questions, assigns cards to teams, and watches work in progress.
+  It never reads code, dispatches workers or reviews work.
+- **A team thread** is a conductor, as this skill describes, for the cards of one team (a
+  project or an area). It pulls a card, dispatches the workers it needs, reviews, merges to its
+  project's branch and closes the card. It works in its own session copy (`SMART-RULE-0038`).
+- **A card** is a task record with a `team`. Taking one: `python shared/skills/tasks/scripts/tasks.py
+  claim TASK-2026-NNNN --by "<session name>"` sets `claimed_by`, `claimed_at` and
+  `status: in_progress`; commit that record on its own and push. A conflict on that push means
+  another thread took it first: pull, drop the claim, take the next card. Leaving one:
+  `tasks.py release TASK-2026-NNNN` or completion clears the claim.
+- **Work in progress is limited** to `tasks.wip_limit` cards per team (two to start). The board
+  shows each team's count against the limit; the scrum master assigns no card past it.
+- **Waking a team thread.** A thread acts only on a turn. The scrum master messages it when a
+  card of its team becomes ready (on Claude Code desktop, sessions on one machine can message
+  each other), or the thread checks the board itself in one short turn every twenty to thirty
+  minutes; never faster, and a thread that finds nothing ready writes nothing.
+- **Handover inside a team** is the ordinary one below; the cards are the substance. The
+  successor claims the team's in-progress cards again under its own session name.
+- The `## Handover` of `/memory/projects/brain-development/STATE.md` names the scrum master and
+  each live team thread with its team, so a new thread can tell which role is free.
+
+Start with two teams and measure (cards closed per day, context sizes at open and close, merge
+conflicts, owner interruptions) before adding a third.
+
 ## Handover between conductor threads
 
-The prompt is a pointer; the files are the substance. Ten minutes, not an hour.
+The prompt is a pointer; the files are the substance. Ten minutes, not an hour. Drain first
+(*When to stop dispatching*): a handover with workers in flight hands the successor a wait it
+cannot see.
 
 **Leaving a thread (the conductor):**
 

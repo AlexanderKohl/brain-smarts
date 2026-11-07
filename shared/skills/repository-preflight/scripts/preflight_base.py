@@ -1,11 +1,12 @@
 """Where each repository of the brain is, the git helpers, and the result every check writes to.
 
-Moved unchanged from preflight.py. preflight.py imports these names back, so everything that uses
+Moved from preflight.py. preflight.py imports these names back, so everything that uses
 preflight sees the same names.
 """
 
 from __future__ import annotations
 
+import re
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -15,6 +16,12 @@ MEMORY_DIR = "memory"
 MEMORY_PREFIX = "/" + MEMORY_DIR + "/"
 LIBRARY_DIR = "library"
 LIBRARY_PREFIX = "/" + LIBRARY_DIR + "/"
+# CONTRACT §8.2: second precision and an explicit timezone.
+TIMESTAMP_RE = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2})$"
+)
+# The branches on which a change becomes active (CONTRACT §13.2), in the order they are tried.
+MAINLINES = ("origin/main", "origin/master")
 
 
 def in_memory(path: Path, root: Path) -> bool:
@@ -112,10 +119,33 @@ def git(repo: Path, *args: str) -> list[str]:
     ).stdout.splitlines()
 
 
-def repository_changes(repo: Path) -> set[str]:
-    tracked = git(repo, "diff", "--name-only", "--diff-filter=ACMRTUXB", "HEAD")
+def change_base(repo: Path) -> str:
+    """The commit a repository's changes are measured from: where it left the branch on which a
+    change becomes active (CONTRACT §13.2), so committed but unpushed changes count, and changes
+    already on that branch do not. Without such a branch (no remote), the last commit."""
+    for mainline in MAINLINES:
+        try:
+            base = git(repo, "merge-base", mainline, "HEAD")
+        except subprocess.CalledProcessError:
+            continue
+        if base:
+            return base[0]
+    return "HEAD"
+
+
+def repository_changes(repo: Path) -> tuple[str, set[str]]:
+    """(base, paths changed since it): committed but unpushed, staged, unstaged and untracked."""
+    base = change_base(repo)
+    tracked = git(repo, "diff", "--name-only", "--diff-filter=ACMRTUXB", base)
     untracked = git(repo, "ls-files", "--others", "--exclude-standard")
-    return {value.replace("\\", "/") for value in tracked + untracked}
+    return base, {value.replace("\\", "/") for value in tracked + untracked}
+
+
+def text_at(repo: Path, revision: str, relative: str) -> str | None:
+    """A file's text at a revision, or None when it did not exist there."""
+    completed = subprocess.run(["git", "-c", f"safe.directory={repo.as_posix()}", "-C", str(repo), "show",
+                                f"{revision}:{relative}"], capture_output=True)
+    return completed.stdout.decode("utf-8", errors="replace") if completed.returncode == 0 else None
 
 
 def is_own_repository(repo: Path) -> bool:

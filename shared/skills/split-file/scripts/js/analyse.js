@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 'use strict';
-// The structure of a CommonJS file, for drawing up a destination table before a split.
+// The structure of a CommonJS file or an ES module, for drawing up a destination table before a
+// split.
 //
 //   node analyse.js <file>                   each top-level statement: lines, names declared, and
 //                                            the other top-level names it refers to
@@ -25,7 +26,7 @@ const USAGE = 'usage: node analyse.js <file> [--class Name | --graph [--flag RE]
 
 function topLevel(file) {
   const { text, lines } = A.readSource(file);
-  const ast = A.parse(text, { recover: true });
+  const ast = A.parse(text, { recover: true, file });
   const stmts = A.statements(ast, text);
   const topNames = new Set(stmts.flatMap((s) => s.declares));
   return {
@@ -46,11 +47,11 @@ function topLevel(file) {
 }
 
 function classMembers(ast, topNames, className) {
-  const cls = ast.program.body.find((s) => s.type === 'ClassDeclaration' && s.id && s.id.name === className);
+  const cls = ast.program.body.map(A.unwrap).find((s) => s.type === 'ClassDeclaration' && s.id && s.id.name === className);
   if (!cls) throw new Error(`class ${className} is not declared at top level`);
-  return cls.body.body.map((m) => {
+  return cls.body.body.map((m, i, all) => {
     const u = A.uses(m);
-    const from = m.leadingComments && m.leadingComments.length ? m.leadingComments[0].loc.start.line : m.loc.start.line;
+    const from = A.firstLine(m, i ? all[i - 1].loc.end.line : cls.body.loc.start.line);
     return {
       name: m.key && (m.key.name || m.key.value || (m.key.id && `#${m.key.id.name}`)),
       type: m.type,

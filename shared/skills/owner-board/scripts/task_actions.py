@@ -2,22 +2,28 @@
 
 Every open task card carries *Do now*, *Done* and a note box (`page_js.py`). The page keeps the
 choice in the browser; saving hands it over in one of two files, both found by
-`apply_verdicts.py` in the same folders as verdicts (each board's `verdicts-in/`, Downloads and
-each folder directly inside it):
+`apply_events.py` in the same folders as verdicts (Downloads and each folder directly inside it):
 
 - a board's verdicts file, whose `tasks` array rides beside its `verdicts`;
-- `task-actions-<savedAt>.json` from the personal or an automatic task page, schema
-  `owner-board/task-actions/v1`, board `tasks`.
+- `task-actions-<savedAt>.json` from the personal, an automatic or a shared board's own task
+  page, schema `owner-board/task-actions/v1`, board `tasks`.
 
 Each entry is `{id, action, note, shots, title}` and is applied through the tasks skill's own
-functions (`tasks.complete`, `tasks.do_now`, `tasks.add_note`), the one way a task changes:
+functions (`tasks.complete`, `tasks.do_now`, `tasks.add_note`), the one way a task changes. They
+find the task in whichever store holds it (`task_stores.find`: the owner store, a node's, a
+pointer node's private one or a repository's `brain/tasks/`), refuse a store that may not be
+written now (a repository is fetched first and refused when behind, on another branch or
+unmerged), and name this brain's author in the History entry, so a change one brain makes to a
+shared task says who made it:
 
-- `done`    status completed, History with the owner's note, record to completed/, STATE.md row out;
-- `do_now`  priority high, status ready unless already in progress, History "Asked for now";
-- no action, a note or screenshots only: a History entry.
+- `done`    status completed, an attributed History entry with the note, record to completed/,
+            the store's STATE.md regenerated;
+- `do_now`  priority high, status ready unless already in progress, an entry "asked for now";
+- no action, a note or screenshots only: an attributed "note" entry.
 
-Screenshots go to `<store>/img/`; only png, jpeg, webp and gif data are kept. An unknown task id
-is reported and skipped. An applied task-actions file moves to `<store>/actions-applied/`.
+Screenshots go to the `img/` folder of the task's own store; only png, jpeg, webp and gif data
+are kept. An unknown task id, a task in two places or a refused store is reported and skipped.
+An applied task-actions file moves to `/memory/tasks/actions-applied/`.
 """
 
 from __future__ import annotations
@@ -67,8 +73,13 @@ def apply_entries(store: Path, entries: list, saved_at: str = "", dry_run: bool 
             continue
         try:
             task = task_store.find_task(store, tid)
-        except LookupError:
-            skipped.append(tid + ": no task with that id")
+        except LookupError as err:
+            # The tasks skill names the stores it could not read; the task may be in one of them.
+            unread = str(err).strip("'").partition("; not read: ")[2]
+            skipped.append(tid + ": no task with that id" + ((" (not read: " + unread + ")") if unread else ""))
+            continue
+        except ValueError as err:
+            skipped.append(str(err).strip("'"))
             continue
         title = task.get("title") or str(entry.get("title") or tid)
         if dry_run:
@@ -76,8 +87,9 @@ def apply_entries(store: Path, entries: list, saved_at: str = "", dry_run: bool 
         else:
             try:
                 task_store.ACTIONS[action or "note"](store, tid, note=note, shots=shots, shot_stamp=saved_at or None)
-            except (LookupError, ValueError) as err:
-                skipped.append(str(err).strip("'"))
+            except (LookupError, ValueError, task_store.WriteRefused) as err:
+                said = str(err).strip("'")
+                skipped.append(said if said.startswith(tid) else tid + ": " + said)
                 continue
             applied.append(WORDS[action].ljust(8) + " " + tid)
         if action == "do_now":

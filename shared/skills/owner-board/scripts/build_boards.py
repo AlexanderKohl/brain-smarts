@@ -4,7 +4,8 @@ The owner bookmarks this one page. It lists the personal task board, every regis
 any automatic task board, with how many cards on each are waiting and how many tasks are open,
 read from the card files and the task records at the moment it runs, so a project nobody has
 opened in a fortnight cannot go quiet without the count saying so. The personal and automatic
-task pages (`task_board.py`) are written here too, on every run.
+task pages and the owner's page of each shared board (`task_board.py`) are written here too, on
+every run, and a task store that could not be read is named.
 
 Boards are registered in `/memory/skills/owner-board/config/boards.json`. A board missing from
 the registry never appears here, and a board that never appears here is one nobody opens.
@@ -20,11 +21,12 @@ import datetime
 import html
 import os
 import sys
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import board_config  # noqa: E402
-import cards  # noqa: E402
+import events  # noqa: E402
 import reconcile  # noqa: E402
 import task_board  # noqa: E402
 
@@ -95,8 +97,48 @@ project that has one, otherwise on the personal board.</p>
 """
 
 
+def shared_checkout(root: Path) -> Path:
+    """Where `root` sits in the shared checkout. A session copy is a Git worktree whose `.git`
+    file names `<shared>/.git/worktrees/<name>`; anything else is its own shared checkout."""
+    marker = Path(root) / ".git"
+    if marker.is_file():
+        text = marker.read_text(encoding="utf-8", errors="replace").strip()
+        if text.startswith("gitdir:"):
+            gitdir = Path(text[len("gitdir:"):].strip())
+            if gitdir.parent.name == "worktrees" and gitdir.parent.parent.name == ".git":
+                return gitdir.parent.parent.parent
+    return Path(root)
+
+
+def link_base(config: board_config.Config) -> Path:
+    """The folder the index's links are relative to: the directory folder as it sits in the
+    shared checkout. The page is built in a session copy but opened from the shared checkout,
+    so a link that leaves the brain (a repository board) is computed from there."""
+    folder = Path(str(config.directory_folder))
+    for root in (Path(str(config.memory)), Path(str(config.brain))):
+        try:
+            inside = folder.relative_to(root)
+        except ValueError:
+            continue
+        return shared_checkout(root) / inside
+    return folder
+
+
+def href_to(config: board_config.Config, target) -> str:
+    """A link from the index to `target`: inside the brain relative to the index itself, outside
+    it (a repository board) relative to the index's place in the shared checkout."""
+    folder = Path(str(config.directory_folder))
+    target = Path(str(target))
+    try:
+        target.relative_to(Path(str(config.brain)))
+        base = folder
+    except ValueError:
+        base = link_base(config)
+    return os.path.relpath(str(target), str(base)).replace(os.sep, "/")
+
+
 def read_board(board: dict) -> dict:
-    data = cards.load(board)
+    data = events.state(board)
     try:
         data["adrift"] = reconcile.check(board, data)
     except Exception as err:
@@ -134,12 +176,13 @@ def task_block(config: board_config.Config, board: dict, tally: dict) -> str:
             '<div class="counts">' + "".join(pills) + "</div></div>")
 
 
-def block(config: board_config.Config, board: dict, data: dict, tally: dict | None = None) -> str:
+def block(config: board_config.Config, board: dict, data: dict, tally: dict | None = None,
+          own: dict | None = None) -> str:
+    """One registered board on the directory; `own` is the tally of the owner's page of a shared board."""
     counts: dict = {}
     for card in data["items"]:
         counts[card.get("state")] = counts.get(card.get("state"), 0) + 1
-    href = os.path.relpath(os.path.join(str(board["folder"]), "status.html"),
-                           str(config.directory_folder)).replace(os.sep, "/")
+    href = href_to(config, Path(str(board["folder"])) / "status.html")
     waiting = counts.get("needs_review", 0) + counts.get("rework", 0)
     pills = []
     for key, label in STATES:
@@ -148,11 +191,26 @@ def block(config: board_config.Config, board: dict, data: dict, tally: dict | No
                      " back" if key == "rework" and n else
                      " zero" if not n else "")
         pills.append('<span class="' + cls + '"><b>' + str(n) + "</b>" + html.escape(label) + "</span>")
+    # Folds first: a conflict needs both people, a released card needs one.
+    folded = {}
+    for card in data["items"]:
+        if card.get("fold"):
+            folded[card["fold"]] = folded.get(card["fold"], 0) + 1
+    for key, label in (("conflict", "In conflict"), ("released", "Released")):
+        if folded.get(key):
+            pills.insert(0, '<span class="n back"><b>' + str(folded[key]) + "</b>" + label + "</span>")
     adrift = data.get("adrift") or []
+    tasks_link = ""
+    if board.get("shared") and own is not None:
+        # A repository board draws the repository's tasks; this owner's private tasks about the
+        # project are on a page of their own in memory.
+        page = task_board.own_page(config, board["id"])
+        tasks_link = ('<p class="blurb">Private tasks: <a href="' + html.escape(os.path.relpath(str(page), str(config.directory_folder)).replace(os.sep, "/"))
+                      + '">your own page</a> &middot; ' + str(own["open"]) + " open (never in the repository)</p>")
     return ('<div class="b' + (" act" if waiting else "") + '">'
             '<h2><a href="' + html.escape(href) + '">' + html.escape(board["label"]) + "</a></h2>"
-            '<p class="blurb">' + html.escape(board.get("blurb", "")) + "</p>"
-            '<div class="counts">' + "".join(pills) + task_pills(tally) + "</div>"
+            '<p class="blurb">' + html.escape(board.get("blurb", "")) + "</p>" + tasks_link
+            + '<div class="counts">' + "".join(pills) + task_pills(tally) + "</div>"
             + ('<p class="adrift">' + str(len(adrift)) + " thing(s) adrift - open the board</p>" if adrift else "")
             + "</div>")
 
@@ -186,9 +244,14 @@ def build(config: board_config.Config, known: dict | None = None, now: str | Non
                           '<p class="blurb">' + html.escape(board.get("blurb", "")) + "</p>"
                           '<p class="adrift">This board could not be read: ' + html.escape(str(err)) + "</p></div>")
             continue
-        blocks.append(block(config, board, data, tallies.get(board["id"])))
+        blocks.append(block(config, board, data, tallies.get(board["id"]), tallies.get(task_board.OWN + board["id"])))
     for auto in sorted((b for b in routed.values() if b["kind"] == "auto"), key=lambda b: b["label"].lower()):
         blocks.append(task_block(config, auto, tallies[auto["key"]]))
+    # A store that could not be read is said, never left out quietly (a repository not checked out).
+    missing = task_board.unread(config)
+    if missing:
+        blocks.append('<p class="adrift">Task stores not read: ' + html.escape(
+            "; ".join(s.label + " (" + str(s.reason) + ")" for s in missing)) + "</p>")
     if not blocks:
         blocks = ['<p class="none">No boards registered yet.</p>']
     page = (PAGE.replace("__FAVICON__", board_config.favicon_link(config))
@@ -201,6 +264,8 @@ def build(config: board_config.Config, known: dict | None = None, now: str | Non
         fh.write(page)
     print("wrote", out, "(" + str(len(config.boards)) + " board(s)"
           + (", " + str(sum(t["open"] for t in tallies.values())) + " open task(s)" if routed else "") + ")")
+    for store in missing:
+        print("task store not read: " + store.label + " (" + str(store.reason) + ")")
     # SMART-RULE-0035: say which projects have outgrown the personal board, so the agent asks.
     for node, title, n in task_board.outgrown(config, routed):
         print("suggest a board: " + title + " (" + node + ") has " + str(n) + " open tasks on the personal board."

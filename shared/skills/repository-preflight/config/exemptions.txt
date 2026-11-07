@@ -9,4 +9,14 @@ value: C:\dev\  # the same default folder as written in the README layout diagra
 value: C:\dev\brain  # documented default brain root on Windows (SETUP, seed prompt)
 value: C:\dev\brain\library  # documented default skill library checkout on Windows (SETUP)
 value: C:\dev\brain\memory  # documented default memory checkout on Windows (SETUP)
+value: ceo@send.example.org  # a fictional address on a sending subdomain of a documentation-reserved domain, used by tests for the platform-domain rule
 value: gmail-api-push@system.gserviceaccount.com  # Google's published service account for Gmail push notifications
+value: invitations-noreply@linkedin.com  # LinkedIn's system sender address for its notification mail, not a person's
+value: jobs-noreply@linkedin.com  # LinkedIn's system sender address for its notification mail, not a person's
+value: messages-noreply@linkedin.com  # LinkedIn's system sender address for its notification mail, not a person's
+value: notifications-noreply@linkedin.com  # LinkedIn's system sender address for its notification mail, not a person's
+value: Pat.Ex+a@googlemail.com  # a fictional address on Google's consumer domain, needed to test Google's documented gmail.com and googlemail.com normalisation rule for hashed conversions
+value: Pat.Example+quote@GMail.com  # a fictional address on Google's consumer domain, needed to test Google's documented gmail.com and googlemail.com normalisation rule for hashed conversions
+value: pat.example+quote@gmail.com  # a fictional address on Google's consumer domain, needed to test Google's documented gmail.com and googlemail.com normalisation rule for hashed conversions
+value: patex@googlemail.com  # a fictional address on Google's consumer domain, needed to test Google's documented gmail.com and googlemail.com normalisation rule for hashed conversions
+value: patexample@gmail.com  # a fictional address on Google's consumer domain, needed to test Google's documented gmail.com and googlemail.com normalisation rule for hashed conversions

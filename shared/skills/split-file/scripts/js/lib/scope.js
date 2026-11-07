@@ -157,7 +157,15 @@ function freeNames(root) {
     eachChild(n, (c, k) => walk(c, s, n, k));
   }
 
-  // At the top: the node's own declarations are the file's top-level names, not an inner scope.
+  // At the top: the node's own declarations are the file's top-level names, not an inner scope. An
+  // import declares names and refers to none here; `export … from` refers to another module's names;
+  // `export { a as b }` refers to `a`; `export function f` is the declaration it exports.
+  if (root.type === 'ImportDeclaration' || root.type === 'ExportAllDeclaration' || (root.type === 'ExportNamedDeclaration' && root.source)) return { read, assigned };
+  if (root.type === 'ExportNamedDeclaration' && !root.declaration) {
+    root.specifiers.forEach((sp) => refer(sp.local.name, scope(null), false));
+    return { read, assigned };
+  }
+  if (root.type === 'ExportNamedDeclaration' || (root.type === 'ExportDefaultDeclaration' && /Declaration$/.test(root.declaration.type))) root = root.declaration;
   if (root.type === 'FunctionDeclaration' || root.type === 'ClassDeclaration') {
     walk({ ...root, id: null }, scope(null), null, null);
   } else if (root.type === 'VariableDeclaration') {

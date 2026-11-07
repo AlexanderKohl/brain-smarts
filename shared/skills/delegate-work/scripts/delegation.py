@@ -7,18 +7,23 @@ task record. The conductor routes durable outcomes under CONTRACT sections 5 and
 
 Commands
   new-run          --title T --why-parallel TEXT [--parent ID] [--max-workers N]
+                   [--plan PATH]  (an approved build plan: --max-workers may then be 1 to 8)
+                   [--trial-workers 5-8 --trial-reason TEXT]  (MEMORY-RULE-0005 trial run; not with --plan)
   new-packet       --run RUN --title T --objective TEXT [--context PATH ...]
                    [--context-mode isolated|fork] [--fork-reason TEXT]
                    [--writes none|worktree|paths] [--path PATH ...]
                    [--external none|read|write] [--target TEXT]
-                   [--model NAME] [--max-tool-calls N] [--max-output-words N]
+                   [--model NAME] [--effort LEVEL] --model-reason TEXT [--max-tool-calls N] [--max-output-words N]
                    [--acceptance TEXT ...] [--exclude TEXT ...]
   dispatch-prompt  --run RUN --packet W01
   validate-result  --run RUN [--packet W01]
   check-writes     --run RUN [--mine PATH ...]
   summarise        --run RUN
   close-run        --run RUN --status synthesised|abandoned --host TEXT --parallel yes|no
+  checkpoint-done  --session ID   (the handover checkpoint is committed; clears the compaction marker)
 
+new-run, new-packet and close-run take exactly one of --context-tokens N | --context-unknown REASON;
+new-run and new-packet also take --owner-override REASON and --session ID (see context_guard.py).
 Common options: --root PATH (otherwise discovered upward from the current directory by finding
 CONTRACT.md) and --now ISO-8601 (tests only). Standard library only.
 """
@@ -32,10 +37,17 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import context_guard
+
 SKILL_PATH = "/shared/skills/delegate-work"
 RUNS_SUBDIR = Path("temp") / "delegation" / "runs"
 DEFAULT_MAX_WORKERS = 4
 HARD_MAX_WORKERS = 4
+# A run named on an approved build plan (--plan) may hold up to eight workers (SMART-RULE-0024).
+PLAN_MAX_WORKERS = 8
+# A run marked as the measured trial of MEMORY-RULE-0005 may hold five to eight workers.
+TRIAL_MIN_WORKERS = 5
+TRIAL_MAX_WORKERS = 8
 RESULT_STATUSES = {"pending", "completed", "failed", "blocked"}
 CONTEXT_MODES = {"isolated", "fork"}
 WRITE_MODES = {"none", "worktree", "paths"}
@@ -93,7 +105,7 @@ def root_path(path: Path, root: Path) -> str:
 
 
 def parse_front_matter(text: str) -> tuple[dict, str]:
-    """Parse the YAML subset this skill writes: scalars and flat lists."""
+    """Parse the YAML subset this skill writes: scalars, flat lists and one-level mappings."""
     if not text.startswith("---\n"):
         return {}, text
     end = text.find("\n---", 4)
@@ -110,6 +122,13 @@ def parse_front_matter(text: str) -> tuple[dict, str]:
             if not isinstance(data.get(key), list):
                 data[key] = []
             data[key].append(unquote(line[4:].strip()))
+            continue
+        if line.startswith("  ") and ":" in line and key is not None:
+            if not isinstance(data.get(key), dict):
+                data[key] = {}
+            sub, _, raw = line.strip().partition(":")
+            raw = raw.strip()
+            data[key][sub.strip()] = None if raw == "null" else unquote(raw)
             continue
         if ":" in line and not line.startswith(" "):
             key, _, raw = line.partition(":")
@@ -146,7 +165,10 @@ def quote(value) -> str:
 def render_front_matter(fields: dict) -> str:
     lines = ["---"]
     for key, value in fields.items():
-        if isinstance(value, list):
+        if isinstance(value, dict):
+            lines.append(f"{key}:")
+            lines.extend(f"  {sub}: {quote(item)}" for sub, item in value.items())
+        elif isinstance(value, list):
             if not value:
                 lines.append(f"{key}: []")
             else:
@@ -305,10 +327,42 @@ def resolve(root: Path, ref: str) -> Path:
 def cmd_new_run(args) -> int:
     root = discover_root(args.root)
     stamp = now_stamp(args.now)
+    context_tokens, override = context_guard.guard(root, args, "new-run", datetime.fromisoformat(stamp))
     run_id = args.run_id or ("RUN-" + stamp[:19].replace("-", "").replace(":", "").replace("T", "-"))
-    max_workers = args.max_workers or DEFAULT_MAX_WORKERS
-    if max_workers > HARD_MAX_WORKERS:
-        raise SystemExit(f"error: max workers is {HARD_MAX_WORKERS} per run (SMART-RULE-0024 budget)")
+    trial = None
+    plan = None
+    if args.plan is not None:
+        if args.trial_workers is not None or args.trial_reason:
+            raise SystemExit("error: --plan and --trial-workers cannot be combined")
+        plan_file = resolve(root, args.plan)
+        if not plan_file.is_file():
+            raise SystemExit(f"error: --plan names no file: {args.plan}")
+        try:
+            plan = root_path(plan_file, root)
+        except ValueError:  # outside the brain: record the absolute path as given
+            plan = plan_file.resolve().as_posix()
+        max_workers = args.max_workers or DEFAULT_MAX_WORKERS
+        if not 1 <= max_workers <= PLAN_MAX_WORKERS:
+            raise SystemExit(f"error: max workers is 1 to {PLAN_MAX_WORKERS} per run with --plan "
+                             "(SMART-RULE-0024 budget); more than eight needs a measured trial "
+                             "(--trial-workers with --trial-reason)")
+    elif args.trial_workers is not None or args.trial_reason:
+        if args.trial_workers is None:
+            raise SystemExit("error: --trial-reason needs --trial-workers")
+        if not (args.trial_reason or "").strip():
+            raise SystemExit("error: --trial-reason is required with --trial-workers")
+        if not TRIAL_MIN_WORKERS <= args.trial_workers <= TRIAL_MAX_WORKERS:
+            raise SystemExit(f"error: --trial-workers must be {TRIAL_MIN_WORKERS} to {TRIAL_MAX_WORKERS} "
+                             "(MEMORY-RULE-0005 trial)")
+        if args.max_workers is not None:
+            raise SystemExit("error: --max-workers and --trial-workers cannot be combined")
+        trial = {"workers": args.trial_workers, "reason": args.trial_reason.strip()}
+        max_workers = args.trial_workers
+    else:
+        max_workers = args.max_workers or DEFAULT_MAX_WORKERS
+        if max_workers > HARD_MAX_WORKERS:
+            raise SystemExit(f"error: max workers is {HARD_MAX_WORKERS} per run (SMART-RULE-0024 budget); "
+                             f"up to {PLAN_MAX_WORKERS} with --plan naming an approved build plan")
     path = root / RUNS_SUBDIR / run_id
     if path.exists():
         raise SystemExit(f"error: run {run_id} already exists")
@@ -322,9 +376,13 @@ def cmd_new_run(args) -> int:
         "status": "open",
         "parent": args.parent,
         "max_workers": max_workers,
+        **({"plan": plan} if plan else {}),
+        **({"trial": trial} if trial else {}),
         "max_depth": 1,
         "host": None,
         "parallel": None,
+        "context_tokens_at_open": context_tokens,
+        **({"owner_override": override} if override else {}),
         # What was already changed before any worker started, so check-writes does not blame
         # a worker for it.
         "dirty_at_start": brain_changes(root),
@@ -361,8 +419,9 @@ def worker_instructions(fields: dict, result_ref: str) -> str:
     lines = [
         f"1. Bootstrap: read `/CONTRACT.md` section 1. {bootstrap}",
         f"2. {write_rule}",
-        ("3. Commit on your own branch at each logical checkpoint and push that branch; never merge "
-         "into main and never touch the shared worktree. The conductor merges (`SMART-RULE-0014`)."
+        ("3. Do not commit, stage or push, in your worktree or anywhere else; leave your changes "
+         "uncommitted there and give the commit message in your result. Never touch the shared "
+         "worktree. The conductor commits and merges (`SMART-RULE-0024`, `SMART-RULE-0014`)."
          if fields["writes"] == "worktree" else
          "3. Do not commit, stage or push. The conductor owns Git (`SMART-RULE-0014`)."),
         f"4. External systems and credentials: {external}",
@@ -383,6 +442,7 @@ def worker_instructions(fields: dict, result_ref: str) -> str:
 def cmd_new_packet(args) -> int:
     root = discover_root(args.root)
     stamp = now_stamp(args.now)
+    _, override = context_guard.guard(root, args, "new-packet", datetime.fromisoformat(stamp))
     run = run_dir(root, args.run)
     run_meta, _ = load(run / "RUN.md")
     existing = packet_files(run)
@@ -413,6 +473,10 @@ def cmd_new_packet(args) -> int:
                                          "one worker its own worktree")
     if args.external not in EXTERNAL_MODES:
         raise SystemExit(f"error: external must be one of {sorted(EXTERNAL_MODES)}")
+    if not (args.model_reason or "").strip():
+        raise SystemExit("error: --model-reason is required: the conductor chooses every packet's model and "
+                         "effort from the ladder in SKILL.md (Choosing a worker's model and effort) and writes "
+                         "why; --model inherit still needs the reason (owner, 7 Nov 2026)")
     if args.external == "write" and not args.target:
         raise SystemExit("error: --target (owner-confirmed, CONTRACT section 10.5) is required "
                          "when --external write")
@@ -437,10 +501,13 @@ def cmd_new_packet(args) -> int:
         "external": args.external,
         "external_target": args.target,
         "model": args.model or "inherit",
+        "effort": args.effort or "inherit",
+        "model_reason": (args.model_reason or "").strip() or None,
         "max_tool_calls": args.max_tool_calls,
         "max_output_words": args.max_output_words,
         "context_refs": args.context or [],
         "facts_verified": [f["label"] for f in facts],
+        **({"owner_override": override} if override else {}),
         "created": stamp,
         "updated": stamp,
     }
@@ -481,7 +548,7 @@ def cmd_new_packet(args) -> int:
     }
     result_body = template_body(root, "result.template.md").replace("{{TITLE}}", args.title)
     write(run / f"{short}.result.md", result_fields, result_body)
-    touch_updated(run / "RUN.md", stamp)
+    touch_updated(run / "RUN.md", stamp, **({"owner_override": override} if override else {}))
     print(root_path(run / f"{short}.md", root))
     return 0
 
@@ -503,124 +570,6 @@ def cmd_dispatch_prompt(args) -> int:
         f"Context mode: {fields.get('context_mode')}; writes: {fields.get('writes')}; "
         f"external: {fields.get('external')}."
     )
-    return 0
-
-
-PATH_RE = re.compile(r"^(/|[A-Za-z]:[\/]|\.{1,2}[\/])\S*$")
-
-
-def looks_like_path(text: str) -> bool:
-    """A repository-root, absolute or relative path without spaces; anything else is free text."""
-    return bool(PATH_RE.match(text.strip()))
-
-
-def validate_one(root: Path, run: Path, short: str, warnings: list[str] | None = None) -> list[str]:
-    errors: list[str] = []
-    warnings = warnings if warnings is not None else []
-    packet_path = run / f"{short}.md"
-    result_path = run / f"{short}.result.md"
-    if not packet_path.exists():
-        return [f"{short}: packet file missing"]
-    if not result_path.exists():
-        return [f"{short}: result file missing"]
-    packet, _ = load(packet_path)
-    result, body = load(result_path)
-    display = root_path(result_path, root)
-
-    for key in ("id", "type", "contract", "run", "packet", "status", "created", "updated"):
-        if key not in result:
-            errors.append(f"{display}: missing front matter field {key}")
-    if result.get("type") != "delegation_result":
-        errors.append(f"{display}: type must be delegation_result")
-    if result.get("packet") != short:
-        errors.append(f"{display}: packet must be {short}")
-    status = result.get("status")
-    if status not in RESULT_STATUSES:
-        errors.append(f"{display}: invalid status {status}")
-    if status == "pending":
-        errors.append(f"{display}: worker has not reported (status pending)")
-        return errors
-    for key in ("host", "model"):
-        value = result.get(key)
-        if not value or not str(value).strip():
-            errors.append(f"{display}: {key} must be set (use 'unknown' rather than guessing)")
-    for key in ("changed_paths", "validation", "artifacts"):
-        if not isinstance(result.get(key), list):
-            errors.append(f"{display}: {key} must be a list")
-            result[key] = []
-
-    # Files inside the run folder (the result itself, artifacts) are not repository writes.
-    outside_run = [
-        changed for changed in result["changed_paths"]
-        if not resolve(root, changed).resolve().is_relative_to(run.resolve())
-    ]
-    if packet.get("writes") == "none" and outside_run:
-        errors.append(f"{display}: packet allows no writes but changed_paths is not empty")
-    if packet.get("writes") == "paths":
-        allowed = [resolve(root, scope).resolve() for scope in packet.get("write_paths") or []]
-        for changed in outside_run:
-            if not any(within(resolve(root, changed).resolve(), scope) for scope in allowed):
-                errors.append(f"{display}: changed path is outside the packet's write_paths: {changed}")
-    for changed in result["changed_paths"]:
-        if resolve(root, changed).exists():
-            continue
-        # A worktree packet works in another repository, so its paths are that
-        # repository's and cannot be resolved here. Reporting them as missing files
-        # teaches a conductor to read past the validator, which is worse than the noise.
-        if packet.get("writes") == "worktree":
-            warnings.append(f"{display}: changed path is not in this repository, which a worktree packet expects: {changed}")
-        else:
-            errors.append(f"{display}: changed path does not exist: {changed}")
-    if result["changed_paths"] and not result["validation"]:
-        errors.append(f"{display}: changed paths reported without validation results")
-    for artifact in result["artifacts"]:
-        # A branch, a commit or a URL is an artifact too; only a path is checked on disk.
-        if looks_like_path(artifact) and not resolve(root, artifact).exists():
-            errors.append(f"{display}: artifact does not exist: {artifact}")
-
-    budget = packet.get("max_output_words")
-    words = len(body.split())
-    if budget and str(budget).isdigit() and words > int(budget):
-        # Acceptance criteria decide the size; the budget is advice to the worker.
-        warnings.append(f"{display}: body is {words} words against a budget of {budget}")
-
-    found = sections(body)
-    defaults = sections(template_body(root, "result.template.md"))
-    for name in REQUIRED_RESULT_SECTIONS:
-        if name not in found:
-            errors.append(f"{display}: missing section '## {name}'")
-    if status == "blocked" and not has_content(found.get("Open questions", ""),
-                                               defaults.get("Open questions", "")):
-        errors.append(f"{display}: blocked result must state the question under Open questions")
-    if status == "completed" and not has_content(found.get("Summary", ""),
-                                                 defaults.get("Summary", "")):
-        errors.append(f"{display}: completed result has an empty Summary")
-    for pattern in SECRET_PATTERNS:
-        if pattern.search(body):
-            errors.append(f"{display}: body matches a secret pattern ({pattern.pattern[:30]}...)")
-            break
-    return errors
-
-
-def cmd_validate_result(args) -> int:
-    root = discover_root(args.root)
-    run = run_dir(root, args.run)
-    shorts = [args.packet] if args.packet else [p.stem for p in packet_files(run)]
-    if not shorts:
-        print("no packets in run")
-        return 1
-    errors: list[str] = []
-    warnings: list[str] = []
-    for short in shorts:
-        errors.extend(validate_one(root, run, short, warnings))
-    for warning in warnings:
-        print(f"WARN {warning}")
-    if errors:
-        for error in errors:
-            print(f"ERROR {error}")
-        print(f"FAIL: {len(errors)} error(s)")
-        return 1
-    print(f"PASS: {len(shorts)} result(s) valid" + (f", {len(warnings)} warning(s)" if warnings else ""))
     return 0
 
 
@@ -651,44 +600,16 @@ def cmd_check_writes(args) -> int:
     return 0
 
 
-def cmd_summarise(args) -> int:
-    root = discover_root(args.root)
-    run = run_dir(root, args.run)
-    run_meta, _ = load(run / "RUN.md")
-    print(f"# Run {run_meta.get('id')}: {run_meta.get('title')}")
-    print(f"status: {run_meta.get('status')}; host: {run_meta.get('host')}; "
-          f"parallel: {run_meta.get('parallel')}; parent: {run_meta.get('parent')}")
-    print()
-    print("| Packet | Title | Status | Host | Model | Changed paths | Artifacts |")
-    print("|---|---|---|---|---|---|---|")
-    collected: dict[str, list[tuple[str, str]]] = {
-        "Summary": [], "Facts to route": [], "Open questions": [], "Suggested tasks": [],
-    }
-    defaults = sections(template_body(root, "result.template.md"))
-    for packet_path in packet_files(run):
-        short = packet_path.stem
-        packet, _ = load(packet_path)
-        result_path = run / f"{short}.result.md"
-        result, body = load(result_path) if result_path.exists() else ({}, "")
-        found = sections(body)
-        print(
-            f"| {short} | {packet.get('title')} | {result.get('status', 'missing')} | "
-            f"{result.get('host') or '-'} | {result.get('model') or '-'} | "
-            f"{len(result.get('changed_paths') or [])} | {len(result.get('artifacts') or [])} |"
-        )
-        for name in collected:
-            text = found.get(name, "")
-            if has_content(text, defaults.get(name, "")):
-                collected[name].append((short, text.replace(defaults.get(name, "").strip(), "").strip()))
-    for name, items in collected.items():
-        print()
-        print(f"## {name}")
-        if not items:
-            print("- none reported")
-        for short, text in items:
-            print(f"### {short}")
-            print(text)
-    return 0
+def trial_line(run_meta: dict) -> str:
+    """The run's budget lines for close-run and summarise: its approved plan and its measured
+    trial fields, one line each, or "" for an ordinary run."""
+    lines = []
+    if run_meta.get("plan"):
+        lines.append(f"plan: {run_meta.get('plan')}")
+    trial = run_meta.get("trial")
+    if isinstance(trial, dict):
+        lines.append(f"trial: workers {trial.get('workers')}; reason: {trial.get('reason')}")
+    return "\n".join(lines)
 
 
 def cmd_close_run(args) -> int:
@@ -697,8 +618,13 @@ def cmd_close_run(args) -> int:
     if args.status not in {"synthesised", "abandoned"}:
         raise SystemExit("error: status must be synthesised or abandoned")
     touch_updated(run / "RUN.md", now_stamp(args.now), status=args.status, host=args.host,
-                  parallel=(args.parallel == "yes"))
+                  parallel=(args.parallel == "yes"),
+                  context_tokens_at_close=context_guard.context_value(args, "close-run"))
     print(root_path(run / "RUN.md", root))
+    meta, _ = load(run / "RUN.md")
+    line = trial_line(meta)
+    if line:
+        print(line)
     return 0
 
 
@@ -706,6 +632,7 @@ def cmd_close_run(args) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    from results import cmd_validate_result, cmd_summarise
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -719,7 +646,13 @@ def build_parser() -> argparse.ArgumentParser:
                    help="one line: why parallel workers beat sequential work")
     p.add_argument("--parent", help="task or run id this run serves")
     p.add_argument("--max-workers", type=int)
+    p.add_argument("--plan", help="repository-root or absolute path of the approved build plan this run "
+                                  "follows; --max-workers may then be 1 to 8 (SMART-RULE-0024)")
+    p.add_argument("--trial-workers", type=int,
+                   help="5 to 8: mark this run as the MEMORY-RULE-0005 measured trial")
+    p.add_argument("--trial-reason", help="required with --trial-workers: why this run is the trial")
     p.add_argument("--run-id", help=argparse.SUPPRESS)
+    context_guard.add_context_arguments(p)
     p.set_defaults(func=cmd_new_run)
 
     p = sub.add_parser("new-packet")
@@ -737,9 +670,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--path", action="append")
     p.add_argument("--external", default="none")
     p.add_argument("--target")
-    p.add_argument("--model", default="inherit")
+    p.add_argument("--model", default=None, help="the worker's model (inherit when left out)")
+    p.add_argument("--effort", default=None, help="the worker's effort (inherit when left out)")
+    p.add_argument("--model-reason", help="required: one line, why this model and effort for this packet")
     p.add_argument("--max-tool-calls", type=int, default=15)
     p.add_argument("--max-output-words", type=int, default=800)
+    context_guard.add_context_arguments(p)
     p.set_defaults(func=cmd_new_packet)
 
     p = sub.add_parser("dispatch-prompt")
@@ -766,11 +702,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--status", required=True)
     p.add_argument("--host", required=True)
     p.add_argument("--parallel", required=True, choices=["yes", "no"])
+    context_guard.add_context_arguments(p, guarded=False)
     p.set_defaults(func=cmd_close_run)
+
+    p = sub.add_parser("checkpoint-done")
+    p.add_argument("--session", required=True, help="this conductor's session id; removes its compaction marker")
+    p.set_defaults(func=lambda a: context_guard.checkpoint_done(discover_root(a.root), a.session))
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
+    for stream in (sys.stdout, sys.stderr):  # a Windows console defaults to cp1252; the messages carry an en dash
+        getattr(stream, "reconfigure", lambda **_: None)(encoding="utf-8", errors="replace")
     args = build_parser().parse_args(argv)
     return args.func(args)
 

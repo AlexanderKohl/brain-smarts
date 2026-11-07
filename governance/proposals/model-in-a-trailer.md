@@ -4,20 +4,23 @@ title: The tool and the model go in a commit's trailers, never its subject
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: proposed
+status: implemented
 owner: brain-owner
 created: 2026-10-01T10:52:46+10:00
-updated: 2026-10-01T12:07:12+10:00
+updated: 2026-10-01T12:45:21+10:00
 rule_id: SMART-RULE-0009
-accepted_by: null
-accepted_at: null
-implemented_at: null
+accepted_by: brain-owner
+accepted_at: 2026-10-01T12:45:21+10:00
+implemented_at: 2026-10-01T12:45:21+10:00
 previous_contract_version: 2.3.0
 new_contract_version: 2.3.0
 target_files:
   - /RULES.md
   - /shared/skills/repository-preflight/scripts/hooks.py
   - /shared/skills/repository-preflight/SKILL.md
+  - /shared/skills/repository-preflight/tests/test_commit_trailers.py
+  - /shared/templates/memory-skeleton/.githooks/commit-msg
+  - /.githooks/commit-msg
 ---
 
 # The tool and the model go in a commit's trailers, never its subject
@@ -98,8 +101,8 @@ Restore the sentence and remove the hook's check.
 
 ## Acceptance
 
-Not yet requested. Ask one direct question that identifies this proposal.
+Accepted by the owner on 1 October 2026. The owner's record is kept in their memory.
 
 ## Implementation record
 
-None.
+Implemented on 1 October 2026: `SMART-RULE-0009`'s sentence as worded above; `hooks.py` `missing_trailers` in the commit-message hook; a commit-message hook added to the memory repository and the memory skeleton, so all three repositories run it; the preflight skill's description; `tests/test_commit_trailers.py`.

@@ -1,0 +1,166 @@
+{
+  "about": "Command families the filter recognises. A family matches when one segment of the command (split at &&, ||, ; and |) starts with one of its `commands` patterns. `drop` removes noise lines unless they are priority lines (errors) or match the family's `keep`; `drop_only_when_over` drops them only when the output is over `max_lines`. `errors: false` means error words in this output are content, not failures (a commit message, a changed line), so the middle keeps only the family's `keep` lines. Over `max_lines`, the middle keeps every priority and `keep` line with `priority_context` around it, then `notable` lines (warnings) while `max_priority_lines` lasts. `keep_head` and `keep_tail` are the lines kept from each end when the result is still over `max_lines`. Families are alphabetical; the first match in this order wins, so each pattern is written to match one family only. Patterns are Python regular expressions, case-insensitive.",
+  "families": [
+    {
+      "name": "build",
+      "commands": [
+        "(npx\\s+)?tsc\\b",
+        "(npx\\s+)?eslint\\b",
+        "(npx\\s+)?vite\\s+build\\b",
+        "(npx\\s+)?webpack\\b",
+        "(npm|pnpm|yarn|bun)\\s+(run\\s+)?(build|lint|typecheck|check)\\b",
+        "cargo\\s+(build|check|clippy)\\b",
+        "go\\s+(build|vet)\\b",
+        "dotnet\\s+build\\b",
+        "(mvn|mvnw|\\./mvnw)\\s+\\S*(compile|package|install|verify)\\b",
+        "(gradle|gradlew|\\./gradlew)\\s+\\S*(build|assemble|compile)\\w*\\b",
+        "make\\b"
+      ],
+      "drop": [
+        "^\\s*Compiling \\S+ v[0-9]",
+        "^\\s*Checking \\S+ v[0-9]",
+        "^\\s*(Downloaded|Downloading) \\S+ v[0-9]",
+        "^\\s*transforming \\(\\d+\\)",
+        "^\\s*rendering chunks"
+      ],
+      "keep_head": 15,
+      "keep_tail": 40,
+      "max_lines": 100
+    },
+    {
+      "name": "docker",
+      "commands": [
+        "docker\\s+(build|logs|compose|pull|push|run)\\b",
+        "docker-compose\\b",
+        "podman\\s+(build|logs|pull|push|run)\\b"
+      ],
+      "drop": [
+        "^#\\d+ (sha256:|extracting|resolve|\\[internal\\])",
+        "^#\\d+ DONE \\d",
+        "^[0-9a-f]{12}: (Waiting|Downloading|Verifying|Extracting|Pulling fs layer|Download complete)",
+        "^\\s*=> (CACHED|\\[internal\\])"
+      ],
+      "keep_head": 15,
+      "keep_tail": 40,
+      "max_lines": 100
+    },
+    {
+      "name": "git-diff",
+      "errors": false,
+      "commands": [
+        "git(\\s+-C\\s+\\S+)?(\\s+--no-pager)?\\s+(diff|show)\\b"
+      ],
+      "drop": [
+        "^index [0-9a-f]+\\.\\.[0-9a-f]+",
+        "^ "
+      ],
+      "drop_only_when_over": true,
+      "keep": [
+        "^diff --git ",
+        "^@@ "
+      ],
+      "keep_head": 120,
+      "keep_tail": 60,
+      "max_lines": 300
+    },
+    {
+      "name": "git-log",
+      "errors": false,
+      "commands": [
+        "git(\\s+-C\\s+\\S+)?(\\s+--no-pager)?\\s+(log|reflog|blame)\\b"
+      ],
+      "drop": [],
+      "keep_head": 80,
+      "keep_tail": 10,
+      "max_lines": 120
+    },
+    {
+      "name": "install",
+      "commands": [
+        "(npm|pnpm|yarn|bun)\\s+(install|i|ci|add|update|upgrade)\\b",
+        "(python\\s+-m\\s+)?pip3?\\s+install\\b",
+        "py\\s+-m\\s+pip\\s+install\\b",
+        "uv\\s+(pip\\s+install|sync|add)\\b",
+        "poetry\\s+(install|add|update)\\b",
+        "cargo\\s+(install|fetch|update)\\b",
+        "go\\s+(get|mod\\s+download|mod\\s+tidy)\\b",
+        "winget\\s+install\\b",
+        "choco\\s+install\\b",
+        "(sudo\\s+)?apt(-get)?\\s+install\\b",
+        "brew\\s+install\\b"
+      ],
+      "drop": [
+        "^\\s*(Collecting|Downloading|Using cached|Requirement already satisfied|Obtaining|Building wheel|Created wheel|Stored in directory|Preparing metadata|Getting requirements)\\b",
+        "^\\s*[|/\\\\-]?\\s*(Resolving|Fetching|Linking|Progress|Downloading|Installing):?\\s",
+        "^\\s*[━──-╿#=>\\s.]+\\s*\\d+(\\.\\d+)?\\s*[/%]",
+        "^npm (warn|WARN) deprecated\\b",
+        "^\\s*Get:\\d+ ",
+        "^\\s*(Unpacking|Selecting previously unselected|Preparing to unpack|Setting up)\\b"
+      ],
+      "keep_head": 10,
+      "keep_tail": 30,
+      "max_lines": 80
+    },
+    {
+      "name": "test",
+      "commands": [
+        "(python3?\\s+-m\\s+|py\\s+-m\\s+|uv\\s+run\\s+)?pytest\\b",
+        "(python3?|py)\\s+(-m\\s+unittest|\\S*test\\S*\\.py)\\b",
+        "(npx\\s+)?(jest|vitest|playwright\\s+test|mocha|ava)\\b",
+        "(npm|pnpm|yarn|bun)\\s+(run\\s+)?test(:\\S+)?\\b",
+        "npm\\s+t\\b",
+        "go\\s+test\\b",
+        "cargo\\s+(test|nextest)\\b",
+        "dotnet\\s+test\\b",
+        "(mvn|mvnw|\\./mvnw)\\s+\\S*test\\b",
+        "(gradle|gradlew|\\./gradlew)\\s+\\S*test\\b",
+        "(bundle\\s+exec\\s+)?(rspec|rake\\s+test)\\b",
+        "phpunit\\b",
+        "Invoke-Pester\\b"
+      ],
+      "drop": [
+        "^\\s*(✓|✔|√)\\s",
+        "^\\s*PASS\\s",
+        "^\\s*ok\\s+\\S+\\s+[0-9.]+s\\b",
+        "^\\s*--- PASS:",
+        "^=== (RUN|PAUSE|CONT)\\s",
+        "\\bPASSED\\b\\s*(\\[\\s*\\d+%\\])?\\s*$",
+        "^\\S+\\.py\\s+[.sx]+\\s*\\[\\s*\\d+%\\]\\s*$",
+        "^\\s*[.sx]+\\s*$",
+        "^test\\S*\\s.*\\.\\.\\.\\s+ok\\s*$",
+        "^\\s*\\[\\s*(PASS|OK)\\s*\\]"
+      ],
+      "keep": [
+        "^_{3,} .+ _{3,}$",
+        "^={3,} .+ ={3,}$",
+        "^\\s*(FAIL|FAILED|ERROR)\\b",
+        "^--- FAIL:",
+        "^\\s*Tests?:\\s",
+        "^\\s*Test (Suites|Files):\\s"
+      ],
+      "keep_head": 10,
+      "keep_tail": 40,
+      "max_lines": 100
+    }
+  ],
+  "generic": {
+    "about": "Used only when the wrapper is asked for explicitly and the command matches no family.",
+    "name": "generic",
+    "drop": [],
+    "keep_head": 30,
+    "keep_tail": 40,
+    "max_lines": 100
+  },
+  "pass_through_below": {
+    "lines": 80,
+    "chars": 8000
+  },
+  "notable": "\\b(warning|warnings|warn|deprecated)\\b",
+  "priority": "\\b(error|errors|err!|fail|failed|failing|failure|failures|fatal|panic|panicked|exception|traceback|assert|assertion|denied|cannot|could not|unable to|not found|no such file|undefined|segmentation fault|timed out|timeout)\\b|✗|✘|×|●|^E\\s|^>\\s|^\\s*at\\s+\\S+.*:\\d+|^\\s*File \"[^\"]+\", line \\d+|exit (code|status) [1-9]",
+  "priority_context": {
+    "before": 1,
+    "after": 2
+  },
+  "max_priority_lines": 80,
+  "leave_alone": "\\|\\s*(head|tail|grep|rg|findstr|select-string|select-object|wc|less|more|sort|uniq|awk|sed|cut|jq)\\b|command-output[\\\\/]scripts[\\\\/]run\\.py"
+}

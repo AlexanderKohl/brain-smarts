@@ -1,0 +1,29 @@
+# Local-only files: never commit them (SMART-RULE-0009).
+
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+*.vault
+*.vault.lock
+*.pem
+*.key
+*.pfx
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Scratch
+*.tmp
+*.temp
+*.bak
+**/traffic-recordings/
+
+# Operating systems
+.DS_Store
+Thumbs.db
+desktop.ini

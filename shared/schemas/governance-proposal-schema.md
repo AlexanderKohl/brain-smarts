@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-08-04T23:16:08+10:00
-updated: 2026-09-23T14:12:51+10:00
+updated: 2026-09-30T22:27:22+10:00
 owner: brain-owner
 ---
 
@@ -64,6 +64,13 @@ Statuses `implemented`, `verified` and `reverted` require:
 ```yaml
 implemented_at: YYYY-MM-DDTHH:mm:ss+HH:MM
 ```
+
+`accepted_at` and `implemented_at` bound what the proposal permits. It covers changes to its
+`target_files` from `accepted_at` until one hour after `implemented_at` (or `reverted_at`), or for
+seven days after `accepted_at` when it is never marked implemented; after that, a change to the same
+files needs a proposal of its own. So `implemented_at` is written from the clock once the accepted
+change is applied and validated, and the push follows within the hour. The repository preflight
+enforces this (`/shared/skills/repository-preflight/`).
 
 ## Required content before acceptance
 

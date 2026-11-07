@@ -1,0 +1,25 @@
+#!/bin/sh
+# Pre-commit for this repository. Switched on per checkout with: git config core.hooksPath .githooks
+
+# The brain's own checks (CONTRACT §15), scoped to this repository. They run only when this
+# repository sits inside a brain; cloned on its own, the commit goes ahead with a one-line note.
+top=$(git rev-parse --show-toplevel)
+dir="$top"
+while [ ! -f "$dir/CONTRACT.md" ] || [ ! -d "$dir/shared" ]; do
+  parent=$(dirname "$dir")
+  if [ "$parent" = "$dir" ]; then
+    echo "pre-commit: no brain above this repository; brain checks skipped" >&2
+    exit 0
+  fi
+  dir="$parent"
+done
+# The first Python that actually runs: on Windows "python3" can be a Store placeholder.
+py=""
+for candidate in python python3 py; do
+  if "$candidate" -c "" >/dev/null 2>&1; then py="$candidate"; break; fi
+done
+if [ -z "$py" ]; then
+  echo "pre-commit: Python not found; brain checks skipped" >&2
+  exit 0
+fi
+exec "$py" "$dir/shared/skills/repository-preflight/scripts/hooks.py" pre-commit

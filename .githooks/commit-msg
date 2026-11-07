@@ -1,6 +1,7 @@
 #!/bin/sh
-# Commit-message check for a shareable repository (SMART-RULE-0008): no personal data in the
-# message. Runs only inside a brain; cloned on its own, the commit goes ahead.
+# Commit-message checks: the tool and model in trailers (SMART-RULE-0009), and in a shareable
+# repository no personal data (SMART-RULE-0008). Runs only inside a brain; cloned on its own, the
+# commit goes ahead.
 top=$(git rev-parse --show-toplevel)
 dir="$top"
 while [ ! -f "$dir/CONTRACT.md" ] || [ ! -d "$dir/shared" ]; do

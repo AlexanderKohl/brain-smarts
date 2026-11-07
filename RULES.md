@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-10-01T12:10:36+10:00
+updated: 2026-11-07T13:22:37+10:00
 owner: brain-owner
 ---
 
@@ -41,12 +41,12 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 | `SMART-RULE-0016` | Product-development process | this file; `/shared/skills/product-development/` | starting or continuing non-trivial software or product work, at any stage |
 | `SMART-RULE-0017` | Surface external-system configuration mismatches before coding around them | this file | an external system's configuration disagrees with what the task needs |
 | `SMART-RULE-0018` | One canonical implementation, no duplicated side effects | this file | adding a function, write, call or control-flow path in software |
-| `SMART-RULE-0019` | Context handoff checkpoint | this file | context is running low, a stage of work ends, or a session ends with work in flight |
+| `SMART-RULE-0019` | Context handoff checkpoint | this file | context is running low, a stage of work ends, a session ends with work in flight, or the context was compacted |
 | `SMART-RULE-0020` | Whole-system implementation review | this file | before reporting a non-trivial software change complete |
 | `SMART-RULE-0021` | Security designed into every implementation | this file | a software change touches an endpoint, query, permission, stored or sent data, an integration or a log; before writing to a client's live system |
 | `SMART-RULE-0022` | Tests demonstrate behaviour | this file | a behavioural software change or a bug fix |
 | `SMART-RULE-0023` | Preflight resolves heading anchors in declared references | `/shared/skills/repository-preflight/` | writing a reference that carries a `#` heading anchor |
-| `SMART-RULE-0024` | Delegated parallel work | this file; `/shared/skills/delegate-work/` | before delegating work to another agent |
+| `SMART-RULE-0024` | Delegated parallel work | this file; `/shared/skills/delegate-work/` | before delegating work to another agent; as a conductor, before reading a source rather than a result |
 | `SMART-RULE-0025` | Task state enumerates every open task | `/shared/templates/memory-skeleton/tasks/RULES.md`; `/shared/skills/repository-preflight/` | creating, changing or closing a task |
 | `SMART-RULE-0026` | Version every change, and show it | this file | a software change that reaches a build someone can load, run or deploy |
 | `SMART-RULE-0027` | Every list has a deliberate order | this file | always |
@@ -65,6 +65,12 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 | `SMART-RULE-0040` | Dated and superseded knowledge claims | `/CONTRACT.md` §4 (`KNOWLEDGE.md`); `/shared/skills/repository-preflight/` | writing or changing a claim in a `KNOWLEDGE.md` |
 | `SMART-RULE-0041` | Code files stay small | this file; `/shared/skills/code-map/` | creating, growing or splitting a code file |
 | `SMART-RULE-0042` | Code repositories run the code map's checks | this file; `/shared/skills/code-map/` | setting up or changing a code repository's CI, or when a code-map check fails |
+| `SMART-RULE-0043` | Work moves between threads through cards | this file; `/shared/skills/delegate-work/`; `/shared/skills/tasks/` | taking, working, releasing or handing over a card; running a scrum-master or team thread |
+| `SMART-RULE-0044` | Raise the ambition of every request | this file; `/shared/skills/raise-ambition/` | always |
+| `SMART-RULE-0045` | Host plugin skills act under the brain | this file | using a skill installed in the host rather than the brain (a host plugin skill), or its connector |
+| `SMART-RULE-0046` | A release note for every change a user would notice | this file; `/shared/skills/release-notes/` | starting, committing or releasing a change someone who uses the system would notice |
+| `SMART-RULE-0047` | Long command output is shortened before the model reads it | this file; `/shared/skills/command-output/` | running a test run, build, install or long `git diff` or `git log`; command output arrives shortened |
+| `SMART-RULE-0048` | One conversation with the owner | this file; `team_sessions_max` in `/memory/OWNER.md`; `/shared/skills/product-feedback/` | a conductor thread starts or hands over, the owner raises another area's topic, before starting a team session, before pushing merged code |
 
 `Applies when` says when an agent reads a rule's full text: `always` rules are in `/CORE-RULES.md`,
 which every writing session reads first with `/CORE.md` (CONTRACT §1); any other rule is read, in its
@@ -120,7 +126,7 @@ Contract sections and when to read them, in section order:
 - In every Git repository modified during an owner-authorised task, automatically create a commit at each successful logical checkpoint. A logical checkpoint exists when an independently describable improvement, fix, document update, configuration change or tested implementation is complete. Do not wait for the entire project to finish and do not bundle unrelated logical changes.
 - A Git checkpoint is mandatory after relevant validation passes; before switching tasks, repositories, branches or workstreams; before pausing for owner input or approval while agent-owned changes remain; before asking the owner to test, reload, load-unpacked, install, or try a build; before the final response when the agent produced durable repository changes; and after 30 minutes of active work with uncommitted agent-owned changes, even if the larger task continues.
 - **Owner-test handoff:** Before asking the owner to test, reload, load-unpacked, install, or try a build, commit the agent-owned change in that product repository. That commit is the rollback point if the test fails. Do not wait for the owner to ask. If the work is a sequence of trials, commit each testable batch separately so a working version can be restored without unpicking later experiments.
-- At each checkpoint, inspect `git status` and the relevant diff, stage only agent-owned files that belong to that logical change, check that no secret or unrelated change is included, run proportionate validation, and commit with a concise message that always includes the host/tool and model in use (for example `Cursor Grok 4.6 High` or `VS Code Claude Code Sonnet 5`) and, when the agent has a specific bot name, that name as well. Do not invent a model or version. Pre-existing or concurrent dirty files do not prevent a path-scoped commit when the agent-owned change can be separated safely.
+- At each checkpoint, inspect `git status` and the relevant diff, stage only agent-owned files that belong to that logical change, check that no secret or unrelated change is included, run proportionate validation, and commit with a concise message whose subject says what changed and never names the tool or the model. Two trailers of the same commit name them: `Tool: <host or tool>` (for example `Tool: Claude Code desktop` or `Tool: Cursor`, with the agent's bot name when it has one) and `Co-Authored-By: <model> <address>` (for example `Co-Authored-By: Claude Opus 5.5 <the host's no-reply address>`). In the brain's repositories the commit-message hook refuses a commit, other than a merge, without both. Do not invent a model or version. Pre-existing or concurrent dirty files do not prevent a path-scoped commit when the agent-owned change can be separated safely.
 - Never commit secrets, credentials, vault ciphertext, private tokens, unresolved conflict markers or unrelated user changes. Do not use `--no-verify`, amend or rewrite an existing commit, force-push, or push directly to a protected `main` or `master` branch unless the owner explicitly directs that specific action. If ownership or safety is uncertain, leave the uncertain path unstaged and ask.
 - Treat commit and push as separate decisions. A push failure or unavailable remote must never prevent the local commit. Owner-test handoff commits stay local: do not push solely because the owner is being asked to test. Push accumulated agent-created commits to the tracked remote when the unit of work finishes and before the final response (except a response that is only an owner-test handoff), or after 30 minutes since the last successful push while work continues, unless the owner has prohibited pushing or repository policy requires review through another path. Also push when the owner asked to push.
 - Never silently finish with committable agent-owned changes. In the final response, report the commit hash and push status for each modified repository, or state `No commit` with the specific reason. Valid reasons include: no durable change, no Git repository, the owner explicitly prohibited committing, validation or a hook failed, a merge/rebase/conflict is active, required Git identity or permission is unavailable, or the change cannot be separated safely from uncertain or unrelated files.
@@ -136,6 +142,8 @@ Contract sections and when to read them, in section order:
 - **Shareable repositories are written clean, not cleaned.** Everything written into a shareable repository – the mechanics and the skill library: rules, skills, scripts, tests, templates, proposals and commit messages – is free of personal data from its first draft (CONTRACT §3.4). Say "the owner". Read concrete values – names, paths, accounts, identifiers, locations, project and client names – at run time from `/memory/OWNER.md` or `/memory/skills/<skill>/config/`, never inline. Write examples with fictional values: `example.com` addresses, numbers reserved for fiction, invented names.
 - **Split a lesson as you write it.** When a rule or skill comes out of the owner's own incident, write the generalised mechanism in the shareable repository and the incident, with its real identifiers, in memory at the node that owns it, in the same piece of work. Never write one file to be split later.
 - **The check confirms; it does not clean.** The validator runs the personal-data check on every shareable repository before each commit, and a hit fails it. Fix a hit at its source. Exempt a value only when it is genuinely public or generic – a vendor's published documentation, a documented default – and give the reason beside the exemption. When a writing habit or a template invited the hit, record it as a learning (`SMART-RULE-0028`).
+- **Fixture numbers are chosen to pass from the start.** A run of nine or more digits, such as a ten-digit epoch-second timestamp, reads as a telephone number. In fixtures, choose such values so their digits contain the run reserved for fiction, `55501` (for example `1755501000`), when the fixture is first written, and derive every expected result from them. A hit found later is fixed by whoever wrote the tests, keeping their ordering and range assertions true, never by a blanket swap of values.
+- **A memory node is not named after a library skill.** The check reads the folder name of every memory project node as an owner term. Give a new memory project node a name that no skill in the library has, or the skill's own name becomes a hit in the library and its commit is refused.
 
 ## SMART-RULE-0015 – Reuse project-native UI patterns
 
@@ -181,7 +189,7 @@ Contract sections and when to read them, in section order:
 
 - Keep durable behavioural rules only in portable governance: `/CONTRACT.md`, root and node `RULES.md` files, and skill operating instructions. Do not create or maintain host-specific behavioural rule files that restate or extend how agents must behave.
 - Host entry files may only point agents to portable bootstrap (`/CONTRACT.md`, `/BOOTSTRAP.md`, `/AGENTS.md`) and must not carry independent behavioural policy.
-- **One text per rule.** A rule's wording lives only in its canonical home. Anywhere else it is referred to by its identifier and section, never restated in other words; a list that can be generated from its sources is generated. The repository preflight fails when a pointer file carries rule identifiers or runs past a pointer's length.
+- **One text per rule.** A rule's wording lives only in its canonical home. Anywhere else it is referred to by its identifier and section, never restated in other words; a list that can be generated from its sources is generated. The repository preflight fails when a pointer file carries rule identifiers or runs past a pointer's length. The worker brief (`/shared/skills/delegate-work/templates/worker-brief.template.md`) is the one permitted digest: each of its items names the rule or contract section it digests, and a change to a digested rule changes the brief in the same commit.
 
 ## SMART-RULE-0016 – Product-development process
 
@@ -237,14 +245,35 @@ Contract sections and when to read them, in section order:
   context threshold: the best moment is immediately after a validated, committed increment and
   **before** starting a new stage of work, because that is when the repository and the agent's
   understanding agree. Take the checkpoint at whichever comes first – the natural boundary, or
-  roughly the last fifth of the context window.
+  the drain threshold below.
 - Never begin a new stage of work when the remaining context is unlikely to carry it to a
   committed, validated state. Checkpoint and say so instead.
+- **The conductor stops dispatching before its context runs out; the owner does not have to
+  find the moment.** Before opening a delegation run or dispatching a packet, the conductor
+  reads its context size from the host and passes it to the delegation script
+  (`--context-tokens`). Up to 750 000 tokens it dispatches freely. From 750 000 it **drains**:
+  no new run; the workers in flight finish, their results are merged, the checkpoint is written
+  and the handover prompt given. From 900 000 no new packet either, and no new stage of its own
+  work, until the checkpoint is committed. The thresholds are a guard rail, not a working
+  budget: a conductor that only conducts (`SMART-RULE-0024`) rarely reaches them, and reaching
+  them is itself a finding to record. The delegation script refuses a run or packet past its
+  threshold; only the owner can override it, for a named run or packet, and the override and
+  its reason are recorded in the run.
+- **An automatic compaction of the conductor's context is a missed checkpoint.** The host hook
+  marks it; dispatching stays closed until the conductor has re-read `/CONTRACT.md`,
+  `/RULES.md`, `/memory/RULES.md` and the owning node's `## Handover`, written the checkpoint,
+  committed, and cleared the marker (`delegation.py checkpoint-done`). The conductor tells the
+  owner in its next reply that a compaction happened.
+- On a host that cannot report the context size, the conductor passes `--context-unknown`
+  with the reason, and drains at its first compaction or after its fourth run in the thread,
+  whichever comes first.
+- Each run records the context size when it opens and when it closes, so the thresholds are
+  tuned from measurements recorded under `/memory/projects/brain-development/`, never by feel.
 - A checkpoint updates, in the owning node: `STATE.md` with the current position, what is in
   flight, what is uncommitted and where, and the exact next action; `KNOWLEDGE.md` with durable
   facts a later session could not re-derive cheaply – especially external-system behaviour
-  established by experiment; `LOG.md` with what happened and why; and `/memory/tasks/` for anything
-  outstanding.
+  established by experiment; `LOG.md` with what happened and why; and the task's store
+  (CONTRACT §9) for anything outstanding.
 - Record **open questions with enough context to act on them**, not just their titles: what is
   unknown, what was already tried, and what would settle it.
 - Record **negative findings**. What was ruled out, and the evidence that ruled it out, is as
@@ -356,24 +385,53 @@ Contract sections and when to read them, in section order:
   the conductor can use without the worker's reasoning. Before dispatching, state in one line
   why parallel workers beat doing the work in sequence. Tightly coupled reasoning, sequential
   implementation and work that needs constant shared state stay with one agent.
+- **The conductor's context is for coordination: it reads results, not sources.** A conductor
+  writes packets, reads result records, routes them, reviews diffs, merges, and writes the
+  shared files (state, log, tasks, indexes) and the commit. Any work that needs reading more
+  than a packet and its result – a source file, a transcript, a log, a page, a tool's output –
+  goes to a worker or a team thread, however small it looks: one such detour costs more context
+  than ten dispatches. A conductor that reads a source says so in the run's log entry and why;
+  the context size recorded on each run shows the cost.
 - Delegate through `/shared/skills/delegate-work/`: a work packet that references canonical
   files rather than copying prose, and a result record the worker writes back. Packets and
   results are ephemeral instrumentation under `/temp/delegation/`, not task records. Work that
-  must outlive the session is an ordinary `/memory/tasks/` record with `waiting_on` and `next_review`.
+  must outlive the session is an ordinary task record (CONTRACT §9) with `waiting_on` and
+  `next_review`.
+- A worker is an agent started with a work packet. An agent started without one – a host's
+  subagent given a piece of the session's own work – is not a worker and does not take on the
+  worker limits below: it does the whole job as the session would, including the state, log and
+  task-list updates the work needs and the commit. A session that wants work done in parallel,
+  or kept apart, uses a packet.
 - Workers start isolated by default. A packet that forks the conductor's context states why.
+- **A build that carries risk starts from an approved plan.** Before a worker builds anything
+  that touches stored data, logins or permissions, money, or more than one module, a short plan
+  is written: the data flow, what happens when each read or write fails, the tests, and the
+  checks that will be run. The conductor approves the plan before the build starts. The plan is
+  the result of its own packet, or written by the conductor, and the build packet names it in its
+  context references; a build packet that needs a plan and names none is not dispatched. A
+  worker that finds, while building, that its work reaches one of these areas and its packet
+  names no approved plan stops with status `blocked`. The approved build plan of a run of more
+  than four workers serves as this plan when it covers these four points for each packet.
 - Workers do not commit, and do not write the files every task shares – logs, state, task lists,
   indexes, version fields, build output. A worker writes only the paths its packet names, in the
   conductor's copy and branch (`SMART-RULE-0038`), and returns findings, artifacts inside its run
   folder, and every changed path with its validation result. The conductor keeps the paths of one
   run disjoint, reviews each worker's diff before staging it, and commits and reports. A worker
-  whose work cannot be kept apart – it builds or tests code, it must change a file another worker
-  also changes, or it is one of several alternative attempts – works in its own worktree, branched
-  from the conductor's branch; the conductor merges it back (`SMART-RULE-0014`).
+  whose work cannot be kept apart – it builds code or runs tests that write outside its own
+  paths, it must change a file another worker also changes, or it is one of several alternative
+  attempts – works in its own worktree, branched from the conductor's branch; the conductor
+  merges it back (`SMART-RULE-0014`). Unit tests that read and write only inside the worker's
+  own paths (and their caches) run in the session copy (`SMART-RULE-0038`).
 - Workers use no credentials and take no external side effect unless the packet names a target
   the owner confirmed for this operation under CONTRACT §10.5. The default is none. A worker
   that needs an owner decision stops with status `blocked` and the question; it does not guess.
-- Budget: depth one (workers do not delegate) and at most four workers per run, until a
-  measured trial recorded under `/memory/projects/brain-development/` justifies more.
+- Budget: depth one (workers do not delegate) and at most four workers per run. A run may hold
+  up to eight workers when an approved build plan splits the work first: the plan names each
+  packet's write paths, no two packets share a path, and the plan fixes every interface between
+  the packets (names, data shapes, identifiers), so no worker needs another's result to finish.
+  The conductor approves the plan before the run opens and names it on the run. The machine
+  limit of `SMART-RULE-0037` still applies, and the number is the lower of the two. A raise
+  beyond eight needs another measured trial recorded under `/memory/projects/brain-development/`.
 - The conductor routes each result under CONTRACT §5 and §6, treats worker claims as
   unverified until checked, writes one `LOG.md` entry per run in the owning node, and does the
   Git accounting under `SMART-RULE-0014`. Never claim parallel execution on a host that ran
@@ -542,8 +600,9 @@ Contract sections and when to read them, in section order:
   keeps shared files – logs, state, task lists, indexes, version fields, build output – for
   itself. Only the conductor stages and commits. A worker gets its own worktree, branched from the
   session's branch and merged back by the conductor, only when its work cannot be kept apart: it
-  builds or tests code, it must change a file another worker also changes, or it is one of
-  several alternative attempts.
+  builds code or runs tests that write outside its own paths, it must change a file another
+  worker also changes, or it is one of several alternative attempts. Unit tests that read and
+  write only inside the worker's own paths (and their caches) run in the session copy.
 - The pre-commit hook refuses a commit on `main` in a repository's own working tree – the
   shared checkout – and names the command that makes a session copy. Session copies are linked
   worktrees on their own branches, so their commits pass; so do a `proposal/*` branch and any
@@ -588,6 +647,159 @@ Contract sections and when to read them, in section order:
   change to the code map cannot break a repository's build unseen.
 - Agents may use the map to answer questions (`show`, `find`), but need not.
 
+## SMART-RULE-0043 – Work moves between threads through cards
+
+- A body of work that several threads share runs as a **scrum**: one **scrum-master thread**
+  and one **team thread** per project or area. The scrum master owns the boards, the
+  priorities and the owner's questions, assigns cards to teams and watches work in progress;
+  it never reads code, dispatches workers or reviews work, so its context stays small for
+  weeks. A team thread is a conductor under `SMART-RULE-0024` for the cards of its team: it
+  pulls a card, dispatches the workers it needs, reviews, merges to its project's branch and
+  closes the card.
+- A **card** is a task record in a task store (CONTRACT §9) with a `team`. A team thread takes a
+  card by setting `claimed_by` to its session name, `claimed_at` from the clock and
+  `status: in_progress`, and committing that record on its own, in the repository that holds it
+  (`tasks.py claim`); a conflict on that commit means another thread took it first, and the
+  loser moves on. A card leaving `in_progress` loses its claim (`tasks.py release`, or
+  completion). The task record stays the only record: who holds a card lives nowhere else.
+- **Work in progress is limited.** A team holds at most `tasks.wip_limit` cards in
+  `in_progress` (two, until a measured trial says otherwise), and the scrum master assigns no
+  card past it. A card that waits on another team's card says so in `waiting_on`; finishing
+  the first clears the second, and the board shows it.
+- A team thread acts only on a turn. It is woken by a message from the scrum master when a
+  card of its team becomes ready, or by its own slow check of the board (one short turn every
+  twenty to thirty minutes), never faster. A thread that finds nothing ready writes nothing.
+- A team thread hands over under `SMART-RULE-0019` when its own context fills. Its cards are
+  its handover: the successor claims them again under its own session name. The `## Handover`
+  of `/memory/projects/brain-development/STATE.md` names the scrum master and the live team
+  threads with their teams.
+- Start with two teams. The trial – cards closed per day, context sizes at open and close,
+  merge conflicts, owner interruptions – and its decision are recorded under
+  `/memory/projects/brain-development/` before a third team is added.
+
+## SMART-RULE-0044 – Raise the ambition of every request
+
+- At the intake of every request, the agent applies `/shared/skills/raise-ambition/`: it names
+  the outcome behind the request and checks whether a bigger version would serve the user better
+  – one that reaches higher (an outcome kept true, not a task done once), deeper (an expert's
+  methods and a harder, measurable target) or wider (other fields and roles, including an
+  adversarial reviewer). The user is the person whose request it is: the owner, or a
+  collaborator working in a shared project.
+- When a bigger version would serve the user better, the agent's clarifying question offers it
+  as option 1, marked recommended, with what it would take; the request as asked is option 2.
+  When no question is otherwise needed, the agent does what was asked and adds one line naming
+  the bigger version.
+- The agent never widens the work without the user's yes, does not repeat a bigger version the
+  user declined for the same request, and keeps the suggestion to a few lines. Safety, cost,
+  side-effect and governance rules are unchanged.
+
+## SMART-RULE-0045 – Host plugin skills act under the brain
+
+- A host plugin skill is a skill installed in one AI host rather than in the brain (for example a
+  host's engineering, marketing, design or legal plugins). It may be used as a tool inside brain
+  work. `/CONTRACT.md`, this file, `/memory/RULES.md` and the active node's rules govern it: where a
+  plugin's own instructions differ – output style, list order, record formats, sending messages,
+  external writes, commits – the brain's rule applies.
+- Work done with a plugin follows the brain skill it serves: engineering work stays inside the
+  product-development process (`SMART-RULE-0016`) with its gates, versions and checkpoint commits;
+  user-interface work inside the brain's UI skills; marketing and legal work inside the owning
+  project's node. The owner's mapping of enabled plugins to brain skills is kept in
+  `/memory/ONBOARDING_OWNER.md` § Host plugins and updated whenever a plugin is enabled or disabled.
+- Output lands in its canonical home in house style: a draft in the owning node or
+  `/memory/outbox/`, a decision in the node's `STATE.md` or `KNOWLEDGE.md`, a task in
+  `/memory/tasks/`. Messages are drafted, never sent without the owner's approval, and a plugin
+  connector's write to an outside system needs the confirmed target of CONTRACT §10.5 like any
+  other.
+- **Learnings flow into the brain.** Using a plugin skill is ordinary evidence under
+  `SMART-RULE-0028`. At the next natural checkpoint the agent records, in the owning subject's
+  knowledge store or `data/learnings/`: what the plugin produced that proved useful or wrong, the
+  owner's corrections to its output and the preference behind them, durable decisions it helped
+  reach, and failures or limits met. Each record names the host and plugin skill that produced the
+  output. Routine use that teaches nothing needs no record.
+- A plugin pattern that proves useful more than once is a candidate brain skill, suggested for
+  promotion under `SMART-RULE-0032`, so the capability becomes portable to hosts that lack the
+  plugin.
+- A plugin connector's account is recorded in the owner's credential registry as
+  `managed_by: host` when it is first used for real work; its credentials stay with the host,
+  never in the brain.
+
+## SMART-RULE-0046 – A release note for every change a user would notice
+
+- A release note records one change that someone who uses the system – staff, customers, or a
+  colleague working in a platform the brain builds in – would see, do, receive or need to watch for
+  differently. It is written from their side, in their words, with no code terms. Commits and
+  their messages stay the developer's record and are not release notes.
+- One note per user-visible outcome, never per commit. The agent opens the note when the work
+  starts and names it in each commit that belongs to it (`Release-note: <slug>` trailer). A later
+  commit that changes what a note says updates the note in the same commit. Refactors, tests,
+  tooling and fixes no user could have met get no note; a commit that needs none but would
+  otherwise be listed as missing one goes in `release-notes/not-user-visible.txt`.
+- Every version that raises the first or middle number (`SMART-RULE-0026`) names at least one note
+  in its commits. The project checks this on every push to its development branch, not only on
+  pull requests: a push with a feature version that names no note, or names one that does not
+  exist, fails.
+- A note's `commits` and `versions` are generated from the trailers by
+  `/shared/skills/release-notes/` (`release_notes.py link`), never kept by hand.
+- A note's `kind` is one of `added`, `changed`, `fixed` or `removed`, and its other fields follow
+  the release-notes skill; the project's check refuses anything else.
+- Code notes live in the project repository under `release-notes/unreleased/`. Notes for changes
+  made in a no-code platform come from that platform's export where a tool provides one, or are
+  written by hand in the owning node.
+- Every note starts as `visibility: undecided`. Only the owner moves a note to `announce`, `hold`
+  or `internal`. At release, only `announce` notes are published to the team; `undecided` and
+  `hold` notes carry forward to the next release; `internal` notes are recorded and never sent.
+- A production release is a merge to the repository's production branch, or the platform
+  equivalent the owner layer or the project's rules name.
+
+## SMART-RULE-0047 – Long command output is shortened before the model reads it
+
+- A shell command's long output reaches the model shortened by `/shared/skills/command-output/`:
+  its head and tail, every error line, and a last line naming the file that holds the full output.
+  Short output, and the output of a command the skill does not recognise, reach the model
+  unchanged.
+- On a host whose after-command hook is registered (the skill's *Hosts* section), the hook does
+  this and the agent does nothing. On any other host, the agent runs a test run, a build, an
+  install, or a long `git diff` or `git log` through the skill's wrapper, `run.py`.
+- An agent that needs more than the shortened output reads the named file. It does not run the
+  command again to see the rest.
+- When shortened output hid something an agent needed, the agent tells the owner in its next reply
+  and records the case under `/memory/projects/brain-development/` as evidence about the filter
+  (`SMART-RULE-0028`).
+
+## SMART-RULE-0048 – One conversation with the owner
+
+- The owner's work is divided into areas, each with its own lifecycle, node and data: for example
+  strategy and finance, a product, and operations in external systems. `/memory/OWNER.md` names
+  the areas in `conductor_areas`; without that field there is one area. Each area has one
+  conductor thread, the owner's one conversation for that area: it answers the owner, puts every
+  question of its area to the owner, and gets work done through workers (`SMART-RULE-0024`). At
+  most one live conductor per area, and no more areas than `conductor_areas` names. The
+  `## Handover` of `/memory/projects/brain-development/STATE.md` names every live conductor with
+  its area and the time it took over; a new thread that finds a live conductor for its area asks
+  the owner which thread continues before dispatching anything. A fact one area learns that
+  another needs is written to the brain's files (the node that owns it), never passed from one
+  thread's context to another.
+- Within an area, for a task that will take more than a day and passes several of the owner's
+  gates, the conductor may start a team session: a separate agent session that conducts that one
+  body of work with its own workers (a team thread, `SMART-RULE-0043`). At most `team_sessions_max`
+  in `/memory/OWNER.md` run at once across all areas, two when it is not set. A team session never
+  puts a question to the owner and never starts another session; it sends its questions and
+  results to its area's conductor, who asks the owner in the conversation. The conductor archives
+  a team session the day it hands back. No other session is started unless the owner asks for one
+  in words, or a rule names it.
+- The conductor routes; the owner does not have to. When the owner raises a topic that belongs to
+  another area, the conductor says so in its first reply, names the area, and offers to start or
+  hand to that area's session (the host's offer, where it has one) before doing anything beyond
+  answering a quick question. It never carries another area's work on because the owner happened
+  to raise it here, and it never leaves the owner to work out which lane a topic belongs to.
+- Every packet that changes code carries the pre-merge checklist. The conductor runs it again on
+  the merged tree before every push: the full unit suite, the code map check, the build, the
+  version and release-note checks, unique migration names, and a safe fallback when a read fails.
+  A push goes only after the checks pass, and CI results are read after each push, before the next
+  merge.
+- When the conductor's context reaches its checkpoint (`SMART-RULE-0019`), it hands over to one
+  successor conductor and stops. The successor is the only thread the owner talks to.
+
 ## Contract restatements
 
 These restatements of `/CONTRACT.md` keep no separate rule identifier. Find the canonical wording in the contract section named here.
@@ -598,7 +810,7 @@ These restatements of `/CONTRACT.md` keep no separate rule identifier. Find the 
 - Keep metadata minimal, explicit and useful. (CONTRACT §8.4)
 - Preserve raw files unchanged. (CONTRACT §11.1)
 - Create Markdown source records for raw files. (CONTRACT §11.2)
-- Treat `/memory/tasks/` as the canonical task system. (CONTRACT §9)
+- Treat the task stores of CONTRACT §9 – every node's `tasks/` and `/memory/tasks/` – as the canonical task system. (CONTRACT §9)
 - Use shared skills for reusable capabilities. (CONTRACT §10.1)
 - Keep project-specific configuration inside the project, and owner-wide skill configuration in `/memory/skills/<skill>/`. (CONTRACT §3.5 / §10.1)
 - Keep personal data out of the mechanics repository; it belongs in `/memory/`. (CONTRACT §3.4)
