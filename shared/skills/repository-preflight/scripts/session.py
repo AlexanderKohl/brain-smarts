@@ -58,11 +58,17 @@ ATTEMPTS = 3                     # merge-check-push rounds before a refused push
 REFUSED = ("[rejected]", "non-fast-forward", "fetch first")   # git's words for "origin moved on"
 
 # Generated files a merge may conflict on, per repository: the pattern and the command that
-# rebuilds them, run from the session root. A conflict in any other file stops `finish`.
+# rebuilds them, run from the session root. A conflict in any other file stops `finish`. Every
+# file the refresh below regenerates is listed. Patterns follow `Path.match`, which matches from
+# the right one part per part (`*` never crosses a `/`): the owner's pages of repository boards
+# sit one folder down, and a board in memory may sit at any depth.
 GENERATED = {
     "memory": [
         ("boards/*.html", ["python", "shared/skills/owner-board/scripts/build_boards.py", "--no-fetch"]),
-        ("projects/*/status/status.html", ["python", "shared/skills/owner-board/scripts/build_status.py", "--no-fetch"]),
+        ("boards/*/*.html", ["python", "shared/skills/owner-board/scripts/build_boards.py", "--no-fetch"]),
+        ("status/status.html", ["python", "shared/skills/owner-board/scripts/build_status.py", "--all", "--no-fetch"]),
+        ("status/state.json", ["python", "shared/skills/owner-board/scripts/build_status.py", "--all", "--no-fetch"]),
+        ("skills/release-notes/pages/*.html", ["python", "shared/skills/release-notes/scripts/release_notes.py", "build"]),
     ],
 }
 

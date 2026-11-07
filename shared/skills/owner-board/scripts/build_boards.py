@@ -27,6 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import board_config  # noqa: E402
 import events  # noqa: E402
+import page_js  # noqa: E402
 import reconcile  # noqa: E402
 import task_board  # noqa: E402
 
@@ -93,7 +94,9 @@ __BODY__
 <p class="foot">A new project registers its board in <code>/memory/skills/owner-board/config/boards.json</code>.
 A board that is not listed here is one nobody opens. A task is shown on the board of its first
 project that has one, otherwise on the personal board.</p>
-</div></body></html>
+</div>
+__BEHIND__
+</body></html>
 """
 
 
@@ -215,8 +218,15 @@ def block(config: board_config.Config, board: dict, data: dict, tally: dict | No
             + "</div>")
 
 
-def build(config: board_config.Config, known: dict | None = None, now: str | None = None) -> str:
-    """Write the directory page. `known` holds board data already loaded this run, by id."""
+def build(config: board_config.Config, known: dict | None = None, now: str | None = None) -> str | None:
+    """Write the directory page. `known` holds board data already loaded this run, by id.
+
+    In the shared checkout nothing is written and None is returned: the directory and the task
+    pages are memory files, rebuilt in a session copy (`board_config.shared_checkout_hold`)."""
+    held = board_config.shared_checkout_hold(config)
+    if held:
+        print("directory and task pages " + held)
+        return None
     known = known or {}
     stamp = now or datetime.datetime.now().astimezone().strftime("%Y-%m-%d %H:%M")
     # Tasks first: route every record once, and write the personal and automatic task pages
@@ -254,7 +264,8 @@ def build(config: board_config.Config, known: dict | None = None, now: str | Non
             "; ".join(s.label + " (" + str(s.reason) + ")" for s in missing)) + "</p>")
     if not blocks:
         blocks = ['<p class="none">No boards registered yet.</p>']
-    page = (PAGE.replace("__FAVICON__", board_config.favicon_link(config))
+    page = (PAGE.replace("__BEHIND__", page_js.BEHIND_JS)
+            .replace("__FAVICON__", board_config.favicon_link(config))
             .replace("__TITLE__", html.escape(config.directory["title"]))
             .replace("__GENERATED__", html.escape(stamp))
             .replace("__BODY__", "\n".join(blocks)))

@@ -4,13 +4,17 @@ and nothing else is. Every folder and name is invented (SMART-RULE-0008). Run fr
 """
 from __future__ import annotations
 
+import datetime
 import http.client
+import json
 import shutil
+import subprocess
 import sys
 import tempfile
 import threading
 import unittest
 from pathlib import Path
+from unittest import mock
 
 SCRIPTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
@@ -112,6 +116,127 @@ class ServerTests(unittest.TestCase):
     def test_a_request_for_another_host_is_refused(self):
         self.assertEqual(self.get("/", host="attacker.example")[0], 403)
         self.assertEqual(self.get("/", host="127.0.0.1")[0], 200)
+
+
+def git(cwd: Path, *args: str) -> str:
+    out = subprocess.run(["git", "-c", "user.name=sam", "-c", "user.email=sam@example.com", "-c", "commit.gpgsign=false",
+                          "-c", "core.autocrlf=false", *args], cwd=str(cwd), capture_output=True, text=True)
+    if out.returncode:
+        raise RuntimeError(" ".join(args) + ": " + out.stderr)
+    return out.stdout
+
+
+class MemoryCheckout:
+    """A memory checkout with a local origin, and a second clone that pushes two commits to it.
+    The fetch in the checkout stands in for a push from a session copy, which updates origin/main
+    in the shared .git without touching the checkout's own files."""
+
+    def __init__(self, base: Path, files: int = 2):
+        self.origin = base / "origin.git"
+        git(base, "init", "--bare", "-b", "main", str(self.origin))
+        self.memory = base / "memory"
+        git(base, "clone", "-q", str(self.origin), str(self.memory))
+        git(self.memory, "checkout", "-q", "-B", "main")
+        for n in range(files):
+            (self.memory / ("note-%02d.md" % n)).write_text("note %d\n" % n, encoding="utf-8")
+        git(self.memory, "add", "-A")
+        git(self.memory, "commit", "-q", "-m", "first")
+        git(self.memory, "push", "-q", "origin", "main")
+        other = base / "session-copy"
+        git(base, "clone", "-q", str(self.origin), str(other))
+        for n in (1, 2):
+            (other / ("later-%d.md" % n)).write_text("later\n", encoding="utf-8")
+            git(other, "add", "-A")
+            git(other, "commit", "-q", "-m", "later %d" % n)
+        git(other, "push", "-q", "origin", "main")
+        git(self.memory, "fetch", "-q", "origin")
+
+
+class MemoryStatusTests(unittest.TestCase):
+    """GET /_boards-status.json: how far the memory checkout the boards come from lags, and the
+    tracked files changed or staged there that would block it catching up."""
+
+    def setUp(self):
+        self.base = Path(tempfile.mkdtemp(prefix="serve-boards-git-"))
+        self.addCleanup(shutil.rmtree, self.base, True)
+
+    def test_behind_counts_the_commits_on_origin_main_the_checkout_lacks(self):
+        repo = MemoryCheckout(self.base)
+        status = serve_boards.memory_status(repo.memory)
+        self.assertEqual(sorted(status), ["behind", "changed", "checked"])
+        self.assertEqual(status["behind"], 2)
+        self.assertEqual(status["changed"], [])
+        self.assertIsNotNone(datetime.datetime.fromisoformat(status["checked"]).tzinfo)
+        git(repo.memory, "merge", "-q", "--ff-only", "origin/main")
+        self.assertEqual(serve_boards.memory_status(repo.memory)["behind"], 0)
+
+    def test_changed_lists_tracked_files_changed_or_staged_and_never_untracked_ones(self):
+        repo = MemoryCheckout(self.base)
+        (repo.memory / "note-00.md").write_text("changed\n", encoding="utf-8")
+        (repo.memory / "note-01.md").write_text("staged\n", encoding="utf-8")
+        git(repo.memory, "add", "note-01.md")
+        (repo.memory / "untracked.md").write_text("new\n", encoding="utf-8")
+        status = serve_boards.memory_status(repo.memory)
+        self.assertEqual(status["behind"], 2)
+        self.assertEqual(status["changed"], ["note-00.md", "note-01.md"])
+
+    def test_changed_holds_at_most_twenty_paths(self):
+        repo = MemoryCheckout(self.base, files=25)
+        for n in range(25):
+            (repo.memory / ("note-%02d.md" % n)).write_text("changed\n", encoding="utf-8")
+        self.assertEqual(len(serve_boards.memory_status(repo.memory)["changed"]), 20)
+
+    def test_a_git_failure_gives_behind_null_and_an_error_only(self):
+        plain = self.base / "not-a-repository"
+        plain.mkdir()
+        status = serve_boards.memory_status(plain)
+        self.assertEqual(sorted(status), ["behind", "error"])
+        self.assertIsNone(status["behind"])
+        self.assertTrue(status["error"])
+        self.assertNotIn(str(plain), status["error"])    # git's own words, with paths, stay on the server
+
+    def test_a_git_that_hangs_is_stopped_and_reported(self):
+        repo = MemoryCheckout(self.base)
+        with mock.patch.object(serve_boards.subprocess, "run", side_effect=subprocess.TimeoutExpired("git", 5)):
+            status = serve_boards.memory_status(repo.memory)
+        self.assertEqual((status["behind"], sorted(status)), (None, ["behind", "error"]))
+
+
+class StatusEndpointTests(unittest.TestCase):
+    """The endpoint on a real socket, under the same Host and path rules as every page."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.base = Path(tempfile.mkdtemp(prefix="serve-boards-status-"))
+        cls.addClassCleanup(shutil.rmtree, cls.base, True)
+        repo = MemoryCheckout(cls.base)
+        site = Site(cls.base / "site")
+        handler = type("H", (serve_boards.Handler,), {"table": site.table, "memory": repo.memory,
+                                                       "log_message": lambda *a: None})
+        cls.server = serve_boards.http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        threading.Thread(target=cls.server.serve_forever, daemon=True).start()
+        cls.addClassCleanup(cls.server.server_close)
+        cls.addClassCleanup(cls.server.shutdown)
+
+    get = ServerTests.get
+
+    def test_the_status_is_served_as_json_with_nothing_else_in_it(self):
+        status, ctype, body = self.get("/_boards-status.json")
+        self.assertEqual(status, 200)
+        self.assertIn("application/json", ctype)
+        data = json.loads(body)
+        self.assertEqual(sorted(data), ["behind", "changed", "checked"])
+        self.assertEqual(data["behind"], 2)
+
+    def test_the_status_is_refused_to_another_host(self):
+        self.assertEqual(self.get("/_boards-status.json", host="attacker.example")[0], 403)
+        self.assertEqual(self.get("/_boards-status.json", host="127.0.0.1")[0], 200)
+
+    def test_only_the_one_status_path_answers(self):
+        self.assertEqual(self.get("/_boards-status.json?t=1")[0], 200)
+        for path in ("/_boards-status.json/x", "/projects/_boards-status.json", "/_boards-status.jsonx"):
+            with self.subTest(path=path):
+                self.assertEqual(self.get(path)[0], 404)
 
 
 if __name__ == "__main__":

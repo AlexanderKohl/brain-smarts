@@ -216,7 +216,8 @@ def build(config: board_config.Config, board: dict, directory: bool = True) -> d
     page = (
         PAGE.replace("__TOKENS__", task_board.TOKENS)
         .replace("__TASKCSS__", task_board.CSS + page_js.CSS + page_notes.CSS + card_detail.CSS)
-        .replace("__SHAREDJS__", page_js.SHARED_JS + "\n" + page_js.TASKS_JS + "\n" + card_detail.JS)
+        .replace("__SHAREDJS__", page_js.SHARED_JS + "\n" + page_js.TASKS_JS + "\n" + card_detail.JS
+                  + "\n" + page_js.BEHIND_JS)
         .replace("__FAVICON__", board_config.favicon_link(config, board))
         .replace("__TITLE__", html.escape(board["title"]))
         .replace("__MAIN__", html.escape(board.get("main") or "main"))
@@ -236,6 +237,14 @@ def build(config: board_config.Config, board: dict, directory: bool = True) -> d
         if MEMORY_PATH.search(page):
             raise Refused("refused to write " + out + ": a repository board may carry no /memory/ path"
                           " (a task record of the repository that names one is fixed in the record)")
+    held = board_config.shared_checkout_hold(config, out)
+    if held:
+        # A board in memory, built from the shared checkout: its page and state.json are memory
+        # files, rebuilt in a session copy (SMART-RULE-0038). The directory says so too.
+        print(board["id"] + " status page " + held)
+        if directory:
+            build_boards.build(config, known={board["id"]: derived})
+        return derived
     with open(out, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(page)
     cards.write_state(board, derived)

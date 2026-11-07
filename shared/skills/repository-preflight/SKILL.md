@@ -19,7 +19,7 @@ script_paths:
   - /shared/skills/repository-preflight/scripts/hooks.py
   - /shared/skills/repository-preflight/tests/test_project_hook.py
 created: 2026-08-04T23:16:08+10:00
-updated: 2026-10-27T08:46:35+11:00
+updated: 2026-11-07T15:48:26+10:00
 owner: brain-owner
 ---
 
@@ -145,8 +145,10 @@ python shared/skills/repository-preflight/scripts/session.py list
   pushes a project repository. What `reconcile.py` finds adrift on each board is printed under
   its own heading, never a stop. A missing configuration, a missing script or a generator that
   fails is said in the output and the finish goes on; nothing in the refresh refuses it. Then,
-  in each repository, it merges `origin/main` into the session branch. A conflict in a generated file (the owner boards and status pages) is
-  resolved by taking `main`'s version and rerunning its generator; any other conflict stops
+  in each repository, it merges `origin/main` into the session branch. A conflict in a generated file – every file the refresh
+  regenerates: the board directory and the task pages under `boards/` (the owner's pages of
+  repository boards one folder down included), each memory board's `status.html` and
+  `state.json`, and the release-notes pages – is resolved by taking `main`'s version and rerunning its generator; any other conflict stops
   `finish` with the merge in progress, for the session to reconcile. It runs preflight on the
   copy, pushes `HEAD:main` (never forced; a push refused because `origin` moved on is merged,
   checked and pushed again, up to three attempts in all, then reported), fast-forwards the shared

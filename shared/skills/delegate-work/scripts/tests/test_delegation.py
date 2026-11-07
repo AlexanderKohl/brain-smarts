@@ -450,6 +450,34 @@ class DelegationTestCase(unittest.TestCase):
         self.assertEqual(meta["parallel"], "false")
         self.assertEqual(meta["context_tokens_at_close"], "180000")
 
+    @unittest.skipUnless(shutil.which("git"), "git is not installed")
+    def test_close_run_from_the_brain_root_leaves_the_memory_checkout_untouched(self) -> None:
+        # SMART-RULE-0038, TASK-alec-2026-0312: close-run writes only in its run folder, never a
+        # board or any other tracked memory file, so the shared checkout can still fast-forward.
+        memory = self.root / "memory"
+        board = memory / "boards" / "index.html"
+        board.parent.mkdir(parents=True)
+        board.write_text("<p>Generated 2026-09-15 08:00</p>\n", encoding="utf-8")
+        (memory / "skills" / "owner-board" / "config").mkdir(parents=True)
+        (memory / "skills" / "owner-board" / "config" / "boards.json").write_text('{"boards": []}', encoding="utf-8")
+
+        def git(*args: str) -> str:
+            return subprocess.run(["git", "-c", "user.name=Example Tester", "-c", "user.email=tester@example.com",
+                                   "-c", "commit.gpgsign=false", "-c", "core.hooksPath=", "-C", str(memory), *args],
+                                  capture_output=True, text=True, check=True).stdout
+
+        git("init", "-q", "-b", "main")
+        git("add", "-A")
+        git("commit", "-q", "-m", "start")
+        seen = {p: p.stat().st_mtime_ns for p in memory.rglob("*") if p.is_file() and ".git" not in p.parts}
+        run = self.new_run()
+        code, out = run_cli(*self.common, "close-run", "--run", run, "--status", "synthesised",
+                            "--host", "Claude Code", "--parallel", "no", "--context-tokens", "1000")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(git("status", "--porcelain", "--untracked-files=all"), "")
+        self.assertEqual({p: p.stat().st_mtime_ns for p in memory.rglob("*") if p.is_file() and ".git" not in p.parts},
+                         seen)
+
     # ------------------------------------------------------------ workers stay apart (SMART-RULE-0038)
     # Each check is also run switched off, and the fault must then get through: that shows the
     # test depends on the check rather than passing on its own.

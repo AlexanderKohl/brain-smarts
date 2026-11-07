@@ -22,16 +22,34 @@ that leads outside its folder is refused, and a request whose Host header is not
 (`localhost`, `127.0.0.1` or `[::1]`) is refused, which stops a web page on another site from
 reading the boards through DNS rebinding. Bind it to 127.0.0.1 only.
 
+One more answer, under the same Host and path rules: `GET /_boards-status.json` says whether the
+memory checkout the boards are drawn from has fallen behind, so a page can warn the owner before
+they decide again what was already decided (`page_js.BEHIND_JS`):
+`{"behind": N, "changed": [...], "checked": "<iso time>"}`, where N is
+`git rev-list --count HEAD..origin/main` in that checkout (a push from a session copy moves
+origin/main in the shared .git, so no fetch is needed) and `changed` names at most 20 tracked
+files changed or staged there, which block it catching up. It is worked out on each request,
+each git call stopped after a few seconds; any failure gives `{"behind": null, "error": "..."}`
+with a short reason of this script's own, never git's output.
+
+The pages' saves (personal CRM design 04, increments 1 and 2), under the same Host rule:
+`GET /_board-server.json` hands a served page this start's token, `POST /_save/<kind>` files a
+page's saved decisions into `/memory/inbox/` and `GET /_saved.json` lists what waits there. The
+checks every post passes are in `serve_post.py`, the saving in `board_inbox.py`.
+
 Usage, from the brain root:
     python shared/skills/owner-board/scripts/serve_boards.py --port 8765
 """
 from __future__ import annotations
 
 import argparse
-import functools
+import datetime
 import http.server
+import io
+import json
 import os
 import posixpath
+import subprocess
 import sys
 import urllib.parse
 from pathlib import Path
@@ -41,9 +59,63 @@ if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
 import board_config  # noqa: E402
+import board_inbox  # noqa: E402
 import build_boards  # noqa: E402
+import serve_post  # noqa: E402
 
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "[::1]", "::1"}
+STATUS_PATH = "/_boards-status.json"
+UPSTREAM = "origin/main"
+MAX_CHANGED = 20
+GIT_TIMEOUT = 5
+
+
+class GitFailed(Exception):
+    """A git call in the memory checkout failed; the message is safe to send to the page."""
+
+
+def _git(folder: Path, *args: str) -> str:
+    try:
+        out = subprocess.run(["git", "-C", str(folder), *args], capture_output=True, text=True,
+                             encoding="utf-8", errors="replace", timeout=GIT_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        raise GitFailed("git " + args[0] + " took longer than " + str(GIT_TIMEOUT) + " seconds")
+    except OSError:
+        raise GitFailed("git could not be run")
+    if out.returncode:
+        raise GitFailed("git " + args[0] + " failed (exit " + str(out.returncode) + ")")
+    return out.stdout
+
+
+def changed_paths(porcelain: str) -> list[str]:
+    """The paths of `git status --porcelain=v1 -z --untracked-files=no`; a rename's source,
+    which follows its entry as a field of its own, is skipped."""
+    fields = porcelain.split("\0")
+    paths: list[str] = []
+    i = 0
+    while i < len(fields):
+        entry = fields[i]
+        i += 1
+        if len(entry) < 4:
+            continue
+        paths.append(entry[3:])
+        if "R" in entry[:2] or "C" in entry[:2]:
+            i += 1
+    return paths
+
+
+def memory_status(folder: Path | None) -> dict:
+    """How far the memory checkout lags origin/main, and the tracked files changed or staged in it."""
+    try:
+        if folder is None:
+            raise GitFailed("no memory checkout")
+        behind = int(_git(folder, "rev-list", "--count", "HEAD.." + UPSTREAM).strip())
+        changed = changed_paths(_git(folder, "status", "--porcelain=v1", "-z", "--untracked-files=no"))
+    except (GitFailed, ValueError) as err:
+        reason = str(err) if isinstance(err, GitFailed) else "git gave no count"
+        return {"behind": None, "error": reason}
+    return {"behind": behind, "changed": changed[:MAX_CHANGED],
+            "checked": datetime.datetime.now().astimezone().isoformat(timespec="seconds")}
 
 
 def arrival(href: str) -> str:
@@ -102,6 +174,10 @@ def resolve(url_path: str, table: list[tuple[str, Path]]) -> Path | None:
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     table: list[tuple[str, Path]] = []
+    memory: Path | None = None   # the memory checkout the boards are drawn from
+    token: str | None = None     # this start's token (serve_post.py); none: every post is refused
+    started: str = ""
+    inbox: board_inbox.Inbox | None = None
 
     def _local(self) -> bool:
         host = (self.headers.get("Host") or "").strip().lower()
@@ -115,6 +191,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if not self._local():
             self.send_error(403, "this server answers only on this machine")
             return None
+        path = urllib.parse.urlsplit(self.path).path
+        if path == STATUS_PATH:
+            return self._status()
+        if path in serve_post.GET_PATHS:
+            return serve_post.get(self, path)
         target = resolve(self.path, self.table)
         if target is None:
             self.send_error(404, "not found")
@@ -122,6 +203,19 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.path = "/" + target.name   # the parent's send_head serves what translate_path returns
         self._target = target
         return super().send_head()
+
+    def do_POST(self):  # noqa: N802 – the standard handler's name
+        serve_post.post(self)
+
+    def _status(self):
+        """The memory checkout's status as JSON, worked out now and never cached."""
+        body = json.dumps(memory_status(self.memory)).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        return io.BytesIO(body)
 
     def translate_path(self, path):
         return str(getattr(self, "_target", ""))
@@ -135,7 +229,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 
 def make_handler(config: board_config.Config):
-    return type("BoardHandler", (Handler,), {"table": mounts(config)})
+    """The handler for one start of the server: its mounts, and a token of its own."""
+    return type("BoardHandler", (Handler,), {"table": mounts(config), "memory": Path(config.memory),
+                                             "token": serve_post.new_token(), "started": serve_post.now_iso(),
+                                             "inbox": board_inbox.Inbox.from_config(config)})
 
 
 def main(argv: list[str] | None = None) -> int:
