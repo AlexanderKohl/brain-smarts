@@ -35,14 +35,33 @@ if [ -n "$leaked" ]; then
   exit 1
 fi
 
+# A merge stages everything the merged-in side changed, which was committed and checked there and
+# is not this commit's work. While a merge is in progress, judge only the staged paths whose content
+# differs from the merged-in side's: what the merge itself changes. An ordinary commit is judged
+# on everything it stages.
+judged="$staged"
+merging=""
+if git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1; then
+  merging=1
+  own=$(git diff --cached --name-only MERGE_HEAD)
+  # Staged paths (first list) that also differ from MERGE_HEAD (second list); Git never lists an
+  # empty path, so an empty line separates the two.
+  judged=$({ printf '%s\n' "$staged"; echo; printf '%s\n' "$own"; } |
+    awk 'BEGIN { second = 0 } $0 == "" { second = 1; next } !second { s[$0]; next } ($0 in s)')
+fi
+
 governance_re='^(CONTRACT\.md|RULES\.md|BOOTSTRAP\.md|governance/|shared/skills/repository-preflight/)'
-gov=$(printf '%s\n' "$staged" | grep -E "$governance_re" || true)
+gov=$(printf '%s\n' "$judged" | grep -E "$governance_re" || true)
 # The worker brief belongs to neither side: it digests rules and changes in the same commit as a
 # rule it digests (SMART-RULE-0007), so it never counts as work elsewhere.
 brief='^shared/skills/delegate-work/templates/worker-brief\.template\.md$'
-other=$(printf '%s\n' "$staged" | grep -vE "$governance_re" | grep -v '^repository-manifest\.json$' | grep -vE "$brief" || true)
+other=$(printf '%s\n' "$judged" | grep -vE "$governance_re" | grep -v '^repository-manifest\.json$' | grep -vE "$brief" | grep -v '^$' || true)
 
 if [ -n "$gov" ] && [ -n "$other" ]; then
+  if [ -n "$merging" ]; then
+    echo "pre-commit: a merge's own changes span both territories: these paths differ from the side merged in."
+    echo "What the merged-in side changed is not counted; what the merge itself changes is."
+  fi
   echo "pre-commit: this commit reaches across two territories, which is what a sweep looks like."
   echo
   echo "  governance:"
