@@ -6,10 +6,11 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 scope: shared
-version: 2.1.0
+version: 2.2.0
 script_paths:
   - /shared/skills/owner-board/scripts/apply_events.py
   - /shared/skills/owner-board/scripts/board_config.py
+  - /shared/skills/owner-board/scripts/board_inbox.py
   - /shared/skills/owner-board/scripts/build_boards.py
   - /shared/skills/owner-board/scripts/build_status.py
   - /shared/skills/owner-board/scripts/card.py
@@ -21,11 +22,12 @@ script_paths:
   - /shared/skills/owner-board/scripts/page_notes.py
   - /shared/skills/owner-board/scripts/reconcile.py
   - /shared/skills/owner-board/scripts/serve_boards.py
+  - /shared/skills/owner-board/scripts/serve_post.py
   - /shared/skills/owner-board/scripts/task_actions.py
   - /shared/skills/owner-board/scripts/task_board.py
   - /shared/skills/owner-board/scripts/team_lanes.py
 created: 2026-09-18T11:05:00+10:00
-updated: 2026-11-07T14:10:29+10:00
+updated: 2026-11-07T15:43:47+10:00
 owner: brain-owner
 project_refs:
   - /memory/projects/brain-development
@@ -280,6 +282,31 @@ and every folder directly inside it, so whichever folder the save dialog offers 
 folder remembered through the File System Access API was tried on 26 September 2026 and failed
 twice on a real owner's Chrome for a page opened from disk; it was removed rather than kept as a
 second path.
+
+**Served pages can save into the inbox folder** (personal CRM design 04, increments 1 and 2;
+the pages do not post yet – that is increments 3 and 6). `serve_boards.py` answers
+`GET /_board-server.json` with `{"server": 1, "token": ..., "started": <iso>, "saves": [kinds],
+"mail": false}` (`Cache-Control: no-store`), and `POST /_save/<kind>` files the exact JSON the
+page would have downloaded into `/memory/inbox/` of the checkout it runs from (`serve_post.py`,
+`board_inbox.py`). The kinds: `verdicts` (a registered board, its `verdict_schema`, named
+`<verdict_prefix><board>-<stamp>.json` as the download is), `task-actions`
+(`task-actions-<stamp>.json`), and, when their library skill is checked out, `inbox-decisions`
+(checked read-only against the account's current snapshot with `inbox_triage.validate_decisions`)
+and `social-decisions`. `<stamp>` comes from the body's `savedAt`; the name is the server's, never
+the page's; a file is never overwritten – a second save in one second gets `-2`, `-3`. The answer
+is `{"saved": <name>, "folder": "/memory/inbox/", "say": "Apply <name> (...)"}` or
+`{"refused": <reason>}` with 400; the owner pastes the `say` line to the area's conductor, which is
+both the wake and the go. `GET /_saved.json` lists the files still waiting (name, kind, saved
+time, size; never content). Every post must carry this start's token in `X-Board-Token` (made
+with `secrets.token_urlsafe(32)` at start, held in memory only), `Content-Type: application/json`
+and an `Origin` of `http://localhost:<port>` or `http://127.0.0.1:<port>`, under the Host check;
+any miss is 403 `{"refused": "not allowed"}`. A body over 25 MB is refused with 413 before it is
+read. No answer carries a CORS header. The server never applies, never commits and writes only
+new, untracked files into the inbox folder; the memory's `.gitignore` keeps inbox and social
+decisions out of every commit. `apply_events.py` reads the inbox folder by default – the
+memory's own and, from a session copy, the shared checkout's (`board_inbox.inbox_folders`) – and
+moves an applied file out of it as before; `inbox_apply.py` and `social_links_apply.py` move a file
+they applied from a memory's `inbox/` into their own `applied/` work folders.
 
 A screenshot pasted into a card's reason box travels with the verdict. The page shrinks it to at
 most 1600px wide, shows it as a thumbnail with a remove button, and puts it in the saved file.
@@ -561,6 +588,7 @@ Run from the brain root. Alphabetical.
 | --- | --- |
 | `apply_events.py` | Turn every saved verdicts file into events after the fences, hand release-note choices and task actions on, settle this brain's effects, print the Do now list, rebuild. `--settle` after a pull. |
 | `board_config.py` | Find the brain root and memory, read and validate `boards.json`, resolve a `<repository>:brain/status` board. Imported by the others. |
+| `board_inbox.py` | Save a page's decisions into the inbox folder: the four kinds and their checks, the server's own file name, no overwrite, the list of what waits, and the inbox folders `apply_events.py` reads. Imported by `serve_post.py` and `apply_events.py`. |
 | `build_boards.py` | Generate `/memory/boards/index.html` from the registry. |
 | `build_status.py` | Fold the events and generate a board's `status.html` and `state.json` (`--all` for every board), then the directory. |
 | `card.py` | Create, change, show, list or drop one card, then rebuild and reconcile. |
@@ -572,6 +600,7 @@ Run from the brain root. Alphabetical.
 | `page_notes.py` | The release-notes section of a board page. Imported by `build_status.py`. |
 | `reconcile.py` | Compare a board with git and the task records. Called by every build. |
 | `serve_boards.py` | Serve the boards over http on this machine: the directory folder at `/`, and each board's node folder at the path the directory page's link arrives at, so a status page outside the directory folder opens (the plain `python -m http.server --directory memory/boards` answers those links with 404). Nothing else of memory or a repository is served; dot paths, listings and links out of a folder are refused, and so is any Host but this machine. `GET /_boards-status.json` answers `{"behind": N, "changed": [at most 20 paths], "checked": <iso time>}` for the memory checkout (`git rev-list --count HEAD..origin/main`, tracked files changed or staged), worked out on each request with a short git timeout; any failure gives `{"behind": null, "error": <a short reason>}`. `--port` (8765), `--list` prints the mounts. |
+| `serve_post.py` | The board server's post plumbing: the per-start token, the checks every `POST` passes (Host, Origin, JSON content type, token, 25 MB), `/_board-server.json`, `/_saved.json` and `/_save/<kind>`. Imported by `serve_boards.py`. |
 | `task_actions.py` | Apply the owner's saved task actions through the tasks skill. Imported by `apply_events.py`. |
 | `task_board.py` | Route task records to boards and draw them: `route`, `build [--for <task>]`, `check`. |
 | `team_lanes.py` | The per-team work-in-progress line above a board's task columns. Imported by `task_board.py`. |

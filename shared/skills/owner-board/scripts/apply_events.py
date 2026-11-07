@@ -40,6 +40,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import board_config  # noqa: E402
+import board_inbox  # noqa: E402
 import cards  # noqa: E402
 import events  # noqa: E402
 import page_js  # noqa: E402
@@ -77,8 +78,9 @@ def saved_files(board: dict, folders: list | None = None) -> list:
 
 
 def candidates(config: board_config.Config, extra: list | None = None) -> list:
-    """Every saved verdicts file and task-actions file, oldest first."""
-    folders = downloads_folders() + list(extra or [])
+    """Every saved verdicts file and task-actions file, oldest first: in Downloads and the inbox
+    folder the board server saves into (`board_inbox.inbox_folders`)."""
+    folders = downloads_folders() + board_inbox.inbox_folders(config.memory) + list(extra or [])
     found: set = set(task_actions.saved_files(folders))
     for board in config.boards:
         found.update(saved_files(board, folders))
