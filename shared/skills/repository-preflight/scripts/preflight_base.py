@@ -122,15 +122,44 @@ def git(repo: Path, *args: str) -> list[str]:
 def change_base(repo: Path) -> str:
     """The commit a repository's changes are measured from: where it left the branch on which a
     change becomes active (CONTRACT §13.2), so committed but unpushed changes count, and changes
-    already on that branch do not. Without such a branch (no remote), the last commit."""
+    already on that branch do not. Without such a branch (no remote), the last commit.
+
+    While a merge of that branch (or of a commit already on it) is in progress, HEAD is still the
+    old branch tip, so its merge base would count the branch's accepted changes since the fork as
+    this commit's. They are measured from the merged-in commit instead, as they will be once the
+    merge is committed. A merge of anything else, or of several heads, is measured as before."""
+    merging = merge_heads(repo)
     for mainline in MAINLINES:
         try:
-            base = git(repo, "merge-base", mainline, "HEAD")
+            if len(merging) == 1 and is_ancestor(repo, merging[0], mainline):
+                base = git(repo, "merge-base", mainline, merging[0])
+            else:
+                base = git(repo, "merge-base", mainline, "HEAD")
         except subprocess.CalledProcessError:
             continue
         if base:
             return base[0]
     return "HEAD"
+
+
+def merge_heads(repo: Path) -> list[str]:
+    """The commits being merged into HEAD (MERGE_HEAD), or none when no merge is in progress."""
+    try:
+        path = Path(git(repo, "rev-parse", "--git-path", "MERGE_HEAD")[0])
+        if not path.is_absolute():
+            path = repo / path
+        return [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    except (OSError, IndexError, subprocess.CalledProcessError):
+        return []
+
+
+def is_ancestor(repo: Path, commit: str, branch: str) -> bool:
+    """True when `commit` is `branch` or is contained in it."""
+    return subprocess.run(
+        ["git", "-c", f"safe.directory={repo.as_posix()}", "-C", str(repo),
+         "merge-base", "--is-ancestor", commit, branch],
+        capture_output=True,
+    ).returncode == 0
 
 
 def repository_changes(repo: Path) -> tuple[str, set[str]]:

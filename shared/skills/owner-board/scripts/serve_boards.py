@@ -32,6 +32,11 @@ files changed or staged there, which block it catching up. It is worked out on e
 each git call stopped after a few seconds; any failure gives `{"behind": null, "error": "..."}`
 with a short reason of this script's own, never git's output.
 
+The pages' saves (personal CRM design 04, increments 1 and 2), under the same Host rule:
+`GET /_board-server.json` hands a served page this start's token, `POST /_save/<kind>` files a
+page's saved decisions into `/memory/inbox/` and `GET /_saved.json` lists what waits there. The
+checks every post passes are in `serve_post.py`, the saving in `board_inbox.py`.
+
 Usage, from the brain root:
     python shared/skills/owner-board/scripts/serve_boards.py --port 8765
 """
@@ -54,7 +59,9 @@ if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
 import board_config  # noqa: E402
+import board_inbox  # noqa: E402
 import build_boards  # noqa: E402
+import serve_post  # noqa: E402
 
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "[::1]", "::1"}
 STATUS_PATH = "/_boards-status.json"
@@ -168,6 +175,9 @@ def resolve(url_path: str, table: list[tuple[str, Path]]) -> Path | None:
 class Handler(http.server.SimpleHTTPRequestHandler):
     table: list[tuple[str, Path]] = []
     memory: Path | None = None   # the memory checkout the boards are drawn from
+    token: str | None = None     # this start's token (serve_post.py); none: every post is refused
+    started: str = ""
+    inbox: board_inbox.Inbox | None = None
 
     def _local(self) -> bool:
         host = (self.headers.get("Host") or "").strip().lower()
@@ -181,8 +191,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if not self._local():
             self.send_error(403, "this server answers only on this machine")
             return None
-        if urllib.parse.urlsplit(self.path).path == STATUS_PATH:
+        path = urllib.parse.urlsplit(self.path).path
+        if path == STATUS_PATH:
             return self._status()
+        if path in serve_post.GET_PATHS:
+            return serve_post.get(self, path)
         target = resolve(self.path, self.table)
         if target is None:
             self.send_error(404, "not found")
@@ -190,6 +203,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.path = "/" + target.name   # the parent's send_head serves what translate_path returns
         self._target = target
         return super().send_head()
+
+    def do_POST(self):  # noqa: N802 – the standard handler's name
+        serve_post.post(self)
 
     def _status(self):
         """The memory checkout's status as JSON, worked out now and never cached."""
@@ -213,7 +229,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 
 def make_handler(config: board_config.Config):
-    return type("BoardHandler", (Handler,), {"table": mounts(config), "memory": Path(config.memory)})
+    """The handler for one start of the server: its mounts, and a token of its own."""
+    return type("BoardHandler", (Handler,), {"table": mounts(config), "memory": Path(config.memory),
+                                             "token": serve_post.new_token(), "started": serve_post.now_iso(),
+                                             "inbox": board_inbox.Inbox.from_config(config)})
 
 
 def main(argv: list[str] | None = None) -> int:
