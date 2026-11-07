@@ -4,14 +4,14 @@ title: Read the core at start-up, and each rule when it applies
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: proposed
+status: accepted
 owner: brain-owner
 created: 2026-09-29T06:36:01+10:00
-updated: 2026-11-07T13:22:37+10:00
+updated: 2026-11-08T09:35:26+10:00
 rule_id: null
-accepted_by: null
-accepted_at: null
-implemented_at: null
+accepted_by: brain-owner
+accepted_at: 2026-11-08T09:35:26+10:00
+implemented_at: 2026-11-08T09:35:26+10:00
 previous_contract_version: 3.0.0
 new_contract_version: 3.1.0
 target_files:
@@ -244,9 +244,14 @@ manual scores are not done yet.
 
 ## Acceptance
 
-Ready for the one direct acceptance question on this diff as revised on 7 November 2026, with the
-results above.
+Accepted by the owner at 2026-11-08T09:35:26+10:00, answering "1, accept it" to the question "Accept
+PROPOSAL-tiered-bootstrap as revised tonight?", asked with the retest results above.
 
 ## Implementation record
 
-None.
+2026-11-08T09:35:26+10:00: `main` merged into `proposal/tiered-bootstrap` in the mechanics, library and memory (the
+merge-aware hook and preflight passed without `--no-verify`), then `main` fast-forwarded to it in
+each. Contract 3.0.0 to 3.1.0; the three manifests name 3.1.0. `core.py check` passes on the
+merged result. The owner's global host pointer names the tiered bootstrap. Validation: the
+preflight and its tests on the merged result, recorded in the owner's acceptance record in
+`/memory/governance/proposals/tiered-bootstrap-acceptance.md`.
