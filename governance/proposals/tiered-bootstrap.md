@@ -99,6 +99,24 @@ own additions:
 4. The parts are now 23,092 and 26,202 characters (`core.py build`), both under 28,000.
 5. The library skeleton's manifest names 3.1.0, as the preflight tests require of it.
 
+## Retest of 7 November 2026 and revision
+
+The part 6 retest (the before-and-after harness 0.6.0, batch `batch-20261107T144721-db96`, 126 sessions;
+A2 and A3 today's `main`, B3 this proposal at 0ff0671) passed marks 1, 2 and 5 and failed 3 and 4
+on one cause. Light sessions: B3's median total tokens processed 243,409 against A2's 350,188
+(30 % fewer; A3 302,384). Heavy: 2,302,161 against 2,909,729 (21 % fewer; A3 2,381,622, so the
+heavy gain is inside the run-to-run noise). Every B3 run that bootstrapped read both parts with the
+file-reading tool; S21 read the core before its first write in every run. The failure: in S19
+("Research these three in parallel and bring me the answers") every B3 run took the scoped tier,
+read nothing, researched the web itself and delegated nothing (S19 checks 0 of 9 against A2's 5 of
+7), which also took B3's automatic adherence to 91.8 against A2's 96.7; without S19 it is 95.5
+against 97.3, inside 2 points.
+
+Revision: the scoped tier now says that research beyond the brain's own files, and work the owner
+asks to run in parallel or hand to workers, is not answer-only (CONTRACT §1 item 4, `/BOOTSTRAP.md`
+item 3, `/CLAUDE.md`, `/AGENTS.md`). A confirmation run of the changed tier (B4) is recorded below
+under Validation.
+
 ## Current wording and exact diff
 
 The branch holds the exact diff; the parts that change behaviour:
@@ -111,7 +129,9 @@ The branch holds the exact diff; the parts that change behaviour:
   - "Choose a bootstrap tier for the current turn, before reading further:"
   - "**Scoped bootstrap** (allowed only for answer-only / read-only fact retrieval with no durable
     writes): read what the answer needs – injected host context, a file already read in this
-    session, or targeted reads of known paths – and nothing else."
+    session, or targeted reads of known paths – and nothing else. Research beyond the brain's own
+    files, and work the owner asks to run in parallel or hand to workers, is not answer-only: it
+    takes the full bootstrap first, because `SMART-RULE-0024` decides how it runs."
   - "**Full bootstrap** (required before the first creation, change or deletion of brain content, a
     governance change, use of a skill with side effects, or when applicable policy is unclear): read
     `/CORE.md` and `/CORE-RULES.md`, then the owner profile `/memory/OWNER.md` and the owner-layer
