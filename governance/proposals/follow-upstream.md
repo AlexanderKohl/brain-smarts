@@ -10,7 +10,7 @@ accepted_by: brain-owner
 accepted_at: 2026-11-08T11:04:23+10:00
 implemented_at: 2026-11-08T11:07:00+10:00
 created: 2026-11-08T10:23:26+10:00
-updated: 2026-11-08T11:07:00+10:00
+updated: 2026-11-08T11:45:13+10:00
 rule_id: SMART-RULE-0032
 previous_contract_version: 3.1.0
 new_contract_version: 3.2.0
@@ -233,3 +233,29 @@ Accepted by the owner at 2026-11-08T11:04:23+10:00, answering "Accept" to "Accep
 ## Implementation record
 
 Implemented at 2026-11-08T11:07:00+10:00 (contract 3.1.0 to 3.2.0). Files changed: `/CONTRACT.md` (section 3.6, section 13.2, `contract_version`), `/RULES.md` (`SMART-RULE-0032` and its index row), `/SETUP.md`, `/CONTRIBUTING.md`, `/shared/skills/skill-exchange/SKILL.md`, `/CORE.md` and `/CORE-RULES.md` (rebuilt by `core.py`), `/repository-manifest.json`, `/shared/templates/library-skeleton/repository-manifest.json`, the manifests of the memory and library checkouts, and this proposal. The code changes (the `sync.py` upstream merge and the rest of "Code changes after acceptance") are built by a separate packet.
+
+## Amendment of 8 November 2026: preflight coverage for an upstream merge (proposed)
+
+Status of this amendment: proposed, not active. Building the code changes showed what the risk
+section above foresaw: today's preflight covers a protected change only inside its proposal's
+window (until one hour after `implemented_at`, or seven days after `accepted_at`), so a brain that
+follows upstream and merges an accepted upstream rule change after that window stops at the
+preflight and pushes nothing. That is safe, but it defeats `follow_upstream` for every rule change
+older than an hour. The preflight's coverage is stated in the protected *Failure behaviour* section
+of `/shared/skills/repository-preflight/SKILL.md`, which the accepted change set did not touch, so
+it needs its own acceptance.
+
+Current, in that section: "A change is covered only by an accepted proposal that lists the file and
+whose window is open when the check runs: from `accepted_at` until one hour after `implemented_at`
+(or `reverted_at`), or for seven days after `accepted_at` when it has neither."
+
+Proposed: "A change is also covered when it arrives in a merge of `upstream/main` made while
+`follow_upstream` is true and that merge's upstream commit and the changed file are recorded in
+`/memory/governance/upstream-merges.md` (`SMART-RULE-0032`, CONTRACT §13.2). Otherwise a change is
+covered only by an accepted proposal that lists the file and whose window is open when the check
+runs: from `accepted_at` until one hour after `implemented_at` (or `reverted_at`), or for seven days
+after `accepted_at` when it has neither."
+
+Code after acceptance: the preflight's coverage check reads the record; tests for a recorded merge
+outside the window (passes) and an unrecorded one (refused). Rollback: revert the sentence and the
+check; merges then stop at the preflight again. Target: `/shared/skills/repository-preflight/SKILL.md`.
