@@ -137,6 +137,41 @@ def coverage_window(metadata: dict[str, Any]) -> tuple[datetime, datetime] | Non
     return opened - CLOCK_TOLERANCE, closed
 
 
+# SMART-RULE-0032: merges of `upstream/main` made while `follow_upstream` is true, recorded by
+# upstream_merge.py in the memory repository (one entry per merge).
+UPSTREAM_RECORD = ("governance", "upstream-merges.md")
+UPSTREAM_ENTRY_RE = re.compile(r"^- upstream commit: ([0-9a-f]{7,40})\s*$\n(?:^- (?!files changed).*\n)*"
+                               r"^- files changed \(\d+\): (.*)$", re.M)
+
+
+def upstream_covered(root: Path, changed: dict[str, tuple[Path, str, str]], paths: set[str]) -> set[str]:
+    """The protected paths (with their leading /) that arrived in a recorded upstream merge: the
+    record names the file, the merge's upstream commit is an ancestor of HEAD, and the file's wording
+    is as that commit brought it in, so a local edit after the merge is not covered."""
+    memory = memory_root(root)
+    try:
+        text = memory.joinpath(*UPSTREAM_RECORD).read_text(encoding="utf-8") if memory else ""
+    except OSError:
+        return set()
+    covered: set[str] = set()
+    for commit, files in UPSTREAM_ENTRY_RE.findall(text):
+        for name in (f.strip() for f in files.split(",")):
+            if "/" + name not in paths or name not in changed:
+                continue
+            repo, _base, relative = changed[name]
+            if subprocess.run(["git", "-C", str(repo), "merge-base", "--is-ancestor", commit, "HEAD"],
+                              capture_output=True).returncode:
+                continue
+            brought = text_at(repo, commit, relative)
+            try:
+                now_text = (repo / relative).read_bytes().decode("utf-8", errors="replace")
+            except OSError:
+                continue
+            if brought is not None and wording(name, brought) == wording(name, now_text):
+                covered.add("/" + name)
+    return covered
+
+
 def validate_governance(
     root: Path, records: dict[Path, dict[str, Any]], result: Result, now: datetime
 ) -> None:
@@ -194,6 +229,7 @@ def validate_governance(
                     and isinstance(metadata.get("target_files"), list)):
                 drafted.update(str(target) for target in metadata["target_files"])
 
+    covered |= upstream_covered(root, changed, protected - covered)
     for path in sorted(protected - covered):
         if path in drafted:
             result.warnings.append(f"{path}: protected governance drafted on {branch}; not active until accepted and merged")
