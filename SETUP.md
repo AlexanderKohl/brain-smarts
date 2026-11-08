@@ -380,7 +380,7 @@ Once the smarts (and, when you have them, the library and memory) are in place, 
 python shared/skills/repository-preflight/scripts/hooks.py install
 ```
 
-It points each repository at its own `.githooks/` folder. Before every commit Git then runs the brain's preflight for that repository alone. A repository cloned on its own still commits: its hook finds no brain above it and steps aside with a note. Session copies switch it on themselves.
+It points each repository at its own `.githooks/` folder. Before every commit Git then runs the brain's preflight for that repository alone. It also writes the host hooks into `.claude/settings.json` (other settings there are kept), so the session start now syncs and checks upstream on its own: each new or resumed session brings the brain repositories up to date with `origin` (fast-forward only; anything else is reported, never merged) and, on the skill-exchange cadence, says how many upstream commits are waiting and how many touch governance. Upstream is never merged by the hook; that stays your decision. A repository cloned on its own still commits: its hook finds no brain above it and steps aside with a note. Session copies switch it on themselves.
 
 ### B3a. Your skill library
 
