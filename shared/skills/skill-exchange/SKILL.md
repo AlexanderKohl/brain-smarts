@@ -230,6 +230,24 @@ git -C library commit -m "<host> <model>: install <name> from <source> at <commi
 python shared/skills/skill-exchange/scripts/skill_exchange.py record-install --skill <name> --source <source repository url> --commit <full commit>
 ```
 
+**A second reader, when it is installed.** NVIDIA's SkillSpector
+(`https://github.com/NVIDIA/skillspector`, Apache-2.0) can scan the fetched skill before the
+commit. Use its model-assisted stage through the local Claude CLI, so the skill's text goes nowhere
+the session does not already send it:
+
+```powershell
+$env:SKILLSPECTOR_PROVIDER = "claude_cli"
+skillspector scan library/skills/<name> --format json --exclude __pycache__ > <scratch>/scan.json
+```
+
+Judge it on the model-stage findings (ids beginning `SDI-`, `SSD-`, `SQP-` or `TP`), which name a
+skill whose behaviour does not match its description, credential harvesting or injected
+instructions. Ignore the overall score and the static rules: every API client in the library
+scores 100 and CRITICAL because it sends its own key to its own vendor, and with `--no-llm` a
+planted credential-stealing skill scored lower than they do (tested 8 November 2026). A
+model-stage finding stops the install and goes to the owner. The scan does not replace reading
+every file.
+
 `installed.json` (memory) then holds the skill, its path, source repository, source commit,
 the installed tree hash and the time. `verify-installs` says whether each installed skill
 still matches what was installed, so a local edit to someone else's code is visible. The source
