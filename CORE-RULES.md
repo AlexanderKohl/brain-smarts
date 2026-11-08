@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-29T08:00:00+10:00
-updated: 2026-11-07T13:22:37+10:00
+updated: 2026-11-08T11:07:00+10:00
 owner: brain-owner
 generated_by: /shared/skills/repository-preflight/scripts/core.py
 canonical_sources:
@@ -80,7 +80,7 @@ that always apply, verbatim.
 | `SMART-RULE-0029` | Four layers: mechanics, skill library, memory and project repositories | `/CONTRACT.md` §3.4–§3.6 | deciding which repository or layer an item belongs in (CONTRACT §3.4 is in the core) |
 | `SMART-RULE-0030` | Rule identifiers | `/CONTRACT.md` §13.2 | numbering a rule or naming a proposal |
 | `SMART-RULE-0031` | Show the text of every new or changed rule | this file | proposing, amending, accepting or applying a rule at any level |
-| `SMART-RULE-0032` | Skill exchange | this file; `/shared/skills/skill-exchange/` | a node-local capability is used by a second node; installing a skill from elsewhere; the upstream check is due |
+| `SMART-RULE-0032` | Skill exchange | this file; `/shared/skills/skill-exchange/` | a node-local capability is used by a second node; installing a skill from elsewhere; session start in a brain with an `upstream` |
 | `SMART-RULE-0033` | A name means one thing, everywhere | this file | naming anything a person or code will read |
 | `SMART-RULE-0034` | Start from the latest | this file; `/shared/skills/repository-preflight/` | always |
 | `SMART-RULE-0035` | Offer a board when a project outgrows the personal board | this file; `/shared/skills/owner-board/` | a project without a board gains its fifth open task or a third active branch |

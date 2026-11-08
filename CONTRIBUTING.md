@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-28T15:11:59+10:00
-updated: 2026-09-28T15:11:59+10:00
+updated: 2026-11-08T11:07:00+10:00
 owner: brain-owner
 ---
 
@@ -30,8 +30,9 @@ In the order you will meet them.
    personal-data check must pass (`SMART-RULE-0008`).
 4. **Show it works.** Run `python shared/skills/repository-preflight/scripts/preflight.py` and the
    tests of any skill you changed; add a test that shows the new behaviour.
-5. **Open a pull request.** The GitHub check runs the preflight again. The maintainer decides on
-   each proposal; a declined one can come back with new evidence.
+5. **Open a pull request.** The GitHub check runs the preflight again. The upstream maintainer decides whether
+   each proposal is taken into the original; a declined one can come back with new evidence. What
+   runs in your own brain stays your decision (CONTRACT §3.6).
 
 ## Style
 

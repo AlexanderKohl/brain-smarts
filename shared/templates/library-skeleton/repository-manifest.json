@@ -4,7 +4,7 @@
   "created": "YYYY-MM-DDTHH:mm:ss+HH:MM",
   "updated": "YYYY-MM-DDTHH:mm:ss+HH:MM",
   "validated_at": "YYYY-MM-DDTHH:mm:ss+HH:MM",
-  "contract_version": "3.1.0",
+  "contract_version": "3.2.0",
   "markdown_files": 2,
   "unique_ids": 2,
   "validation_errors": [],

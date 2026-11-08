@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-23T13:00:00+10:00
-updated: 2026-11-03T10:03:18+10:00
+updated: 2026-11-08T11:07:00+10:00
 owner: brain-owner
 skill_refs:
   - /shared/skills/manage-credentials
@@ -218,7 +218,7 @@ The brain is four layers (CONTRACT §3.4). The person gets:
   the `upstream` remote so improvements can be pulled in. Checked out at the brain root.
 - **Skill library** – their own private copy of the skill library, with the original kept as
   `upstream`; or, when the original cannot be read, an empty library of their own made from
-  `/shared/templates/library-skeleton/`, with no `upstream` until its owner grants access.
+  `/shared/templates/library-skeleton/`, with no `upstream` until the upstream maintainer grants access.
   Checked out at `<brain_root>/library/`.
 - **Memory** – a new private repository made from `/shared/templates/memory-skeleton/`,
   checked out at `<brain_root>/memory/`.
@@ -387,7 +387,7 @@ It points each repository at its own `.githooks/` folder. Before every commit Gi
 **Done when:** `<brain_root>/library/skills/README.md` exists, and `git remote -v` in
 `<brain_root>/library/` shows `origin` pointing at the person's own repository, and `upstream`
 at the original when the original could be read. A library made from the skeleton (**Empty
-library** below) has no `upstream` until the original's owner grants read access.
+library** below) has no `upstream` until the upstream maintainer grants read access.
 
 **Agent does:** the original library sits beside the original smarts under the same account and
 is named `brain-skills`, so its address is the smarts' `upstream` address with the last part
@@ -503,7 +503,10 @@ front matter, and `<brain_root>/memory/` is its own Git repository with an `orig
    write `/memory/skills/skill-exchange/config/settings.json` as
    `{"upstreams": {"library": "<library upstream address>", "smarts": "<smarts upstream address>"}}`
    from `git remote get-url upstream` in the brain root and in `library/`; leave out any that has
-   no `upstream`. Add `skill-exchange/` to the Folders of `/memory/skills/README.md` ("the owner's
+   no `upstream`. When at least one upstream was recorded, ask once: "Follow the original
+   automatically? 1. Yes: each session start merges the changes its maintainer has accepted, rules
+   included, and tells you what came in (suggested). 2. No: you are told what changed and decide
+   each time." Record the answer in the same file as `"follow_upstream": true` or `false`. Add `skill-exchange/` to the Folders of `/memory/skills/README.md` ("the owner's
    settings for skill exchange, including where the original repositories are").
 7. Run the validator from the brain root and fix every error in memory. Two warnings are expected
    here and go away at step 8 and in H: memory is not yet its own Git repository, and its

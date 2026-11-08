@@ -9,7 +9,7 @@ scope: shared
 script_paths:
   - /shared/skills/skill-exchange/scripts/skill_exchange.py
 created: 2026-09-23T14:00:00+10:00
-updated: 2026-09-24T09:06:46+10:00
+updated: 2026-11-08T11:07:00+10:00
 owner: brain-owner
 skill_refs:
   - /shared/skills/learning-maintenance
@@ -30,8 +30,9 @@ Skills move between brains in both directions, and each move is the owner's deci
    owner could use, and suggests promoting it to a library skill.
 2. **Offer upstream** – a promoted, scrubbed skill goes to the original mechanics repository as
    a pull request the upstream maintainer accepts or declines.
-3. **Hear about upstream** – on a cadence, the agent tells the owner what changed upstream that
-   touches the skills and rules they use.
+3. **Follow or hear upstream** – with `follow_upstream` on, the brain merges the original's
+   accepted changes at session start and reports them; otherwise, on a cadence, the agent tells the
+   owner what changed upstream that touches the skills and rules they use.
 4. **Install from elsewhere** – a skill from someone else's brain is installed with its source
    and commit recorded in memory.
 
@@ -59,6 +60,7 @@ Everything about this owner's exchange lives in memory:
 {
   "branch": "main",
   "check_every_days": 7,
+  "follow_upstream": true,
   "max_items_per_digest": 5,
   "remote": "upstream",
   "suggestions": "checkpoint",
@@ -69,6 +71,8 @@ Everything about this owner's exchange lives in memory:
 `upstreams` records where the originals are, written by SETUP step B4, so that another computer
 of the same brain can add its `upstream` remotes (SETUP step B1a); leave it out when the owner
 maintains the originals.
+
+`follow_upstream` is the owner's choice at SETUP B4; absent means off (`SMART-RULE-0032`).
 
 `suggestions` is `checkpoint` (default: at natural checkpoints, batched), `weekly` (only in
 the weekly review of `SMART-RULE-0028`) or `off` (only when the owner asks).
@@ -170,6 +174,9 @@ repository):
 
 ### 4. Hear about upstream
 
+With `follow_upstream` on, `sync.py` merges upstream at session start and the digest below describes
+what was merged; the owner is not asked. With it off, as follows.
+
 At session start, cheaply:
 
 ```powershell
@@ -198,7 +205,9 @@ inert until switched on:
 
 A digest that includes governance changes (`/CONTRACT.md`, `/RULES.md`, bootstrap files,
 `/governance/`) is **protected governance**: merging it changes active rules, so it is
-presented as a proposal with the diff and waits for explicit acceptance (CONTRACT §13.2).
+presented as a proposal with the diff and waits for explicit acceptance (CONTRACT §13.2),
+unless `follow_upstream` is on, which is that acceptance for changes already accepted on upstream
+`main`.
 
 ### 5. Install a skill from another brain
 

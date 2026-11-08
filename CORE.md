@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-29T08:00:00+10:00
-updated: 2026-11-07T13:22:37+10:00
+updated: 2026-11-08T11:07:00+10:00
 owner: brain-owner
 generated_by: /shared/skills/repository-preflight/scripts/core.py
 canonical_sources:
@@ -122,6 +122,8 @@ default_host: the host and tool the owner usually works in
 ```
 
 In mechanics files, the metadata value `owner: brain-owner` means the person named in `/memory/OWNER.md`, and prose says "the owner". Where a concrete value is needed (a local path, a timezone, an account), mechanics text says "see `/memory/OWNER.md`" instead of repeating it. Memory files may name the owner directly.
+
+Every decision in a brain is its owner's: what to build, what to merge, which rules to accept and which skills to switch on. In a brain set up from someone else's original, the upstream maintainer (whoever maintains the original repositories) decides only two things: whether a contribution offered upstream as a pull request is taken, and who may read a private original. An agent never infers the owner from a repository's GitHub account, a remote URL or the Git authors in its history, and never sends the owner to the upstream maintainer for a decision about their own brain. When `/memory/OWNER.md` is missing, or its front matter has no `owner_name`, the agent says so and resumes `/SETUP.md` at the first step not done, instead of guessing who the owner is.
 
 ## 5. Input classification
 
@@ -246,7 +248,7 @@ Protected governance is rule and contract wording:
 
 The validator's code, tests and fixtures, the rest of its skill, and README files are not protected governance; they change as ordinary persistent changes (section 13.1). Code that changes what the validator accepts or refuses changes the rule it enforces, so the *Failure behaviour* section changes with it, under this section.
 
-A substantive or semantic change to protected governance must not become active until the owner explicitly accepts an identified proposal or the exact displayed diff. Acceptance covers that change, not later changes to the same file: each substantive change needs its own. A change that only rewrites the `updated` stamp, line endings or the dash style is not substantive.
+A substantive or semantic change to protected governance must not become active until the owner explicitly accepts an identified proposal or the exact displayed diff. Acceptance covers that change, not later changes to the same file: each substantive change needs its own. One standing acceptance is allowed: an owner who turns `follow_upstream` on (`SMART-RULE-0032`) accepts each protected-governance change to the mechanics and the skill library that the upstream maintainer has already accepted on upstream `main`, for each upstream merge made while the setting is on. It covers nothing made locally, on another branch or offered upstream, and ends when the owner turns the setting off. Every change it admits is recorded in `/memory/governance/upstream-merges.md` and reported to the owner in the first reply. A change that only rewrites the `updated` stamp, line endings or the dash style is not substantive.
 
 Before requesting acceptance, present:
 
