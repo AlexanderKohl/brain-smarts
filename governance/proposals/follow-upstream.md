@@ -4,10 +4,13 @@ title: The owner decides in their own brain, and a brain can follow its original
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: proposed
+status: accepted
 owner: brain-owner
+accepted_by: brain-owner
+accepted_at: 2026-11-08T11:04:23+10:00
+implemented_at: 2026-11-08T11:07:00+10:00
 created: 2026-11-08T10:23:26+10:00
-updated: 2026-11-08T10:23:26+10:00
+updated: 2026-11-08T11:07:00+10:00
 rule_id: SMART-RULE-0032
 previous_contract_version: 3.1.0
 new_contract_version: 3.2.0
@@ -225,5 +228,8 @@ Revert the commit on `main` and restore `contract_version` 3.1.0. Owners set `fo
 
 ## Acceptance
 
-Not yet asked. Question to ask: "Accept PROPOSAL-follow-upstream (parts A and B, contract 3.1.0 to
-3.2.0)?"
+Accepted by the owner at 2026-11-08T11:04:23+10:00, answering "Accept" to "Accept PROPOSAL-follow-upstream as written?".
+
+## Implementation record
+
+Implemented at 2026-11-08T11:07:00+10:00 (contract 3.1.0 to 3.2.0). Files changed: `/CONTRACT.md` (section 3.6, section 13.2, `contract_version`), `/RULES.md` (`SMART-RULE-0032` and its index row), `/SETUP.md`, `/CONTRIBUTING.md`, `/shared/skills/skill-exchange/SKILL.md`, `/CORE.md` and `/CORE-RULES.md` (rebuilt by `core.py`), `/repository-manifest.json`, `/shared/templates/library-skeleton/repository-manifest.json`, the manifests of the memory and library checkouts, and this proposal. The code changes (the `sync.py` upstream merge and the rest of "Code changes after acceptance") are built by a separate packet.

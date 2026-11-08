@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-11-07T13:22:37+10:00
+updated: 2026-11-08T11:07:00+10:00
 owner: brain-owner
 ---
 
@@ -54,7 +54,7 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 | `SMART-RULE-0029` | Four layers: mechanics, skill library, memory and project repositories | `/CONTRACT.md` §3.4–§3.6 | deciding which repository or layer an item belongs in (CONTRACT §3.4 is in the core) |
 | `SMART-RULE-0030` | Rule identifiers | `/CONTRACT.md` §13.2 | numbering a rule or naming a proposal |
 | `SMART-RULE-0031` | Show the text of every new or changed rule | this file | proposing, amending, accepting or applying a rule at any level |
-| `SMART-RULE-0032` | Skill exchange | this file; `/shared/skills/skill-exchange/` | a node-local capability is used by a second node; installing a skill from elsewhere; the upstream check is due |
+| `SMART-RULE-0032` | Skill exchange | this file; `/shared/skills/skill-exchange/` | a node-local capability is used by a second node; installing a skill from elsewhere; session start in a brain with an `upstream` |
 | `SMART-RULE-0033` | A name means one thing, everywhere | this file | naming anything a person or code will read |
 | `SMART-RULE-0034` | Start from the latest | this file; `/shared/skills/repository-preflight/` | always |
 | `SMART-RULE-0035` | Offer a board when a project outgrows the personal board | this file; `/shared/skills/owner-board/` | a project without a board gains its fifth open task or a third active branch |
@@ -521,8 +521,8 @@ Contract sections and when to read them, in section order:
 
 - **Notice and suggest.** When a node-local capability is used or copied by a second node, holds no owner data once its configuration is moved out, or wraps a system other owners use, record it as a promotion candidate and suggest promoting it to a library skill at the next natural checkpoint. Procedure: `/shared/skills/skill-exchange/`.
 - **Clean before it leaves memory.** Nothing moves from `/memory/` to a shareable repository (the mechanics or the skill library), or from a shareable repository to any other repository, until the personal-data check reports no hits (`SMART-RULE-0008`, CONTRACT §3.4).
-- **Offer, never push.** A contribution to an upstream repository is a pull request from the owner's own repository, carrying a proposal file without a rule number, the personal-data check's result and passing tests, opened only after the owner says yes to that contribution.
-- **Hear upstream on a cadence.** At session start, when a check is due (default every seven days), fetch `upstream` and tell the owner what changed in their `active_skills`, the core skills, governance and new skills. Merging is the owner's decision; an upstream change to protected governance is presented as a proposal (CONTRACT §13.2).
+- **Offer, never push.** A contribution to an upstream repository is a pull request from the owner's own repository, carrying a proposal file without a rule number, the personal-data check's result and passing tests, opened only after the owner says yes to that contribution. Whether it is taken is the upstream maintainer's decision; every other decision in the owner's brain is the owner's (CONTRACT §3.6).
+- **Follow upstream, or hear it.** The owner's setting `follow_upstream` in `/memory/skills/skill-exchange/config/settings.json`, asked once at `/SETUP.md` step B4, decides how upstream reaches the brain. When it is on, at session start the agent fetches `upstream` and merges `upstream/main` into the mechanics and the skill library the way `SMART-RULE-0034` merges `origin`: a merge commit, never a rebase or a forced push; a conflicting hand-written file stops the merge and is put to the owner; the merged result passes the repository preflight before it is pushed to `origin`. The setting is the owner's standing acceptance of protected-governance changes the upstream maintainer has already accepted on upstream `main` (CONTRACT §13.2); each merge that brings one is recorded in `/memory/governance/upstream-merges.md` (upstream commit, files changed, contract version before and after) and reported in the first reply. When it is off or absent, at session start when a check is due (default every seven days) the agent fetches `upstream` and tells the owner what changed in their `active_skills`, the core skills, governance and new skills; merging is the owner's decision, and an upstream change to protected governance is presented as a proposal (CONTRACT §13.2).
 - **Record provenance.** A skill installed from another brain or library is read in full before it runs, and its source repository and commit are recorded in `/memory/skills/installed.json`.
 - **Suggest at checkpoints, once.** Suggestions are batched at natural checkpoints (session start, end of a unit of work, the weekly review), numbered with a recommendation, capped, and not repeated after a decline unless new evidence arrives. The owner may set them to weekly or off. A security fix to a skill the owner uses is the one exception and is reported at the next response.
 
