@@ -44,8 +44,9 @@ import sys
 from pathlib import Path
 
 
-def git(repo: Path, *args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, encoding="utf-8")
+def git(repo: Path, *args: str, timeout: float | None = None) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, encoding="utf-8",
+                          timeout=timeout)
 
 
 def brain_root(start: Path) -> Path | None:
@@ -71,12 +72,14 @@ def is_session_copy(repo: Path) -> bool:
     return all(dirs) and Path(dirs[0]).resolve() != Path(dirs[1]).resolve()
 
 
-def sync_one(name: str, repo: Path, merge_from: Path | None = None, project: bool = False) -> dict:
+def sync_one(name: str, repo: Path, merge_from: Path | None = None, project: bool = False,
+             fetch_timeout: float | None = None) -> dict:
     """What happened to one repository, as {name, state, detail, ok}.
 
     `merge_from` is the brain root of the shared checkout when a diverged branch may be merged
     (SMART-RULE-0034); without it a diverged branch is only reported. `project` marks a project
-    repository, whose own merge routine applies.
+    repository, whose own merge routine applies. `fetch_timeout` (seconds) bounds the fetch, for
+    the session-start hook's time budget; a fetch that takes longer counts as unreachable.
     """
     def result(state: str, detail: str, ok: bool) -> dict:
         return {"name": name, "path": str(repo), "state": state, "detail": detail, "ok": ok}
@@ -85,7 +88,10 @@ def sync_one(name: str, repo: Path, merge_from: Path | None = None, project: boo
         return result("not a repository", "no .git here", False)
     if git(repo, "remote", "get-url", "origin").returncode:
         return result("no origin", "nothing to fetch from", False)
-    fetched = git(repo, "fetch", "--quiet", "origin")
+    try:
+        fetched = git(repo, "fetch", "--quiet", "origin", timeout=fetch_timeout)
+    except subprocess.TimeoutExpired:
+        return result("unreachable", f"fetching origin took longer than {fetch_timeout:.0f} s", False)
     if fetched.returncode:
         return result("unreachable", "could not fetch origin: " + (fetched.stderr.strip().splitlines() or ["?"])[-1], False)
     branch = git(repo, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()

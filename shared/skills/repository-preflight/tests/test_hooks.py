@@ -15,10 +15,10 @@ class HooksTest(unittest.TestCase):
     def test_committed_settings_are_generated_from_the_list(self):
         settings = hooks.ROOT / ".claude" / "settings.json"
         if settings.is_file():
-            self.assertEqual(json.loads(settings.read_text(encoding="utf-8")), hooks.host_settings())
+            self.assertEqual(json.loads(settings.read_text(encoding="utf-8"))["hooks"], hooks.host_settings()["hooks"])
         else:
-            # Only the events the list gives a Claude Code name reach the host; today the two
-            # compaction hooks, which fire on a compaction and never on a light session.
+            # Only the events the list gives a Claude Code name reach the host: the compaction hooks
+            # and the session-start sync, which says nothing when all is current.
             listed = {e["claude_code"] for e in json.loads(hooks.EVENTS.read_text(encoding="utf-8"))["events"]
                       if e.get("claude_code")}
             self.assertEqual(set(hooks.host_settings()["hooks"]), listed)

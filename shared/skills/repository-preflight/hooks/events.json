@@ -3,10 +3,19 @@
  "events": [
   {
    "event": "session start",
-   "claude_code": null,
+   "claude_code": "SessionStart",
+   "matcher": "startup",
    "git": null,
    "command": "shared/skills/repository-preflight/scripts/hooks.py session-start",
-   "held_back": "the host session hooks cost tokens on every light session (before-and-after test, 28 September 2026); the pre-commit hook is proposed alone"
+   "note": "syncs origin without merging and hears upstream on the skill-exchange cadence (SMART-RULE-0034, SMART-RULE-0032), within about 20 seconds; says nothing when all is current, so a light session pays no tokens (the reason it was held back on 28 September 2026)"
+  },
+  {
+   "event": "session resume",
+   "claude_code": "SessionStart",
+   "matcher": "resume",
+   "git": null,
+   "command": "shared/skills/repository-preflight/scripts/hooks.py session-start",
+   "note": "the same as session start, for a resumed thread"
   },
   {
    "event": "before commit",

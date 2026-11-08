@@ -166,6 +166,18 @@ python shared/skills/repository-preflight/scripts/session.py list
   working tree – the shared checkout – and names `session.py start`. A linked worktree (a session
   copy) or any other branch passes. `BRAIN_SHARED_CHECKOUT=1` lets a host that cannot work in a
   separate folder, or the owner by hand, commit there on purpose.
+- The session start now syncs and checks upstream on its own. `hooks.py session-start` runs as the
+  host's `SessionStart` hook with matchers `startup` and `resume`: within about 20 seconds it syncs
+  every brain repository the way `sync.py --no-merge` does (fast-forward when only behind;
+  divergence, uncommitted changes and an unreachable `origin` are reported, never acted on), and
+  when the mechanics or the library has an `upstream` remote and the skill-exchange cadence says a
+  check is due (`check_every_days`, default seven; recorded as `last_checked` in
+  `/memory/skills/skill-exchange/state.json`), it fetches `upstream` and reports how many upstream
+  commits are not in `HEAD`, how many touch protected governance paths, and the command to review
+  them. It never merges upstream (`SMART-RULE-0032`). It prints its message as
+  `hookSpecificOutput.additionalContext`, telling the agent to pass it to the owner in its first
+  reply, prints nothing when all is current, and always exits 0: an error becomes one line of the
+  message. `hooks.py install` writes `.claude/settings.json` too, keeping its other keys.
 - A compaction is a missed handover checkpoint (`SMART-RULE-0019`, amendment proposed in
   `PROPOSAL-conductor-stays-small`). `hooks.py pre-compact` runs as the host's `PreCompact` hook:
   it writes a marker `<brain_root>/temp/conductor/compacted/<session_id>.json` (session, time,
@@ -175,8 +187,8 @@ python shared/skills/repository-preflight/scripts/session.py list
   must re-read `/CONTRACT.md`, `/RULES.md`, `/memory/RULES.md` and the owning node's `## Handover`
   before anything else, write and commit the checkpoint and start no new worker until then, and
   lists the markers still present. Both fire only on a compaction, never on a light session.
-  Regenerate `.claude/settings.json` with `hooks.py host-settings` after changing
-  `hooks/events.json`; the file is git-ignored, so each checkout the owner opens sessions in
+  Regenerate `.claude/settings.json` with `hooks.py host-settings` (or `hooks.py install`) after
+  changing `hooks/events.json`; the file is git-ignored, so each checkout the owner opens sessions in
   regenerates its own.
 
 ## Outputs

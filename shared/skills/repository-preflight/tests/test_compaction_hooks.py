@@ -36,8 +36,9 @@ class HostSettingsShapeTest(unittest.TestCase):
         generated = hooks.host_settings()["hooks"]
         self.assertEqual(generated["PreCompact"], [{"hooks": [{"type": "command",
                          "command": f'python "{(hooks.ROOT / "shared/skills/repository-preflight/scripts/hooks.py").as_posix()}" pre-compact'}]}])
-        self.assertEqual(generated["SessionStart"], [{"matcher": "compact", "hooks": [{"type": "command",
-                         "command": f'python "{(hooks.ROOT / "shared/skills/repository-preflight/scripts/hooks.py").as_posix()}" post-compact'}]}])
+        self.assertIn({"matcher": "compact", "hooks": [{"type": "command",
+                       "command": f'python "{(hooks.ROOT / "shared/skills/repository-preflight/scripts/hooks.py").as_posix()}" post-compact'}]},
+                      generated["SessionStart"])
 
 
 class PreCompactTest(unittest.TestCase):
