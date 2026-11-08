@@ -119,6 +119,22 @@ routine applies), a diverged session copy (merged by `session.py finish`) and an
 `origin` are reported and left untouched. It never rebases, resets, stashes, discards or forces a
 push. Exit code 1 means a repository needs attention.
 
+**Following upstream (`SMART-RULE-0032`).** When the owner's setting `follow_upstream` in
+`/memory/skills/skill-exchange/config/settings.json` is true and the mechanics or the library has an
+`upstream` remote, `sync.py` (after every brain repository is current, and not with `--no-merge`) and
+the session-start hook merge `upstream/main` through `scripts/upstream_merge.py`: a session copy of its
+own begins at the shared checkout's commit, `upstream/main` is merged in with the routine above (a
+merge commit when the histories differ; a conflicting hand-written file stops and leaves the merge in
+the copy), the merge is appended to `/memory/governance/upstream-merges.md` (upstream commit, files
+changed, `contract_version` before and after, protected-governance files) in the copy's memory, and
+`session.py finish` runs the preflight, pushes to `origin` and fast-forwards the shared checkout. One
+summary line per merge is printed; the hook adds skill-exchange's digest of what came in. The hook
+merges only while at least `MERGE_SECONDS` of its budget is left, otherwise it says the merge is
+pending and gives the `sync.py` command. When the setting is absent and an `upstream` exists, the hook
+gives the SETUP B4 question to ask the owner once; when it is false or absent nothing is merged.
+The preflight's protected-governance check is unchanged: a merge that brings protected governance
+after the upstream proposal's window has closed stops at the preflight and pushes nothing.
+
 ## One working copy per session
 
 `scripts/session.py` implements `SMART-RULE-0038`. A session that will write runs it after

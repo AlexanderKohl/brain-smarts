@@ -86,7 +86,8 @@ def layer_of(repo: Path, root: Path) -> str:
 
 
 # Session start (SMART-RULE-0034, SMART-RULE-0032): sync origin without merging and hear upstream
-# on the skill-exchange cadence, within a time budget; the host shows the message to the agent.
+# on the skill-exchange cadence, or merge it when the owner follows upstream (upstream_merge.py),
+# within a time budget; the host shows the message to the agent.
 BUDGET_SECONDS = 20.0
 PROTECTED = ("CONTRACT.md", "RULES.md", "BOOTSTRAP.md", "CORE.md", "CORE-RULES.md", "AGENTS.md", "CLAUDE.md",
              "governance/", "shared/skills/repository-preflight/")
@@ -180,6 +181,16 @@ def session_start(root: Path = ROOT, now: str | None = None, budget: float = BUD
             untracked = [l[3:] for l in git(repo, "status", "--porcelain", "--untracked-files=all").splitlines()
                          if l.startswith("??")]
             (git_dir(repo) / UNTRACKED).write_text("\n".join(untracked), encoding="utf-8")
+    import upstream_merge
+    if upstream_merge.following(root):
+        # SMART-RULE-0032: following upstream, the merge replaces the report and the cadence question
+        for r in upstream_merge.merge_all(root, deadline, time.monotonic):
+            lines.append(f"{r['name']}: {r['state']} – {r['detail']}")
+            lines += ["  " + line for line in r["digest"]]
+        return "\n".join([HEADER] + lines) if lines else ""
+    nudge = upstream_merge.b4_nudge(root)
+    if nudge:
+        lines.append(nudge)
     lines += upstream_lines(root, now, deadline)
     return "\n".join([HEADER] + lines) if lines else ""
 

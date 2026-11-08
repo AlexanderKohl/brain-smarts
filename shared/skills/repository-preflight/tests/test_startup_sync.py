@@ -122,7 +122,11 @@ class UpstreamTest(unittest.TestCase):
         self.brain = Brain(Path(self.tmp.name))
         git(self.brain.root, "remote", "add", "upstream", str(self.brain.upstream))
         (self.brain.root / "memory").mkdir()
-        work = Path(self.tmp.name) / "up-work"
+        # The owner answered SETUP B4 "no": the report, not the merge (test_upstream_merge.py covers the rest)
+        settings = self.brain.root / "memory" / "skills" / "skill-exchange" / "config" / "settings.json"
+        settings.parent.mkdir(parents=True)
+        settings.write_text(json.dumps({"follow_upstream": False}), encoding="utf-8")
+        work =Path(self.tmp.name) / "up-work"
         git(Path(self.tmp.name), "clone", "-q", str(self.brain.upstream), str(work))
         commit(work, "CONTRACT.md", "a governance change\n")
         commit(work, "shared/skills/example/SKILL.md", "a skill change\n")

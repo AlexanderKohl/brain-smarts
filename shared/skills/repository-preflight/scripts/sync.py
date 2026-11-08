@@ -23,6 +23,12 @@ branch:
 - ahead only: says how many commits are not pushed yet;
 - `origin` unreachable: says so.
 
+Then, when every brain repository is current and the owner's setting `follow_upstream` is true
+(SMART-RULE-0032), it merges `upstream/main` into the mechanics and the library with the same
+routine (`upstream_merge.py`), records each merge in `/memory/governance/upstream-merges.md` and
+prints one summary line per merge. When the setting is false or absent nothing more happens, as
+before. `--no-merge` skips it.
+
 It never rebases, resets, stashes or discards anything, and never forces a push. Untracked files
 do not count as changes; a fast-forward that would overwrite one fails in Git and is reported.
 Exit code 0 when every repository is up to date (or was fast-forwarded or merged), 1 when one
@@ -175,6 +181,9 @@ def main(argv: list[str] | None = None) -> int:
     results = [sync_one(name, repo, merge_from=None if args.no_merge else root)
                if index < brain else sync_one(name, repo, project=True)
                for index, (name, repo) in enumerate(repositories(root, args.also))]
+    if not args.no_merge and all(r["ok"] for r in results):
+        import upstream_merge  # noqa: E402 – here, as session is (SMART-RULE-0018)
+        results += upstream_merge.merge_all(root)
     results += not_joined(root)
     if args.json:
         print(json.dumps(results, indent=2))
