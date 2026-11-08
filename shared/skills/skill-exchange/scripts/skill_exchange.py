@@ -123,6 +123,8 @@ def git(root: Path, *args: str, check: bool = True) -> str:
 
 def due(brain: Brain) -> tuple[bool, str]:
     settings = brain.settings()
+    if settings.get("follow_upstream") is True:
+        return False, "following upstream: sync.py merges it at session start (SMART-RULE-0032)"
     state = read_json(brain.home / "state.json", {})
     last = state.get("last_checked")
     if not last:
@@ -172,6 +174,35 @@ def upstream_changes(brain: Brain, fetch: bool = True) -> dict:
     remote, branch = settings["remote"], settings["branch"]
     if remote not in git(brain.root, "remote").split():
         raise SystemExit("no remote named " + remote + " - see /SETUP.md step B3")
+    spans = []
+    for label, repo, prefix in exchange_repositories(brain):
+        if remote not in git(repo, "remote").split():
+            continue
+        if fetch:
+            git(repo, "fetch", "-q", remote)
+        ref = remote + "/" + branch
+        spans.append((label, repo, prefix, git(repo, "merge-base", "HEAD", ref), ref))
+    return changes_between(brain, spans)
+
+
+def merged_changes(brain: Brain, repo: Path, before: str, after: str) -> dict | None:
+    """What a completed upstream merge brought into `repo` (the commits before..after), in
+    upstream_changes' shape, for digest(merged=True); None when `repo` holds no skills."""
+    for label, path, prefix in exchange_repositories(brain):
+        if Path(path).resolve() == Path(repo).resolve():
+            changes = changes_between(brain, [(label, path, prefix, before, after)])
+            # After the merge every skill is local: one its folder lacked before the merge arrived new.
+            had = {line.rstrip("/").rsplit("/", 1)[-1] for line in
+                   git(path, "ls-tree", "--name-only", before + ":" + prefix.rstrip("/"), check=False).splitlines()}
+            grouped = changes["skills"]
+            grouped["new"] = sorted(set(grouped["new"]) | {n for n in grouped["other"] if n not in had})
+            grouped["other"] = [n for n in grouped["other"] if n in had]
+            return changes
+    return None
+
+
+def changes_between(brain: Brain, spans: list) -> dict:
+    """The commits base..ref of each (label, repository, skills prefix, base, ref), grouped for the owner."""
     active = set(brain.active_skills())
     required = always_on(brain)
     local = local_skills(brain)
@@ -179,14 +210,8 @@ def upstream_changes(brain: Brain, fetch: bool = True) -> dict:
     skills: dict = {}
     governance: list = []
     other = 0
-    for label, repo, prefix in exchange_repositories(brain):
-        if remote not in git(repo, "remote").split():
-            continue
-        if fetch:
-            git(repo, "fetch", "-q", remote)
-        ref = remote + "/" + branch
+    for label, repo, prefix, base, ref in spans:
         head = git(repo, "rev-parse", ref)
-        base = git(repo, "merge-base", "HEAD", ref)
         found_commits = git(repo, "log", "--format=%h %s", base + ".." + ref).splitlines()
         refs.append(ref if label == "smarts" else label + " " + ref)
         heads.append(head if label == "smarts" else label + ":" + head)
@@ -215,10 +240,11 @@ def upstream_changes(brain: Brain, fetch: bool = True) -> dict:
             "skills": grouped, "governance": sorted(set(governance)), "other_files": other}
 
 
-def digest(brain: Brain, changes: dict) -> list:
-    """The lines to show the owner: only what was not reported before, capped, numbered."""
+def digest(brain: Brain, changes: dict, merged: bool = False) -> list:
+    """The lines to show the owner: only what was not reported before, capped, numbered. With
+    `merged`, the description of a completed upstream merge (follow_upstream on, SMART-RULE-0032)."""
     state = read_json(brain.home / "state.json", {})
-    if state.get("last_reported_commit") == changes["upstream_commit"]:
+    if not merged and state.get("last_reported_commit") == changes["upstream_commit"]:
         return []
     if not changes["commits"]:
         return []
@@ -229,10 +255,12 @@ def digest(brain: Brain, changes: dict) -> list:
     for name in changes["skills"]["always_on"]:
         items.append("changed skill every brain uses: " + name)
     for path in changes["governance"]:
-        items.append("governance changed: " + path + " (needs your acceptance before it applies)")
+        items.append("governance changed: " + path + (" (accepted by your follow_upstream setting, CONTRACT §13.2)"
+                                                       if merged else " (needs your acceptance before it applies)"))
     for name in changes["skills"]["new"]:
-        items.append("new skill offered: " + name)
-    lines = ["Upstream has " + str(len(changes["commits"])) + " new commit(s) on " + changes["ref"] + "."]
+        items.append(("new skill arrived: " if merged else "new skill offered: ") + name)
+    lines = [("Merged " + str(len(changes["commits"])) + " upstream commit(s) from " if merged else
+              "Upstream has " + str(len(changes["commits"])) + " new commit(s) on ") + changes["ref"] + "."]
     for n, item in enumerate(items[:cap], start=1):
         lines.append(str(n) + ". " + item)
     rest = max(0, len(items) - cap) + len(changes["skills"]["other"])
