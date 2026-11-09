@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-11-08T11:07:00+10:00
+updated: 2026-11-09T13:25:17+10:00
 owner: brain-owner
 ---
 
@@ -71,6 +71,7 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 | `SMART-RULE-0046` | A release note for every change a user would notice | this file; `/shared/skills/release-notes/` | starting, committing or releasing a change someone who uses the system would notice |
 | `SMART-RULE-0047` | Long command output is shortened before the model reads it | this file; `/shared/skills/command-output/` | running a test run, build, install or long `git diff` or `git log`; command output arrives shortened |
 | `SMART-RULE-0048` | One conversation with the owner | this file; `team_sessions_max` in `/memory/OWNER.md`; `/shared/skills/product-feedback/` | a conductor thread starts or hands over, the owner raises another area's topic, before starting a team session, before pushing merged code |
+| `SMART-RULE-0049` | Fast project checks without reduced coverage | this file | setting up or changing a code project's checks, CI, test runner or pre-push hook; a check is slow |
 
 `Applies when` says when an agent reads a rule's full text: `always` rules are in `/CORE-RULES.md`,
 which every writing session reads first with `/CORE.md` (CONTRACT §1); any other rule is read, in its
@@ -507,6 +508,7 @@ Contract sections and when to read them, in section order:
 - **Learn from use and owner input.** Distinguish retrieval from application, and usefulness from truth. Record helpful, ineffective, harmful or unknown outcomes with their evidence basis. Preserve owner feedback and classify it as preference, decision, usefulness assessment or factual observation. Apply it within its stated scope; investigate factual contradictions.
 - **Interrupt only when needed.** Contact the owner when authority is required, a consequential trade-off needs judgement, uncertainty about their goals blocks a useful decision, or a finding materially affects current work. Failure or disagreement alone is not an escalation trigger. Ordinary maintenance stays silent.
 - **Present a weekly review.** When due during an active session, present new learning and substantive changes since the previous delivered review, including retirements and uncertainty. Track delivery; label a possible repeat after uncertain delivery. Presentation is not acceptance of proposed governance changes.
+- **Show each learning with its risk, impact and suggestion.** Whenever an agent shows the owner a learning – in the weekly review, a review of pending records, or a reply – each one states in plain words: the risk (what can go wrong, and how likely it is to happen again), the impact (high, medium or low, with one reason: what it would cost the owner, their business or their customers), and the suggestion (what the agent proposes, or "nothing: accept the risk" with the reason). A learning whose fix is already built says so and names the fix, so the owner is not asked to decide it again. Learnings shown together are listed by impact, highest first.
 - **One writer at a time, not one writer for all time.** Background workers return findings and do not edit canonical learning or shared views; the thread that launched a worker validates and integrates its results. Any session may integrate, and while it writes it must be the only writer: exclusion lasts for the write and never outlives the session holding it, so no designation goes stale and no work waits on a session that has ended. Re-read the target inside that window, stage only its own paths, and treat a Git conflict as the signal to reconcile rather than overwrite. Generated views are derived from the records and are regenerated after integration, never edited as source. `/shared/skills/learning-maintenance/` implements this process without expanding its authority.
 
 ## SMART-RULE-0031 – Show the text of every new or changed rule
@@ -799,6 +801,15 @@ Contract sections and when to read them, in section order:
   merge.
 - When the conductor's context reaches its checkpoint (`SMART-RULE-0019`), it hands over to one
   successor conductor and stops. The successor is the only thread the owner talks to.
+
+## SMART-RULE-0049 – Fast project checks without reduced coverage
+
+- For every new code project, build these concepts into its validation setup. When an existing code project is next changed, review and apply the applicable concepts before handoff; record any justified incompatibility and remaining work in that project's state. Projects without executable code are assessed for applicable checks without adding an unnecessary build system.
+- Reuse dependencies only when an exact cache key covers all lockfiles, runtime version, platform/architecture and installation inputs. Verify completeness and integrity before reuse; a missing, corrupt or incompatible cache falls back to a clean install. Publish entries atomically, bound cache storage, and keep cleanup from deleting shared dependencies.
+- Tune test concurrency from measured runtime and reliability within the machine's capacity. Keep overrides available and retain full test coverage. Use two browser workers as the initial local default where browser tests exist; raise it only after repeat measurements show a reliable improvement. Adapt unit-test concurrency to the project and available cores rather than imposing one number everywhere.
+- Avoid duplicate checks only when successful results belong to the exact commit, comparison base and relevant configuration being validated. Restrict docs-only shortcuts to the project's explicit non-product definition; include both sides of renames, and run full checks when scope is unknown. Version and release-note checks still run where required; never skip executable documentation or generated-code inputs merely because of their location or extension.
+- Preserve validation of the exact committed tree, isolation from dirty working files, branch-movement protection, cleanup and all required checks. Unexpected failures or missing results block integration. Warn about local runtime differences from CI. Never use bypass flags or weaken tests to improve timings.
+- Validate cache keys, hit/miss/corruption paths and every skip condition. Record cold and warm per-step timings and concurrency comparisons with failures included. Keep one canonical project implementation of each check, and report which optimisations are active and which are inapplicable.
 
 ## Contract restatements
 

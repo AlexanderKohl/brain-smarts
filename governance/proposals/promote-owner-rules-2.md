@@ -4,10 +4,13 @@ title: Three more owner rules that any brain can use move into the mechanics
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: proposed
+status: accepted
 owner: brain-owner
 created: 2026-11-09T12:08:45+10:00
-updated: 2026-11-09T12:08:45+10:00
+updated: 2026-11-09T13:25:17+10:00
+accepted_by: brain-owner
+accepted_at: 2026-11-09T13:25:17+10:00
+implemented_at: 2026-11-09T13:25:17+10:00
 rule_id: SMART-RULE-0049
 previous_contract_version: 3.2.0
 new_contract_version: 3.2.0
