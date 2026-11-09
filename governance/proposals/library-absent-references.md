@@ -157,7 +157,7 @@ failing state.
 
 Carried out on the candidate diff on 10 November 2026, before this proposal was written:
 
-- the two new tests pass;
+- the full preflight test suite passes with the two new tests in it (249 tests);
 - in a clean checkout of the mechanics alone, as CI has it, the preflight reports `PASS` with
   eight "library checkout absent" warnings and no error.
 
