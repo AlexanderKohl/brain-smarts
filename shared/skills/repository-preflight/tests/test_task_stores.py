@@ -251,7 +251,12 @@ class P25FailureTests(StoreTestCase):
         git(repo, "checkout", "-q", "main")
         brain.write_repo(record, task("TASK-sam-2026-0001", refs=[f"{REPO}:brain"], body="Sam's side.\n"))
         git(repo, "commit", "-q", "-am", "sam")
-        merged = subprocess.run(["git", "-C", str(repo), "merge", "bob"], capture_output=True, text=True)
+        # The identity is given here: without one (a CI machine) Git stops before it merges,
+        # and leaves no unmerged path to find.
+        merged = subprocess.run(
+            ["git", "-c", "user.name=Example Tester", "-c", "user.email=tester@example.com",
+             "-C", str(repo), "merge", "bob"], capture_output=True, text=True)
+        self.assertIn("CONFLICT", merged.stdout)
         self.assertNotEqual(merged.returncode, 0)
         result = brain.project()
         self.assertError(result, f"{REPO}:{record}", "unmerged in Git")
