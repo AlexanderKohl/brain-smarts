@@ -4,14 +4,14 @@ title: A reference into the skill library is a warning when the library is not c
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: draft
+status: implemented
 owner: brain-owner
 created: 2026-11-10T08:40:03+10:00
-updated: 2026-11-10T08:40:03+10:00
+updated: 2026-11-10T09:01:12+10:00
 rule_id: null
-accepted_by: null
-accepted_at: null
-implemented_at: null
+accepted_by: brain-owner
+accepted_at: 2026-11-10T09:00:28+10:00
+implemented_at: 2026-11-10T09:01:12+10:00
 previous_contract_version: 3.2.0
 new_contract_version: 3.2.0
 target_files:
@@ -166,6 +166,11 @@ run on `main` after the push, which must be green.
 
 ## Acceptance
 
-Not yet requested. Ask one direct question that identifies this proposal. Do not treat silence, adjacent approval or general agreement as acceptance.
+Accepted by the owner at 2026-11-10T09:00:28+10:00 in the conversation with the conductor: "I accept it", answering the question "Do you accept PROPOSAL-library-absent-references as shown?", asked with the current and proposed wording and the exact diff.
 
 ## Implementation record
+
+Applied at 2026-11-10T09:01:12+10:00 exactly as shown: the clause in *Failure behaviour*, the change to
+`preflight_references.py` and the two tests. The full preflight test suite and the repository
+preflight pass on the result. No rule number: the change amends what the validator enforces and
+adds no rule.

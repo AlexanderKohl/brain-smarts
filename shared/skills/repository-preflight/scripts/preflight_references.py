@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 from typing import Any
-from preflight_base import MEMORY_PREFIX, in_memory, memory_root, library_root, layer_of, Result, root_path, git_ignored, is_template_path, is_own_repository
+from preflight_base import LIBRARY_PREFIX, MEMORY_PREFIX, in_memory, memory_root, library_root, layer_of, Result, root_path, git_ignored, is_template_path, is_own_repository
 from preflight_tasks import repository_checkouts, resolve_repository_ref
 
 
@@ -86,6 +86,7 @@ def validate_declared_references(
     root: Path, records: dict[Path, dict[str, Any]], result: Result
 ) -> None:
     memory_present = memory_root(root) is not None
+    library_present = library_root(root) is not None
     checkouts = None
     for path, metadata in records.items():
         display = root_path(path, root)
@@ -118,6 +119,13 @@ def validate_declared_references(
                 if path_part.startswith(MEMORY_PREFIX) and not memory_present:
                     result.warnings.append(
                         f"{display}: {key} reference {value} not checked: memory checkout absent"
+                    )
+                    continue
+                if path_part.startswith(LIBRARY_PREFIX) and not library_present:
+                    # The skill library is a separate checkout (CONTRACT 3.5); a run on the
+                    # mechanics alone, such as CI, cannot say whether the target exists.
+                    result.warnings.append(
+                        f"{display}: {key} reference {value} not checked: library checkout absent"
                     )
                     continue
                 if not target.exists():

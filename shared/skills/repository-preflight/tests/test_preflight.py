@@ -134,6 +134,25 @@ class LayoutTests(BrainTestCase):
         self.assertFalse(result.memory_present)
         self.assertTrue(any("memory checkout absent" in w for w in result.warnings))
 
+    def test_library_reference_is_a_warning_when_the_library_checkout_is_absent(self) -> None:
+        brain = self.make(with_memory=False)
+        brain.write("shared/NOTE.md", md("note", skill_refs=["/library/skills/example-skill"]))
+        brain.write("shared/CLOSED.md", md("PROPOSAL-example", type="governance_proposal",
+                                           status="implemented",
+                                           target_files=["/library/skills/README.md"]))
+        result = brain.run()
+        self.assertEqual(result.errors, [], result.errors)
+        unchecked = [w for w in result.warnings if "library checkout absent" in w]
+        self.assertEqual(len(unchecked), 2, result.warnings)
+
+    def test_library_reference_is_checked_when_the_library_checkout_is_present(self) -> None:
+        brain = self.make(with_memory=False)
+        (brain.root / "library" / "skills").mkdir(parents=True)
+        brain.write("shared/NOTE.md", md("note", skill_refs=["/library/skills/example-skill"]))
+        result = brain.run()
+        self.assertTrue(any("broken skill_refs reference /library/skills/example-skill" in e
+                            for e in result.errors), result.errors)
+
     def test_mechanics_with_memory_passes_and_validates_memory_files(self) -> None:
         brain = self.make()
         result = brain.run()
