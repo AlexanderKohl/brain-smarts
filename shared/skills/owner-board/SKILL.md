@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 scope: shared
-version: 2.3.0
+version: 2.4.0
 script_paths:
   - /shared/skills/owner-board/scripts/apply_events.py
   - /shared/skills/owner-board/scripts/board_config.py
@@ -26,8 +26,9 @@ script_paths:
   - /shared/skills/owner-board/scripts/task_actions.py
   - /shared/skills/owner-board/scripts/task_board.py
   - /shared/skills/owner-board/scripts/team_lanes.py
+  - /shared/skills/owner-board/scripts/install_board_server.ps1
 created: 2026-09-18T11:05:00+10:00
-updated: 2026-11-07T16:00:35+10:00
+updated: 2026-11-09T11:32:02+10:00
 owner: brain-owner
 project_refs:
   - /memory/projects/brain-development
@@ -294,8 +295,19 @@ folder remembered through the File System Access API was tried on 26 September 2
 twice on a real owner's Chrome for a page opened from disk; it was removed rather than kept as a
 second path.
 
-**Served pages can save into the inbox folder** (personal CRM design 04, increments 1 and 2;
-the pages do not post yet – that is increments 3 and 6). `serve_boards.py` answers
+**Served pages save into the inbox folder** (personal CRM design 04, increments 1 to 6). The pages
+post: a page served over http asks `GET /_board-server.json` once (`BoardPage.server`), and an answer
+with a token turns Save into `BoardPage.save(kind, name, text)` – one code path in `page_js.py`,
+inlined into every page – which posts the exact JSON the download would have held, shows
+"Saved to /memory/inbox/. Say to the conductor: Apply <name> (...)" with a **Copy** button
+(`BoardPage.show`), or the server's own reason when it refuses (`Not saved: ...`; every decision
+stays on the page). A page opened from disk, a server without the endpoint (404), a kind the server
+does not offer, a token still refused after one fresh ask, or a failed call keeps today's
+behaviour exactly: the download. Only a saved or downloaded file clears the page's decisions, never a
+refusal. The clients are the registered boards' verdicts (`page_html.py`, kind `verdicts`), the task
+pages' save bar (`TASK_SAVE_JS`, kind `task-actions`) and, in the library, the inbox review page
+(mail-review, kind `inbox-decisions`) and the social links page (crm, kind `social-decisions`).
+`serve_boards.py` answers
 `GET /_board-server.json` with `{"server": 1, "token": ..., "started": <iso>, "saves": [kinds],
 "mail": false}` (`Cache-Control: no-store`), and `POST /_save/<kind>` files the exact JSON the
 page would have downloaded into `/memory/inbox/` of the checkout it runs from (`serve_post.py`,
@@ -308,13 +320,23 @@ the page's; a file is never overwritten – a second save in one second gets `-2
 is `{"saved": <name>, "folder": "/memory/inbox/", "say": "Apply <name> (...)"}` or
 `{"refused": <reason>}` with 400; the owner pastes the `say` line to the area's conductor, which is
 both the wake and the go. `GET /_saved.json` lists the files still waiting (name, kind, saved
-time, size; never content). Every post must carry this start's token in `X-Board-Token` (made
+time, size; never content). `POST /_mail/text` (increment 4) answers one message's whole text,
+read live and read-only by the mail-review skill's `inbox_serve.py` (loaded only when that skill is
+checked out; `"mail"` in `/_board-server.json` says whether it is); it passes the same checks and
+writes nothing. Every post must carry this start's token in `X-Board-Token` (made
 with `secrets.token_urlsafe(32)` at start, held in memory only), `Content-Type: application/json`
 and an `Origin` of `http://localhost:<port>` or `http://127.0.0.1:<port>`, under the Host check;
 any miss is 403 `{"refused": "not allowed"}`. A body over 25 MB is refused with 413 before it is
 read. No answer carries a CORS header. The server never applies, never commits and writes only
 new, untracked files into the inbox folder; the memory's `.gitignore` keeps inbox and social
-decisions out of every commit. `apply_events.py` reads the inbox folder by default – the
+decisions out of every commit. **Start-up** (increment 5): `install_board_server.ps1` registers one
+scheduled task, `BrainBoardServer`, at log-on of the current user (not elevated, no Startup-folder
+shortcut) that runs `serve_boards.py --port 8765 --bind 127.0.0.1 --root <the shared checkout>` with
+no console window and restarts it on failure; it refuses a session copy, does not start the server
+itself, and `-Uninstall` removes the task. A second start while the port is taken prints "the board
+server already runs on port 8765" and exits 0, so the `brain-boards` launch entry stays harmless;
+`BoardServer` does not set `SO_REUSEADDR` on Windows, where it would let a second server share the
+port. `apply_events.py` reads the inbox folder by default – the
 memory's own and, from a session copy, the shared checkout's (`board_inbox.inbox_folders`) – and
 moves an applied file out of it as before; `inbox_apply.py` and `social_links_apply.py` move a file
 they applied from a memory's `inbox/` into their own `applied/` work folders.
@@ -607,11 +629,12 @@ Run from the brain root. Alphabetical.
 | `events.py` | Ids, the append-only event files, the fold and the fences. Imported by the others and by the release-notes skill. |
 | `migrate_board.py` | Convert a board from `board.md` and verdict folders to `board.json` and events, in place or into a repository; `--dry-run` first (**Migrating a board**). |
 | `page_html.py` | The status page: HTML, CSS and the board's own browser code, including the folds. Imported by `build_status.py`. |
-| `page_js.py` | The browser code every board page shares: screenshots, lightbox, download, task controls, the task pages' save bar. Imported by the builders. |
+| `page_js.py` | The browser code every board page shares: screenshots, lightbox, download, task controls, the task pages' save bar, and the board server's client (`BoardPage.server`, `post`, `save`, `say`, `show`). Imported by the builders. |
 | `page_notes.py` | The release-notes section of a board page. Imported by `build_status.py`. |
 | `reconcile.py` | Compare a board with git and the task records. Called by every build. |
 | `serve_boards.py` | Serve the boards over http on this machine: the directory folder at `/`, and each board's node folder at the path the directory page's link arrives at, so a status page outside the directory folder opens (the plain `python -m http.server --directory memory/boards` answers those links with 404). Nothing else of memory or a repository is served; dot paths, listings and links out of a folder are refused, and so is any Host but this machine. `GET /_boards-status.json` answers `{"behind": N, "changed": [at most 20 paths], "checked": <iso time>}` for the memory checkout (`git rev-list --count HEAD..origin/main`, tracked files changed or staged), worked out on each request with a short git timeout; any failure gives `{"behind": null, "error": <a short reason>}`. `--port` (8765), `--list` prints the mounts. |
-| `serve_post.py` | The board server's post plumbing: the per-start token, the checks every `POST` passes (Host, Origin, JSON content type, token, 25 MB), `/_board-server.json`, `/_saved.json` and `/_save/<kind>`. Imported by `serve_boards.py`. |
+| `serve_post.py` | The board server's post plumbing: the per-start token, the checks every `POST` passes (Host, Origin, JSON content type, token, 25 MB), `/_board-server.json`, `/_saved.json`, `/_save/<kind>` and `/_mail/text`. Imported by `serve_boards.py`. |
+| `install_board_server.ps1` | Register (and with `-Uninstall` remove) the log-on scheduled task that starts the board server on 127.0.0.1:8765. Run from the shared checkout; never started by the script itself. |
 | `task_actions.py` | Apply the owner's saved task actions through the tasks skill. Imported by `apply_events.py`. |
 | `task_board.py` | Route task records to boards and draw them: `route`, `build [--for <task>]`, `check`. |
 | `team_lanes.py` | The per-team work-in-progress line above a board's task columns. Imported by `task_board.py`. |

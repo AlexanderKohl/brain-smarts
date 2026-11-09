@@ -674,13 +674,17 @@ __SHAREDJS__
       + out.savedAt.slice(0, 19).replace(/[:T]/g, '-') + '.json';
     var text = JSON.stringify(out, null, 2);
     var btn = this;
-    P.download(name, text);
-    note('Downloaded ' + name + '. Save it in any folder inside Downloads, then tell the conductor.');
-    btn.textContent = 'Saved - tell the conductor';
-    setTimeout(function () { btn.textContent = 'Save my verdicts'; }, 2600);
-    TASKS.forget(taskIds(tasks));
-    NOTES.forget();
-    handOver(decided);
+    /* Served by the board server, the file is filed in the inbox folder and the bar shows the line to
+       say to the conductor with Copy; opened from disk, or with no server, the browser downloads it
+       as before. A refusal (the server's own reason) hands nothing over: every decision stays. */
+    P.save('verdicts', name, text).then(function (res) {
+      if (P.show(document.getElementById('savenote'), res) === 'refused') return;
+      btn.textContent = 'Saved - tell the conductor';
+      setTimeout(function () { btn.textContent = 'Save my verdicts'; }, 2600);
+      TASKS.forget(taskIds(tasks));
+      NOTES.forget();
+      handOver(decided);
+    });
   });
 
   document.getElementById('copy').addEventListener('click', function () {

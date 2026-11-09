@@ -8,9 +8,10 @@ actions on task cards. They are written here and inlined into each page, because
 from disk cannot load a sibling script reliably and the owner opens boards by double-clicking.
 
 - `CSS`       the thumbnails, lightbox, bottom bar, buttons and task-card controls
-- `SHARED_JS` `window.BoardPage`: `el`, `shrink`, `lightbox`, `download`, `attachShots`
+- `SHARED_JS` `window.BoardPage`: `el`, `shrink`, `lightbox`, `download`, `attachShots`, and the board server's
+              client (`served`, `server`, `post`, `save`, `say`, `show`: personal CRM design 04)
 - `TASKS_JS`  `window.BoardTasks`: Do now, Done and a note on every open task card
-- `TASK_BAR` and `TASK_SAVE_JS`  the save bar of a page that shows only tasks
+- `TASK_BAR` and `TASK_SAVE_JS`  the save bar of a page that shows only tasks; it saves through `BoardPage.save`
 - `BEHIND_JS` `window.BoardBehind`: served by `serve_boards.py`, a banner when the shared checkout
   the page was drawn from is behind (`/_boards-status.json`); on every page, the directory included
 
@@ -176,7 +177,91 @@ SHARED_JS = r"""<script>
     draw();
     return draw;
   }
-  window.BoardPage = { el: el, shrink: shrink, lightbox: lightbox, download: download, attachShots: attachShots };
+  /* The board server (serve_boards.py, personal CRM design 04). A page served over http asks
+     /_board-server.json once; an answer with a token turns Save into a post of the same JSON the
+     download would have held. A page opened from disk, a server without the endpoint (404) or a
+     server that refuses the post keeps today's behaviour exactly: the download. Every call goes
+     through `api`, so a test can replace `served` (a harness page is opened from disk). */
+  var found = null;
+  function served() {
+    var proto = (window.location && window.location.protocol) || '';
+    return (proto === 'http:' || proto === 'https:') && !!window.fetch;
+  }
+  /* The server's answer with a token, or null; asked once, again only when `fresh`. */
+  function server(fresh) {
+    if (!api.served()) return Promise.resolve(null);
+    if (found && !fresh) return found;
+    found = window.fetch('/_board-server.json', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { return d && typeof d.token === 'string' && d.token ? d : null; })
+      .catch(function () { return null; });
+    return found;
+  }
+  /* One post of `text` (JSON) to `path` with the token: {status, data}; status 0 is no server or
+     a failed call. A 403 or a failed call asks for a new token once (a restart made a new one)
+     and tries once more. */
+  function post(path, text) {
+    var none = { status: 0, data: {} };
+    function once(info) {
+      return window.fetch(path, { method: 'POST', cache: 'no-store', body: text,
+        headers: { 'Content-Type': 'application/json', 'X-Board-Token': info.token } })
+        .then(function (r) {
+          return r.json().catch(function () { return {}; }).then(function (d) { return { status: r.status, data: d || {} }; });
+        })
+        .catch(function () { return none; });
+    }
+    return api.server().then(function (info) {
+      if (!info) return none;
+      return once(info).then(function (res) {
+        if (res.status !== 403 && res.status !== 0) return res;
+        return api.server(true).then(function (again) { return again ? once(again) : none; });
+      });
+    });
+  }
+  /* Save `text` as `kind` through the server when it offers that kind; else hand the browser the
+     download named `name`. Resolves {state: 'saved', name, folder, say} | {state: 'refused', reason}
+     | {state: 'downloaded', name}. Only 'saved' means the decisions have left the page. */
+  function save(kind, name, text) {
+    function fallback() { api.download(name, text); return { state: 'downloaded', name: name }; }
+    return api.server().then(function (info) {
+      if (!info || (info.saves || []).indexOf(kind) < 0) return fallback();
+      return api.post('/_save/' + kind, text).then(function (res) {
+        if (res.status === 200 && res.data.saved) {
+          return { state: 'saved', name: String(res.data.saved), folder: String(res.data.folder || ''), say: String(res.data.say || '') };
+        }
+        if (res.status !== 0 && res.status !== 403 && typeof res.data.refused === 'string') return { state: 'refused', reason: res.data.refused };
+        return fallback();
+      });
+    });
+  }
+  /* The line to say to the conductor, with a Copy button, in `node`. */
+  function say(node, line) {
+    node.textContent = '';
+    if (!line) return;
+    node.appendChild(el('span', 'saynote', line + ' '));
+    var b = el('button', null, 'Copy');
+    b.type = 'button';
+    b.addEventListener('click', function () {
+      function done() { b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy'; }, 1400); }
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(line).then(done, function () { window.prompt('Copy this:', line); });
+      else window.prompt('Copy this:', line);
+    });
+    node.appendChild(b);
+  }
+  /* What a save result says in the bar's note: the line to say with Copy, the server's reason,
+     or where the download went. Returns the state. */
+  function show(node, res) {
+    if (res.state === 'saved') {
+      say(node, 'Saved to ' + (res.folder || 'the inbox folder') + '. Say to the conductor: ' + (res.say || res.name));
+    } else if (res.state === 'refused') {
+      node.textContent = 'Not saved: ' + res.reason;
+    } else {
+      node.textContent = 'Downloaded ' + res.name + '. Save it in any folder inside Downloads, then tell the conductor.';
+    }
+    return res.state;
+  }
+  var api = window.BoardPage = { el: el, shrink: shrink, lightbox: lightbox, download: download, attachShots: attachShots,
+    served: served, server: server, forget: function () { found = null; }, post: post, save: save, say: say, show: show };
 })();
 </script>"""
 
@@ -368,12 +453,15 @@ TASK_SAVE_JS = r"""<script>
     if (!list.length) { window.alert('Nothing decided yet.'); return; }
     var out = { schema: '__SCHEMA__', board: 'tasks', savedAt: new Date().toISOString(), tasks: list };
     var name = '__PREFIX__' + out.savedAt.slice(0, 19).replace(/[:T]/g, '-') + '.json';
-    P.download(name, JSON.stringify(out, null, 2));
-    note('Downloaded ' + name + '. Save it in any folder inside Downloads, then tell the conductor.');
     var btn = this;
-    btn.textContent = 'Saved - tell the conductor';
-    setTimeout(function () { btn.textContent = 'Save my verdicts'; }, 2600);
-    T.forget(list.map(function (a) { return a.id; }));
+    /* Through the board server when it answers (filed in the inbox folder, the line to say shown with
+       Copy), else the download as before; a refusal keeps every action on its card. */
+    P.save('task-actions', name, JSON.stringify(out, null, 2)).then(function (res) {
+      if (P.show(document.getElementById('savenote'), res) === 'refused') return;
+      btn.textContent = 'Saved - tell the conductor';
+      setTimeout(function () { btn.textContent = 'Save my verdicts'; }, 2600);
+      T.forget(list.map(function (a) { return a.id; }));
+    });
   });
   document.getElementById('copy').addEventListener('click', function () {
     var list = T.entries();
