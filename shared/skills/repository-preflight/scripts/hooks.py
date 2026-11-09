@@ -3,7 +3,8 @@
   python shared/skills/repository-preflight/scripts/hooks.py install        git hooks in every brain repository,
                                     and the host settings (.claude/settings.json)
   python shared/skills/repository-preflight/scripts/hooks.py session-start [--root <brain>]
-                                    sync origin (no merge) and hear upstream on its cadence
+                                    sync origin (no merge), hear upstream on its cadence and
+                                    name a failed latest CI run (ci_status.py)
   python shared/skills/repository-preflight/scripts/hooks.py pre-commit     run by Git before each commit
   python shared/skills/repository-preflight/scripts/hooks.py pre-compact    the handover reminder; marks the compaction
   python shared/skills/repository-preflight/scripts/hooks.py post-compact   after a compaction: reload the rules first
@@ -87,7 +88,8 @@ def layer_of(repo: Path, root: Path) -> str:
 
 # Session start (SMART-RULE-0034, SMART-RULE-0032): sync origin without merging and hear upstream
 # on the skill-exchange cadence, or merge it when the owner follows upstream (upstream_merge.py),
-# within a time budget; the host shows the message to the agent.
+# within a time budget, and name a failed latest CI run (ci_status.py); the host shows the message
+# to the agent.
 BUDGET_SECONDS = 20.0
 PROTECTED = ("CONTRACT.md", "RULES.md", "BOOTSTRAP.md", "CORE.md", "CORE-RULES.md", "AGENTS.md", "CLAUDE.md",
              "governance/", "shared/skills/repository-preflight/")
@@ -157,11 +159,16 @@ def upstream_lines(root: Path, now: str | None, deadline: float) -> list[str]:
 
 
 def session_start(root: Path = ROOT, now: str | None = None, budget: float = BUDGET_SECONDS,
-                  source: str = "startup") -> str:
+                  source: str = "startup", cwd: str | None = None) -> str:
     """What the agent must tell the owner at session start, or "" when everything is current.
-    Sync is sync.py's with --no-merge semantics: fast-forward when only behind, report the rest."""
+    Sync is sync.py's with --no-merge semantics: fast-forward when only behind, report the rest.
+    The CI check (ci_status.py) runs alongside, within the same budget: one line per repository
+    whose latest completed GitHub Actions run failed, for the brain repositories and the project
+    repository of the session's working folder `cwd`; silent otherwise."""
+    import ci_status
     import sync
     deadline = time.monotonic() + budget
+    ci = ci_status.Check(ci_status.repositories(sync.repositories(root, []), cwd), deadline)
     install(root)
     lines = []
     for name, repo in sync.repositories(root, []):
@@ -187,11 +194,13 @@ def session_start(root: Path = ROOT, now: str | None = None, budget: float = BUD
         for r in upstream_merge.merge_all(root, deadline, time.monotonic):
             lines.append(f"{r['name']}: {r['state']} – {r['detail']}")
             lines += ["  " + line for line in r["digest"]]
+        lines += ci.lines()
         return "\n".join([HEADER] + lines) if lines else ""
     nudge = upstream_merge.b4_nudge(root)
     if nudge:
         lines.append(nudge)
     lines += upstream_lines(root, now, deadline)
+    lines += ci.lines()
     return "\n".join([HEADER] + lines) if lines else ""
 
 
@@ -209,7 +218,7 @@ def session_start_hook(argv: list[str]) -> str:
         if not (root / "CONTRACT.md").is_file():
             raise FileNotFoundError(f"no CONTRACT.md in {root}")
         data, _note = hook_input()
-        message = session_start(root, source=str(data.get("source") or "startup"))
+        message = session_start(root, source=str(data.get("source") or "startup"), cwd=data.get("cwd") or None)
     except Exception as error:  # noqa: BLE001 – any failure is reported, never raised
         reason = f"{type(error).__name__}: {error}".replace("\n", " ")
         message = f"{HEADER}\nThe sync and upstream check could not run: {reason}"

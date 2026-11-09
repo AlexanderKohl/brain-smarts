@@ -18,8 +18,10 @@ script_paths:
   - /shared/skills/repository-preflight/tests/test_task_stores.py
   - /shared/skills/repository-preflight/scripts/hooks.py
   - /shared/skills/repository-preflight/tests/test_project_hook.py
+  - /shared/skills/repository-preflight/scripts/ci_status.py
+  - /shared/skills/repository-preflight/tests/test_ci_status.py
 created: 2026-08-04T23:16:08+10:00
-updated: 2026-11-07T15:48:26+10:00
+updated: 2026-11-09T11:51:57+10:00
 owner: brain-owner
 ---
 
@@ -190,7 +192,15 @@ python shared/skills/repository-preflight/scripts/session.py list
   check is due (`check_every_days`, default seven; recorded as `last_checked` in
   `/memory/skills/skill-exchange/state.json`), it fetches `upstream` and reports how many upstream
   commits are not in `HEAD`, how many touch protected governance paths, and the command to review
-  them. It never merges upstream (`SMART-RULE-0032`). It prints its message as
+  them. It never merges upstream (`SMART-RULE-0032`). Alongside, within the same budget,
+  `scripts/ci_status.py` asks `gh run list --branch <branch> --limit 1` for the latest GitHub
+  Actions run of the current branch of each brain repository with a GitHub `origin`, and of the
+  project repository holding the session's working folder (`cwd` in the hook input) when it is
+  another Git repository with a GitHub `origin`. It says one line per repository only when that
+  run completed and failed (failure, timed out or startup failure): workflow name, short sha and
+  url. A passed, running or cancelled run, no run, `gh` not installed or not signed in, and a call
+  that does not answer within its short timeout (eight seconds, never past the budget; the calls
+  run in parallel) all leave it silent. It prints its message as
   `hookSpecificOutput.additionalContext`, telling the agent to pass it to the owner in its first
   reply, prints nothing when all is current, and always exits 0: an error becomes one line of the
   message. `hooks.py install` writes `.claude/settings.json` too, keeping its other keys.
