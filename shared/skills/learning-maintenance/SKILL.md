@@ -5,7 +5,7 @@ type: skill
 schema_version: 0.2
 contract: /CONTRACT.md
 created: 2026-09-17T17:14:19+10:00
-updated: 2026-11-09T11:51:57+10:00
+updated: 2026-11-09T13:25:17+10:00
 status: active
 owner: brain-owner
 scope: shared
@@ -86,7 +86,7 @@ Whichever session integrates regenerates index.md and board.md from canonical re
 
 The first digest is due seven days after activation. **Any session may prepare and present it.** Presenting is a read of canonical records plus a message to the owner; it writes no learning. Rationale: restricting presentation to one designated session would make `SMART-RULE-0028`'s weekly review unreachable, because that session is usually not the one active when the digest falls due. A skill may implement a rule's duties and must not narrow one into something that cannot happen.
 
-When due in an active session, that session prepares a snapshot of all new learning and substantive changes since the last delivered snapshot, including retirements, uncertainty and owner questions. Record snapshot ID and status prepared, then presenting before showing it, and delivered only after actually displaying it. Record next due seven days after delivery, in `index.md` with exactly the phrase `next is due <timestamp>` (for example `the next is due 2026-11-14T13:47:56+10:00`): the daily scheduled review reads that phrase (`DIGEST_DUE_PHRASE` in `/shared/skills/tasks/scripts/scheduled_review.py`), and an index without it is reported as digest state unreadable. Every regeneration of the index keeps the phrase. If delivery is uncertain, retain the snapshot and label the next presentation a possible repeat. Two sessions reaching the due date together are safe: the states are at-least-once by design, and a repeat is labelled rather than hidden. A digest may be offered in the normal response without a separate interruption. No scheduler or real-time guarantee is implied. Presentation never accepts governance.
+When due in an active session, that session prepares a snapshot of all new learning and substantive changes since the last delivered snapshot, including retirements, uncertainty and owner questions. Record snapshot ID and status prepared, then presenting before showing it, and delivered only after actually displaying it. Record next due seven days after delivery, in `index.md` with exactly the phrase `next is due <timestamp>` (for example `the next is due 2026-11-14T13:47:56+10:00`): the daily scheduled review reads that phrase (`DIGEST_DUE_PHRASE` in `/shared/skills/tasks/scripts/scheduled_review.py`), and an index without it is reported as digest state unreadable. Every regeneration of the index keeps the phrase. If delivery is uncertain, retain the snapshot and label the next presentation a possible repeat. Two sessions reaching the due date together are safe: the states are at-least-once by design, and a repeat is labelled rather than hidden. A digest may be offered in the normal response without a separate interruption. No scheduler or real-time guarantee is implied. Presentation never accepts governance. Each learning shown carries its risk, impact and suggestion, as `SMART-RULE-0028` requires (**Show each learning with its risk, impact and suggestion**).
 
 A weekly review the owner sees twice costs little; one they never see costs the whole mechanism.
 

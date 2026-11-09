@@ -22,6 +22,69 @@ Operate one portable encrypted credential vault without an external secret servi
 
 Runtime unlock is held by the **per-login Vault Agent**. Applications receive scoped results through the local broker (normally mapped static fields or OAuth JSON load/save). Closing PowerShell does not revoke OAuth grants; those remain encrypted in the vault.
 
+## Credential policy
+
+The rules every use of this skill follows (moved here from an owner's node rules on 9 November 2026, PROPOSAL-promote-owner-rules-2).
+
+### Storage policy
+
+- Use the vault file named under *Required inputs* as the canonical encrypted store for future credentials unless a credential set explicitly declares another approved provider.
+- Store no plaintext password, API key, client secret, access token, refresh token, private key or recovery passphrase in the brain.
+- Permit only the approved authenticated encrypted `credentials.vault` container in the project data directory; exclude it from Git.
+- Store only non-secret aliases, provider names, field names, ownership, consumers and lifecycle metadata in the repository.
+- Do not duplicate connector-managed credentials into the portable vault when the connector keeps them opaque and local code does not require them.
+- Do not use Windows Credential Manager or an external password manager as the default backend.
+- Do not place secrets in command-line arguments, Markdown, committed JSON, `.env` files, shell history, logs or task records.
+- Accept new secret values through a hidden prompt or standard input.
+- Collect all fields for a new credential entry after one vault unlock and commit them together only after every required input validates.
+- Inject static credentials only into the environment of an authorised short-lived child process when that process cannot use the Vault Agent broker, and do not persist that environment. Do not place the vault recovery passphrase or vault encryption key in any child environment.
+- Prefer the per-login Vault Agent as the runtime unlock holder: the owner unlocks once after Windows login (or after agent restart / explicit lock) through a hidden prompt; the agent retains the derived vault key in its own memory only; authorised consumers obtain scoped results (normally short-lived OAuth access tokens or explicitly mapped static fields) through the local broker without a chat-long credential-aware shell.
+- Treat `vault_credentials.py session` as deprecated emergency compatibility only. Do not use it as the default operating model for new work or agentic shells.
+
+### Vault structure
+
+- Use stable lowercase entry aliases such as `xero-oauth`.
+- Use lowercase snake-case field names.
+- Store static values in separate fields, such as `client_id`, `client_secret` or `api_key`.
+- Store a provider's complete rotating OAuth record as one JSON field so token pairs are updated together.
+- Initialise OAuth JSON fields with `{}` through the credential skill; never paste live tokens into repository files.
+- Fail when an entry or field is missing or malformed.
+
+### Passphrase and encryption
+
+- Use a unique recovery passphrase of at least 20 characters.
+- Never supply the recovery passphrase in chat, command arguments, Markdown, scripts, logs, shell profiles, `.env` files, persistent environment variables, or child-process environments. Enter it only through the skill's hidden unlock prompt into the Vault Agent (or an emergency interactive vault CLI that does not export the passphrase to children). Store the recovery copy separately from the encrypted vault.
+- Derive the encryption key with the fixed approved scrypt parameters and protect the complete vault with AES-256-GCM.
+- Use fresh salt and nonce values for every vault write.
+- Treat authentication failure as either a wrong passphrase or possible alteration; do not attempt partial recovery.
+
+### OAuth lifecycle
+
+- Request only required scopes.
+- Replace the stored token bundle immediately after a successful refresh.
+- Allow only one active refresh writer for a credential set across all devices.
+- Pass tenant or organisation context explicitly; do not infer it from an unrelated process.
+- Reauthorise when refresh credentials expire, are revoked or cannot be reconciled safely.
+
+### Portability and concurrency
+
+- Copy or synchronise the encrypted vault only while it is closed.
+- Keep a verified offline backup of the encrypted vault and keep its passphrase separately.
+- Do not commit the vault, merge divergent copies, or assume file synchronisation provides locking.
+- Use one active writer for each rotating OAuth credential set across devices.
+- Do not enable unattended vault unlock after reboot without a separately accepted runtime design (for example a future TPM/device-bound key slot). Per-login interactive unlock into the Vault Agent is the approved workstation model.
+- Do not substitute a plaintext `.env` passphrase for interactive unlock.
+- Before prompting for the recovery passphrase, check whether the Vault Agent is already unlocked for this Windows login. If it is unlocked, reuse it for further credential operations; do not prompt again and do not start a second agent instance.
+- Keep the vault file data lock short-lived around each authenticated read or write. Do not treat `credentials.vault.lock` as a session lease. Use a distinct agent singleton / session lease so only one Vault Agent instance holds the unlock key, while OAuth token refresh can still serialise per entry without blocking unrelated vault maintenance incorrectly.
+- Do not create parallel unlocked agents or parallel processes that each hold the recovery passphrase.
+
+### Logging and failure
+
+- Log credential aliases and operation results only.
+- Never log secret values, passphrases, token payloads, child environments or decrypted vault contents.
+- Fail closed when the vault is missing, cannot authenticate, is malformed, has unsupported parameters, or the cryptography dependency is unavailable.
+- Create a task for rotation failure, provider outage, suspected disclosure or required reauthorisation.
+
 ## Allowed operations and permissions
 
 Read `/memory/projects/credential-management/RULES.md` before changing credential storage.
