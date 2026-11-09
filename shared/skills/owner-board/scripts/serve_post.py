@@ -9,6 +9,10 @@ token, the checks every `POST` passes, and the two small JSON answers beside the
   Host check and with no CORS header, so another site's script cannot read it.
 - `GET /_saved.json` – the saved files still waiting in the inbox folder (`board_inbox.py`).
 - `POST /_save/<kind>` – files a page's saved decisions through `board_inbox.py`.
+- `POST /_mail/text` – one snapshot message's whole text, fetched live (increment 4; only when the
+  mail-review skill is checked out, else 404 and `"mail": false`): `{"account", "threadId",
+  "messageId"}` answers `{"text", "chars", "cut", "fetched"}`. It passes the same checks as every
+  post, reads only (`inbox_serve.py` calls `messages.get` and nothing else) and writes nothing.
 
 A post is refused with 403 and the same two words, `{"refused": "not allowed"}`, when the Host is
 not this machine, the `Origin` is not this server's own (`http://localhost:<port>` or
@@ -30,6 +34,7 @@ import board_inbox
 SERVER_PATH = "/_board-server.json"
 SAVED_PATH = "/_saved.json"
 SAVE_PREFIX = "/_save/"
+MAIL_TEXT_PATH = "/_mail/text"
 GET_PATHS = (SERVER_PATH, SAVED_PATH)
 TOKEN_HEADER = "X-Board-Token"
 MAX_BODY = 25 * 1024 * 1024          # screenshots travel as data URIs
@@ -72,7 +77,7 @@ def get(handler, path: str):
         return None
     if path == SERVER_PATH:
         data = {"server": SERVER_VERSION, "token": handler.token, "started": handler.started,
-                "saves": handler.inbox.kinds(), "mail": False}
+                "saves": handler.inbox.kinds(), "mail": handler.inbox.fetcher is not None}
     else:
         data = {"folder": handler.inbox.shown, "saved": handler.inbox.waiting()}
     body = _encode(data)
@@ -119,7 +124,8 @@ def post(handler) -> None:
         return answer(handler, 403, NOT_ALLOWED)
     path = handler.path.split("?", 1)[0].split("#", 1)[0]
     kind = path[len(SAVE_PREFIX):] if path.startswith(SAVE_PREFIX) else ""
-    if handler.inbox is None or kind not in handler.inbox.kinds():
+    mail = path == MAIL_TEXT_PATH and handler.inbox is not None and handler.inbox.fetcher is not None
+    if handler.inbox is None or (not mail and kind not in handler.inbox.kinds()):
         return answer(handler, 404, {"refused": "nothing is saved at that address"})
     try:
         body = json.loads(raw.decode("utf-8"))
@@ -127,6 +133,9 @@ def post(handler) -> None:
         body = None
     if not isinstance(body, dict):
         return answer(handler, 400, {"refused": "the post is not a JSON object"})
+    if mail:      # read-only: one message's whole text, nothing written
+        status, data = handler.inbox.mail_text(body)
+        return answer(handler, status, data)
     try:
         return answer(handler, 200, handler.inbox.save(kind, raw, body))
     except board_inbox.Refused as err:

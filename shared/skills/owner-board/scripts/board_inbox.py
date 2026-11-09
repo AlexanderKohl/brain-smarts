@@ -21,7 +21,9 @@ snapshot of their account (`inbox_triage.validate_decisions`), so a stale page i
 Nothing is applied or dry-run here.
 
 The two library kinds are offered only when their skill is checked out under `/library/` (the
-mail-review and crm skills); their prefixes and schemas are read from the skill's own module.
+mail-review and crm skills); their prefixes and schemas are read from the skill's own module. The
+mail-review skill also brings `inbox_serve.py`, the full text of one message on demand
+(`mail_text`, for `POST /_mail/text`); without the skill `/_board-server.json` says `"mail": false`.
 `inbox_folders` gives `apply_events.py` the inbox folders it reads by default: this memory's, and
 when this memory is a session copy (a linked worktree), the shared checkout's, where the server
 saves.
@@ -131,6 +133,8 @@ class Inbox:
         library = Path(library) if library is not None else self.brain / "library"
         self.mail = _library(library, "mail-review", "inbox_triage", "inbox_apply.py")
         self.social = _library(library, "crm", "social_links_page", "social_links_apply.py")
+        serve = _library(library, "mail-review", "inbox_serve", "inbox_apply.py")
+        self.fetcher = serve.Fetcher(self.brain) if serve else None     # the full text of a message, on demand
 
     @classmethod
     def from_config(cls, config) -> "Inbox":
@@ -205,6 +209,13 @@ class Inbox:
         base, detail = check[kind](body, stamp_of(body))
         name = write_new(self.folder, base, raw)
         return {"saved": name, "folder": self.shown, "say": "Apply " + name + " (" + detail + ")"}
+
+    def mail_text(self, body: dict) -> tuple:
+        """`(status, answer)` for `POST /_mail/text`: one snapshot message's whole text, fetched live
+        by the mail-review skill's `inbox_serve.py` (read-only, `messages.get` only)."""
+        if self.fetcher is None:
+            return 404, {"refused": "nothing is saved at that address"}
+        return self.fetcher.text(body)
 
     def waiting(self) -> list:
         """The saved files still in the folder, oldest first: name, kind, saved time, size."""

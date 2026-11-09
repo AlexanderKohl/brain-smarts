@@ -37,6 +37,11 @@ The pages' saves (personal CRM design 04, increments 1 and 2), under the same Ho
 page's saved decisions into `/memory/inbox/` and `GET /_saved.json` lists what waits there. The
 checks every post passes are in `serve_post.py`, the saving in `board_inbox.py`.
 
+Started at log-on (increment 5) by the scheduled task `install_board_server.ps1` registers: this script
+on `--bind 127.0.0.1 --port 8765` from the shared checkout, with no console window. A second start
+while the port is taken exits 0 with "the board server already runs on port 8765", so the desktop
+app's `brain-boards` launch entry stays harmless on a machine with the task.
+
 Usage, from the brain root:
     python shared/skills/owner-board/scripts/serve_boards.py --port 8765
 """
@@ -44,6 +49,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import errno
 import http.server
 import io
 import json
@@ -68,6 +74,7 @@ STATUS_PATH = "/_boards-status.json"
 UPSTREAM = "origin/main"
 MAX_CHANGED = 20
 GIT_TIMEOUT = 5
+PORT_TAKEN = {errno.EADDRINUSE, getattr(errno, "WSAEADDRINUSE", errno.EADDRINUSE), 10048, 10013}
 
 
 class GitFailed(Exception):
@@ -225,7 +232,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return None
 
     def log_message(self, format, *args):  # quieter: one line per request on stderr, as before
-        sys.stderr.write("%s - %s\n" % (self.address_string(), format % args))
+        if sys.stderr is not None:     # a pythonw process (the log-on task) has no stderr
+            sys.stderr.write("%s - %s\n" % (self.address_string(), format % args))
+
+
+class BoardServer(http.server.ThreadingHTTPServer):
+    # On Windows SO_REUSEADDR lets a second server bind a port another one listens on, so a second
+    # start would not notice the first; elsewhere it only speeds up a restart.
+    allow_reuse_address = os.name != "nt"
 
 
 def make_handler(config: board_config.Config):
@@ -248,7 +262,13 @@ def main(argv: list[str] | None = None) -> int:
         for prefix, folder in handler.table:
             print(f"{prefix}  ->  {folder}")
         return 0
-    server = http.server.ThreadingHTTPServer((args.bind, args.port), handler)
+    try:
+        server = BoardServer((args.bind, args.port), handler)
+    except OSError as err:
+        if err.errno in PORT_TAKEN:     # the log-on task already runs it, or the launch entry did: not a failure
+            print(f"the board server already runs on port {args.port}", flush=True)
+            return 0
+        raise
     print(f"serving the boards on http://localhost:{args.port}/ ({len(handler.table)} folders)", flush=True)
     try:
         server.serve_forever()
