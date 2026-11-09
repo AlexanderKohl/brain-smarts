@@ -46,7 +46,10 @@ DAILY_AT = "07:00"
 EXECUTION_LIMIT_MINUTES = 30
 REPOSITORIES = [(".", "mechanics"), ("library", "skill library"), ("memory", "memory")]
 DIGEST_INDEX = "memory/projects/brain-development/data/learning/index.md"
-DIGEST_DUE = re.compile(r"next is due (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2})")
+# The phrase the learning index must carry before the next digest's due date; learning-maintenance's
+# SKILL.md tells the session that regenerates the index to write exactly this.
+DIGEST_DUE_PHRASE = "next is due"
+DIGEST_DUE = re.compile(re.escape(DIGEST_DUE_PHRASE) + r" (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2})")
 TASK_COUNT = re.compile(r"^(\d+) task\(s\) need attention", re.MULTILINE)
 
 
@@ -99,14 +102,28 @@ def freshness(root: Path) -> list[str]:
 
 
 def digest_due(root: Path, now: datetime) -> str | None:
+    """"due since ..." or "state unreadable (...)" when the owner should act; None when not due or
+    when there is no learning index. An index without a readable due date is never "not due": a
+    regenerated index once dropped the phrase and the reminder went silent for weeks."""
     index = root / DIGEST_INDEX
     if not index.is_file():
         return None
-    match = DIGEST_DUE.search(index.read_text(encoding="utf-8"))
-    if not match:
-        return None
-    due = datetime.fromisoformat(match.group(1))
+    unreadable = f"state unreadable (no due date found in /{DIGEST_INDEX})"
+    try:
+        match = DIGEST_DUE.search(index.read_text(encoding="utf-8"))
+        due = datetime.fromisoformat(match.group(1)) if match else None
+    except (OSError, UnicodeDecodeError, ValueError):
+        due = None
+    if due is None:
+        return unreadable
     return f"due since {match.group(1)}" if due <= now else None
+
+
+def digest_reason(digest: str | None) -> str | None:
+    """The notification's reason for the digest state digest_due returned."""
+    if not digest:
+        return None
+    return "weekly learning digest due" if digest.startswith("due since") else f"weekly learning digest: {digest}"
 
 
 def review(root: Path, now: datetime, jobs: bool = True) -> tuple[str, list[str], list[str]]:
@@ -134,8 +151,8 @@ def review(root: Path, now: datetime, jobs: bool = True) -> tuple[str, list[str]
     count = TASK_COUNT.search(tasks)
     if count and int(count.group(1)):
         reasons.append(f"{count.group(1)} task(s) need attention")
-    if digest:
-        reasons.append("weekly learning digest due")
+    if digest_reason(digest):
+        reasons.append(digest_reason(digest))
     if not preflight.startswith("PASS"):
         reasons.append("preflight not passing")
     reasons += morning_jobs.reasons(results)

@@ -45,6 +45,32 @@ class ScheduledReviewTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             self.assertIsNone(scheduled_review.digest_due(Path(folder), datetime.now().astimezone()))
 
+    def test_index_without_the_due_phrase_is_unreadable_not_silent(self):
+        # A regenerated index once wrote "overdue since" instead of the phrase, and the review said
+        # "not due" for weeks. An index that exists without a readable due date is a reason to act.
+        now = datetime.fromisoformat("2026-10-28T08:00:00+10:00")
+        for text in ("- delivered; overdue since 2026-10-04T16:41:23+10:00.",
+                     f"- delivered; the {scheduled_review.DIGEST_DUE_PHRASE} 2026-13-40T16:41:23+10:00."):
+            with tempfile.TemporaryDirectory() as folder:
+                index = Path(folder) / scheduled_review.DIGEST_INDEX
+                index.parent.mkdir(parents=True)
+                index.write_text(text, encoding="utf-8")
+                state = scheduled_review.digest_due(Path(folder), now)
+                self.assertEqual(state, f"state unreadable (no due date found in /{scheduled_review.DIGEST_INDEX})")
+                self.assertEqual(scheduled_review.digest_reason(state),
+                                 f"weekly learning digest: {state}")
+
+    def test_digest_reason_only_when_due_or_unreadable(self):
+        self.assertIsNone(scheduled_review.digest_reason(None))
+        self.assertEqual(scheduled_review.digest_reason("due since 2026-10-04T16:41:23+10:00"),
+                         "weekly learning digest due")
+
+    def test_the_reader_finds_the_phrase_the_skill_tells_the_generator_to_write(self):
+        skill = (ROOT / "shared/skills/learning-maintenance/SKILL.md").read_text(encoding="utf-8")
+        self.assertIn(f"`{scheduled_review.DIGEST_DUE_PHRASE} <timestamp>`", skill)
+        self.assertTrue(scheduled_review.DIGEST_DUE.search(
+            f"the {scheduled_review.DIGEST_DUE_PHRASE} 2026-11-14T13:47:56+10:00"))
+
     SCRIPT = Path("/brain/shared/skills/tasks/scripts/scheduled_review.py")
     PYTHON = Path("/usr/bin/python3")
     HOME = Path(tempfile.gettempdir()) / "owner-home"

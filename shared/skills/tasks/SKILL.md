@@ -18,7 +18,7 @@ metadata:
     - /shared/skills/owner-board
     - /shared/skills/repository-preflight
   created: 2026-09-23T13:10:00+10:00
-  updated: 2026-10-28T08:43:45+10:00
+  updated: 2026-11-09T11:51:57+10:00
 ---
 
 # Tasks
@@ -223,7 +223,7 @@ Each move keeps identifier and file name, adds `author`, an attributed entry and
 | `tasks.py new ...` | Procedure 1 |
 | `tasks.py done`, `do-now`, `note`, `edit`, `claim`, `release` | Procedure 4 |
 | `tasks.py migrate ...` | Procedure 7 |
-| `scheduled_review.py [--register \| --status \| --unregister] [--no-notify] [--no-jobs]` | Read-only review with no model: writes the ignored `/temp/due.md` (each repository compared with origin, the weekly learning digest when due, tasks due in every store through `tasks.py review`, skill exchange, preflight), then runs the owner's **morning jobs** (below) and reports one line per job, and shows a desktop notification when something needs attention, a failed or timed-out job included. `--register` runs it daily at 07:00 from the operating system's scheduler – Windows Task Scheduler, a launchd agent on macOS, a systemd user timer on Linux (cron without systemd) – catching up after the computer was off except under cron, always from the shared checkout named in `/memory/OWNER.md`; `--status` shows it and `--unregister` removes it. Set up per computer in `/SETUP.md` G.2. Once registered, follow-up is real under CONTRACT §14. `--no-jobs` writes the report without the jobs |
+| `scheduled_review.py [--register \| --status \| --unregister] [--no-notify] [--no-jobs]` | Read-only review with no model: writes the ignored `/temp/due.md` (each repository compared with origin, the weekly learning digest when due, or its state unreadable when the learning index has no `next is due <timestamp>` line, tasks due in every store through `tasks.py review`, skill exchange, preflight), then runs the owner's **morning jobs** (below) and reports one line per job, and shows a desktop notification when something needs attention, a failed or timed-out job included. `--register` runs it daily at 07:00 from the operating system's scheduler – Windows Task Scheduler, a launchd agent on macOS, a systemd user timer on Linux (cron without systemd) – catching up after the computer was off except under cron, always from the shared checkout named in `/memory/OWNER.md`; `--status` shows it and `--unregister` removes it. Set up per computer in `/SETUP.md` G.2. Once registered, follow-up is real under CONTRACT §14. `--no-jobs` writes the report without the jobs |
 
 Common options: `--tasks <path>` (the owner store; default `/memory/tasks`), `--json`,
 `--offline`, and on changing commands `--now` and `--no-board`. Standard library only.
