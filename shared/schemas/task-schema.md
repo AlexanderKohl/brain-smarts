@@ -86,6 +86,12 @@ still parses.
     took it (ISO 8601 with seconds and an explicit timezone, from the clock).
   - `claimed_by` and `claimed_at` are set together when the card enters `in_progress`
     (`tasks.py claim`) and cleared together when it leaves (`tasks.py release`, `done`).
+  - A claim holds the card for 6 hours from `claimed_at`. The holder renews it by claiming
+    again; after that the claim has lapsed, the boards say so, and another session may take the
+    card over.
+  - In a repository store, which several people's brains share, `claimed_by` is
+    `<author>/<session name>`, and a claim or release is committed and pushed at once so the
+    other brains see it. A memory store keeps the bare session name.
 
 ## The companion file
 
