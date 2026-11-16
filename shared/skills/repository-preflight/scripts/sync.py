@@ -162,6 +162,23 @@ def not_joined(root: Path) -> list[dict]:
             for nudge in joining.not_joined(root)]
 
 
+def held_by_others(root: Path) -> list[dict]:
+    """Cards other brains hold in the shared repositories (a claim lasts six hours), so a session
+    sees them before it picks work. The rule of what a claim is lives in the tasks skill
+    (SMART-RULE-0018); a brain without it, or without an owner profile, reports nothing."""
+    scripts = (brain_root(Path(__file__).resolve().parent) or root) / "shared" / "skills" / "tasks" / "scripts"
+    if not (scripts / "task_claims.py").is_file():
+        return []
+    if str(scripts) not in sys.path:
+        sys.path.insert(0, str(scripts))
+    try:
+        import task_claims  # noqa: E402
+        lines = task_claims.held_by_others(root)
+    except Exception:  # a notice never stops a sync
+        return []
+    return [{"name": "claim", "path": "", "state": "held elsewhere", "detail": line, "ok": True} for line in lines]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--root", type=Path, default=None, help="the brain root (default: found from here)")
@@ -185,6 +202,7 @@ def main(argv: list[str] | None = None) -> int:
         import upstream_merge  # noqa: E402 – here, as session is (SMART-RULE-0018)
         results += upstream_merge.merge_all(root)
     results += not_joined(root)
+    results += held_by_others(root)
     if args.json:
         print(json.dumps(results, indent=2))
     else:
