@@ -20,6 +20,7 @@ from vault_agent_runtime import (
     clear_state,
     ipc_address,
     prepare_runtime_dir,
+    read_state,
     restrict_to_current_user,
     singleton_lock_path,
     write_state,
@@ -27,6 +28,9 @@ from vault_agent_runtime import (
 
 
 class VaultAgent:
+    # How often a running agent checks that its state file is still there (see _keep_state).
+    STATE_CHECK_SECONDS = 5.0
+
     def __init__(self, vault_path: Path | str | None = None) -> None:
         self.vault = PortableVault(vault_path)
         self._passphrase: str | None = None
@@ -37,6 +41,7 @@ class VaultAgent:
         self._authkey = secrets.token_bytes(32)
         self._listener: Listener | None = None
         self._singleton_handle: Any = None
+        self._state_payload: dict[str, Any] | None = None
 
     def _entry_lock(self, entry: str) -> threading.Lock:
         with self._lock:
@@ -180,7 +185,9 @@ class VaultAgent:
             if os.name == "nt":
                 import msvcrt
 
-                handle.seek(0)
+                # Measure the file from its end: in append mode a write always lands there, so a
+                # start that is about to be refused must not add a byte to the holder's file.
+                handle.seek(0, os.SEEK_END)
                 if handle.tell() == 0:
                     handle.write(b"0")
                     handle.flush()
@@ -233,17 +240,17 @@ class VaultAgent:
             if sock.exists():
                 sock.unlink()
         self._listener = Listener(address, authkey=self._authkey)
-        write_state(
-            {
-                "pid": os.getpid(),
-                "address": address if isinstance(address, str) else list(address),
-                "authkey": self._authkey.hex(),
-                "token": self._auth_token,
-                "vault_path": str(self.vault.path.resolve()),
-                "protocol": AGENT_PROTOCOL_VERSION,
-            }
-        )
+        self._state_payload = {
+            "pid": os.getpid(),
+            "address": address if isinstance(address, str) else list(address),
+            "authkey": self._authkey.hex(),
+            "token": self._auth_token,
+            "vault_path": str(self.vault.path.resolve()),
+            "protocol": AGENT_PROTOCOL_VERSION,
+        }
+        write_state(self._state_payload)
         atexit.register(self.shutdown)
+        threading.Thread(target=self._keep_state, name="vault-agent-state", daemon=True).start()
         print(
             "Vault Agent listening. Unlock once with: "
             "python shared/skills/manage-credentials/scripts/vaultctl.py unlock",
@@ -265,8 +272,14 @@ class VaultAgent:
                 # Closing the listener at shutdown ends the loop; any other error is retried a
                 # bounded number of times so a broken pipe cannot spin forever.
                 failures += 1
-                if self._listener is None or failures >= 50:
+                if self._listener is None:
                     break
+                if failures >= 50:
+                    # Not a shutdown: say so, so the tray does not go on looking healthy.
+                    self.shutdown()
+                    raise CredentialError(
+                        "Vault Agent stopped listening after repeated connection errors."
+                    )
                 time.sleep(0.1)
                 continue
             failures = 0
@@ -276,6 +289,26 @@ class VaultAgent:
                 daemon=True,
             )
             thread.start()
+
+    def _keep_state(self) -> None:
+        """Write the state file again when it has gone missing while this agent still listens.
+
+        Clients find the agent through that file. If another process removes it, the agent
+        would run on unreachable until it was restarted; this puts the file back.
+        """
+        while self._listener is not None:
+            time.sleep(self.STATE_CHECK_SECONDS)
+            # Under the agent's lock, which shutdown also takes: a stopping agent never writes
+            # its state file back after it has removed it.
+            with self._lock:
+                payload = self._state_payload
+                if self._listener is None or payload is None:
+                    return
+                try:
+                    if read_state() != payload:
+                        write_state(payload)
+                except OSError:
+                    continue
 
     def _serve_connection(self, connection: Any) -> None:
         try:
@@ -301,9 +334,15 @@ class VaultAgent:
     def shutdown(self) -> None:
         with self._lock:
             self._passphrase = None
-        clear_state()
-        listener = self._listener
-        self._listener = None
+            listener = self._listener
+            self._listener = None
+            self._state_payload = None
+        # Only this agent's own state file: never the file of another, running agent.
+        clear_state(only_pid=os.getpid())
+        try:
+            atexit.unregister(self.shutdown)
+        except Exception:  # noqa: BLE001
+            pass
         if listener is not None:
             try:
                 listener.close()

@@ -1,5 +1,6 @@
 """The Vault Agent survives a client with the wrong key, and the client never connects with the key of
 an agent that has ended. Runs on its own pipe and runtime folder, never the owner's running agent."""
+import os
 import secrets
 import shutil
 import subprocess
@@ -73,6 +74,39 @@ class AgentConnectionsTest(unittest.TestCase):
             with self.assertRaises(vault_broker_client.BrokerUnavailable) as caught:
                 vault_broker_client.broker_request("status")
         self.assertIn("has ended", str(caught.exception))
+
+    def test_an_agent_that_stops_leaves_another_agents_state_file(self):
+        # The fault of 16 November 2026: a test agent's shutdown at interpreter exit removed the
+        # state file of the owner's running tray, which then could not be reached until restarted.
+        agent, _thread = self.start_agent()
+        other = {"pid": os.getpid() + 1, "address": self.address, "authkey": "00" * 32,
+                 "token": "0" * 64, "vault_path": "fictional.vault", "protocol": 1}
+        vault_agent_runtime.write_state(other)
+        agent.shutdown()
+        self.assertEqual(vault_agent_runtime.read_state(), other)
+
+    def test_a_stopped_agent_leaves_nothing_to_run_at_exit(self):
+        agent, _thread = self.start_agent()
+        with mock.patch.object(vault_agent.atexit, "unregister") as unregister:
+            agent.shutdown()
+        unregister.assert_called_once_with(agent.shutdown)
+
+    def test_a_running_agent_puts_back_a_state_file_that_went_missing(self):
+        with mock.patch.object(vault_agent.VaultAgent, "STATE_CHECK_SECONDS", 0.1):
+            self.start_agent()
+            state = self.folder / "agent-state.json"
+            state.unlink()
+            deadline = time.time() + 5
+            while time.time() < deadline and not state.is_file():
+                time.sleep(0.05)
+        self.assertTrue(state.is_file(), "the agent did not write its state file again")
+        self.assertIs(vault_broker_client.broker_request("status")["unlocked"], False)
+
+    def test_a_second_start_leaves_a_running_agents_state_file(self):
+        self.start_agent()
+        with mock.patch.object(vault_agent_runtime.Path, "read_text", side_effect=PermissionError("locked")):
+            vault_agent_runtime.prepare_runtime_dir()
+        self.assertTrue((self.folder / "agent-state.json").is_file())
 
 
 if __name__ == "__main__":

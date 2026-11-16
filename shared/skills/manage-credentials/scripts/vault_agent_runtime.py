@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -68,26 +69,22 @@ def _pid_is_running(pid: int) -> bool:
 
 
 def prepare_runtime_dir() -> None:
-    """Clear stale state/tmp files and a singleton left by a dead process."""
+    """Tighten the runtime folder and remove temporary files a dead agent left.
+
+    It never removes the state file or the singleton lock. A state file left by an agent that
+    has ended is harmless: clients refuse it because its process is gone, and the next agent
+    overwrites it. Removing it here once let a second start, or a test, take away the state
+    file of an agent that was running or just starting.
+    """
     directory = runtime_dir()
-    for path in directory.glob("agent-state*.tmp"):
+    restrict_to_current_user(directory)
+    cutoff = time.time() - 60
+    for leftover in directory.glob("agent-state*.tmp"):
         try:
-            path.unlink()
+            if leftover.stat().st_mtime < cutoff:
+                leftover.unlink()
         except OSError:
             pass
-    lock_path = singleton_lock_path()
-    if lock_path.exists():
-        try:
-            raw = lock_path.read_text(encoding="ascii").strip()
-            pid = int(raw) if raw.isdigit() else 0
-        except (OSError, ValueError):
-            pid = 0
-        if not _pid_is_running(pid):
-            try:
-                lock_path.unlink()
-            except OSError:
-                pass
-            clear_state()
 
 
 def icacls_arguments(path: Path, user: str, is_dir: bool) -> list[str]:
@@ -109,9 +106,7 @@ def restrict_to_current_user(path: Path) -> None:
         return
     if os.name != "nt":
         try:
-            os.chmod(path, 0o600)
-            if path.is_dir():
-                os.chmod(path, 0o700)
+            os.chmod(path, 0o700 if path.is_dir() else 0o600)
         except OSError:
             pass
         return
@@ -145,6 +140,9 @@ def write_state(payload: dict[str, Any]) -> None:
             stream.write("\n")
             stream.flush()
             os.fsync(stream.fileno())
+        # Tighten the file before it takes the published name, so the keys in it are never
+        # readable under the folder's earlier access list.
+        restrict_to_current_user(temporary)
         os.replace(temporary, path)
     finally:
         if temporary.exists():
@@ -161,13 +159,23 @@ def read_state() -> dict[str, Any] | None:
         return None
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except (OSError, ValueError):
+        # Unreadable, not UTF-8 or not JSON: the same as no state file.
         return None
     return payload if isinstance(payload, dict) else None
 
 
-def clear_state() -> None:
+def clear_state(only_pid: int | None = None) -> None:
+    """Remove the state file; with `only_pid`, only when it names that process.
+
+    An agent that stops passes its own process id, so it can never remove the state file of
+    another, running agent.
+    """
     path = state_path()
+    if only_pid is not None:
+        state = read_state()
+        if state is not None and state.get("pid") != only_pid:
+            return
     try:
         if path.exists():
             path.unlink()
