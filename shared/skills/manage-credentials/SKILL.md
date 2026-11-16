@@ -11,7 +11,7 @@ metadata:
   scope: shared
   project_ref: /memory/projects/credential-management
   created: 2026-08-04T16:11:53+10:00
-  updated: 2026-11-16T22:40:02+10:00
+  updated: 2026-11-17T05:01:44+10:00
 ---
 
 # Credential Management
@@ -62,7 +62,10 @@ The rules every use of this skill follows (moved here from an owner's node rules
 
 - Request only required scopes.
 - Replace the stored token bundle immediately after a successful refresh.
-- Allow only one active refresh writer for a credential set across all devices.
+- Allow only one active refresh writer for a credential set across all devices, unless the
+  entry is listed in the token relay's configuration. Brains that share a relayed entry refresh
+  only while holding the relay's lease, take the newest token from the relay before refreshing,
+  and write the new token back at once.
 - Pass tenant or organisation context explicitly; do not infer it from an unrelated process.
 - Reauthorise when refresh credentials expire, are revoked or cannot be reconciled safely.
 
@@ -70,8 +73,16 @@ The rules every use of this skill follows (moved here from an owner's node rules
 
 - Copy or synchronise the encrypted vault only while it is closed.
 - Keep a verified offline backup of the encrypted vault and keep its passphrase separately.
-- Do not commit the vault, merge divergent copies, or assume file synchronisation provides locking.
-- Use one active writer for each rotating OAuth credential set across devices.
+- Do not commit the vault, merge divergent copies, or assume file synchronisation provides
+  locking. The token relay's record is not the vault: it is one rotating token bundle, encrypted
+  with the relay key, and may be committed only to the private store named in the relay's
+  configuration.
+- Use one active writer for each rotating OAuth credential set across devices, or the token
+  relay for an entry several brains share.
+- The relay store holds ciphertext only. The relay key and the provider's client secret live in
+  each brain's vault and reach another person only through a password manager, never through
+  chat, e-mail or a repository. When the relay cannot be reached and the local token is about
+  to expire, a brain refuses to refresh.
 - Do not enable unattended vault unlock after reboot without a separately accepted runtime design (for example a future TPM/device-bound key slot). Per-login interactive unlock into the Vault Agent is the approved workstation model.
 - Do not substitute a plaintext `.env` passphrase for interactive unlock.
 - Before prompting for the recovery passphrase, check whether the Vault Agent is already unlocked for this Windows login. If it is unlocked, reuse it for further credential operations; do not prompt again and do not start a second agent instance.
