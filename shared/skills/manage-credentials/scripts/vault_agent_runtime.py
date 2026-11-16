@@ -90,6 +90,18 @@ def prepare_runtime_dir() -> None:
             clear_state()
 
 
+def icacls_arguments(path: Path, user: str, is_dir: bool) -> list[str]:
+    """The icacls command that leaves only `user` and SYSTEM with access to `path`.
+
+    On a folder the grants carry `(OI)(CI)`, so files and folders created in it afterwards – the
+    vault's `.lock` file, a README – inherit the same two grants. Without them, `/inheritance:r`
+    leaves every later child with an empty access list that nobody, not even the user, can open.
+    """
+    rights = "(OI)(CI)(F)" if is_dir else "(F)"
+    return ["icacls", str(path), "/inheritance:r",
+            "/grant:r", f"{user}:{rights}", "/grant:r", f"SYSTEM:{rights}"]
+
+
 def restrict_to_current_user(path: Path) -> None:
     """Best-effort ACL tightening so only the current user (and SYSTEM on Windows) can read."""
     path = Path(path)
@@ -108,15 +120,7 @@ def restrict_to_current_user(path: Path) -> None:
         return
     try:
         subprocess.run(
-            [
-                "icacls",
-                str(path),
-                "/inheritance:r",
-                "/grant:r",
-                f"{user}:(F)",
-                "/grant:r",
-                "SYSTEM:(F)",
-            ],
+            icacls_arguments(path, user, path.is_dir()),
             check=False,
             capture_output=True,
             text=True,
