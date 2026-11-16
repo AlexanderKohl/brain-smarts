@@ -98,6 +98,14 @@ def _shared(store, offline: bool) -> bool:
     return store.kind == "repository" and not offline
 
 
+def _settle_first(store, offline: bool) -> list[str]:
+    """Refuse a shared change the checkout is not ready for, before the card is read; an earlier
+    change of this tool's that was never confirmed is published first (task_claim_sync.ready)."""
+    if not _shared(store, offline):
+        return []
+    return task_claim_sync.ready(store, lambda: task_state.write(store))
+
+
 def _publish(root: Path, store, task: Task, target: Path, subject: str, offline: bool, holder: str | None) -> list[str]:
     """Send the change to origin, or undo it and raise (task_claim_sync). `holder` is who the
     card must still name once origin is merged in: the claimant, or nobody after a release."""
@@ -175,6 +183,9 @@ def claim(store: Path, tid: str, by: str, team: str | None = None, note: str | N
     if task.folder == "completed":
         raise ValueError(f"{tid} is already {task.get('status') or 'completed'}")
     home = task.store or task_stores.owner_store(root)
+    settled = _settle_first(home, offline)
+    if settled:      # an earlier unconfirmed change was just published: read the card again
+        root, task = locate(store, tid)
     author = brain_author(root)
     bare, by = by, holder_name(home, author, by)
     at, _ = stamp(root, now)
@@ -192,10 +203,8 @@ def claim(store: Path, tid: str, by: str, team: str | None = None, note: str | N
         fields["team"] = check_team(team)
     label = fields.get("team") or task.get("team")
     what = f"claimed by {by}" + (f" for team {label}" if label else "") + took + " (in_progress)"
-    if _shared(home, offline):
-        task_claim_sync.ready(home)
     target, said = change(root, task, fields, what, note=note, folder="open", now=at, offline=offline)
-    said += _publish(root, home, task, target, f"Claim {tid} by {by}", offline, by)
+    said = settled + said + _publish(root, home, task, target, f"Claim {tid} by {by}", offline, by)
     return target, [f"claimed {tid} by {by}: {target}"] + said
 
 
@@ -208,17 +217,18 @@ def release(store: Path, tid: str, note: str | None = None, now: str | None = No
     root, task = locate(store, tid)
     if task.folder == "completed":
         raise ValueError(f"{tid} is already {task.get('status') or 'completed'}")
-    holder = task.get("claimed_by")
     home = task.store or task_stores.owner_store(root)
+    settled = _settle_first(home, offline)
+    if settled:
+        root, task = locate(store, tid)
+    holder = task.get("claimed_by")
     at, _ = stamp(root, now)
     if holder and home.kind == "repository" and not own(task, brain_author(root)) and not lapsed(task, at):
         end = lapses_at(task)
         raise ValueError(f"{tid} is held by {holder}, and only its holder releases a live claim"
                          + (f"; it lapses at {end.isoformat(timespec='minutes')}" if end else ""))
-    if _shared(home, offline):
-        task_claim_sync.ready(home)
     fields: dict[str, str | None] = {"status": "ready", "claimed_by": None, "claimed_at": None}
     what = ("released by " + holder if holder else "released, no session held it") + " (ready)"
     target, said = change(root, task, fields, what, note=note, folder="open", now=at, offline=offline)
-    said += _publish(root, home, task, target, f"Release {tid}", offline, None)
+    said = settled + said + _publish(root, home, task, target, f"Release {tid}", offline, None)
     return target, [f"released {tid}: {target}"] + said

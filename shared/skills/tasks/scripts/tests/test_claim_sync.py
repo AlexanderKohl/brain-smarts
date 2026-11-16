@@ -409,6 +409,39 @@ class Shared(unittest.TestCase):
         git(self.clone, "push", "-q", "origin", "HEAD:main")            # the person finishes it
         self.assertIn("claimed_by: sam/green", self.on_origin())
 
+    def test_an_unconfirmed_claim_is_finished_by_the_next_claim_even_after_origin_moved(self) -> None:
+        url = git(self.clone, "remote", "get-url", "origin").strip()
+        self.between(lambda: git(self.clone, "remote", "set-url", "origin", str(self.brain.tmp / "nowhere.git")))
+        code, out = self.claim()
+        self.assertEqual(code, 1, out)
+        self.assertIn("could not be read back", out)
+        task_claim_sync.publish = self.real_publish
+        git(self.clone, "remote", "set-url", "origin", url)
+        self.bo_claims(self.other_brain(), rel=f"open/{TID2}-paint.md")     # origin moves on meanwhile
+        code, out = self.claim(tid=TID3, now=SOON)
+        self.assertEqual(code, 0, out)
+        self.assertIn("an earlier change that could not be confirmed is now published", out)
+        self.assertIn("claimed_by: sam/green", self.on_origin())
+        self.assertIn("claimed_by: bo/blue", self.on_origin(f"open/{TID2}-paint.md"))
+        self.assertIn("claimed_by: sam/green", self.on_origin(f"open/{TID3}-idea.md"))
+        self.assertNotIn("<<<<<<<", self.on_origin("STATE.md"))
+        self.assertEqual(git(self.clone, "status", "--porcelain"), "")
+        self.assertEqual(git(self.clone, "diff", "origin/main", "HEAD"), "")
+
+    def test_an_unconfirmed_claim_another_brain_then_took_stops_with_instructions_and_no_half_merge(self) -> None:
+        url = git(self.clone, "remote", "get-url", "origin").strip()
+        self.between(lambda: git(self.clone, "remote", "set-url", "origin", str(self.brain.tmp / "nowhere.git")))
+        self.claim()
+        task_claim_sync.publish = self.real_publish
+        git(self.clone, "remote", "set-url", "origin", url)
+        self.bo_claims(self.other_brain())                                  # the same card
+        code, out = self.claim(tid=TID3, now=SOON)
+        self.assertEqual(code, 1, out)
+        self.assertIn("another brain has changed the same card since", out)
+        self.assertIn("pull --no-rebase origin main", out)
+        self.assertEqual(git(self.clone, "status", "--porcelain"), "")      # the merge was abandoned
+        self.assertTrue((self.tasks / f"inbox/{TID3}-idea.md").is_file())   # the new claim was not written
+
     def test_a_withdrawal_after_a_merge_restores_what_was_merged_not_a_newer_origin(self) -> None:
         other = self.other_brain()
         hook = self.origin / "hooks/pre-receive"

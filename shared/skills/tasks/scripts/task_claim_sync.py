@@ -32,6 +32,11 @@ committed, and origin is not merged over them.
       merge conflicts in the card        merge abandoned, claim withdrawn; ClaimLost
       merge leaves the card another's    claim withdrawn; ClaimLost
 
+An unconfirmed change is finished by the next claim or release: `ready` sees that every
+unpushed commit here is this tool's own (its `Tool: tasks.py` trailer), fetches, merges origin
+when it has moved (STATE.md generated again when only it conflicts) and pushes, before the new
+change is written. Unpushed commits of anyone else's are never pushed: they refuse the claim.
+
 History is never rewritten and nothing is forced. A withdrawal is its own commit of exactly
 the claim's paths, set back to what they were before the claim (or, once origin has been merged
 in, to what origin holds) with STATE.md generated again; it never reverts a commit, so a
@@ -100,8 +105,57 @@ def _count(checkout: Path, span: str) -> int:
     return int(done.stdout.strip() or 0) if done.returncode == 0 else 0
 
 
-def ready(store) -> None:
-    """Raise ClaimNotMade unless a claim made now would be the only thing committed and pushed."""
+def _only_ours(checkout: Path, branch: str) -> bool:
+    """True when every commit origin lacks was made by this tool (a claim, a withdrawal, a merge)."""
+    done = _git(checkout, "log", f"origin/{branch}..HEAD", "--format=%(trailers:key=Tool,valueonly,separator=%x2C)|")
+    tools = [part.strip() for part in (done.stdout or "").replace("\n", "").split("|")[:-1]]
+    return done.returncode == 0 and bool(tools) and all(tool == "tasks.py" for tool in tools)
+
+
+def _settle(store, rebuild: Callable[[], object] | None) -> list[str]:
+    """Publish this tool's own unpushed commits (an earlier change that could not be confirmed)
+    before a new change is written. Raises ClaimNotMade, saying what to do, when it cannot."""
+    checkout, branch = store.checkout, store.branch
+    fix = f"git -C {checkout.as_posix()}"
+    state = str(store.path / "STATE.md")
+    if _git(checkout, "fetch", "origin", branch).returncode != 0:
+        raise ClaimNotMade(f"{store.label}: an earlier claim or release here was never confirmed, and origin still "
+                           "cannot be reached; try again when it can")
+    if _count(checkout, f"HEAD..origin/{branch}"):
+        if _git(checkout, "diff", "--quiet").returncode != 0:
+            raise ClaimNotMade(f"{store.label}: an earlier claim or release here was never confirmed and origin has "
+                               f"moved, and it is not merged over uncommitted edits: commit or stash them, then try again")
+        message = _message(checkout, f"Merge origin/{branch} after an unconfirmed change")
+        if _git(checkout, "merge", "--no-edit", "-m", message, f"origin/{branch}").returncode != 0:
+            stuck = [line.strip().strip('"') for line in
+                     _git(checkout, "diff", "--name-only", "--diff-filter=U").stdout.splitlines() if line.strip()]
+            only_state = bool(stuck) and all((checkout / name).resolve() == Path(state).resolve() for name in stuck)
+            if not (only_state and rebuild is not None):
+                _git(checkout, "merge", "--abort")
+                raise ClaimNotMade(f"{store.label}: an earlier claim or release here was never confirmed, and another "
+                                   f"brain has changed the same card since. Run `{fix} pull --no-rebase origin {branch}`, "
+                                   "keep origin's version of the card, commit, then try again")
+            rebuild()
+            _git(checkout, "add", "--", state)
+            if _git(checkout, "commit", "--quiet", "-m", message).returncode != 0:
+                _git(checkout, "merge", "--abort")
+                raise ClaimNotMade(f"{store.label}: an earlier unconfirmed change could not be merged with origin; "
+                                   f"run `{fix} pull --no-rebase origin {branch}` and resolve it, then try again")
+        if rebuild is not None and rebuild():
+            _git(checkout, "add", "--", state)
+            _git(checkout, "commit", "--quiet", "-m", _message(checkout, "STATE.md after an unconfirmed change"), "--", state)
+    if not _count(checkout, f"origin/{branch}..HEAD"):
+        return []
+    pushed = _git(checkout, "push", "origin", f"HEAD:{branch}", timeout=PUSH_TIMEOUT_S)
+    if pushed.returncode != 0:
+        raise ClaimNotMade(f"{store.label}: an earlier claim or release here is still unpublished and the push was "
+                           f"refused ({_last(pushed)}); run `{fix} push origin HEAD:{branch}` and read its answer")
+    return [f"{store.label}: an earlier change that could not be confirmed is now published"]
+
+
+def ready(store, rebuild: Callable[[], object] | None = None) -> list[str]:
+    """Raise ClaimNotMade unless a claim made now would be the only thing committed and pushed.
+    This tool's own unpushed commits are published first (`_settle`); returns notes to show."""
     checkout, branch = store.checkout, store.branch
     fix = f"git -C {checkout.as_posix()}"
     if _git(checkout, "diff", "--cached", "--quiet").returncode != 0:
@@ -112,10 +166,15 @@ def ready(store) -> None:
         raise ClaimNotMade(f"{store.label}: task files here have uncommitted edits, and a claim would publish them. "
                            f"Commit or discard them first (`{fix} status`)")
     waiting = _count(checkout, f"origin/{branch}..HEAD")
-    if waiting and _git(checkout, "diff", "--quiet", f"origin/{branch}", "HEAD").returncode != 0:
+    if not waiting:
+        return []
+    if _only_ours(checkout, branch):
+        return _settle(store, rebuild)
+    if _git(checkout, "diff", "--quiet", f"origin/{branch}", "HEAD").returncode != 0:
         raise ClaimNotMade(f"{store.label}: this checkout has {waiting} unpushed commit(s) of its own, and a claim "
                            f"never pushes other work. Push them first (`{fix} push`), or pass --offline for a claim "
                            "only this computer sees")
+    return []
 
 
 def _put_back(checkout: Path, names: list[str]) -> None:
@@ -177,8 +236,9 @@ def _unconfirmed(store, checkout: Path, branch: str, why: str) -> ClaimUnconfirm
     fix = f"git -C {checkout.as_posix()}"
     return ClaimUnconfirmed(f"{store.label}: the push failed ({why}) and origin could not be read back, so the "
                             "commit was left in place: the server may or may not hold it. When origin is reachable "
-                            f"run `{fix} fetch origin {branch}` and `{fix} push origin HEAD:{branch}`; the change "
-                            "counts once that push succeeds")
+                            "claim or release again and it is finished first; or by hand, "
+                            f"`{fix} pull --no-rebase origin {branch}` then `{fix} push origin HEAD:{branch}`. The "
+                            "change counts once that push succeeds")
 
 
 def publish(store, paths: list[Path], subject: str, rebuild: Callable[[], object] | None = None,
