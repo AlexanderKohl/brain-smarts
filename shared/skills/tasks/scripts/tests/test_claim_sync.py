@@ -239,6 +239,11 @@ class Shared(unittest.TestCase):
         self.assertTrue((self.tasks / f"inbox/{TID3}-idea.md").is_file())
         self.assertFalse((self.tasks / f"open/{TID3}-idea.md").exists())
         self.assertEqual(git(self.clone, "status", "--porcelain"), "")
+        log = self.log()
+        self.assertEqual(log[0], f"Withdraw: Claim {TID3} by sam/green")
+        self.assertEqual(log[1], f"Claim {TID3} by sam/green")
+        git(self.clone, "pull", "-q", "--no-rebase")
+        self.assertEqual(self.meta(self.tasks / f"open/{TID3}-idea.md")["claimed_by"], "bo/blue")
 
     def test_two_brains_claiming_different_cards_at_once_both_keep_their_claim(self) -> None:
         other = self.other_brain()
@@ -322,6 +327,9 @@ class Shared(unittest.TestCase):
         self.assertEqual(self.meta(self.tasks / f"open/{TID2}-paint.md")["claimed_by"], "bo/blue")
         self.assertEqual(git(self.clone, "status", "--porcelain"), "")
         self.assertEqual(git(self.clone, "diff", "origin/main", "HEAD"), "")
+        log = self.log()                            # undone by a commit on top, never by a reset
+        self.assertEqual(log[0], f"Withdraw: Claim {TID} by sam/green")
+        self.assertIn(f"Claim {TID} by sam/green", log[1:4])
         hook.unlink()
         task_claim_sync.publish = self.real_publish
         code, out = self.claim("green", SOON)      # nothing is left that blocks the next claim
@@ -384,7 +392,51 @@ class Shared(unittest.TestCase):
         code, out = self.claim()
         self.assertEqual(code, 0, out)
         self.assertIn("claimed_by: sam/green", self.on_origin())
+        self.assertEqual(self.meta()["claimed_by"], "sam/green")
         self.assertEqual(git(self.clone, "status", "--porcelain"), "")
+
+    def test_a_failed_push_that_cannot_be_read_back_undoes_nothing_and_says_how_to_finish(self) -> None:
+        url = git(self.clone, "remote", "get-url", "origin").strip()
+        self.between(lambda: git(self.clone, "remote", "set-url", "origin", str(self.brain.tmp / "nowhere.git")))
+        code, out = self.claim()
+        self.assertEqual(code, 1, out)
+        self.assertIn("could not be read back", out)
+        self.assertIn("push origin HEAD:main", out)
+        self.assertNotIn("withdrawn", out)
+        self.assertEqual(self.meta()["claimed_by"], "sam/green")       # nothing undone
+        self.assertEqual(self.log()[0], f"Claim {TID} by sam/green")
+        git(self.clone, "remote", "set-url", "origin", url)
+        git(self.clone, "push", "-q", "origin", "HEAD:main")            # the person finishes it
+        self.assertIn("claimed_by: sam/green", self.on_origin())
+
+    def test_a_withdrawal_after_a_merge_restores_what_was_merged_not_a_newer_origin(self) -> None:
+        other = self.other_brain()
+        hook = self.origin / "hooks/pre-receive"
+        real = task_claim_sync._git
+
+        def bo_moves_on_before_the_second_push(checkout, *args, **kwargs):
+            if args[0] == "push" and git(self.clone, "log", "-1", "--format=%s").startswith("Merge origin/main"):
+                task_claim_sync._git = real
+                paint = other / f"brain/tasks/open/{TID2}-paint.md"
+                paint.write_text(paint.read_text(encoding="utf-8") + "- a later note by bo\n", encoding="utf-8")
+                git(other, "commit", "-q", "-am", "bo adds a note")
+                git(other, "push", "-q")
+                hook.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8", newline="\n")
+                os.chmod(hook, 0o755)
+            return real(checkout, *args, **kwargs)
+
+        self.between(lambda: self.bo_claims(other, rel=f"open/{TID2}-paint.md"))
+        task_claim_sync._git = bo_moves_on_before_the_second_push
+        self.addCleanup(setattr, task_claim_sync, "_git", real)
+        code, out = self.claim()
+        self.assertEqual(code, 1, out)
+        self.assertIn("it was withdrawn here", out)
+        self.assertNotIn("claimed_by", self.meta())
+        self.assertNotIn("a later note by bo", (self.tasks / f"open/{TID2}-paint.md").read_text(encoding="utf-8"))
+        hook.unlink()
+        git(self.clone, "pull", "-q", "--no-rebase")                    # the newer origin then arrives cleanly
+        self.assertEqual(git(self.clone, "status", "--porcelain"), "")
+        self.assertIn("a later note by bo", (self.tasks / f"open/{TID2}-paint.md").read_text(encoding="utf-8"))
 
     def test_a_change_that_cannot_be_staged_fails_the_command_and_changes_nothing(self) -> None:
         real = task_claim_sync._git

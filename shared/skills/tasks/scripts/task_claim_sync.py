@@ -20,8 +20,11 @@ committed, and origin is not merged over them.
     push accepted                     done
     push reported failed, yet origin
       holds the commit                done
-    push refused, origin unreachable
-      or not ahead (hook, protection) the claim is withdrawn by a second commit; ClaimNotMade
+    push failed and origin cannot
+      be read back                    nothing is undone: the server may hold the commit. The
+                                      commit stays, and ClaimUnconfirmed says to fetch and push
+    push refused, origin not ahead
+      (a hook, a protected branch)    the claim is withdrawn by a second commit; ClaimNotMade
     push refused, origin moved,
       uncommitted edits elsewhere     withdrawn; ClaimNotMade says to pull first
     push refused, origin moved        origin is merged (never rebased) and the push tried again
@@ -50,6 +53,11 @@ PUSH_TIMEOUT_S = 600
 
 class ClaimNotMade(ValueError):
     """The change could not be published, and was undone in this checkout."""
+
+
+class ClaimUnconfirmed(ClaimNotMade):
+    """The push failed and origin could not be read back, so nobody knows whether the server
+    holds the commit. Nothing was undone: withdrawing here could contradict the server."""
 
 
 class ClaimLost(ClaimNotMade):
@@ -165,6 +173,14 @@ class _Change:
         return kind(f"{self.store.label}: {why}; {tail}")
 
 
+def _unconfirmed(store, checkout: Path, branch: str, why: str) -> ClaimUnconfirmed:
+    fix = f"git -C {checkout.as_posix()}"
+    return ClaimUnconfirmed(f"{store.label}: the push failed ({why}) and origin could not be read back, so the "
+                            "commit was left in place: the server may or may not hold it. When origin is reachable "
+                            f"run `{fix} fetch origin {branch}` and `{fix} push origin HEAD:{branch}`; the change "
+                            "counts once that push succeeds")
+
+
 def publish(store, paths: list[Path], subject: str, rebuild: Callable[[], object] | None = None,
             still_ours: Callable[[], bool] | None = None) -> list[str]:
     """Commit `paths` in the store's checkout and push its branch; returns notes to show.
@@ -190,7 +206,7 @@ def publish(store, paths: list[Path], subject: str, rebuild: Callable[[], object
     if pushed.returncode == 0:
         return [f"{store.label}: committed and pushed to origin/{branch}"]
     if _git(checkout, "fetch", "origin", branch).returncode != 0:
-        raise made.fail(ClaimNotMade, f"origin could not be reached ({_last(pushed)})")
+        raise _unconfirmed(store, checkout, branch, _last(pushed))
     if _git(checkout, "merge-base", "--is-ancestor", claim, f"origin/{branch}").returncode == 0:
         return [f"{store.label}: committed and pushed to origin/{branch} (the push reported a failure, but origin holds it)"]
     if not _count(checkout, f"HEAD..origin/{branch}"):
@@ -212,7 +228,9 @@ def publish(store, paths: list[Path], subject: str, rebuild: Callable[[], object
         done = _git(checkout, "commit", "--quiet", "-m", merge_message)
         if done.returncode != 0:
             raise made.fail(ClaimNotMade, f"the merge could not be completed ({_last(done)})")
-    made.base = f"origin/{branch}"      # origin is merged in: a withdrawal now returns the card to what origin holds
+    # Origin is merged in: a withdrawal now returns the card to what that merged commit holds,
+    # by its hash, so a later fetch cannot move what is restored.
+    made.base = _git(checkout, "rev-parse", f"origin/{branch}").stdout.strip() or f"origin/{branch}"
     if still_ours is not None and not still_ours():
         raise made.fail(ClaimLost, "another brain changed this card first")
     if rebuild is not None and rebuild():
@@ -224,7 +242,8 @@ def publish(store, paths: list[Path], subject: str, rebuild: Callable[[], object
     again = _git(checkout, "push", "origin", f"HEAD:{branch}", timeout=PUSH_TIMEOUT_S)
     if again.returncode == 0:
         return [f"{store.label}: committed, merged origin/{branch} and pushed"]
-    if _git(checkout, "fetch", "origin", branch).returncode == 0 and \
-            _git(checkout, "merge-base", "--is-ancestor", claim, f"origin/{branch}").returncode == 0:
+    if _git(checkout, "fetch", "origin", branch).returncode != 0:
+        raise _unconfirmed(store, checkout, branch, _last(again))
+    if _git(checkout, "merge-base", "--is-ancestor", claim, f"origin/{branch}").returncode == 0:
         return [f"{store.label}: committed, merged origin/{branch} and pushed (the push reported a failure, but origin holds it)"]
     raise made.fail(ClaimNotMade, f"the push was refused after merging ({_last(again)})")
