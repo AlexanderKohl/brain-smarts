@@ -36,6 +36,7 @@
       "Read(**/.env)",
       "Read(**/.env.*)",
       "Read(~/.cache/PortableAIBrain/**)",
+      "Read(~/.portable-ai-brain/**)",
       "Read(~/AppData/Local/PortableAIBrain/**)"
     ],
     "ask": [
