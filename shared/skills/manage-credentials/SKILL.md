@@ -11,7 +11,7 @@ metadata:
   scope: shared
   project_ref: /memory/projects/credential-management
   created: 2026-08-04T16:11:53+10:00
-  updated: 2026-10-19T10:35:34+10:00
+  updated: 2026-11-16T22:40:02+10:00
 ---
 
 # Credential Management
@@ -177,6 +177,16 @@ like any other process. Still, never start the tray or `vault_agent.py serve` fr
 from your own terminal or the login shortcut. The client refuses a state file whose process has ended
 rather than connect with a dead agent's key, and the agent survives a client with a wrong key.
 
+The state file belongs to the running agent. An agent that stops removes it only when it names
+its own process; a running agent writes it back within a few seconds if it goes missing; and a
+second tray started by mistake leaves it alone. Until 16 November 2026 the skill's own test run
+could remove a running tray's state file, which left the tray looking unlocked while no script
+could reach it.
+
+`vaultctl.py get-access-token` returns the access token stored on this computer and never
+refreshes or syncs. For an entry shared through the token relay, use the provider's client, which
+takes the newest shared token first.
+
 Use this recovery sequence:
 
 1. Keep using the existing tray agent and do not ask for the passphrase again.
@@ -254,6 +264,87 @@ with store.rotation_lock():
 ```
 
 Library consumers do not prompt. They require an unlocked Vault Agent (or an emergency in-process passphrase that must not be placed in child environments). `rotation_lock()` protects the complete local read-refresh-write sequence.
+
+## Share a rotating sign-in between brains (token relay)
+
+Some providers issue a new refresh token at every refresh and retire the old one. When several
+people's brains use the same sign-in, the token relay lets each of them refresh without one
+computer being the refresher for all. It is off until an owner sets it up, and it is governed by
+the *Credential policy* above: without a relay, one writer per sign-in.
+
+**What it is.** One private store all the sharing brains can reach – a private GitHub repository,
+read and written through the `gh` command line each brain is already signed in to – holding one
+file per shared vault entry. The file carries the current token bundle, encrypted with the relay
+key (AES-256-GCM), a version number and a lease. The store never holds the relay key or the
+provider's client secret, so the file is useless to anyone who takes it.
+
+**How a refresh goes.** A brain whose token is about to expire reads the file. If another brain
+has already refreshed, it adopts that token and is done. Otherwise it writes a lease into the
+file; the store refuses the write when someone else wrote first, so one brain holds it. It
+refreshes with the provider, saves the new token in its own vault, writes it to the file and
+clears the lease. Only a lease holder changes the tokens in the file; any other save changes
+other data only.
+
+**It refuses instead of guessing.** A listed entry is not refreshed when the store cannot be
+reached, the file is missing, the file is older than this computer's copy, the file does not
+decrypt, or the relay key is absent. A token saved locally whose write-back failed is pushed at
+the next use; if another brain has moved on meanwhile, the shared token wins and a warning says
+so.
+
+**Limits.** Everyone sharing an entry holds the client secret and a working token, so the relay
+suits trusted partners and cannot make anyone read-only. A brain that crashes while holding the
+lease blocks the others for the length of the lease (`lease_seconds`, 300 unless set, 120 to
+900). Only the field `oauth_token_json` is relayed. A client must pass its token keys to the
+store and skip the provider when the token is already fresh; the Xero and HighLevel clients in
+the skill library do.
+
+### Set it up (the owner, once)
+
+1. Create a private repository for the relay and invite each person who shares the sign-in.
+2. Beside the vault file, write `token-relay.json`:
+
+   ```json
+   {"backend": "github", "repository": "<owner>/<name>", "entries": ["<vault entry>"], "lease_seconds": 300}
+   ```
+
+3. With the Vault Agent unlocked, in your own terminal:
+
+   ```powershell
+   python shared/skills/manage-credentials/scripts/token_relay.py key-new
+   python shared/skills/manage-credentials/scripts/token_relay.py seed --entry <vault entry>
+   python shared/skills/manage-credentials/scripts/token_relay.py status
+   ```
+
+   `seed` pushes this computer's token as version 1 and refuses when a file already exists.
+   `seed --replace` overwrites the shared file with this computer's token at a higher version;
+   use it after replacing the relay key, or when the file is damaged. An entry listed before
+   its first sign-in signs in locally with a warning; run `seed` straight after.
+4. `key-export` prints the relay key to a terminal only. Put it and the provider's client id and
+   secret in a password manager entry shared with the other person; never in chat, e-mail or a
+   repository.
+
+### Join it (each other person, once)
+
+1. Accept the invitation to the relay repository and check `gh auth status`.
+2. Write the same `token-relay.json` beside your vault file.
+3. Store the client id and secret in the vault entry as usual, with an empty `oauth_token_json`
+   (`init-json`), then `token_relay.py key-import` (a hidden prompt).
+4. `token_relay.py status` shows the shared version; the first use of the sign-in adopts it.
+
+### Remove a person
+
+Remove them from the relay repository, then refresh once from any remaining brain (each client's
+manual refresh does it). Their copy of the refresh token stops working; an access token they
+still hold runs until it expires. After an exit that was not friendly, replace the client secret
+and the relay key (`key-new --replace`), authorise again, run `seed --replace`, and give the
+others the new key.
+
+A computer whose local token was cleared takes the shared one again at its next use. With
+`--vault`, the relay commands refuse a vault other than the one the running Vault Agent serves;
+the JSON store itself does not make that check.
+
+`status` prints, per entry, the shared and local versions, the lease and whether a local change
+is still unpushed; never a secret.
 
 ## Change the recovery passphrase
 

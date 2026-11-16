@@ -463,25 +463,30 @@ class PortableVaultJsonStore:
             self._broker = BrokerOAuthStore(self.entry, self.field, path=path)
             self.path = self._broker.path
             self.rotation_lock_path = self._broker.rotation_lock_path
-            return
         except CredentialError:
             self._broker = None
-        if not self.passphrase:
-            raise CredentialError(
-                "Vault Agent is locked/unavailable and no in-process unlock is present. "
-                "Start the Portable Vault tray app and unlock it from the tray menu."
+        if self._broker is None:
+            if not self.passphrase:
+                raise CredentialError(
+                    "Vault Agent is locked/unavailable and no in-process unlock is present. "
+                    "Start the Portable Vault tray app and unlock it from the tray menu."
+                )
+            self.path = f"vault://{self.vault.path.resolve()}#{self.entry}/{self.field}"
+            digest = hashlib.sha256(
+                f"{self.vault.path.resolve()}\0{self.entry}\0{self.field}".encode("utf-8")
+            ).hexdigest()
+            self.rotation_lock_path = (
+                Path(tempfile.gettempdir())
+                / "portable-ai-brain-credential-locks"
+                / f"{digest}.lock"
             )
-        self.path = f"vault://{self.vault.path.resolve()}#{self.entry}/{self.field}"
-        digest = hashlib.sha256(
-            f"{self.vault.path.resolve()}\0{self.entry}\0{self.field}".encode("utf-8")
-        ).hexdigest()
-        self.rotation_lock_path = (
-            Path(tempfile.gettempdir())
-            / "portable-ai-brain-credential-locks"
-            / f"{digest}.lock"
-        )
+        # Token relay hook: a relayed store for an entry listed in token-relay.json beside the
+        # vault, else None and the behaviour below is unchanged. The logic lives in token_relay.py.
+        from token_relay import relay_for
 
-    def load(self) -> dict[str, Any]:
+        self._relay = relay_for(self)
+
+    def _local_load(self) -> dict[str, Any]:
         if self._broker is not None:
             return self._broker.load()
         value = self.vault.get(self.entry, self.field, self.passphrase)
@@ -491,16 +496,57 @@ class PortableVaultJsonStore:
             )
         return value
 
-    def save(self, value: dict[str, Any]) -> None:
+    def _local_save(self, value: dict[str, Any]) -> None:
         if self._broker is not None:
             self._broker.save(value)
             return
         self.vault.set(self.entry, self.field, value, "json", self.passphrase)
 
-    def clear(self) -> None:
-        self.save({})
-
     @contextmanager
-    def rotation_lock(self) -> Iterator[None]:
+    def _local_rotation_lock(self) -> Iterator[None]:
         with _file_lock(self.rotation_lock_path):
             yield
+
+    def load(self) -> dict[str, Any]:
+        if self._relay is not None:
+            return self._relay.load()
+        return self._local_load()
+
+    def save(self, value: dict[str, Any]) -> None:
+        if self._relay is not None:
+            self._relay.save(value)
+            return
+        self._local_save(value)
+
+    def clear(self) -> None:
+        if self._relay is not None:
+            self._relay.clear()
+            return
+        self.save({})
+
+    def rotation_lock(
+        self,
+        *,
+        refresh: bool = False,
+        leeway_seconds: float | None = None,
+        new_authorisation: bool = False,
+    ) -> Any:
+        """The rotation lock. A relayed store takes its lease when refresh=True (forced) or when the
+        token expires within leeway_seconds; new_authorisation=True marks a code exchange, which
+        may go ahead locally when the entry has no shared record yet and this computer holds no
+        refresh token. Without the relay the arguments change nothing."""
+        if self._relay is not None:
+            return self._relay.rotation_lock(
+                refresh=refresh, leeway_seconds=leeway_seconds, new_authorisation=new_authorisation
+            )
+        return self._local_rotation_lock()
+
+    def sync(self) -> None:
+        """Adopt the shared record without a lease; without the relay, nothing to do."""
+        if self._relay is not None:
+            self._relay.sync()
+
+    def set_chain_keys(self, keys: Any) -> None:
+        """The keys a provider's token answer sets; the relay lets only a lease holder change them."""
+        if self._relay is not None:
+            self._relay.set_chain_keys(keys)
