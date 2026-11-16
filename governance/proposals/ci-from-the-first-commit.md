@@ -100,7 +100,7 @@ finding, and every later change is checked from the start.
 - **A host without GitHub Actions.** The rule says "the CI run", not a product: the same checks
   run in whatever CI the repository's host offers.
 - **Private mechanics.** CI fetches the code map from the mechanics repository; where an owner's
-  copy of it is private, the workflow needs a read token for it. The code map's skill says how.
+  copy of it is private, the workflow needs a read token for it, stored as a repository secret.
 - **Existing repositories without CI** are found when work next starts in them. No sweep is
   proposed.
 
