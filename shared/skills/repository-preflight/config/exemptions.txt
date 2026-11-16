@@ -9,6 +9,9 @@ value: C:\dev\  # the same default folder as written in the README layout diagra
 value: C:\dev\brain  # documented default brain root on Windows (SETUP, seed prompt)
 value: C:\dev\brain\library  # documented default skill library checkout on Windows (SETUP)
 value: C:\dev\brain\memory  # documented default memory checkout on Windows (SETUP)
+value: CONTACTS  # the same generic word as a constant name, in the crm skill's contacts page
+value: Contacts  # the same generic word capitalised, as in Google Contacts and the Xero Contacts endpoint
+value: contacts  # the generic node name the crm skill's starter node installs at /memory/projects/contacts (SETUP D.3), also an ordinary word
 value: ceo@send.example.org  # a fictional address on a sending subdomain of a documentation-reserved domain, used by tests for the platform-domain rule
 value: gmail-api-push@system.gserviceaccount.com  # Google's published service account for Gmail push notifications
 value: invitations-noreply@linkedin.com  # LinkedIn's system sender address for its notification mail, not a person's
