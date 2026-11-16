@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-23T13:00:00+10:00
-updated: 2026-11-16T14:37:38+10:00
+updated: 2026-11-16T15:38:27+10:00
 owner: brain-owner
 skill_refs:
   - /shared/skills/manage-credentials
@@ -105,7 +105,7 @@ rewritten.
 
 Once the memory exists (step B4), progress lives under `## Setup` in `/memory/STATE.md`. A
 per-owner step (B1a, B3, B3a, B4, B5, C, and D's skill choices) has one row; a per-machine step
-(A, B2, D vault and connections, E, F, G, H) has one row for each computer, named in `Machine`.
+(A, B2, B7, D vault and connections, E, F, G, H) has one row for each computer, named in `Machine`.
 Keep rows in setup order (the order a reader follows), replace a row when its status changes,
 and put history in `/memory/LOG.md`.
 
@@ -133,8 +133,8 @@ settings are per machine, while the repositories and skill choices are per owner
    `SMART-RULE-0038`): anything set up from one points at that copy and breaks when it is removed.
    On a refusal, stop and run setup from the shared checkout the message names.
 2. If `/memory/STATE.md` has a `## Setup` section, continue from the first row that is not
-   `done` or `skipped` on this machine. For a new machine, run the per-machine steps (A, B2, D
-   vault and connections, E, F, G, H) and skip the per-owner ones already `done`.
+   `done` or `skipped` on this machine. For a new machine, run the per-machine steps (A, B2, B7,
+   D vault and connections, E, F, G, H) and skip the per-owner ones already `done`.
 3. If memory does not exist yet, ask B1a first: on another computer of an existing brain the
    memory is cloned, not made. Otherwise detect progress with each step's **Done when** check below,
    then continue from the first step that fails its check. Record the detected results as soon
@@ -309,7 +309,7 @@ no work of its own. Then:
    first computer's. When this computer's differ, say so in its B1a row and use the real folders
    here for every `cd`; do not change `OWNER.md` for it.
 4. **Resume** with section 2.2: the per-owner steps are already `done` in `/memory/STATE.md`; run
-   the per-machine steps (A, B2, D vault and connections, E, F, G, H) on this computer and add a
+   the per-machine steps (A, B2, B7, D vault and connections, E, F, G, H) on this computer and add a
    `## Setup` row for each with this computer's name.
 
 ### B2. Git identity
@@ -595,6 +595,28 @@ Then one optional question about owner-layer rules (`/memory/RULES.md`):
 >
 > **Suggested reply:** `1`
 
+Then one question about parallel work. The delegation rule (`SMART-RULE-0024`) is read only when
+an agent is already about to delegate, so an owner who wants work handed to workers as a habit
+says so in a rule of their own:
+
+> **Ask:** When a task has independent pieces, how should the agent work?
+> 1. Hand them to workers in parallel, within what this computer can carry (recommended – faster,
+>    and the main conversation stays short; it uses more of your plan's allowance)
+> 2. One piece after another in the main session; workers only when you ask
+>
+> **Suggested reply:** `1`
+
+For option 1, draft this owner-layer rule as a proposal, show its text (`SMART-RULE-0031`) and ask
+for acceptance; the person may reword it:
+
+```markdown
+- When a task has two or more independent pieces, the agent hands them to workers through
+  `/shared/skills/delegate-work/` instead of working through them one after another, within the
+  limits of `SMART-RULE-0024` and `SMART-RULE-0037`.
+- A decision the owner owes is not a reason to idle: the agent carries on with every piece the
+  decision does not block.
+```
+
 A preference becomes a proposal under `/memory/governance/proposals/` and is applied only after
 the owner accepts it (CONTRACT §13.2).
 
@@ -615,6 +637,43 @@ active_skills:
 Adding the field to the skeleton's `OWNER.md` template is a change to a governance template
 (CONTRACT §13.2) and needs the owner's acceptance of a proposal; until then the agent writes it
 into the person's own `OWNER.md` only.
+
+### B7. This computer's hardware and session cost
+
+**Done when:** `machines` in `/memory/OWNER.md` has an entry whose `hostname` is what `hostname`
+prints on this computer, with its `hardware`.
+
+Parallel work is sized to the computer (`SMART-RULE-0037`): an agent may not start a second
+session or worker until the hardware and the memory one session costs are recorded for the
+computer in use. Recording them here means the first task that could use workers is not held up
+by a measurement. This step is per machine; the list has one entry for each computer.
+
+**Agent does:** reads the hardware itself and writes the entry into the person's own `OWNER.md`
+front matter (the skeleton's template is not changed, as for B6):
+
+```yaml
+machines:
+  - hostname: EXAMPLE-LAPTOP
+    name: the name the person uses for this computer
+    hardware: processor (cores, threads), memory, graphics card and its memory, disk
+    agent_session_cost_mb: 550
+    measured: 2026-10-01
+```
+
+| System | Hardware | Free memory, in MB |
+|---|---|---|
+| Linux | `lscpu`, `free -m`, `df -h ~` | `free -m` (the `available` column) |
+| macOS | `sysctl -n machdep.cpu.brand_string hw.ncpu hw.memsize`, `df -h ~` | `vm_stat` (free plus inactive pages, times the page size) |
+| Windows | `Get-CimInstance Win32_Processor`, `Win32_ComputerSystem`, `Win32_VideoController`, `Win32_LogicalDisk` | `(Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1024` |
+
+Rows are alphabetical by system.
+
+`agent_session_cost_mb` is the drop in free memory while one worker runs, its child processes
+included: read free memory, start one read-only worker (for example one that reads
+`/CONTRACT.md` and reports its title), read free memory again while it runs, and record the
+difference with the date. On a host that cannot start a worker, leave both fields out and say so
+in the `## Setup` row; `SMART-RULE-0037` then has the agent measure before its first parallel
+batch.
 
 ## 5. Step C – Choose your skills
 
@@ -1105,6 +1164,7 @@ Rows are grouped by host, then in the order a session looks for them.
 |---|---|---|---|
 | Claude Code | `<brain_root>/CLAUDE.md` | already in the smarts | Sessions in the brain or in `memory/` (Claude Code also reads parent folders) |
 | Claude Code | `~/.claude/CLAUDE.md` | `claude-code-user.CLAUDE.template.md` | Sessions opened in a sibling project repository or elsewhere |
+| Claude Code | `~/.claude/agents/worker-*.md` | copies of `<brain_root>/.claude/agents/worker-*.md`, unchanged | The worker types of `/shared/skills/delegate-work/` in sessions opened in a project repository or elsewhere: Claude Code loads a folder's own definitions only inside that folder |
 | Claude Code | `<project repo>/CLAUDE.md` | `project-repo.CLAUDE.template.md` | A project repository's own pointer, useful to collaborators too |
 | Codex | `<brain_root>/AGENTS.md` | already in the smarts | Sessions in the brain root |
 | Codex | `<brain_root>/memory/AGENTS.md` | `memory-root.AGENTS.template.md` | Codex stops at the Git root, and `memory/` is its own repository (installed in B4) |
@@ -1155,11 +1215,27 @@ Two kinds of file, two owners:
    cp <brain_root>/temp/setup/codex-AGENTS.md ~/.codex/AGENTS.md
    ```
 
+   For Claude Code, add the worker definitions; they are copied as they are, with nothing to fill:
+
+   ```powershell
+   New-Item -ItemType Directory -Force "$HOME\.claude\agents" | Out-Null
+   Copy-Item "<brain_root>\.claude\agents\worker-*.md" "$HOME\.claude\agents\"
+   ```
+
+   ```bash
+   mkdir -p ~/.claude/agents && cp <brain_root>/.claude/agents/worker-*.md ~/.claude/agents/
+   ```
+
+   They load from the next session. After an update that changes a file under
+   `<brain_root>/.claude/agents/`, give the person the same command again.
+
    Give only the lines for the hosts the person uses. A backup is made only when none exists
    for that date, so running the commands a second time never overwrites the first backup with
    the already-replaced file. The Codex trust entry belongs to the settings, step F.3.
 4. After the person says done, verify read-only: each installed file matches its scratch file,
-   and, only where a file existed before, its backup exists. Record the result under `## Setup`.
+   each worker definition matches its original in `<brain_root>/.claude/agents/` (line endings
+   aside), and, only where a file existed before, its backup exists. Record the result under
+   `## Setup`.
 
 **You do:**
 

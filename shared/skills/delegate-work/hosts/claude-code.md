@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-15T07:45:00+10:00
-updated: 2026-10-14T19:50:39+10:00
+updated: 2026-11-16T15:38:27+10:00
 owner: brain-owner
 ---
 
@@ -74,3 +74,8 @@ the session id and the `checkpoint-done` command; dispatching is refused until i
   effort an implementation card that takes a minute at medium can take ten or more, so a packet
   that does not name a worker type runs at whatever the conductor is set to. A definitions folder
   created during a session is watched only from the next session.
+- The pinned worker types are defined in `<brain_root>/.claude/agents/`, which Claude Code loads
+  only for sessions opened in the brain root. A session opened in a project repository has them
+  only when they were also copied to `~/.claude/agents/` (`/SETUP.md` step E). When they are
+  missing, dispatch a `general-purpose` worker with the packet's `model` and `effort`, and tell
+  the owner the copy is missing.
