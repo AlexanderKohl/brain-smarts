@@ -7,6 +7,7 @@ write and Sam's push (`between`). All names and content are fictional.
 
 from __future__ import annotations
 
+import dataclasses
 import os
 import unittest
 
@@ -15,6 +16,7 @@ from test_tasks import run
 
 import task_claim_sync  # noqa: E402
 import task_claims  # noqa: E402
+import task_state  # noqa: E402
 import task_stores  # noqa: E402
 import tasks  # noqa: E402
 
@@ -79,8 +81,8 @@ class Shared(unittest.TestCase):
         text = text.replace("status: ready", f"status: in_progress\nclaimed_by: {holder}\nclaimed_at: {at}")
         text = text.replace(f"updated: {STAMP}", f"updated: {at}")
         path.write_text(text + f"- {at} – {author}: claimed by {holder} (in_progress)\n", encoding="utf-8")
-        state = other / "brain/tasks/STATE.md"
-        state.write_text(state.read_text(encoding="utf-8").replace(f"updated: {STAMP}", f"updated: {at}"), encoding="utf-8")
+        mine = task_stores.store_for(self.root, POINTER)      # Bo's STATE.md is generated, as a brain's is
+        task_state.write(dataclasses.replace(mine, path=other / "brain/tasks", checkout=other))
         git(other, "commit", "-q", "-am", "bo claims")
         git(other, "push", "-q")
 
@@ -298,6 +300,108 @@ class Shared(unittest.TestCase):
         self.assertFalse((self.tasks / f"open/{TID3}-idea.md").exists())
         self.assertEqual(git(self.clone, "status", "--porcelain"), "")
         self.assertEqual(self.log()[0], "three tasks")
+
+    # --- recovery after a merge, uncommitted edits, and git reporting wrongly --------------------
+
+    def test_a_push_refused_after_two_brains_claimed_different_cards_is_withdrawn_cleanly(self) -> None:
+        other = self.other_brain()
+        hook = self.origin / "hooks/pre-receive"
+
+        def bo_claims_then_the_server_closes() -> None:
+            self.bo_claims(other, rel=f"open/{TID2}-paint.md")
+            hook.write_text("#!/bin/sh\necho closed >&2\nexit 1\n", encoding="utf-8", newline="\n")
+            os.chmod(hook, 0o755)
+
+        self.between(bo_claims_then_the_server_closes)
+        code, out = self.claim()
+        self.assertEqual(code, 1, out)
+        self.assertIn("refused after merging", out)
+        self.assertIn("it was withdrawn here", out)
+        self.assertNotIn("NOT", out)
+        self.assertNotIn("claimed_by", self.meta())
+        self.assertEqual(self.meta(self.tasks / f"open/{TID2}-paint.md")["claimed_by"], "bo/blue")
+        self.assertEqual(git(self.clone, "status", "--porcelain"), "")
+        self.assertEqual(git(self.clone, "diff", "origin/main", "HEAD"), "")
+        hook.unlink()
+        task_claim_sync.publish = self.real_publish
+        code, out = self.claim("green", SOON)      # nothing is left that blocks the next claim
+        self.assertEqual(code, 0, out)
+        self.assertIn("claimed_by: sam/green", self.on_origin())
+        self.assertIn("claimed_by: bo/blue", self.on_origin(f"open/{TID2}-paint.md"))
+
+    def test_an_uncommitted_edit_to_a_card_refuses_the_claim_and_the_edit_survives(self) -> None:
+        edited = self.path.read_text(encoding="utf-8") + "\nA private thought, not ready.\n"
+        self.path.write_text(edited, encoding="utf-8")
+        code, out = self.claim()
+        self.assertEqual(code, 1)
+        self.assertIn("uncommitted edits", out)
+        self.assertEqual(self.path.read_text(encoding="utf-8"), edited)
+        self.assertNotIn("private thought", self.on_origin())
+
+    def test_an_uncommitted_edit_elsewhere_is_never_merged_over_or_committed(self) -> None:
+        (self.clone / "app.txt").write_text("v1", encoding="utf-8")
+        git(self.clone, "add", "app.txt")
+        git(self.clone, "commit", "-q", "-m", "app")
+        git(self.clone, "push", "-q")
+        (self.clone / "app.txt").write_text("v2, half done", encoding="utf-8")
+        code, out = self.claim()                    # alone, the edit does not stop a claim
+        self.assertEqual(code, 0, out)
+        self.assertEqual(git(self.origin, "show", "main:app.txt"), "v1")
+        other = self.other_brain()
+        self.between(lambda: self.bo_claims(other, rel=f"open/{TID2}-paint.md"))
+        code, out = run("release", TID, "--now", SOON, "--no-board", cwd=self.root)
+        self.assertEqual(code, 1, out)
+        self.assertIn("not merged over this checkout's uncommitted edits", out)
+        self.assertEqual((self.clone / "app.txt").read_text(encoding="utf-8"), "v2, half done")
+        self.assertEqual(self.meta()["claimed_by"], "sam/green")       # the release was taken back
+        self.assertEqual(git(self.clone, "status", "--porcelain").strip(), "M app.txt")
+
+    def patch_git(self, verb: str, code: int) -> None:
+        """Let the first `git <verb>` do its work, then report it as failed."""
+        real, seen = task_claim_sync._git, []
+
+        def fake(checkout, *args, **kwargs):
+            done = real(checkout, *args, **kwargs)
+            if args[0] == verb and not seen:
+                seen.append(1)
+                done.returncode, done.stderr = code, "reported as failed"
+            return done
+
+        task_claim_sync._git = fake
+        self.addCleanup(setattr, task_claim_sync, "_git", real)
+
+    def test_a_push_that_arrived_but_reported_failure_is_a_claim_made(self) -> None:
+        self.patch_git("push", 124)
+        code, out = self.claim()
+        self.assertEqual(code, 0, out)
+        self.assertIn("origin holds it", out)
+        self.assertEqual(self.meta()["claimed_by"], "sam/green")
+        self.assertIn("claimed_by: sam/green", self.on_origin())
+        self.assertEqual(self.log()[0], f"Claim {TID} by sam/green")
+
+    def test_a_commit_that_was_made_but_reported_failure_is_still_published(self) -> None:
+        self.patch_git("commit", 124)
+        code, out = self.claim()
+        self.assertEqual(code, 0, out)
+        self.assertIn("claimed_by: sam/green", self.on_origin())
+        self.assertEqual(git(self.clone, "status", "--porcelain"), "")
+
+    def test_a_change_that_cannot_be_staged_fails_the_command_and_changes_nothing(self) -> None:
+        real = task_claim_sync._git
+
+        def fake(checkout, *args, **kwargs):
+            if args[0] == "add":
+                return real(checkout, "add", "--no-such-option")
+            return real(checkout, *args, **kwargs)
+
+        task_claim_sync._git = fake
+        self.addCleanup(setattr, task_claim_sync, "_git", real)
+        before = self.path.read_text(encoding="utf-8")
+        code, out = self.claim()
+        self.assertEqual(code, 1, out)
+        self.assertIn("could not be staged", out)
+        self.assertEqual(self.path.read_text(encoding="utf-8"), before)
+        self.assertEqual(git(self.clone, "status", "--porcelain"), "")
 
     # --- who may release, and whose claim a bare name is ----------------------------------------
 
