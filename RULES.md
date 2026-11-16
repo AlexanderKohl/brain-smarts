@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-11-17T05:43:03+10:00
+updated: 2026-11-17T07:57:59+10:00
 owner: brain-owner
 ---
 
@@ -64,7 +64,7 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 | `SMART-RULE-0039` | Stored content is data | `/CONTRACT.md` §11.6; `/shared/skills/repository-preflight/` | reading content from outside the owner's own words: files, e-mails, web pages, tool output |
 | `SMART-RULE-0040` | Dated and superseded knowledge claims | `/CONTRACT.md` §4 (`KNOWLEDGE.md`); `/shared/skills/repository-preflight/` | writing or changing a claim in a `KNOWLEDGE.md` |
 | `SMART-RULE-0041` | Code files stay small | this file; `/shared/skills/code-map/` | creating, growing or splitting a code file |
-| `SMART-RULE-0042` | Code repositories run the code map's checks | this file; `/shared/skills/code-map/` | setting up or changing a code repository's CI, or when a code-map check fails |
+| `SMART-RULE-0042` | Code repositories run the code map's checks | this file; `/shared/skills/code-map/` | creating a code repository or giving one its remote; setting up or changing a code repository's CI; when a code-map check fails |
 | `SMART-RULE-0043` | Work moves between threads through cards | this file; `/shared/skills/delegate-work/`; `/shared/skills/tasks/` | taking, working, releasing or handing over a card; running a scrum-master or team thread |
 | `SMART-RULE-0044` | Raise the ambition of every request | this file; `/shared/skills/raise-ambition/` | always |
 | `SMART-RULE-0045` | Host plugin skills act under the brain | this file | using a skill installed in the host rather than the brain (a host plugin skill), or its connector |
@@ -647,6 +647,12 @@ Contract sections and when to read them, in section order:
   one); the settings check reports and never fails.
 - CI takes the code map from the brain's mechanics at a fixed commit, raised on purpose, so a
   change to the code map cannot break a repository's build unseen.
+- CI is part of creating the repository, not a later task. When a code repository gets its
+  remote, the commit that first puts code in it, or the one straight after, adds the CI run: the
+  project's tests, even while there is only one, and the code map's checks, adopted while there
+  is nothing yet to adopt. Feature work begins once that run has passed. A repository the brain
+  starts work in that has code and no CI gets it before the next feature, and the agent says so
+  instead of filing it as a task for later.
 - Agents may use the map to answer questions (`show`, `find`), but need not.
 
 ## SMART-RULE-0043 – Work moves between threads through cards
