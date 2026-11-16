@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-11-16T19:30:45+10:00
+updated: 2026-11-17T05:43:03+10:00
 owner: brain-owner
 ---
 
@@ -817,6 +817,8 @@ Contract sections and when to read them, in section order:
 - Avoid duplicate checks only when successful results belong to the exact commit, comparison base and relevant configuration being validated. Restrict docs-only shortcuts to the project's explicit non-product definition; include both sides of renames, and run full checks when scope is unknown. Version and release-note checks still run where required; never skip executable documentation or generated-code inputs merely because of their location or extension.
 - Preserve validation of the exact committed tree, isolation from dirty working files, branch-movement protection, cleanup and all required checks. Unexpected failures or missing results block integration. Warn about local runtime differences from CI. Never use bypass flags or weaken tests to improve timings.
 - Validate cache keys, hit/miss/corruption paths and every skip condition. Record cold and warm per-step timings and concurrency comparisons with failures included. Keep one canonical project implementation of each check, and report which optimisations are active and which are inapplicable.
+- **A failed test is rerun once, alone, and stays named.** A check that runs before integration (a pre-push hook or CI) runs each failed test once more, on its own, after every other step has finished, so nothing else competes with it for the machine. A test that passes then counts as passed and is named in the check's output; one that fails again fails the check. Only the failed tests rerun, never the whole suite, and never more than once. A step with more failures than a small limit the project sets (5 unless it chooses another) is not rerun: that many failures is a fault. Each rerun is recorded outside the repository's tracked files, and the check warns when the same test has needed a rerun in 3 of its last 20 runs; such a test is reported to the owner and fixed, never left to the rerun.
+- **Rolling push.** A conductor that merges several workers' branches pushes as soon as a merge is ready and no push is running. While a push's check runs, nothing is merged into the branch being pushed. Branches that finish during a push are merged when it returns and go out together in the next push. No push waits for a batch to be complete, and none is held back to save a check or a deployment.
 
 ## Contract restatements
 
