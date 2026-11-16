@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-11-09T13:25:17+10:00
+updated: 2026-11-16T19:30:45+10:00
 owner: brain-owner
 ---
 
@@ -694,6 +694,13 @@ Contract sections and when to read them, in section order:
 - The agent never widens the work without the user's yes, does not repeat a bigger version the
   user declined for the same request, and keeps the suggestion to a few lines. Safety, cost,
   side-effect and governance rules are unchanged.
+- When a request starts a project, or leaves the design open, and the goals or the values behind
+  it are uncertain or could be read in more than one way, the agent asks about those before it
+  designs: what the work is for, whom it serves, and what matters more when two aims conflict.
+  It does not ask how the goals should be achieved; that is the agent's to work out. Each
+  question carries a suggested answer (`SMART-RULE-0010`), and the questions arrive with every
+  part of the work they do not block already done. A task whose outcome is already spelled out
+  gets no such questions.
 
 ## SMART-RULE-0045 – Host plugin skills act under the brain
 

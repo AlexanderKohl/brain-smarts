@@ -4,14 +4,14 @@ title: Ask about goals and values before designing, never about means
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: draft
+status: implemented
 owner: brain-owner
 rule_id: SMART-RULE-0044
-accepted_by: null
-accepted_at: null
-implemented_at: null
+accepted_by: brain-owner
+accepted_at: 2026-11-16T19:30:45+10:00
+implemented_at: 2026-11-16T19:30:45+10:00
 created: 2026-11-16T19:11:14+10:00
-updated: 2026-11-16T19:11:14+10:00
+updated: 2026-11-16T19:30:45+10:00
 target_files:
   - /RULES.md
   - /CORE-RULES.md
@@ -113,3 +113,9 @@ three bullets.
 The owner accepts or declines `PROPOSAL-ask-goals-before-design` as one answer. On acceptance the
 exact wording above is applied, and the acceptance is recorded in the memory's governance
 proposals.
+
+## Implementation
+
+Accepted by the owner on 16 November 2026 ("Accept", answering the one acceptance question that
+named this proposal) and applied the same evening, exactly as worded above. `core.py build`
+regenerated `/CORE-RULES.md`.
