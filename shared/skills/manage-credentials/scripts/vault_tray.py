@@ -64,6 +64,8 @@ _WNDPROC = ctypes.WINFUNCTYPE(
 # 32-bit int, and the call fails with "OverflowError: int too long to convert".
 user32.DefWindowProcW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
 user32.DefWindowProcW.restype = _LRESULT
+user32.SendMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+user32.SendMessageW.restype = _LRESULT
 
 
 class _RECT(ctypes.Structure):
@@ -204,8 +206,31 @@ def _prompt_passphrase(title: str = "Unlock Portable Vault") -> str | None:
     return value or None
 
 
+_WM_KEYDOWN = 0x0100
+_VK_RETURN = 0x0D
+_VK_ESCAPE = 0x1B
+_DIALOG_CLIENT_HEIGHT = 132  # the buttons end at 116; 16 below them, as at the sides
+
+
+def _dialog_key_command(message: int, key: int) -> int | None:
+    """The button a key press stands for: Enter is OK, Esc is Cancel, anything else none."""
+    if message != _WM_KEYDOWN:
+        return None
+    return {_VK_RETURN: _IDC_OK, _VK_ESCAPE: _IDC_CANCEL}.get(int(key))
+
+
+def _outer_size(client_width: int, client_height: int, style: int, ex_style: int) -> tuple[int, int]:
+    """Window size whose inside is the given size, so the title bar never eats the buttons."""
+    rect = _RECT(0, 0, client_width, client_height)
+    if not user32.AdjustWindowRectEx(ctypes.byref(rect), style, False, ex_style):
+        return client_width + 16, client_height + 48
+    return rect.right - rect.left, rect.bottom - rect.top
+
+
 def _win_password_dialog(title: str) -> str | None:
-    width, height = 380, 150
+    style = _WS_POPUP | _WS_CAPTION | _WS_SYSMENU | _DS_MODALFRAME
+    ex_style = _WS_EX_DLGMODALFRAME | _WS_EX_TOPMOST
+    width, height = _outer_size(372, _DIALOG_CLIENT_HEIGHT, style, ex_style)
     x, y = _position_near_tray(width, height, margin=16)
     hinstance = kernel32.GetModuleHandleW(None)
     class_name = "PortableVaultUnlockDialog"
@@ -257,8 +282,6 @@ def _win_password_dialog(title: str) -> str | None:
     wc.lpszClassName = class_name
     user32.RegisterClassW(ctypes.byref(wc))  # fails harmlessly if already registered
 
-    style = _WS_POPUP | _WS_CAPTION | _WS_SYSMENU | _DS_MODALFRAME
-    ex_style = _WS_EX_DLGMODALFRAME | _WS_EX_TOPMOST
     hwnd = user32.CreateWindowExW(
         ex_style,
         class_name,
@@ -343,7 +366,14 @@ def _win_password_dialog(title: str) -> str | None:
 
     msg = wintypes.MSG()
     while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) != 0:
-        if not user32.IsDialogMessageW(hwnd, ctypes.byref(msg)):
+        # This window is not a dialog class, so Enter and Esc reach no default button on
+        # their own: turn them into the button's command here. A focused button keeps Enter.
+        command = _dialog_key_command(msg.message, msg.wParam)
+        if command == _IDC_OK and msg.hWnd != edit:
+            command = None
+        if command is not None:
+            user32.SendMessageW(hwnd, _WM_COMMAND, command, 0)
+        elif not user32.IsDialogMessageW(hwnd, ctypes.byref(msg)):
             user32.TranslateMessage(ctypes.byref(msg))
             user32.DispatchMessageW(ctypes.byref(msg))
         if state["finished"]:

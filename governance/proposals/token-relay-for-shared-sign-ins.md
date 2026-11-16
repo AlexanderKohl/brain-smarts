@@ -4,14 +4,14 @@ title: A token relay lets several brains share one rotating sign-in
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: draft
+status: implemented
 owner: brain-owner
 rule_id: null
-accepted_by: null
-accepted_at: null
-implemented_at: null
+accepted_by: brain-owner
+accepted_at: 2026-11-17T05:01:44+10:00
+implemented_at: 2026-11-17T05:01:44+10:00
 created: 2026-11-16T19:59:48+10:00
-updated: 2026-11-16T19:59:48+10:00
+updated: 2026-11-17T05:01:44+10:00
 target_files:
   - /shared/skills/manage-credentials/SKILL.md
 ---
@@ -114,3 +114,11 @@ this wording.
 The owner accepts or declines `PROPOSAL-token-relay-for-shared-sign-ins` as one answer. On
 acceptance the exact wording above is applied, and the acceptance is recorded in the memory's
 governance proposals.
+
+## Implementation
+
+Accepted by the owner on 17 November 2026 ("Accept", answering the one acceptance question that
+named this proposal, asked after its full wording was shown) and applied the same morning, exactly
+as worded above, to the *Credential policy* of `/shared/skills/manage-credentials/SKILL.md`. The
+policy carries no rule number, so `rule_id` stays empty. The relay stays off until an owner creates
+the store, the key and the configuration.
