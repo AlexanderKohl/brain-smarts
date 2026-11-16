@@ -4,14 +4,14 @@ title: CI is set up when a code repository is created, not later
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: draft
+status: implemented
 owner: brain-owner
 rule_id: SMART-RULE-0042
-accepted_by: null
-accepted_at: null
-implemented_at: null
+accepted_by: brain-owner
+accepted_at: 2026-11-17T07:57:59+10:00
+implemented_at: 2026-11-17T07:57:59+10:00
 created: 2026-11-17T07:40:52+10:00
-updated: 2026-11-17T07:40:52+10:00
+updated: 2026-11-17T07:57:59+10:00
 target_files:
   - /RULES.md
   - /CORE-RULES.md
@@ -117,3 +117,9 @@ Revert the commit that applies the wording and run `core.py build`.
 The owner accepts or declines `PROPOSAL-ci-from-the-first-commit` as one answer. On acceptance the
 exact wording above is applied, and the acceptance is recorded in the memory's governance
 proposals.
+
+## Implementation
+
+Accepted by the owner on 17 November 2026 ("Accept", answering the one acceptance question that
+named this proposal, asked after its full wording was shown) and applied the same morning, exactly
+as worded above. `core.py build` regenerated `/CORE-RULES.md`.
