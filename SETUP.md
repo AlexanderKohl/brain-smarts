@@ -494,6 +494,10 @@ front matter, and `<brain_root>/memory/` is its own Git repository with an `orig
    filled when a task, contact or persona is made. Their `id` still loses its `template-` prefix:
    an id may exist only once across both repositories, and the skeleton keeps the original. The
    next free task number is not stored anywhere: `tasks.py next-id` reads it from the records.
+   In `memory/projects/brain-development/data/learning/index.md`, replace `FIRST_DIGEST_DUE` with
+   the time seven days from now, in the same format: the first weekly learning digest is due then
+   (`/shared/skills/learning-maintenance/`), and the daily due check (G.2) reads it from the
+   phrase `next is due <timestamp>`, reporting the digest state as unreadable while it is missing.
 4. Add the `## Setup` section to `memory/STATE.md` (section 2.1) with every step detected so far.
 5. Copy `/shared/templates/host-pointers/memory-root.AGENTS.template.md` to
    `memory/AGENTS.md`; in the copy, drop the `template-` prefix from its `id`, delete the

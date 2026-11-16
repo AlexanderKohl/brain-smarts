@@ -16,6 +16,7 @@ record bodies only when relevant.
 
 - No learning records yet.
 - Pending work: none.
+- Weekly digest: none delivered yet; the next is due FIRST_DIGEST_DUE (seven days after setup).
 - Pending-artifact discovery: the integrating session checks
   `/memory/projects/brain-development/data/learning/inbox/` at integration checkpoints when that
   folder exists. Never treat absence from this index as proof no learning exists.
