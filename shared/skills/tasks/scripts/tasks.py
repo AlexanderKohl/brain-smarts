@@ -12,6 +12,7 @@ Commands:
     edit     change allowed fields, with a History entry naming each `key: old -> new`
     claim    a team thread takes a card: in_progress, claimed_by and claimed_at (task_claims.py)
     release  the thread lets it go: claimed_by and claimed_at cleared, ready (task_claims.py)
+    claims   the cards other brains hold in shared repositories, live then lapsed
     state    regenerate STATE.md of every store, or one
     migrate  the move of tasks into node and repository stores (task_migrate.py)
 
@@ -225,6 +226,7 @@ def _parser() -> argparse.ArgumentParser:
     for name, text in (("check", "validate task records and stores"), ("state", "regenerate STATE.md")):
         s = sub.add_parser(name, help=text)
         s.add_argument("--store", metavar="LABEL", help="one store, as `check` names it")
+    sub.add_parser("claims", help="cards other brains hold in shared repositories (a claim lasts 6 hours)")
     n = sub.add_parser("next-id", help="next free task number")
     n.add_argument("--year", type=int, help="default the current year")
     n.add_argument("--author", help="default this brain's author name")
@@ -326,6 +328,10 @@ def _run(args, store: Path, root: Path) -> int:
         return _review(args, root)
     if args.command == "migrate":
         return task_migrate.run(args, root)
+    if args.command == "claims":
+        lines = task_claims.held_by_others(root)
+        print(json.dumps(lines, indent=2) if args.json else "\n".join(lines or ["no card is held by another brain"]))
+        return 0
     if args.command == "new":
         paths, said = create(root, args.title, status=args.status, priority=args.priority, projects=args.project,
                              skills=args.skill, due=args.due, next_review=args.next_review,

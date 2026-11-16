@@ -149,6 +149,14 @@ python shared/skills/tasks/scripts/tasks.py claim TASK-... --by "SESSION NAME" [
 python shared/skills/tasks/scripts/tasks.py release TASK-... [--note "..."]
 ```
 
+- `claim`: refused while another session's claim is live. A claim lasts 6 hours; claim again to
+  renew it. A lapsed claim is taken over, and the History says whose it was. In a repository
+  store the holder is written `<author>/<session>`, and the claim or release is committed on its
+  own and pushed at once, so the other brains see it. It never pushes other work: with unpushed
+  commits in the checkout it commits and says the push is still owed. When another brain
+  changed the card first, the claim is withdrawn and the command says so.
+- `tasks.py claims` lists the cards other brains hold in shared repositories, live claims
+  first, then lapsed ones; `sync.py` shows the same lines at session start.
 - `done`: status `completed`, a claim cleared, the record moved to its store's `completed/`.
 - `do-now`: priority `high`, status `ready` unless `in_progress`; an inbox task moves to `open/`.
 - `note`: the note verbatim. `--run <job>` records a scheduled run as `run of `<job>`: <outcome>`

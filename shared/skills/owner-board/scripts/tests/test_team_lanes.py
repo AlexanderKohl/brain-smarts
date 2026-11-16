@@ -92,6 +92,11 @@ class TeamLanesUnitTests(unittest.TestCase):
         self.assertIn("Held by Session &lt;Blue&gt; &middot; claimed 12 min ago", held)
         self.assertIn('data-claimed-at="2026-01-10T08:48:00+10:00"', held)
         self.assertEqual(team_lanes.held_html(Record(claimed_by=None), NOW), "")
+        old = Record(claimed_by="sam/green", claimed_at="2026-01-10T02:00:00+10:00")
+        self.assertIn("lapsed, free to take", team_lanes.held_html(old, NOW, lapse_hours=6))
+        self.assertNotIn("lapsed", team_lanes.held_html(old, NOW))
+        fresh = Record(claimed_by="sam/green", claimed_at="2026-01-10T08:48:00+10:00")
+        self.assertNotIn("lapsed", team_lanes.held_html(fresh, NOW, lapse_hours=6))
         self.assertIn("claimed at an unknown time", team_lanes.held_html(Record(claimed_by="S", claimed_at="soon"), NOW))
 
     def test_wip_lines_count_in_progress_per_team_and_mark_the_excess(self):

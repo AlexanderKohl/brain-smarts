@@ -89,13 +89,17 @@ def ago(stamp: datetime.datetime, now: datetime.datetime | None = None) -> str:
     return str(hours // 24) + " d ago"
 
 
-def held_html(task, now: datetime.datetime | None = None) -> str:
-    """Who holds a card and since when, for an in-progress card; nothing when nobody does."""
+def held_html(task, now: datetime.datetime | None = None, lapse_hours: float | None = None) -> str:
+    """Who holds a card and since when, for an in-progress card; nothing when nobody does.
+    With `lapse_hours` (the board passes task_claims.CLAIM_HOURS), a claim older than that says
+    it has lapsed and the card is free to take."""
     holder = task.get("claimed_by")
     if not holder:
         return ""
     stamp = parse_stamp(task.get("claimed_at"))
     when = "claimed " + ago(stamp, now) if stamp else "claimed at an unknown time"
+    if stamp and lapse_hours and ((now or local_now()) - stamp).total_seconds() >= lapse_hours * 3600:
+        when += " &middot; lapsed, free to take"
     return ('<p class="held" data-claimed-by="' + html.escape(holder) + '"'
             + (' data-claimed-at="' + html.escape(str(task.get("claimed_at"))) + '"' if stamp else "")
             + ">Held by " + html.escape(holder) + " &middot; " + when + "</p>")

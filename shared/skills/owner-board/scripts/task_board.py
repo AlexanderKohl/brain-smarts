@@ -61,6 +61,7 @@ import board_config  # noqa: E402
 import page_js  # noqa: E402
 import team_lanes  # noqa: E402
 import tasks as task_store  # noqa: E402
+import task_claims  # noqa: E402
 import task_stores  # noqa: E402
 
 # Left to right is the way a task travels. The action columns come first; `completed` shows
@@ -464,7 +465,7 @@ def _task_html(task: task_store.Task, ref: str | None, board: dict, page_dir: Pa
     team = team_lanes.team_of(task)
     if team:
         tags.append(team_lanes.team_tag(team))
-    held = team_lanes.held_html(task) if column == "in_progress" else ""
+    held = team_lanes.held_html(task, lapse_hours=task_claims.CLAIM_HOURS) if column == "in_progress" else ""
     wait = ""
     if column in BY_REVIEW:
         parts = []
