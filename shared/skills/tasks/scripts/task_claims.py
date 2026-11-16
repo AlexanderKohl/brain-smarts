@@ -184,8 +184,10 @@ def claim(store: Path, tid: str, by: str, team: str | None = None, note: str | N
         raise ValueError(f"{tid} is already {task.get('status') or 'completed'}")
     home = task.store or task_stores.owner_store(root)
     settled = _settle_first(home, offline)
-    if settled:      # an earlier unconfirmed change was just published: read the card again
+    if _shared(home, offline):      # the checkout may just have taken in origin: always read the card again
         root, task = locate(store, tid)
+        if task.folder == "completed":
+            raise ValueError(f"{tid} is already {task.get('status') or 'completed'}")
     author = brain_author(root)
     bare, by = by, holder_name(home, author, by)
     at, _ = stamp(root, now)
@@ -219,8 +221,10 @@ def release(store: Path, tid: str, note: str | None = None, now: str | None = No
         raise ValueError(f"{tid} is already {task.get('status') or 'completed'}")
     home = task.store or task_stores.owner_store(root)
     settled = _settle_first(home, offline)
-    if settled:
+    if _shared(home, offline):      # the checkout may just have taken in origin: always read the card again
         root, task = locate(store, tid)
+        if task.folder == "completed":
+            raise ValueError(f"{tid} is already {task.get('status') or 'completed'}")
     holder = task.get("claimed_by")
     at, _ = stamp(root, now)
     if holder and home.kind == "repository" and not own(task, brain_author(root)) and not lapsed(task, at):

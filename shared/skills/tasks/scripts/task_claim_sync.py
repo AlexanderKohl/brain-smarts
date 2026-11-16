@@ -34,8 +34,10 @@ committed, and origin is not merged over them.
 
 An unconfirmed change is finished by the next claim or release: `ready` sees that every
 unpushed commit here is this tool's own (its `Tool: tasks.py` trailer), fetches, merges origin
-when it has moved (STATE.md generated again when only it conflicts) and pushes, before the new
-change is written. Unpushed commits of anyone else's are never pushed: they refuse the claim.
+when it has moved and pushes, before the new change is written. In that merge STATE.md is
+generated again, and a card another brain changed meanwhile is taken whole from origin: the
+unconfirmed claim lost, and two versions of a record are never mixed line by line. The caller always reads the card
+again afterwards, so a card another brain took in the meantime is refused, never overwritten. Unpushed commits of anyone else's are never pushed: they refuse the claim.
 
 History is never rewritten and nothing is forced. A withdrawal is its own commit of exactly
 the claim's paths, set back to what they were before the claim (or, once origin has been merged
@@ -118,6 +120,8 @@ def _settle(store, rebuild: Callable[[], object] | None) -> list[str]:
     checkout, branch = store.checkout, store.branch
     fix = f"git -C {checkout.as_posix()}"
     state = str(store.path / "STATE.md")
+    notes: list[str] = []
+    lost = False
     if _git(checkout, "fetch", "origin", branch).returncode != 0:
         raise ClaimNotMade(f"{store.label}: an earlier claim or release here was never confirmed, and origin still "
                            "cannot be reached; try again when it can")
@@ -126,31 +130,53 @@ def _settle(store, rebuild: Callable[[], object] | None) -> list[str]:
             raise ClaimNotMade(f"{store.label}: an earlier claim or release here was never confirmed and origin has "
                                f"moved, and it is not merged over uncommitted edits: commit or stash them, then try again")
         message = _message(checkout, f"Merge origin/{branch} after an unconfirmed change")
+        by_hand = (f"By hand: `{fix} merge --abort` if `{fix} status` shows a merge in progress; then "
+                   f"`{fix} pull --no-rebase origin {branch}`, and for each conflicting file under the task store "
+                   f"keep origin's (`{fix} checkout --theirs -- <file>`, `{fix} add <file>`), commit, run "
+                   f"`tasks.py state --store {store.label}`, commit, and try again")
         if _git(checkout, "merge", "--no-edit", "-m", message, f"origin/{branch}").returncode != 0:
             stuck = [line.strip().strip('"') for line in
                      _git(checkout, "diff", "--name-only", "--diff-filter=U").stdout.splitlines() if line.strip()]
-            only_state = bool(stuck) and all((checkout / name).resolve() == Path(state).resolve() for name in stuck)
-            if not (only_state and rebuild is not None):
-                _git(checkout, "merge", "--abort")
-                raise ClaimNotMade(f"{store.label}: an earlier claim or release here was never confirmed, and another "
-                                   f"brain has changed the same card since. Run `{fix} pull --no-rebase origin {branch}`, "
-                                   "keep origin's version of the card, commit, then try again")
-            rebuild()
+            # A card both brains changed is taken whole from origin: the unconfirmed change lost, and
+            # two versions of one record are never mixed line by line. STATE.md is generated again.
+            cards = [name for name in stuck if (checkout / name).resolve() != Path(state).resolve()]
+            for name in cards:
+                took = _git(checkout, "checkout", "--theirs", "--", name)
+                if took.returncode != 0 or _git(checkout, "add", "--", name).returncode != 0:
+                    left = "" if _git(checkout, "merge", "--abort").returncode == 0 else " A merge is unfinished."
+                    raise ClaimNotMade(f"{store.label}: an earlier claim or release here was never confirmed, and "
+                                       f"{name} cannot be taken from origin ({_last(took)}).{left} {by_hand}")
+            lost = bool(cards)
+            try:
+                if rebuild is None:
+                    raise ValueError("STATE.md cannot be generated here")
+                rebuild()
+            except (OSError, ValueError) as err:
+                left = "" if _git(checkout, "merge", "--abort").returncode == 0 else " A merge is unfinished."
+                raise ClaimNotMade(f"{store.label}: an earlier unconfirmed change could not be merged with origin "
+                                   f"({err}).{left} {by_hand}") from err
             _git(checkout, "add", "--", state)
             if _git(checkout, "commit", "--quiet", "-m", message).returncode != 0:
-                _git(checkout, "merge", "--abort")
-                raise ClaimNotMade(f"{store.label}: an earlier unconfirmed change could not be merged with origin; "
-                                   f"run `{fix} pull --no-rebase origin {branch}` and resolve it, then try again")
-        if rebuild is not None and rebuild():
+                left = "" if _git(checkout, "merge", "--abort").returncode == 0 else " A merge is unfinished."
+                raise ClaimNotMade(f"{store.label}: an earlier unconfirmed change could not be merged with origin.{left} {by_hand}")
+        try:
+            changed = rebuild is not None and rebuild()
+        except (OSError, ValueError) as err:
+            raise ClaimNotMade(f"{store.label}: STATE.md could not be generated after merging origin ({err}); run "
+                               f"`tasks.py state --store {store.label}`, commit, and try again") from err
+        if changed:
             _git(checkout, "add", "--", state)
             _git(checkout, "commit", "--quiet", "-m", _message(checkout, "STATE.md after an unconfirmed change"), "--", state)
+        notes.append(f"{store.label}: origin had moved and was merged in"
+                     + ("; another brain had changed a card an earlier unconfirmed change here also touched, and "
+                        "origin's version was kept" if lost else ""))
     if not _count(checkout, f"origin/{branch}..HEAD"):
-        return []
+        return notes or [f"{store.label}: an earlier change that could not be confirmed had reached origin"]
     pushed = _git(checkout, "push", "origin", f"HEAD:{branch}", timeout=PUSH_TIMEOUT_S)
     if pushed.returncode != 0:
         raise ClaimNotMade(f"{store.label}: an earlier claim or release here is still unpublished and the push was "
                            f"refused ({_last(pushed)}); run `{fix} push origin HEAD:{branch}` and read its answer")
-    return [f"{store.label}: an earlier change that could not be confirmed is now published"]
+    return notes + [f"{store.label}: an earlier change that could not be confirmed is now published"]
 
 
 def ready(store, rebuild: Callable[[], object] | None = None) -> list[str]:
@@ -158,6 +184,9 @@ def ready(store, rebuild: Callable[[], object] | None = None) -> list[str]:
     This tool's own unpushed commits are published first (`_settle`); returns notes to show."""
     checkout, branch = store.checkout, store.branch
     fix = f"git -C {checkout.as_posix()}"
+    if _git(checkout, "rev-parse", "-q", "--verify", "MERGE_HEAD").returncode == 0:
+        raise ClaimNotMade(f"{store.label}: a merge is unfinished in this checkout. Finish it, or run "
+                           f"`{fix} merge --abort`, then try again")
     if _git(checkout, "diff", "--cached", "--quiet").returncode != 0:
         raise ClaimNotMade(f"{store.label}: files are staged in this checkout, and a claim commits and pushes on its "
                            f"own. Commit or unstage them first (`{fix} status`), or pass --offline for a claim only "

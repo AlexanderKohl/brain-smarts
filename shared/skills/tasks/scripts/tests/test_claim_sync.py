@@ -428,7 +428,7 @@ class Shared(unittest.TestCase):
         self.assertEqual(git(self.clone, "status", "--porcelain"), "")
         self.assertEqual(git(self.clone, "diff", "origin/main", "HEAD"), "")
 
-    def test_an_unconfirmed_claim_another_brain_then_took_stops_with_instructions_and_no_half_merge(self) -> None:
+    def test_an_unconfirmed_claim_another_brain_then_took_loses_to_origin_and_the_next_claim_goes_on(self) -> None:
         url = git(self.clone, "remote", "get-url", "origin").strip()
         self.between(lambda: git(self.clone, "remote", "set-url", "origin", str(self.brain.tmp / "nowhere.git")))
         self.claim()
@@ -436,11 +436,65 @@ class Shared(unittest.TestCase):
         git(self.clone, "remote", "set-url", "origin", url)
         self.bo_claims(self.other_brain())                                  # the same card
         code, out = self.claim(tid=TID3, now=SOON)
+        self.assertEqual(code, 0, out)
+        self.assertIn("origin's version was kept", out)
+        self.assertEqual(self.meta()["claimed_by"], "bo/blue")              # here and on origin
+        self.assertEqual(self.path.read_text(encoding="utf-8").count("claimed_by:"), 1)   # one record, not a mix
+        self.assertNotIn("sam/green", self.path.read_text(encoding="utf-8"))
+        self.assertIn("claimed_by: bo/blue", self.on_origin())
+        self.assertIn("claimed_by: sam/green", self.on_origin(f"open/{TID3}-idea.md"))
+        self.assertNotIn("<<<<<<<", self.on_origin("STATE.md") + self.on_origin())
+        self.assertEqual(git(self.clone, "status", "--porcelain"), "")
+        self.assertEqual(git(self.clone, "diff", "origin/main", "HEAD"), "")
+
+    def test_after_an_unconfirmed_push_that_did_land_a_card_another_brain_took_is_refused_not_overwritten(self) -> None:
+        real, state = task_claim_sync._git, {"push": 0, "fetch": 0}
+
+        def landed_but_unreadable(checkout, *args, **kwargs):
+            if args[0] == "push" and not state["push"]:
+                state["push"] = 1
+                done = real(checkout, *args, **kwargs)
+                done.returncode, done.stderr = 124, "reported as failed"
+                return done
+            if args[0] == "fetch" and state["push"] and not state["fetch"]:
+                state["fetch"] = 1
+                return real(checkout, "fetch", "no-such-remote")
+            return real(checkout, *args, **kwargs)
+
+        task_claim_sync._git = landed_but_unreadable
+        self.addCleanup(setattr, task_claim_sync, "_git", real)
+        code, out = self.claim()
         self.assertEqual(code, 1, out)
-        self.assertIn("another brain has changed the same card since", out)
-        self.assertIn("pull --no-rebase origin main", out)
-        self.assertEqual(git(self.clone, "status", "--porcelain"), "")      # the merge was abandoned
-        self.assertTrue((self.tasks / f"inbox/{TID3}-idea.md").is_file())   # the new claim was not written
+        self.assertIn("could not be read back", out)
+        self.assertIn("claimed_by: sam/green", self.on_origin())            # it did land
+        task_claim_sync._git = real
+        self.bo_claims(self.other_brain(), rel=f"open/{TID2}-paint.md")     # Bo, on top of Sam's commit
+        code, out = self.claim(tid=TID2, now=SOON)
+        self.assertEqual(code, 1, out)
+        self.assertTrue("held by bo/blue" in out or "behind origin/main" in out, out)
+        self.assertIn("claimed_by: bo/blue", self.on_origin(f"open/{TID2}-paint.md"))
+        code, out = run("release", TID2, "--now", SOON, "--no-board", cwd=self.root)
+        self.assertEqual(code, 1, out)
+        self.assertTrue("only its holder releases a live claim" in out or "behind origin/main" in out, out)
+        git(self.clone, "pull", "-q", "--ff-only")
+        code, out = self.claim(tid=TID2, now=SOON)
+        self.assertEqual(code, 1, out)
+        self.assertIn("held by bo/blue", out)
+        self.assertIn("claimed_by: bo/blue", self.on_origin(f"open/{TID2}-paint.md"))
+        self.assertEqual(git(self.clone, "status", "--porcelain"), "")
+
+    def test_an_unfinished_merge_refuses_the_claim_and_says_to_abort_it(self) -> None:
+        other = self.other_brain()
+        self.claim("green", EARLY, TID, "--offline")
+        git(self.clone, "commit", "-q", "-am", "a local claim")
+        self.bo_claims(other)
+        git(self.clone, "fetch", "-q")
+        with self.assertRaises(RuntimeError):
+            git(self.clone, "merge", "origin/main")
+        code, out = self.claim(tid=TID3, now=SOON)
+        self.assertEqual(code, 1, out)
+        self.assertIn("a merge is unfinished", out)
+        self.assertIn("merge --abort", out)
 
     def test_a_withdrawal_after_a_merge_restores_what_was_merged_not_a_newer_origin(self) -> None:
         other = self.other_brain()
