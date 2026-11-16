@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-23T13:00:00+10:00
-updated: 2026-11-08T11:07:00+10:00
+updated: 2026-11-16T14:37:38+10:00
 owner: brain-owner
 skill_refs:
   - /shared/skills/manage-credentials
@@ -642,7 +642,7 @@ others. Numbers run through both groups so a reply stays short.
 | 1 | abr-access | Looks up Australian Business Numbers and company names on the Australian Business Register | Free ABR web-services GUID (emailed after registration); the vault |
 | 2 | crm | Remembers the people and organisations you deal with, and which of your identities to reply as | Nothing external; chosen automatically with 4 |
 | 3 | gohighlevel-access | Reads and, with your confirmation, writes HighLevel CRM data across sub-accounts | A HighLevel **agency** account; a Marketplace app you register; the vault |
-| 4 | google-workspace-access | Gmail (draft-first), Calendar, Tasks, Drive and Contacts for one or more Google accounts | A Google account; a Google Cloud project and OAuth client you register; the vault; the contact register (2) |
+| 4 | google-workspace-access | Gmail (draft-first), Calendar, Tasks, Drive and Contacts for one or more Google accounts | A Google account; an OAuth client, either one shared with you or one you register in a Google Cloud project; the vault; the contact register (2) |
 | 5 | manage-credentials | The encrypted vault every credentialed skill uses | A passphrase you choose; chosen automatically with 1, 3, 4, 6 or 9 |
 | 6 | railway-access | Reads Railway projects, deployments and logs | A Railway account token you create; the vault |
 | 7 | ui-implementation | Rules a live screen must keep while data changes underneath it | Nothing external |
@@ -924,8 +924,28 @@ needs the target sub-account confirmed for that operation (CONTRACT §10.5).
    }
    ```
 
-**You do**, in Google Cloud Console signed in with the Google login that will own the app
-(console labels move – `verify against current host docs`):
+**Agent asks next**, before any Google Cloud step. A Google sign-in app (an OAuth client) can
+serve many people: each person signs in with their own Google login and holds their own tokens
+in their own vault, so the client gives the person who shared it no access to anyone else's
+mail. A person who was given one needs no Google Cloud project at all.
+
+> **Ask:** Which Google sign-in app should this brain use?
+> 1. One that was shared with you – you were given its client ID and client secret
+>    (recommended when you have them: no Google Cloud set-up)
+> 2. Your own – you register it in Google Cloud Console, about ten minutes
+>
+> **Suggested reply:** `1` when the person who shared the brain, or a project you joined, gave
+> you a client; otherwise `2`
+
+For option 1, skip steps 1 to 5 below and do step 6 with the two shared values. They reach the
+person through a password manager or in person, never through chat or e-mail, and go only into
+the hidden prompt (section 1.2). When Google answers "access blocked" at sign-in, the shared app
+is not open to this login: the person who shared it either publishes it as an **External** app or
+adds this login as a test user (step 4 below), and the agent says so instead of starting a
+second Google Cloud project. The skill's section *One client for several people* has the detail.
+
+**You do** for option 2, in Google Cloud Console signed in with the Google login that will own
+the app (console labels move – `verify against current host docs`):
 
 1. **Create a project:** https://console.cloud.google.com/projectcreate – name suggested
    `brain-workspace`.
@@ -944,8 +964,8 @@ needs the target sub-account confirmed for that operation (CONTRACT §10.5).
 5. **Create the OAuth client:** https://console.cloud.google.com/auth/clients → **Create
    client** → type **Web application** → name `brain-local` → **Authorised redirect URIs**:
    exactly `http://localhost:8767/oauth/callback` → **Create**. Keep the dialog open.
-6. Store the client ID and secret straight from that dialog (one entry per alias; the same
-   client may serve several aliases):
+6. Store the client ID and secret straight from that dialog, or the two values that were shared
+   with you (one entry per alias; the same client may serve several aliases):
 
    ```powershell
    cd C:\dev\brain
