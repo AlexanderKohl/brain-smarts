@@ -4,14 +4,14 @@ title: A failed test is rerun once, alone; a conductor pushes as soon as a merge
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: draft
+status: implemented
 owner: brain-owner
-rule_id: null
-accepted_by: null
-accepted_at: null
-implemented_at: null
+rule_id: SMART-RULE-0049
+accepted_by: brain-owner
+accepted_at: 2026-11-17T05:43:03+10:00
+implemented_at: 2026-11-17T05:43:03+10:00
 created: 2026-11-17T05:15:23+10:00
-updated: 2026-11-17T05:15:23+10:00
+updated: 2026-11-17T05:43:03+10:00
 target_files:
   - /RULES.md
 ---
@@ -72,4 +72,4 @@ Remove the two bullets from `/RULES.md` and rebuild the core files.
 
 ## Acceptance
 
-Not yet accepted.
+The owner accepted both bullets on 17 November 2026 ("1. both bullets"), answering the question that named this proposal and quoted the wording.
