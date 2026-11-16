@@ -284,6 +284,67 @@ class JoinTests(unittest.TestCase):
         self.run_join()
         self.assertEqual(joining.not_joined(self.root), [])
 
+    def ship_hooks(self):
+        """The fictional project versions a pre-push hook on its working branch, as a real one does."""
+        seed = self.base / "seed"
+        write(seed / ".githooks" / "pre-push", "#!/bin/sh\nexit 0\n")
+        git(seed, "add", ".githooks/pre-push")
+        git(seed, "commit", "-q", "-m", "hooks")
+        git(seed, "push", "-q", "origin", "testing")
+        git(self.repo, "fetch", "-q", "origin")
+
+    def hooks_path(self) -> str:
+        done = subprocess.run(["git", "-C", str(self.repo), "config", "--local", "--get", "core.hooksPath"],
+                              capture_output=True, text=True)
+        return done.stdout.strip()
+
+    def test_join_switches_on_the_hooks_a_fresh_clone_leaves_off(self):
+        self.ship_hooks()
+        self.assertEqual(self.hooks_path(), "")
+        code, dry = self.run_join("--dry-run")
+        self.assertEqual(code, 0, dry)
+        self.assertEqual(self.hooks_path(), "")          # on main the folder is not there yet; nothing set
+        code, out = self.run_join()
+        self.assertEqual(code, 0, out)
+        self.assertIn("switched on the repository's Git hooks (core.hooksPath = .githooks)", out)
+        self.assertEqual(self.hooks_path(), ".githooks")
+        code, again = self.run_join()
+        self.assertIn("Git hooks switched on (core.hooksPath = .githooks)", again)
+        self.assertNotIn("would", again)
+
+    def test_a_dry_run_says_it_would_switch_the_hooks_on_and_does_not(self):
+        self.ship_hooks()
+        git(self.repo, "checkout", "-q", "testing")
+        code, out = self.run_join("--dry-run")
+        self.assertEqual(code, 0, out)
+        self.assertIn("would switch on the repository's Git hooks", out)
+        self.assertEqual(self.hooks_path(), "")
+
+    def test_a_hooks_path_the_person_set_elsewhere_is_left_and_named(self):
+        self.ship_hooks()
+        git(self.repo, "config", "core.hooksPath", "my-own-hooks")
+        code, out = self.run_join()
+        self.assertEqual(code, 0, out)
+        self.assertIn("core.hooksPath is my-own-hooks", out)
+        self.assertEqual(self.hooks_path(), "my-own-hooks")
+
+    def test_a_repository_without_hooks_gets_no_setting_and_no_line(self):
+        code, out = self.run_join()
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("hooks", out)
+        self.assertEqual(self.hooks_path(), "")
+
+    def test_a_joined_clone_with_its_hooks_off_is_nudged(self):
+        self.run_join()
+        self.assertEqual(joining.not_joined(self.root), [])
+        self.ship_hooks()
+        git(self.repo, "merge", "-q", "--ff-only", "origin/testing")
+        nudges = joining.not_joined(self.root)
+        self.assertEqual([n["name"] for n in nudges], ["garden-app"])
+        self.assertIn("Git hooks in .githooks/ are not switched on", nudges[0]["detail"])
+        self.run_join()
+        self.assertEqual(joining.not_joined(self.root), [])
+
     def test_the_manifest_parser_reads_lists_of_mappings(self):
         manifest = joining.load_manifest(self.repo)
         self.assertEqual(manifest["boards"][0]["id"], "garden")

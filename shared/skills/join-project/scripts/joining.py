@@ -9,7 +9,9 @@ imported by `join.py` (this skill) and by `repository-preflight/scripts/sync.py`
 Joined means: a pointer node for the repository exists in this brain's memory (a `README.md`
 under `/memory/projects/` whose `repo_url` names the repository or whose `local_path` names the
 clone), and every board the manifest lists is registered in `/memory/skills/owner-board/config/
-boards.json` with the status `<clone folder>:<board status>`.
+boards.json` with the status `<clone folder>:<board status>`; and, when the clone ships its own
+versioned Git hooks in `.githooks/`, Git is set to run them (`core.hooksPath`), because a fresh
+clone leaves them off and a pre-push check is then skipped without a word.
 
 The list of pointer nodes is the tasks skill's (`task_stores.pointers`, every depth under
 /memory/projects/), so this skill and the task stores agree on which nodes point at a repository.
@@ -21,6 +23,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -33,6 +36,7 @@ import task_stores  # noqa: E402  (one list of pointer nodes, SMART-RULE-0018)
 MANIFEST = Path("brain") / "JOINING.md"
 BOARDS_CONFIG = Path("memory") / "skills" / "owner-board" / "config" / "boards.json"
 JOIN_COMMAND = "python shared/skills/join-project/scripts/join.py"
+HOOKS_FOLDER = ".githooks"   # where a repository versions its own Git hooks, as the brain's repositories do
 
 
 # -- a small YAML subset: scalars, lists of scalars, lists of one-level mappings, nested mappings --
@@ -236,10 +240,42 @@ def expected_status(folder_name: str, board: dict) -> str:
     return f"{folder_name}:{str(board.get('status') or 'brain/status').strip('/')}"
 
 
+def hooks_state(repo: Path) -> tuple[str, str]:
+    """Whether the repository's own versioned Git hooks run in this clone: (state, current setting).
+
+    `none`: the checkout ships no `.githooks/` folder with a file in it. `on`: `core.hooksPath`
+    names that folder. `off`: the setting is empty, so Git looks in `.git/hooks` and the versioned
+    hooks do not run. `other`: the person pointed the setting somewhere else; it is left alone.
+    """
+    folder = repo / HOOKS_FOLDER
+    try:
+        ships = folder.is_dir() and any(item.is_file() for item in folder.iterdir())
+    except OSError:
+        ships = False
+    if not ships:
+        return "none", ""
+    try:
+        done = subprocess.run(["git", "-C", str(repo), "config", "--get", "core.hooksPath"],
+                              capture_output=True, text=True, encoding="utf-8", errors="replace")
+    except OSError:
+        return "off", ""
+    value = done.stdout.strip()
+    if not value:
+        return "off", ""
+    plain = value.replace("\\", "/").rstrip("/")
+    plain = plain[2:] if plain.startswith("./") else plain
+    try:
+        same = plain == HOOKS_FOLDER or Path(value).resolve() == folder.resolve()
+    except OSError:
+        same = plain == HOOKS_FOLDER
+    return ("on" if same else "other"), value
+
+
 def joined_state(root: Path, repo: Path) -> dict:
     """Where this brain stands with one cloned repository that carries a manifest."""
     manifest = load_manifest(repo)
-    state = {"repo": repo, "name": repo.name, "manifest": manifest, "pointer": None, "missing_boards": []}
+    state = {"repo": repo, "name": repo.name, "manifest": manifest, "pointer": None, "missing_boards": [],
+             "hooks": hooks_state(repo)[0]}
     if not manifest or "error" in manifest:
         return state
     state["pointer"] = find_pointer(root / "memory", manifest.get("repository"), repo.name)
@@ -276,6 +312,8 @@ def not_joined(root: Path) -> list[dict]:
                 missing.append("no pointer node in memory")
             if state["missing_boards"]:
                 missing.append("shared board(s) not registered: " + ", ".join(state["missing_boards"]))
+        if state["hooks"] == "off":
+            missing.append(f"its Git hooks in {HOOKS_FOLDER}/ are not switched on, so its commit and push checks are skipped")
         if missing:
             found.append({"name": repo.name, "path": str(repo), "detail": "; ".join(missing),
                           "command": f"{JOIN_COMMAND} {repo}"})

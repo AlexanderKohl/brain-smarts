@@ -6,12 +6,12 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 scope: shared
-version: 1.2.1
+version: 1.3.0
 script_paths:
   - /shared/skills/join-project/scripts/join.py
   - /shared/skills/join-project/scripts/joining.py
 created: 2026-10-21T11:55:16+10:00
-updated: 2026-10-23T08:54:40+10:00
+updated: 2026-11-16T16:51:40+10:00
 owner: brain-owner
 skill_refs:
   - /shared/skills/tasks
@@ -68,6 +68,8 @@ project's own. The parser reads this subset of YAML only: scalars, lists of scal
   `/memory/skills/owner-board/config/boards.json` and `/memory/skills/product-feedback/config/companion.json`
 - run `sync.py --no-merge`; clone the repository under `project_repos_root`; `git fetch` and
   `git checkout <working branch>` in a clean clone
+- set `core.hooksPath` to `.githooks` in the clone when the checkout ships that folder and the
+  setting is empty, so the repository's own commit and push checks run
 - create the pointer node from `/shared/templates/project-pointer-README.template.md`, or update its
   `repo_url`, `local_path` and `default_branch`; name the node under Folders in `/memory/projects/README.md`
 - add a board entry to this brain's `boards.json`
@@ -95,7 +97,10 @@ project's own. The parser reads this subset of YAML only: scalars, lists of scal
     python -m unittest discover -s shared/skills/join-project/tests -v         # tests (fictional data)
 
 `scripts/joining.py` is the one implementation of the manifest and of what "joined" means,
-imported by `join.py` and by `/shared/skills/repository-preflight/scripts/sync.py`. Its list of
+imported by `join.py` and by `/shared/skills/repository-preflight/scripts/sync.py`. Joined
+includes the clone's own Git hooks: a fresh clone leaves `core.hooksPath` empty, Git then skips
+the hooks the repository versions in `.githooks/` (a pre-push CI run, for example) without a
+word, and `sync.py` names such a clone at session start until `join.py` has switched them on. Its list of
 pointer nodes is the tasks skill's `task_stores.pointers` (every depth, a pointer recognised by
 `repo_url`), so joining and the task stores agree on which node points at a repository.
 
@@ -129,6 +134,8 @@ in its own memory and asks the project to raise it in `brain/JOINING.md`.
 - no brain root with `/memory/OWNER.md`, no `brain/JOINING.md` in the repository, a manifest
   without a `joining:` mapping, or a failed clone: reported under **Could not continue**, exit 1
 - a clone with changed tracked files is not switched to the working branch; the person is told
+- a `core.hooksPath` that already points somewhere other than `.githooks` is left as it is; the
+  person is told the repository's own hooks do not run, with the command that switches to them
 - a board registered under another status, a contract or skill below the minimum, a skill without a
   version, a locked or missing vault, a companion not configured: each is the person's step, exit 0
 - a manifest minimum contract below 3.0.0, a task record that is unreadable or conflicted, an owner

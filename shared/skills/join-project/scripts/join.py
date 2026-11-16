@@ -10,7 +10,9 @@ Given a repository URL or a cloned path it:
    versions the manifest requires, and that each library skill it lists is under `/library/skills/`
    (a missing one is the person's step, with the command that adds it);
 2. clones the repository under `project_repos_root` (from `/memory/OWNER.md`) when it is not
-   there, and checks out the working branch when the clone is clean;
+   there, and checks out the working branch when the clone is clean; when the checkout ships its
+   own Git hooks in `.githooks/`, sets `core.hooksPath` to that folder so its commit and push
+   checks run (a setting that already points elsewhere is left alone and named);
 3. creates the pointer node in this memory from `/shared/templates/project-pointer-README.template.md`,
    or updates its `repo_url`, `local_path` and `default_branch`; it never copies project state,
    rules or knowledge, and names the node in `/memory/projects/README.md`;
@@ -241,6 +243,30 @@ def step_branch(repo: Path, branch: str | None, report: Report) -> None:
         report.own(f"could not check out {branch}: " + (out.stderr.strip().splitlines() or ["?"])[-1])
     else:
         report.would(f"checked out {branch} (was on {current})")
+
+
+def step_hooks(repo: Path, report: Report) -> None:
+    """Switch on the repository's own versioned Git hooks, which a fresh clone leaves off."""
+    state, value = joining.hooks_state(repo)
+    folder = joining.HOOKS_FOLDER
+    if state == "none":
+        return
+    command = f'git -C "{repo}" config core.hooksPath {folder}'
+    if state == "on":
+        report.done(f"Git hooks switched on (core.hooksPath = {folder})")
+    elif state == "other":
+        report.own(f"core.hooksPath is {value}, so the repository's own hooks in {folder}/ do not run; "
+                   f"to use them: {command}")
+    elif report.dry_run:
+        report.would(f"switch on the repository's Git hooks (core.hooksPath = {folder})")
+    else:
+        out = git(repo, "config", "core.hooksPath", folder)
+        if out.returncode:
+            report.own("could not switch on the repository's Git hooks: "
+                       + (out.stderr.strip().splitlines() or ["?"])[-1] + f"; run: {command}")
+        else:
+            report.would(f"switched on the repository's Git hooks (core.hooksPath = {folder}); "
+                         "its commit and push checks now run")
 
 
 def fill_template(text: str, values: dict[str, str]) -> str:
@@ -513,6 +539,7 @@ def main(argv: list[str] | None = None) -> int:
     step_versions(root, manifest, report)
     step_library(root, manifest, report)
     step_branch(repo, args.branch or manifest.get("working_branch"), report)
+    step_hooks(repo, report)
     node = step_pointer(root, repo, manifest, report)
     step_boards(root, repo, manifest, node, report)
     step_tasks(root, repo, manifest, report)
