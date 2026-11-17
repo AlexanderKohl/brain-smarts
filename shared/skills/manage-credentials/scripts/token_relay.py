@@ -1,7 +1,11 @@
 """Token relay: several brains share one rotating OAuth sign-in through an encrypted remote record.
 
-Configuration lives in token-relay.json beside the vault file. An entry it does not list, or a
-missing file, leaves the store exactly as it was. For a listed entry the relayed store in
+Configuration lives in token-relay.json beside the vault file: the vault the running Vault Agent
+serves when the work goes through it, else the named or default vault, else (a session copy, whose
+own memory holds no vault) the default vault under brain_root in /memory/OWNER.md; resolve_config
+lists the places in that order. An entry it does not list, or a missing file, leaves the store as
+it was, with one exception: a token that carries a relay version and finds no file is refused a
+refresh (refuse_unrelayed_refresh), so a stale refresh token never reaches the provider. For a listed entry the relayed store in
 token_relay_store syncs with the remote record, takes a lease before a refresh and pushes saves
 as new versions; token_relay_backend holds the record format and the backends.
 
@@ -29,6 +33,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, TextIO
 
+import portable_vault
 from portable_vault import CredentialError, PortableVault
 from token_relay_backend import (
     MAX_LEASE_SECONDS,
@@ -65,9 +70,12 @@ __all__ = [
     "RelayIntegrityError",
     "RelayUnavailable",
     "RelayedStore",
+    "config_candidates",
     "config_path",
     "load_config",
+    "refuse_unrelayed_refresh",
     "relay_for",
+    "resolve_config",
 ]
 
 
@@ -82,6 +90,112 @@ class RelayConfig:
 def config_path(vault_path: Path | str | None = None) -> Path:
     """token-relay.json in the vault's folder, the vault resolved as PortableVault resolves it."""
     return PortableVault(vault_path).path.parent / CONFIG_NAME
+
+
+def _owner_brain_root(root: Path) -> Path | None:
+    """brain_root from the front matter of <root>/memory/OWNER.md, or None."""
+    try:
+        lines = (root / "memory" / "OWNER.md").read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError):
+        return None
+    if not lines or lines[0].strip() != "---":
+        return None
+    for line in lines[1:]:
+        if line.strip() == "---":
+            break
+        key, separator, value = line.partition(":")
+        if separator and key.strip() == "brain_root":
+            value = value.strip().strip("\"'")
+            return Path(value) if value else None
+    return None
+
+
+def _agent_vault_path() -> Path | None:
+    """The vault the unlocked Vault Agent serves, or None when no agent is unlocked."""
+    from vault_broker_client import BrokerUnavailable, broker_status, broker_unlocked
+
+    if not broker_unlocked():
+        return None
+    try:
+        served = broker_status().get("vault_path")
+    except (BrokerUnavailable, CredentialError, OSError):
+        return None
+    return Path(served) if isinstance(served, str) and served else None
+
+
+def _same(a: Path, b: Path) -> bool:
+    return os.path.normcase(str(a.resolve())) == os.path.normcase(str(b.resolve()))
+
+
+def config_candidates(vault_path: Path | str | None = None, *, use_agent: bool = True) -> list[Path]:
+    """Where token-relay.json is looked for, in this order (the vault actually in use first):
+    1. beside the vault the unlocked Vault Agent serves, when use_agent (the work goes through it);
+    2. beside the named vault, else PORTABLE_VAULT_PATH, else the default under this brain root;
+    3. when that vault is this brain root's default one, beside the default vault under brain_root
+       in /memory/OWNER.md: in a session copy that is the shared checkout, which holds the vault.
+    Never only the script's own root, so a session copy finds the shared checkout's config."""
+    vaults: list[Path] = []
+    if use_agent:
+        served = _agent_vault_path()
+        if served is not None:
+            vaults.append(served)
+    named = PortableVault(vault_path).path
+    vaults.append(named)
+    own_root = portable_vault.find_brain_root()
+    default = portable_vault.default_vault_path()
+    if _same(named, default):
+        owner_root = _owner_brain_root(own_root)
+        if owner_root is not None:
+            vaults.append(owner_root / default.relative_to(own_root))
+    unique: list[Path] = []
+    for vault in vaults:
+        if not any(_same(vault, seen) for seen in unique):
+            unique.append(vault)
+    return [vault.parent / CONFIG_NAME for vault in unique]
+
+
+def resolve_config(
+    vault_path: Path | str | None = None, *, use_agent: bool = True
+) -> tuple[Path | None, list[Path]]:
+    """The first token-relay.json that exists among config_candidates, and every place looked."""
+    looked = config_candidates(vault_path, use_agent=use_agent)
+    return next((path for path in looked if path.is_file()), None), looked
+
+
+def _expires_within(token: dict[str, Any], seconds: float) -> bool:
+    try:
+        return float(token.get("expires_at", 0)) <= time.time() + seconds
+    except (TypeError, ValueError):
+        return True
+
+
+def refuse_unrelayed_refresh(
+    store: Any,
+    *,
+    refresh: bool = False,
+    leeway_seconds: float | None = None,
+    new_authorisation: bool = False,
+) -> None:
+    """Fail closed. A store relay_for left off because no token-relay.json was found, whose stored
+    token carries a relay version, is refused a forced refresh, a new authorisation, or a refresh
+    the leeway makes due: nothing goes to the provider. A store with a config (its entry unlisted),
+    another field, or a token never relayed is left alone, and a plain lock is not refused."""
+    if getattr(store, "relay_config_path", None) is not None or store.field != RELAYED_FIELD:
+        return
+    due = refresh or new_authorisation
+    if not due and leeway_seconds is None:
+        return
+    token = store._local_load()
+    version = _version(token)
+    if not version or not (due or _expires_within(token, leeway_seconds)):
+        return
+    looked = "; ".join(str(path) for path in getattr(store, "relay_config_looked", None) or [])
+    raise CredentialError(
+        f"Refresh of {store.entry} refused: its stored token carries token relay version {version}, "
+        f"but no {CONFIG_NAME} was found (looked in: {looked}). Nothing was sent to the provider. "
+        "Run from the checkout whose vault holds the relay config, or put the config beside the "
+        "vault in use."
+    )
 
 
 def load_config(path: Path) -> RelayConfig | None:
@@ -141,8 +255,15 @@ def read_relay_key(store: Any = None) -> bytes:
 
 
 def relay_for(store: Any) -> RelayedStore | None:
-    """The relayed behaviour for a PortableVaultJsonStore, or None when the relay is off."""
-    config = load_config(config_path(store.vault.path))
+    """The relayed behaviour for a PortableVaultJsonStore, or None when the relay is off. The
+    config used (or None) and the places looked are left on the store as relay_config_path and
+    relay_config_looked, for refuse_unrelayed_refresh and for callers that report them."""
+    found, looked = resolve_config(
+        store.vault.path, use_agent=getattr(store, "_broker", None) is not None
+    )
+    store.relay_config_path = found
+    store.relay_config_looked = looked
+    config = load_config(found) if found is not None else None
     if config is None or store.field != RELAYED_FIELD or store.entry not in config.entries:
         return None
     local = types.SimpleNamespace(
@@ -205,13 +326,15 @@ def _key_exists() -> bool:
 def _status(vault: str | None, out: TextIO) -> int:
     from portable_vault import PortableVaultJsonStore
 
-    config = load_config(config_path(vault))
+    found, looked = resolve_config(vault)
+    config = load_config(found) if found is not None else None
     if config is None:
-        print(json.dumps({"relay": "off", "reason": f"no {CONFIG_NAME} beside the vault"}), file=out)
+        reason = f"no {CONFIG_NAME} found; looked in: " + "; ".join(str(path) for path in looked)
+        print(json.dumps({"relay": "off", "reason": reason}), file=out)
         return 0
     backend = make_backend(config)
     for entry in config.entries:
-        row: dict[str, Any] = {"entry": entry, "relay": "on"}
+        row: dict[str, Any] = {"entry": entry, "relay": "on", "relay_config": str(found)}
         try:
             content, _ = backend.get(remote_name(entry))
             record = parse_record(content, entry) if content else None
@@ -238,7 +361,8 @@ def _seed(entry: str, vault: str | None, out: TextIO, replace: bool = False) -> 
     down for any brain."""
     from portable_vault import PortableVaultJsonStore
 
-    config = load_config(config_path(vault))
+    found, _ = resolve_config(vault)
+    config = load_config(found) if found is not None else None
     if config is None or entry not in config.entries:
         raise CredentialError(f"{entry} is not listed in {CONFIG_NAME}.")
     store = PortableVaultJsonStore(entry, path=vault)

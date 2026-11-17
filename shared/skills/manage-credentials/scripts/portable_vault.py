@@ -554,11 +554,18 @@ class PortableVaultJsonStore:
         """The rotation lock. A relayed store takes its lease when refresh=True (forced) or when the
         token expires within leeway_seconds; new_authorisation=True marks a code exchange, which
         may go ahead locally when the entry has no shared record yet and this computer holds no
-        refresh token. Without the relay the arguments change nothing."""
+        refresh token. Without the relay the arguments change nothing, except that a token carrying a
+        relay version with no relay config found is refused (token_relay.refuse_unrelayed_refresh)."""
         if self._relay is not None:
             return self._relay.rotation_lock(
                 refresh=refresh, leeway_seconds=leeway_seconds, new_authorisation=new_authorisation
             )
+        # Fail closed: a relay-marked token with no relay config found is refused a refresh.
+        from token_relay import refuse_unrelayed_refresh
+
+        refuse_unrelayed_refresh(
+            self, refresh=refresh, leeway_seconds=leeway_seconds, new_authorisation=new_authorisation
+        )
         return self._local_rotation_lock()
 
     def sync(self) -> None:

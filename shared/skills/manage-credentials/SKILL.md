@@ -329,6 +329,14 @@ lease blocks the others for the length of the lease (`lease_seconds`, 300 unless
 store and skip the provider when the token is already fresh; the Xero and HighLevel clients in
 the skill library do.
 
+**Where the config is found, and failing closed.** `token-relay.json` is looked for beside the
+vault the unlocked Vault Agent serves, then beside the named or default vault, then (when that is
+the default vault, as in a session copy whose own memory holds no vault) beside the default vault
+under `brain_root` in `/memory/OWNER.md`; the first that exists is used. `token_relay.py status`
+names it in each row, and the Xero vault store prints `Token relay config: <path>` (or where it
+looked) on stderr. When none is found and the stored token carries a relay version, a refresh or
+a new authorisation is refused with the places looked in, and nothing is sent to the provider.
+
 ### Set it up (the owner, once)
 
 1. Create a private repository for the relay and invite each person who shares the sign-in.
