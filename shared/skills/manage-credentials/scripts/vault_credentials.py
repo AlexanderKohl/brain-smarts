@@ -25,6 +25,12 @@ def _passphrase(
         session_passphrase = os.getenv("PORTABLE_VAULT_PASSPHRASE")
         if session_passphrase:
             return session_passphrase
+    if sys.stdin is None or not sys.stdin.isatty():
+        # No keyboard: a hidden prompt would wait for ever (a scheduled run, an agent's shell).
+        raise CredentialError(
+            "The vault passphrase is needed and there is no terminal to ask for it. "
+            "Unlock the Portable Vault tray app, then run this again."
+        )
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always", getpass.GetPassWarning)
         value = getpass.getpass(prompt)
@@ -62,15 +68,19 @@ def _mapping(value: str) -> tuple[str, str]:
 
 
 def _try_broker_fields(entry: str, fields: list[str]) -> dict[str, object] | None:
+    """The fields from the unlocked Vault Agent; None when the agent is locked or cannot be
+    reached, and the caller then asks for the passphrase. When the unlocked agent answers that
+    the entry or a field does not exist, that answer is the result: it is raised, never turned
+    into a passphrase prompt, which could only find the same vault lacking the same field."""
     try:
-        from vault_broker_client import broker_request, broker_unlocked
+        from vault_broker_client import BrokerLocked, BrokerUnavailable, broker_request, broker_unlocked
     except ImportError:
         return None
     try:
         if not broker_unlocked():
             return None
         values = broker_request("get_fields", entry=entry, fields=fields)
-    except CredentialError:
+    except (BrokerLocked, BrokerUnavailable):
         return None
     return values if isinstance(values, dict) else None
 

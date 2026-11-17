@@ -11,7 +11,7 @@ metadata:
   scope: shared
   project_ref: /memory/projects/credential-management
   created: 2026-08-04T16:11:53+10:00
-  updated: 2026-11-17T05:01:44+10:00
+  updated: 2026-11-17T11:42:01+10:00
 ---
 
 # Credential Management
@@ -275,6 +275,14 @@ with store.rotation_lock():
 ```
 
 Library consumers do not prompt. They require an unlocked Vault Agent (or an emergency in-process passphrase that must not be placed in child environments). `rotation_lock()` protects the complete local read-refresh-write sequence.
+
+## Running without a terminal
+
+`run` never waits for input nobody can give. When the unlocked Vault Agent answers that an entry
+or a field does not exist, `run` fails at once with that message: it does not fall back to a
+passphrase prompt, which could only find the same vault lacking the same field. When the
+passphrase is needed and there is no terminal to ask for it (a scheduled run, an agent's
+shell), every command fails at once and says to unlock the tray app.
 
 ## Share a rotating sign-in between brains (token relay)
 
