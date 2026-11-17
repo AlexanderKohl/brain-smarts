@@ -244,6 +244,26 @@ class PortableVault:
             del entries[entry]
             self._write_unlocked(payload, passphrase)
 
+    def delete_field(self, entry: str, field: str, passphrase: str) -> None:
+        """Remove one field and leave the rest of the entry as it was. The last field of an entry
+        is refused: an entry with nothing in it is deleted as an entry, a separate decision."""
+        entry = _validate_name(entry, "Entry name")
+        field = _validate_name(field, "Field name")
+        with _file_lock(self.lock_path):
+            payload = self._load_unlocked(passphrase)
+            try:
+                fields = payload["entries"][entry]["fields"]
+                if field not in fields:
+                    raise KeyError(field)
+            except (KeyError, TypeError) as exc:
+                raise CredentialError(f"Credential field does not exist: {entry}#{field}") from exc
+            if len(fields) == 1:
+                raise CredentialError(
+                    f"{field} is the only field of {entry}; delete the entry itself with delete-entry."
+                )
+            del fields[field]
+            self._write_unlocked(payload, passphrase)
+
     def _load_unlocked(self, passphrase: str) -> dict[str, Any]:
         if not self.path.exists():
             raise CredentialError(f"Credential vault does not exist: {self.path}")

@@ -131,6 +131,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     delete_entry.add_argument("--entry", required=True)
 
+    delete_field = commands.add_parser(
+        "delete-field",
+        help="Permanently delete one field of an entry; the entry's other fields stay",
+    )
+    delete_field.add_argument("--entry", required=True)
+    delete_field.add_argument("--field", required=True)
+
     put = commands.add_parser("put", help="Store one secret field")
     put.add_argument("--entry", required=True)
     put.add_argument("--field", required=True)
@@ -214,6 +221,16 @@ def main() -> int:
                 raise CredentialError("Credential entry deletion was not confirmed.")
             vault.delete_entry(args.entry, _passphrase())
             print(f"Deleted encrypted credential entry: {args.entry}")
+            return 0
+        if args.operation == "delete-field":
+            # Like delete-entry: the person types what goes and unlocks with the passphrase. It is
+            # never done through the unlocked Vault Agent, so no program can delete on its own.
+            target = f"{args.entry}#{args.field}"
+            confirmation = input(f"Type {target} to permanently delete this credential field: ")
+            if confirmation != target:
+                raise CredentialError("Credential field deletion was not confirmed.")
+            vault.delete_field(args.entry, args.field, _passphrase())
+            print(f"Deleted encrypted credential field: {target}")
             return 0
         if args.operation == "put":
             try:
