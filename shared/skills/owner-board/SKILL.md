@@ -331,12 +331,15 @@ read. No answer carries a CORS header. The server never applies, never commits a
 new, untracked files into the inbox folder; the memory's `.gitignore` keeps inbox and social
 decisions out of every commit. **Start-up** (increment 5): `install_board_server.ps1` registers one
 scheduled task, `BrainBoardServer`, at log-on of the current user (not elevated, no Startup-folder
-shortcut) that runs `serve_boards.py --port 8765 --bind 127.0.0.1 --root <the shared checkout>` with
+shortcut) that runs `serve_boards.py --port 8774 --bind 127.0.0.1 --root <the shared checkout>` with
 no console window and restarts it on failure; it refuses a session copy, does not start the server
 itself, and `-Uninstall` removes the task. A second start while the port is taken prints "the board
-server already runs on port 8765" and exits 0, so the `brain-boards` launch entry stays harmless;
+server already runs on port 8774" and exits 0, so the `brain-boards` launch entry stays harmless;
 `BoardServer` does not set `SO_REUSEADDR` on Windows, where it would let a second server share the
-port. `apply_events.py` reads the inbox folder by default – the
+port. The server used port 8765 until 17 Nov 2026; that port belongs to the Xero connection
+manager (its redirect address is registered with Xero). To move a machine over, stop the old server
+(`Get-NetTCPConnection -LocalPort 8765` names its process), run the installer again (it replaces the
+task) and start the task. `apply_events.py` reads the inbox folder by default – the
 memory's own and, from a session copy, the shared checkout's (`board_inbox.inbox_folders`) – and
 moves an applied file out of it as before; `inbox_apply.py` and `social_links_apply.py` move a file
 they applied from a memory's `inbox/` into their own `applied/` work folders.
@@ -632,9 +635,9 @@ Run from the brain root. Alphabetical.
 | `page_js.py` | The browser code every board page shares: screenshots, lightbox, download, task controls, the task pages' save bar, and the board server's client (`BoardPage.server`, `post`, `save`, `say`, `show`). Imported by the builders. |
 | `page_notes.py` | The release-notes section of a board page. Imported by `build_status.py`. |
 | `reconcile.py` | Compare a board with git and the task records. Called by every build. |
-| `serve_boards.py` | Serve the boards over http on this machine: the directory folder at `/`, and each board's node folder at the path the directory page's link arrives at, so a status page outside the directory folder opens (the plain `python -m http.server --directory memory/boards` answers those links with 404). Nothing else of memory or a repository is served; dot paths, listings and links out of a folder are refused, and so is any Host but this machine. `GET /_boards-status.json` answers `{"behind": N, "changed": [at most 20 paths], "checked": <iso time>}` for the memory checkout (`git rev-list --count HEAD..origin/main`, tracked files changed or staged), worked out on each request with a short git timeout; any failure gives `{"behind": null, "error": <a short reason>}`. `--port` (8765), `--list` prints the mounts. |
+| `serve_boards.py` | Serve the boards over http on this machine: the directory folder at `/`, and each board's node folder at the path the directory page's link arrives at, so a status page outside the directory folder opens (the plain `python -m http.server --directory memory/boards` answers those links with 404). Nothing else of memory or a repository is served; dot paths, listings and links out of a folder are refused, and so is any Host but this machine. `GET /_boards-status.json` answers `{"behind": N, "changed": [at most 20 paths], "checked": <iso time>}` for the memory checkout (`git rev-list --count HEAD..origin/main`, tracked files changed or staged), worked out on each request with a short git timeout; any failure gives `{"behind": null, "error": <a short reason>}`. `--port` (8774), `--list` prints the mounts. |
 | `serve_post.py` | The board server's post plumbing: the per-start token, the checks every `POST` passes (Host, Origin, JSON content type, token, 25 MB), `/_board-server.json`, `/_saved.json`, `/_save/<kind>` and `/_mail/text`. Imported by `serve_boards.py`. |
-| `install_board_server.ps1` | Register (and with `-Uninstall` remove) the log-on scheduled task that starts the board server on 127.0.0.1:8765. Run from the shared checkout; never started by the script itself. |
+| `install_board_server.ps1` | Register (and with `-Uninstall` remove) the log-on scheduled task that starts the board server on 127.0.0.1:8774. Run from the shared checkout; never started by the script itself. |
 | `task_actions.py` | Apply the owner's saved task actions through the tasks skill. Imported by `apply_events.py`. |
 | `task_board.py` | Route task records to boards and draw them: `route`, `build [--for <task>]`, `check`. |
 | `team_lanes.py` | The per-team work-in-progress line above a board's task columns. Imported by `task_board.py`. |

@@ -31,10 +31,10 @@ POWERSHELL = shutil.which("powershell") or shutil.which("pwsh")
 
 
 class InstallScriptTests(unittest.TestCase):
-    def test_it_starts_serve_boards_bound_to_this_machine_only_on_port_8765(self):
+    def test_it_starts_serve_boards_bound_to_this_machine_only_on_port_8774(self):
         self.assertIn("shared\\skills\\owner-board\\scripts\\serve_boards.py", CODE)
         self.assertRegex(CODE, r'\$bindAddress = "127\.0\.0\.1"')
-        self.assertRegex(CODE, r"\$port = 8765\b")
+        self.assertRegex(CODE, r"\$port = 8774\b")
         self.assertRegex(CODE, r"--port \$port --bind \$bindAddress")
         self.assertNotRegex(CODE, r"0\.0\.0\.0|\[::\]|--bind\s+(?!\$bindAddress)")
         self.assertEqual(re.findall(r"\d+\.\d+\.\d+\.\d+", CODE), ["127.0.0.1"], "no other address appears in the script's code")
@@ -113,7 +113,7 @@ class SecondStartTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(out.getvalue().strip(), "the board server already runs on port %d" % first.server_address[1])
 
-    def test_the_default_bind_is_this_machine_only_on_port_8765(self):
+    def test_the_default_bind_is_this_machine_only_on_port_8774(self):
         seen = {}
 
         class Spy:
@@ -123,7 +123,7 @@ class SecondStartTests(unittest.TestCase):
 
         with mock.patch.object(serve_boards, "BoardServer", Spy), contextlib.redirect_stdout(io.StringIO()):
             serve_boards.main(["--root", str(self.brain.root)])
-        self.assertEqual(seen["address"], ("127.0.0.1", 8765))
+        self.assertEqual(seen["address"], ("127.0.0.1", 8774))
 
     def test_a_request_is_answered_when_the_process_has_no_stderr(self):
         """pythonw gives a process no stderr: the per-request log line must not break the answer."""

@@ -38,12 +38,12 @@ page's saved decisions into `/memory/inbox/` and `GET /_saved.json` lists what w
 checks every post passes are in `serve_post.py`, the saving in `board_inbox.py`.
 
 Started at log-on (increment 5) by the scheduled task `install_board_server.ps1` registers: this script
-on `--bind 127.0.0.1 --port 8765` from the shared checkout, with no console window. A second start
-while the port is taken exits 0 with "the board server already runs on port 8765", so the desktop
+on `--bind 127.0.0.1 --port 8774` from the shared checkout, with no console window. A second start
+while the port is taken exits 0 with "the board server already runs on port 8774", so the desktop
 app's `brain-boards` launch entry stays harmless on a machine with the task.
 
 Usage, from the brain root:
-    python shared/skills/owner-board/scripts/serve_boards.py --port 8765
+    python shared/skills/owner-board/scripts/serve_boards.py --port 8774
 """
 from __future__ import annotations
 
@@ -251,7 +251,7 @@ def make_handler(config: board_config.Config):
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--port", type=int, default=8774)
     parser.add_argument("--bind", default="127.0.0.1")
     parser.add_argument("--root", help="the brain root (default: found from here)")
     parser.add_argument("--list", action="store_true", help="print the mounts and exit")

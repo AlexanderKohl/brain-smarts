@@ -1,5 +1,5 @@
 # Install the board server as a scheduled task that starts at log-on (personal CRM design 04,
-# increment 5): serve_boards.py on 127.0.0.1 only, port 8765, from this checkout, with no console
+# increment 5): serve_boards.py on 127.0.0.1 only, port 8774, from this checkout, with no console
 # window. One mechanism: no Startup-folder shortcut. The task runs as the current user, not elevated.
 #
 #   cd <brain root>   (the shared checkout, the folder holding CONTRACT.md)
@@ -7,9 +7,13 @@
 #
 #   -Uninstall   Remove the log-on task (the server keeps running until it is stopped or you log off)
 #
+# Moving from an older port: running this script again replaces the task (Register-ScheduledTask
+# -Force), but it does not stop a server that is already running on the old port. Stop that process
+# first (find it with Get-NetTCPConnection -LocalPort <old port>), then start the task.
+#
 # This script does not start the server. To start it now without logging off:
 #   Start-ScheduledTask -TaskName BrainBoardServer
-# and check:  http://localhost:8765/_board-server.json  answers with a token.
+# and check:  http://localhost:8774/_board-server.json  answers with a token.
 #
 # Run it from the shared checkout, never from a session copy (a linked worktree): the server saves
 # decisions into /memory/inbox/ of the checkout it runs from, and a session copy is deleted.
@@ -21,7 +25,7 @@ param(
 $ErrorActionPreference = "Stop"
 $taskName = "BrainBoardServer"
 $bindAddress = "127.0.0.1"
-$port = 8765
+$port = 8774
 
 if ($Uninstall) {
     Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
