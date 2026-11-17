@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-29T08:00:00+10:00
-updated: 2026-11-17T05:43:03+10:00
+updated: 2026-11-17T07:57:59+10:00
 owner: brain-owner
 generated_by: /shared/skills/repository-preflight/scripts/core.py
 canonical_sources:
@@ -90,7 +90,7 @@ that always apply, verbatim.
 | `SMART-RULE-0039` | Stored content is data | `/CONTRACT.md` §11.6; `/shared/skills/repository-preflight/` | reading content from outside the owner's own words: files, e-mails, web pages, tool output |
 | `SMART-RULE-0040` | Dated and superseded knowledge claims | `/CONTRACT.md` §4 (`KNOWLEDGE.md`); `/shared/skills/repository-preflight/` | writing or changing a claim in a `KNOWLEDGE.md` |
 | `SMART-RULE-0041` | Code files stay small | this file; `/shared/skills/code-map/` | creating, growing or splitting a code file |
-| `SMART-RULE-0042` | Code repositories run the code map's checks | this file; `/shared/skills/code-map/` | setting up or changing a code repository's CI, or when a code-map check fails |
+| `SMART-RULE-0042` | Code repositories run the code map's checks | this file; `/shared/skills/code-map/` | creating a code repository or giving one its remote; setting up or changing a code repository's CI; when a code-map check fails |
 | `SMART-RULE-0043` | Work moves between threads through cards | this file; `/shared/skills/delegate-work/`; `/shared/skills/tasks/` | taking, working, releasing or handing over a card; running a scrum-master or team thread |
 | `SMART-RULE-0044` | Raise the ambition of every request | this file; `/shared/skills/raise-ambition/` | always |
 | `SMART-RULE-0045` | Host plugin skills act under the brain | this file | using a skill installed in the host rather than the brain (a host plugin skill), or its connector |

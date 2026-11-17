@@ -10,7 +10,7 @@ status: active
 scope: shared
 owner: brain-owner
 created: 2026-09-03T14:05:35+10:00
-updated: 2026-09-28T13:44:41+10:00
+updated: 2026-11-17T07:57:59+10:00
 ---
 
 # Product Development
@@ -144,6 +144,7 @@ Work through the adapted phases and gates at the selected depth. The agent shoul
 - compare existing products, components, APIs and internal capabilities
 - analyse internal value and commercial potential
 - draft scope, journeys, prototypes, architecture, risks, tests and release plans
+- set up CI when the repository is created, before the first feature (`SMART-RULE-0042`)
 - perform permitted validation and collect results
 - expose uncertainty, contradictory evidence and assumptions
 - maintain tasks and project state under the contract

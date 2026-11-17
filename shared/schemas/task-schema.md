@@ -90,8 +90,9 @@ still parses.
     again; after that the claim has lapsed, the boards say so, and another session may take the
     card over.
   - In a repository store, which several people's brains share, `claimed_by` is
-    `<author>/<session name>`, and a claim or release is committed and pushed at once so the
-    other brains see it. A memory store keeps the bare session name.
+    `<author>/<session name>`, and a claim or release either reaches origin at once or is not
+    made. A memory store keeps the bare session name. A live claim is released only by the
+    author who holds it.
 
 ## The companion file
 

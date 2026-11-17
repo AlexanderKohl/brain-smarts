@@ -25,6 +25,12 @@ def _passphrase(
         session_passphrase = os.getenv("PORTABLE_VAULT_PASSPHRASE")
         if session_passphrase:
             return session_passphrase
+    if sys.stdin is None or not sys.stdin.isatty():
+        # No keyboard: a hidden prompt would wait for ever (a scheduled run, an agent's shell).
+        raise CredentialError(
+            "The vault passphrase is needed and there is no terminal to ask for it. "
+            "Unlock the Portable Vault tray app, then run this again."
+        )
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always", getpass.GetPassWarning)
         value = getpass.getpass(prompt)
@@ -62,15 +68,19 @@ def _mapping(value: str) -> tuple[str, str]:
 
 
 def _try_broker_fields(entry: str, fields: list[str]) -> dict[str, object] | None:
+    """The fields from the unlocked Vault Agent; None when the agent is locked or cannot be
+    reached, and the caller then asks for the passphrase. When the unlocked agent answers that
+    the entry or a field does not exist, that answer is the result: it is raised, never turned
+    into a passphrase prompt, which could only find the same vault lacking the same field."""
     try:
-        from vault_broker_client import broker_request, broker_unlocked
+        from vault_broker_client import BrokerLocked, BrokerUnavailable, broker_request, broker_unlocked
     except ImportError:
         return None
     try:
         if not broker_unlocked():
             return None
         values = broker_request("get_fields", entry=entry, fields=fields)
-    except CredentialError:
+    except (BrokerLocked, BrokerUnavailable):
         return None
     return values if isinstance(values, dict) else None
 
@@ -120,6 +130,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Permanently delete one complete encrypted credential entry",
     )
     delete_entry.add_argument("--entry", required=True)
+
+    delete_field = commands.add_parser(
+        "delete-field",
+        help="Permanently delete one field of an entry; the entry's other fields stay",
+    )
+    delete_field.add_argument("--entry", required=True)
+    delete_field.add_argument("--field", required=True)
 
     put = commands.add_parser("put", help="Store one secret field")
     put.add_argument("--entry", required=True)
@@ -204,6 +221,16 @@ def main() -> int:
                 raise CredentialError("Credential entry deletion was not confirmed.")
             vault.delete_entry(args.entry, _passphrase())
             print(f"Deleted encrypted credential entry: {args.entry}")
+            return 0
+        if args.operation == "delete-field":
+            # Like delete-entry: the person types what goes and unlocks with the passphrase. It is
+            # never done through the unlocked Vault Agent, so no program can delete on its own.
+            target = f"{args.entry}#{args.field}"
+            confirmation = input(f"Type {target} to permanently delete this credential field: ")
+            if confirmation != target:
+                raise CredentialError("Credential field deletion was not confirmed.")
+            vault.delete_field(args.entry, args.field, _passphrase())
+            print(f"Deleted encrypted credential field: {target}")
             return 0
         if args.operation == "put":
             try:

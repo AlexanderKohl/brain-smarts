@@ -151,10 +151,19 @@ python shared/skills/tasks/scripts/tasks.py release TASK-... [--note "..."]
 
 - `claim`: refused while another session's claim is live. A claim lasts 6 hours; claim again to
   renew it. A lapsed claim is taken over, and the History says whose it was. In a repository
-  store the holder is written `<author>/<session>`, and the claim or release is committed on its
-  own and pushed at once, so the other brains see it. It never pushes other work: with unpushed
-  commits in the checkout it commits and says the push is still owed. When another brain
-  changed the card first, the claim is withdrawn and the command says so.
+  store the holder is written `<author>/<session>`, and a claim or release either reaches origin
+  at once or is not made: it is committed on its own (the card and `STATE.md`, nothing else) and
+  pushed, and when that cannot be done the change is undone and the command fails.
+  - It is refused, before anything is written, while files are staged or the checkout has
+    unpushed commits of its own: push or commit first. `--offline` makes a claim only this
+    computer sees, and says so.
+  - When origin moved meanwhile, origin is merged (never rebased) and the push tried again; two
+    brains claiming different cards at once both keep theirs.
+  - When another brain changed the same card first, or the server or a hook refuses the push,
+    the claim is withdrawn by a second commit and the command says why. Pull, then look at who
+    holds the card.
+- `release`: in a repository store a live claim is released only by the author who holds it; a
+  lapsed one by anyone.
 - `tasks.py claims` lists the cards other brains hold in shared repositories, live claims
   first, then lapsed ones; `sync.py` shows the same lines at session start.
 - `done`: status `completed`, a claim cleared, the record moved to its store's `completed/`.
