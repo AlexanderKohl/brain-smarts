@@ -16,6 +16,25 @@ from portable_vault import CredentialError, PortableVault
 ENVIRONMENT_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
+def _keyboard() -> bool:
+    """Whether a person can type at this process: standard input is a console, not a pipe, a file or the null device."""
+    stdin = sys.stdin
+    if stdin is None or not stdin.isatty():
+        return False
+    if os.name != "nt":
+        return True
+    # On Windows the null device also answers isatty() with yes; only a console has a console mode.
+    import ctypes
+    import msvcrt
+
+    try:
+        handle = msvcrt.get_osfhandle(stdin.fileno())
+    except (AttributeError, OSError, ValueError):
+        return False
+    mode = ctypes.c_ulong()
+    return bool(ctypes.windll.kernel32.GetConsoleMode(ctypes.c_void_p(handle), ctypes.byref(mode)))
+
+
 def _passphrase(
     prompt: str = "Vault recovery passphrase: ",
     *,
@@ -25,7 +44,7 @@ def _passphrase(
         session_passphrase = os.getenv("PORTABLE_VAULT_PASSPHRASE")
         if session_passphrase:
             return session_passphrase
-    if sys.stdin is None or not sys.stdin.isatty():
+    if not _keyboard():
         # No keyboard: a hidden prompt would wait for ever (a scheduled run, an agent's shell).
         raise CredentialError(
             "The vault passphrase is needed and there is no terminal to ask for it. "

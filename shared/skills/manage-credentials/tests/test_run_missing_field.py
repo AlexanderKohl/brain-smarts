@@ -68,6 +68,15 @@ class RunTests(unittest.TestCase):
     def test_the_fields_are_returned_when_the_agent_has_them(self) -> None:
         self.assertEqual(self.fields(lambda operation, **payload: {"client_id": "sample-id"}), {"client_id": "sample-id"})
 
+    def test_the_null_device_is_no_terminal_so_listing_fails_at_once(self) -> None:
+        # On Windows the null device answers isatty() with yes; a session's shell hands it over as standard input.
+        errors = io.StringIO()
+        clean = {k: v for k, v in os.environ.items() if k != "PORTABLE_VAULT_PASSPHRASE"}
+        with open(os.devnull) as nothing, mock.patch.object(sys, "stdin", nothing),                 mock.patch.object(vault_credentials.getpass, "getpass", side_effect=AssertionError("a prompt would hang here")),                 mock.patch.dict(os.environ, clean, clear=True),                 mock.patch.object(sys, "argv", ["vault_credentials.py", "list"]), contextlib.redirect_stderr(errors):
+            code = vault_credentials.main()
+        self.assertEqual(code, 2)
+        self.assertIn("no terminal", errors.getvalue())
+
     def fields(self, request) -> object:
         with mock.patch.object(vault_broker_client, "broker_request", request), \
                 mock.patch.object(vault_broker_client, "broker_unlocked", lambda: True):
