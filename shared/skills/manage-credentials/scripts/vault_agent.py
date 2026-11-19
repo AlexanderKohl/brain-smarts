@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import atexit
+import errno
 import os
 import secrets
 import sys
@@ -27,9 +28,20 @@ from vault_agent_runtime import (
 )
 
 
+# The errors a locked file gives on Windows (EACCES, EDEADLOCK) and on POSIX (EACCES, EAGAIN).
+LOCK_BUSY_ERRNOS = {errno.EACCES, errno.EAGAIN, errno.EDEADLK}
+
+
+class AgentAlreadyRunning(CredentialError):
+    """The singleton lock stayed held for the whole wait: another agent is running."""
+
+
 class VaultAgent:
     # How often a running agent checks that its state file is still there (see _keep_state).
     STATE_CHECK_SECONDS = 5.0
+    # How long a start waits for a busy singleton lock before it reports another running agent.
+    LOCK_WAIT_SECONDS = 10.0
+    LOCK_RETRY_SECONDS = 0.25
 
     def __init__(self, vault_path: Path | str | None = None) -> None:
         self.vault = PortableVault(vault_path)
@@ -177,31 +189,53 @@ class VaultAgent:
             code = "locked" if "locked" in message.lower() else "error"
             return {"ok": False, "id": request_id, "error": message, "code": code}
 
-    def _acquire_singleton(self) -> None:
+    @staticmethod
+    def _try_lock(handle: Any) -> None:
+        """One attempt at the singleton lock; raises OSError when it cannot be taken."""
+        if os.name == "nt":
+            import msvcrt
+
+            # Measure the file from its end: in append mode a write always lands there, so a
+            # start that is about to be refused must not add a byte to the holder's file.
+            handle.seek(0, os.SEEK_END)
+            if handle.tell() == 0:
+                handle.write(b"0")
+                handle.flush()
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+    def _acquire_singleton(self, wait_seconds: float | None = None) -> None:
+        """Take the one-agent lock, retrying while another holder may be about to let go.
+
+        At login an agent can meet a holder that is ending, or a process that touches the lock file
+        for a moment, so a busy lock is retried for `LOCK_WAIT_SECONDS` before it is reported as
+        another running agent. Any other failure is reported with its own cause.
+        """
+        wait = self.LOCK_WAIT_SECONDS if wait_seconds is None else wait_seconds
         path = singleton_lock_path()
         path.parent.mkdir(parents=True, exist_ok=True)
-        handle = path.open("a+b")
-        try:
-            if os.name == "nt":
-                import msvcrt
-
-                # Measure the file from its end: in append mode a write always lands there, so a
-                # start that is about to be refused must not add a byte to the holder's file.
-                handle.seek(0, os.SEEK_END)
-                if handle.tell() == 0:
-                    handle.write(b"0")
-                    handle.flush()
-                handle.seek(0)
-                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
-            else:
-                import fcntl
-
-                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError as exc:
-            handle.close()
-            raise CredentialError(
-                "Another Vault Agent instance is already running for this user."
-            ) from exc
+        deadline = time.monotonic() + wait
+        while True:
+            try:
+                handle = path.open("a+b")
+            except OSError as exc:
+                raise CredentialError(f"Vault Agent cannot open its lock file {path}: {exc}") from exc
+            try:
+                self._try_lock(handle)
+                break
+            except OSError as exc:
+                handle.close()
+                if exc.errno not in LOCK_BUSY_ERRNOS:
+                    raise CredentialError(f"Vault Agent could not take its lock {path}: {exc}") from exc
+                if time.monotonic() >= deadline:
+                    raise AgentAlreadyRunning(
+                        "Another Vault Agent instance is already running for this user."
+                    ) from exc
+                time.sleep(self.LOCK_RETRY_SECONDS)
         handle.seek(0)
         handle.truncate()
         handle.write(str(os.getpid()).encode("ascii"))

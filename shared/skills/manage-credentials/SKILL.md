@@ -171,7 +171,9 @@ powershell -NoProfile -File shared/skills/manage-credentials/scripts/install_vau
 pythonw shared\skills\manage-credentials\scripts\vault_tray.py
 ```
 
-Tray menu: Unlock… / Lock / Status… / Quit. After reboot/login the scheduled task starts the tray app automatically.
+Tray menu: Unlock… / Lock / Status… / Quit. After reboot/login the Startup shortcut (and the logon task, when one could be registered) starts the tray app automatically.
+
+A start that finds the agent's lock busy retries for 10 seconds before it concludes another agent is running. When a healthy agent already answers, the second tray ends quietly with no dialog. Every other start failure is shown with its real cause. The tray has no console, so each start, quiet exit and failure is also written to `%USERPROFILE%\.portable-ai-brain\vault-agent\tray.log` (never secret material; the file is cut back once it passes 64 KiB). When the icon is missing after login, read that file first.
 
 Before prompting for the recovery passphrase, check the tray colour or run `python shared/skills/manage-credentials/scripts/vaultctl.py status`. If already unlocked, reuse that same tray agent and do not prompt again.
 

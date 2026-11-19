@@ -10,8 +10,9 @@ from ctypes import wintypes
 from typing import Any
 
 from portable_vault import CredentialError, default_vault_path
-from vault_agent import VaultAgent
-from vault_agent_runtime import prepare_runtime_dir
+from vault_agent import AgentAlreadyRunning, VaultAgent
+from vault_agent_runtime import log_tray, prepare_runtime_dir
+from vault_broker_client import broker_available
 
 user32 = ctypes.windll.user32
 kernel32 = ctypes.windll.kernel32
@@ -389,6 +390,7 @@ class VaultTrayApp:
         self._serve_thread: threading.Thread | None = None
         self._icon: Any = None
         self._stop = threading.Event()
+        self._another_agent = False
 
     def _unlocked(self) -> bool:
         return bool(self.agent.status().get("unlocked"))
@@ -407,12 +409,19 @@ class VaultTrayApp:
         def run() -> None:
             try:
                 self.agent.serve_forever()
+            except AgentAlreadyRunning as exc:
+                # run() decides whether this is worth a dialog: a healthy agent needs none.
+                log_tray(f"lock held by another agent: {exc}")
+                self._another_agent = True
+                self._stop.set()
             except CredentialError as exc:
+                log_tray(f"agent stopped: {exc}")
                 _show_error(str(exc))
                 self._stop.set()
                 if self._icon is not None:
                     self._icon.stop()
             except Exception as exc:  # noqa: BLE001
+                log_tray(f"agent stopped unexpectedly: {exc!r}")
                 _show_error(f"Vault Agent stopped unexpectedly: {exc}")
                 self._stop.set()
                 if self._icon is not None:
@@ -420,7 +429,9 @@ class VaultTrayApp:
 
         self._serve_thread = threading.Thread(target=run, name="vault-agent", daemon=True)
         self._serve_thread.start()
-        deadline = time.time() + 5
+        # The agent may wait for a busy lock before it starts, so the window covers that wait.
+        window = VaultAgent.LOCK_WAIT_SECONDS + 5
+        deadline = time.time() + window
         while time.time() < deadline:
             if self._stop.is_set():
                 raise CredentialError("Vault Agent failed to start.")
@@ -436,7 +447,7 @@ class VaultTrayApp:
                 pass
             time.sleep(0.1)
         raise CredentialError(
-            "Vault Agent did not start within 5 seconds: its state file was not written."
+            f"Vault Agent did not start within {window:.0f} seconds: its state file was not written."
         )
 
     def _do_unlock(self, _icon: Any = None, _item: Any = None) -> None:
@@ -495,9 +506,15 @@ class VaultTrayApp:
 
     def run(self, *, prompt_on_start: bool = True) -> int:
         prepare_runtime_dir()
+        log_tray("tray starting")
         try:
             self._start_broker()
         except CredentialError as exc:
+            if self._another_agent and broker_available():
+                # A healthy agent already serves this login, so there is nothing to start or report.
+                log_tray("a healthy agent is already running; this start ends quietly")
+                return 0
+            log_tray(f"start failed: {exc}")
             _show_error(
                 f"{exc}\n\n"
                 "If another Vault Agent is still running, quit it from the tray "

@@ -41,6 +41,25 @@ def singleton_lock_path() -> Path:
     return runtime_dir() / "agent.singleton"
 
 
+def tray_log_path() -> Path:
+    return runtime_dir() / "tray.log"
+
+
+def log_tray(message: str) -> None:
+    """Append one line to the tray's log. The tray runs without a console, so this is the only
+    trace of why a start failed. Never raises, and never receives secret material."""
+    try:
+        path = tray_log_path()
+        # Keep the file small: start again when it passes 64 KiB.
+        if path.exists() and path.stat().st_size > 64 * 1024:
+            path.unlink()
+        stamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        with path.open("a", encoding="utf-8", newline="\n") as stream:
+            stream.write(f"{stamp} pid={os.getpid()} {message}\n")
+    except OSError:
+        pass
+
+
 def ipc_address() -> str | tuple[str, int]:
     if os.name == "nt":
         return rf"\\.\pipe\{AGENT_NAME}"
