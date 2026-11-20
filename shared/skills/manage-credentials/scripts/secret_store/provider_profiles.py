@@ -32,7 +32,7 @@ def profiles() -> dict[str, Any]:
 
 
 def provider_for(entry: str | None) -> str | None:
-    """The provider an entry name points to (xero, google, gohighlevel), or None."""
+    """The provider an entry name points to (xero, google, gohighlevel, meta), or None."""
     name = str(entry or "").lower()
     for key, profile in profiles().items():
         if any(word in name for word in profile.get("match", [key])):

@@ -295,7 +295,11 @@ class StoreBackend:
         the per-entry lock, refuse a disabled or unresolved entry, write and flush the calling
         record; return its operation id and the full record. Elsewhere: the refresher's name and
         the latest published record, after a pull. No sign-in yet: with new_authorisation (a code
-        exchange) an operation id for the first save, which creates the sign-in; else nothing."""
+        exchange) an operation id for the first save, which creates the sign-in; else nothing.
+        A sign-in whose record holds no token (grant text stored before the first browser sign-in,
+        or cleared) counts as no sign-in yet unless this is a new authorisation, and a new
+        authorisation writes no calling record: it never spends the stored grant, so a block that
+        ends without a save leaves nothing uncertain."""
         with self._lock:
             self._ready()
             st, group = self._route(entry)
@@ -314,8 +318,10 @@ class StoreBackend:
             else:
                 revision = st.checkpoint.objects[signin.oauth_id]["revision"]
                 record = oauth_ops.read(st, signin)  # first: a failure to read never leaves a calling record
+                if not new_authorisation and not oauth_ops.looks_like_signin(record):
+                    return {"signin": False}  # no token yet: nothing to refresh, nothing journalled
                 stack, begun = self._journal.begin(signin.journal_key, revision, signin.provider,
-                                                   self._policy_disabled(st))
+                                                   self._policy_disabled(st), write=not new_authorisation)
             timer = threading.Timer(self.refresh_timeout, self._expire, (key, begun["operation"]))
             timer.daemon = True
             self._pending[key] = {"stack": stack, "record": begun, "timer": timer, "signin": signin, "store": st,

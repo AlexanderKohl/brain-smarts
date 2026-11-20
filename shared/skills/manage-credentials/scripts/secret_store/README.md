@@ -71,9 +71,12 @@ Tests: `tests/test_secret_store_*.py`.
   repository (the store refuses a clone inside the brain).
 - Checkpoints, trust-root pins, enrolment state and journals sit in the per-user application data
   folder (`brain-secrets`), outside every clone.
-- Recovery packages are written to `recovery-packages` in that folder by default, refreshed weekly
-  and after every policy change; point `recovery_package_dir` at the person's own cloud drive to
-  keep a copy outside the computer. A package is encrypted to the recovery key.
+- Recovery packages go by default to a `brain-secrets-recovery` folder in the person's own cloud
+  drive when one is found (OneDrive through the `OneDrive` or `OneDriveConsumer` environment
+  variable on Windows, iCloud Drive on macOS), otherwise to `recovery-packages` in that folder,
+  and status then warns that the package is only on this computer; `recovery_package_dir` sets
+  another place. A package older than seven days is rebuilt when the store opens (after the
+  opening transaction) and after every policy change. A package is encrypted to the recovery key.
 - Every file of one change is one commit with a generic message (`update`, `policy`, `recovery`).
 
 ## Roles

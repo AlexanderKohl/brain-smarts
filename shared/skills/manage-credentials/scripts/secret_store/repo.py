@@ -288,25 +288,15 @@ class SecretRepo:
                     return Conflict(remote)
                 raise SecretStoreError("local head is not the verified remote head")
             blobs = {name: canonical.dumps(value) for name, value in change.items() if value is not None}
-            for name, value in change.items():
-                target = self.path / name
-                if value is None:
-                    if local is None or not self._git("cat-file", "-e", f"HEAD:{name}", check=False).returncode == 0:
-                        raise SecretStoreError("removal of a file that does not exist")
-                    self._git("rm", "--quiet", "--cached", "--", name)
-                    target.unlink(missing_ok=True)
-                else:
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    tmp = target.with_name(target.name + ".tmp")
-                    tmp.write_bytes(blobs[name])
-                    os.replace(tmp, target)
-                    self._git("add", "--", name)
-            if local is None or self._git("cat-file", "-e", f"HEAD:{GITATTRIBUTES}", check=False).returncode != 0:
-                (self.path / GITATTRIBUTES).write_bytes(GITATTRIBUTES_BYTES)
-                self._git("add", "--", GITATTRIBUTES)
-            commit_result = self._git("commit", "--quiet", "--no-verify", "-m", message, check=False)
+            self._clean(local)  # nothing staged or loose may ride along with the declared files
+            try:
+                self._stage(change, blobs, local)
+                commit_result = self._git("commit", "--quiet", "--no-verify", "-m", message, check=False)
+            except BaseException:
+                self._clean(local)
+                raise
             if commit_result.returncode != 0:
-                self._restore(local)
+                self._clean(local)
                 raise SecretStoreError("nothing to commit or commit failed")
             new = self.head()
             push = self._git("push", "--quiet", "--porcelain", REMOTE,
@@ -319,6 +309,35 @@ class SecretRepo:
                 raise SecretStoreError("push did not complete; the change is committed locally but not synced")
             self._git("update-ref", self._remote_ref(), new)
             return new
+
+    def _clean(self, local: str | None) -> None:
+        """Index and working tree exactly at the verified head local (or empty): anything staged or
+        loose is dropped, then the state is proved clean."""
+        if local is None:
+            self._git("read-tree", "--empty")
+        else:
+            self._git("reset", "--quiet", "--hard", local)
+        self._git("clean", "-fdq")
+        if self._out("status", "--porcelain", "--untracked-files=all").strip():
+            raise SecretStoreError("the local copy holds changes that cannot be removed; nothing was written")
+
+    def _stage(self, change: dict[str, Any], blobs: dict[str, bytes], local: str | None) -> None:
+        for name, value in change.items():
+            target = self.path / name
+            if value is None:
+                if local is None or not self._git("cat-file", "-e", f"HEAD:{name}", check=False).returncode == 0:
+                    raise SecretStoreError("removal of a file that does not exist")
+                self._git("rm", "--quiet", "--cached", "--", name)
+                target.unlink(missing_ok=True)
+            else:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                tmp = target.with_name(target.name + ".tmp")
+                tmp.write_bytes(blobs[name])
+                os.replace(tmp, target)
+                self._git("add", "--", name)
+        if local is None or self._git("cat-file", "-e", f"HEAD:{GITATTRIBUTES}", check=False).returncode != 0:
+            (self.path / GITATTRIBUTES).write_bytes(GITATTRIBUTES_BYTES)
+            self._git("add", "--", GITATTRIBUTES)
 
     def settle_failed_write(self, before: str | None) -> str | None:
         """After write raised: the commit it made when the remote head is that very commit (the

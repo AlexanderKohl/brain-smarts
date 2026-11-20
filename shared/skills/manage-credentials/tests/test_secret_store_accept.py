@@ -306,9 +306,12 @@ class AcceptTest(Base):
         w = self.w
         tok = {"provider": "xero", "accessToken": "fictional-a", "expiresAt": 1, "tenant": "t1"}
         w.apply(commit(w.obj("o1", tok, "bob-pc", operation="op-1")), latest={"o1": dict(TOK_A)})
-        for name, value in (("accessToken", "fictional-b"), ("expiresAt", 2), ("provider", "x")):
+        for name, value, text in (("accessToken", "fictional-b", "access-token"),
+                                  ("expiresAt", 2, "access-token"),
+                                  # The policy's recorded provider is checked first, on every revision.
+                                  ("provider", "x", "provider")):
             self.refused(commit(w.obj("o1", dict(tok, **{name: value}), "carol-pc")), latest={"o1": tok},
-                         text="access-token")
+                         text=text)
         w.accept(commit(w.obj("o1", dict(tok, tenant="t2"), "carol-pc")), latest={"o1": tok})
 
     def test_reader_change_needs_an_administrator(self):

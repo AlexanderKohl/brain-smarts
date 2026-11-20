@@ -26,7 +26,7 @@ from .store_ops import GROUP, new_object_id, next_policy
 GRANT_SUFFIX = "#grant"
 DEFAULT_FIELD = "oauth_token_json"
 PROVIDER_KEY = "provider"
-SIGNIN_MARKERS = ("access_token", "refresh_token", "accessToken", "refreshToken")
+SIGNIN_MARKERS = ("access_token", "refresh_token", "accessToken", "refreshToken", "user_token")
 
 
 class _Unchanged(Exception):

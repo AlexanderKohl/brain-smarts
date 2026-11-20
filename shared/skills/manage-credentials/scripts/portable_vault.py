@@ -30,6 +30,17 @@ class CredentialError(RuntimeError):
     """Raised when a credential operation cannot complete safely."""
 
 
+def __getattr__(name: str) -> Any:
+    """ProviderNotCalled: the secrets-store journal's class, re-exported so a connector can raise
+    it for a failure before any provider request (the begun refresh is then removed, not held as
+    uncertain). Imported on first use, so this module stays light."""
+    if name == "ProviderNotCalled":
+        from secret_store.journal import ProviderNotCalled
+
+        return ProviderNotCalled
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 def find_brain_root(start: Path | None = None) -> Path:
     """Walk upwards from this script (or ``start``) to the folder holding CONTRACT.md."""
     here = (start or Path(__file__)).resolve()

@@ -42,6 +42,24 @@ def find_brain_root(start: str | os.PathLike | None = None) -> Path | None:
     return None
 
 
+RECOVERY_FOLDER = "brain-secrets-recovery"
+
+
+def recovery_package_place() -> tuple[Path, bool]:
+    """The default recovery-package folder and whether it is in the person's own cloud drive:
+    OneDrive (the OneDrive or OneDriveConsumer environment variable) on Windows, iCloud Drive on
+    macOS, else the local application-data folder (status then warns)."""
+    found: list = []
+    if sys.platform == "win32":
+        found = [os.environ.get("OneDrive"), os.environ.get("OneDriveConsumer")]
+    elif sys.platform == "darwin":
+        found = [Path.home() / "Library" / "Mobile Documents" / "com~apple~CloudDocs"]
+    for folder in found:
+        if folder and Path(folder).is_dir():
+            return Path(folder) / RECOVERY_FOLDER, True
+    return app_data_dir() / "recovery-packages", False
+
+
 def app_data_dir() -> Path:
     """The per-user application data folder that holds the checkpoint (outside every clone)."""
     if sys.platform == "win32":
@@ -98,7 +116,10 @@ def load_config(use_config_file: bool = True, brain_root: str | os.PathLike | No
     config["personal_clone"] = Path(data.get("personal_clone") or repos / "brain-secrets")
     config["team_clone"] = Path(data.get("team_clone") or repos / "brain-team-secrets")
     config["checkpoint_dir"] = Path(data.get("checkpoint_dir") or app_data_dir())
-    config["recovery_package_dir"] = Path(data.get("recovery_package_dir") or app_data_dir() / "recovery-packages")
+    if data.get("recovery_package_dir"):  # the person's own choice
+        config["recovery_package_dir"], config["recovery_package_cloud"] = Path(data["recovery_package_dir"]), True
+    else:
+        config["recovery_package_dir"], config["recovery_package_cloud"] = recovery_package_place()
     for name in ("personal_clone", "team_clone"):
         clone, brain = config[name].resolve(), root.resolve() if root is not None else None
         if brain is not None and (clone == brain or brain in clone.parents):
@@ -238,4 +259,9 @@ def store_status(self: Any) -> str:
         lines.append(f"Recovery package: made {days} day(s) ago at {path}.")
     else:
         lines.append("Recovery package: none yet; run recovery-package.")
+    if getattr(self, "package_error", None):
+        lines.append("Recovery package: the automatic weekly refresh failed; run recovery-package.")
+    if not self.config.get("recovery_package_cloud", True):
+        lines.append("Warning: no OneDrive or iCloud Drive folder was found, so the recovery package is only on "
+                     "this computer; set recovery_package_dir to a folder that is backed up elsewhere.")
     return " ".join(lines)

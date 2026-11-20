@@ -134,7 +134,10 @@ def _wait_for_refresher(store: Any, begun: dict, leeway: Any) -> None:
     raise CredentialError(f"this sign-in refreshes on {begun.get('computer')}; it has not refreshed it yet")
 
 
-def unsaved_message(entry: str) -> str:
+def unsaved_message(entry: str, new_authorisation: bool = False) -> str:
+    if new_authorisation:
+        return (f"The sign-in of {entry} ended without saving the provider's answer; nothing was recorded. "
+                "Sign in again in the browser.")
     return (f"The refresh of {entry} ended without saving the provider's answer, so it is held as uncertain: "
             "the provider may have been called. A connector that certainly sent nothing raises "
             "ProviderNotCalled instead.")
@@ -150,7 +153,8 @@ def store_refresh(store: Any, local_lock: Any, *, refresh: bool = False, leeway_
     refresher, begin_refresh opens the journal record and the save inside carries its operation
     id. Only ProviderNotCalled removes the record; any other exception, and a normal exit without
     a save, leave it in calling (uncertain) and release the lock (the latter with a plain
-    message). Elsewhere a refresh runs once the refresher has published a newer access token."""
+    message). A new authorisation writes no calling record, so it leaves nothing uncertain. A
+    connector raises portable_vault.ProviderNotCalled for any failure before its provider request. Elsewhere a refresh runs once the refresher has published a newer access token."""
     from secret_store.journal import ProviderNotCalled
 
     with local_lock():
@@ -185,4 +189,4 @@ def store_refresh(store: Any, local_lock: Any, *, refresh: bool = False, leeway_
             raise
         end("release_refresh")
         if not store._saved:
-            raise CredentialError(unsaved_message(store.entry))
+            raise CredentialError(unsaved_message(store.entry, new_authorisation))

@@ -249,7 +249,20 @@ class SecretStore:
             self._sync(pinned, saved)
         if not self.pin_path.exists() and pinned:
             self._save_pin(pinned)
+        self._refresh_stale_package()  # after the transaction, never inside it
         return self
+
+    def _refresh_stale_package(self) -> None:
+        """A package on this computer older than seven days is rebuilt when the store opens; a
+        failure (an offline cloud drive) never stops the opening and shows in status."""
+        self.package_error = None
+        path = self._package_path()
+        if self.policy is None or not path.exists() or time.time() - path.stat().st_mtime < PACKAGE_MAX_AGE:
+            return
+        try:
+            self.refresh_recovery_package()
+        except (OSError, SecretStoreError):
+            self.package_error = "the automatic refresh failed"
 
     @classmethod
     def restore_from_package(cls, words: str, package_path: Any, folder: Any,

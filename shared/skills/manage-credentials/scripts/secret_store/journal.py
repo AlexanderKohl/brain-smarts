@@ -134,17 +134,20 @@ class Journal:
             return self._finish(entry, record, publish, lambda *_: False)
 
     def begin(self, entry: str, revision: int, provider: str | None = None,
-              policy_disabled: bool = False) -> tuple[ExitStack, dict]:
+              policy_disabled: bool = False, write: bool = True) -> tuple[ExitStack, dict]:
         """Steps 1 to 3 for a provider call made in another process (the Vault Agent's
         begin_refresh). The per-entry lock stays held in the returned stack until the caller closes
-        it after complete or abandon, or at its own time limit (the record then stays uncertain)."""
+        it after complete or abandon, or at its own time limit (the record then stays uncertain).
+        With write=False (a code exchange, which never spends the stored grant) nothing is written
+        until complete: a block that ends without a save leaves no record."""
         stack = ExitStack()
         stack.enter_context(self.lock(entry))
         try:
             if self.check(entry, provider, policy_disabled) is not None:
                 raise SecretStoreError(f"a refreshed token of {label(entry)} is still waiting to be published; try again")
             record = {"operation": secrets.token_hex(16), "entry": entry, "revision": revision, "state": "calling"}
-            self.write(entry, record)
+            if write:
+                self.write(entry, record)
         except BaseException:
             stack.close()
             raise
