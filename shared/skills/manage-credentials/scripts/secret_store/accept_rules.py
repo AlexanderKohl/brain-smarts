@@ -152,14 +152,10 @@ def check_supersession(record: dict[str, Any], prior: Policy, result: Policy) ->
 
 def protected_fields(payload: dict, previous: dict | None) -> frozenset:
     """Token fields only the refresher changes: the conservative default set, every grant-field
-    spelling (which never belongs in an oauth object), every provider's token fields for the
-    provider the shared settings name (now or before), and that name itself."""
-    fields = set(TOKEN_FIELDS) | provider_profiles.grant_fields() | {"provider"}
-    for doc in (payload, previous or {}):
-        provider = doc.get("provider")
-        if isinstance(provider, str) and provider_profiles.profile(provider) is not None:
-            fields |= provider_profiles.token_fields(provider)
-    return frozenset(fields)
+    spelling (which never belongs in an oauth object), every provider profile's token fields
+    whatever the provider (recognised or not), and the provider name itself."""
+    return frozenset(set(TOKEN_FIELDS) | provider_profiles.token_fields() | provider_profiles.grant_fields()
+                     | {"provider"})
 
 
 def check_oauth_payload(payload: dict, previous: dict | None, obj: dict, token_writer: bool, admin_writer: bool,

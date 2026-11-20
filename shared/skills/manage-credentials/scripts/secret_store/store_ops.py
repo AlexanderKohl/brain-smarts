@@ -240,6 +240,31 @@ def marker_current(marker: Path, package: Path, policy_hash: str, public_key: An
         return False
 
 
+def package_health(config: dict[str, Any]) -> str | None:
+    """The daily due check's read-only look at the personal recovery package: None when the store
+    is off or the package is fresh (under seven days old, its marker naming the clone's current
+    policy and the package), else a plain problem. Files only: no Git, keychain or network, so the
+    marker's signature is left to the store, which checks it at its next use."""
+    if not config.get("enabled") or not config.get("person"):
+        return None
+    clone = Path(config["personal_clone"])
+    if not (clone / ".git").is_dir():
+        return "the secrets store is on but not set up on this computer, so there is no recovery package"
+    path = Path(config["recovery_package_dir"]) / f"brain-secrets-{config['person']}.package"
+    if not path.is_file():
+        return f"no recovery package at {path}; run recovery-package"
+    days = (time.time() - path.stat().st_mtime) / 86400
+    if days >= 7:
+        return f"the recovery package is {int(days)} day(s) old; run recovery-package"
+    try:
+        doc = canonical.loads(path.with_name(path.name + ".policy").read_bytes())
+        current = object_hash(canonical.loads((clone / "policy.json").read_bytes()))
+        fresh = {k: v for k, v in doc.items() if k != "signature"} == _marker_doc(path, current)
+    except (OSError, ValueError, TypeError, KeyError, AttributeError, SecretStoreError):
+        fresh = False
+    return None if fresh else "the recovery package does not match the current policy; run recovery-package"
+
+
 def write_marker(marker: Path, package: Path, policy_hash: str, signer: Ed25519PrivateKey) -> None:
     marker.write_bytes(canonical.dumps(signing.sign(_marker_doc(package, policy_hash), signer)))
 

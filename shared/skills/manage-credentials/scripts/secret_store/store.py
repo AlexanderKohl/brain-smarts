@@ -266,22 +266,34 @@ class SecretStore:
         running for weeks); a failure (an offline cloud drive) never stops the operation and shows
         in status."""
         self._package_checked = time.time()
-        path = self._package_path()
-        if self.policy is None or (path.exists() and time.time() - path.stat().st_mtime < PACKAGE_MAX_AGE):
+        if self.policy is None:
+            return
+        self._package_policy = self.policy.hash
+        if self.package_fresh():
             self.package_error = None
             return
         self._package_upkeep()
+
+    def package_fresh(self) -> bool:
+        """Under seven days old and its signed marker names the current policy and the package."""
+        path = self._package_path()
+        marker = path.with_name(path.name + ".policy")
+        return (self.policy is not None and path.exists() and time.time() - path.stat().st_mtime < PACKAGE_MAX_AGE
+                and marker_current(marker, path, self.policy.hash, self._identity().ed25519.public_key()))
 
     def _package_upkeep(self) -> None:
         """refresh_recovery_package after a saved change or on schedule; a failure is kept as a
         warning (package_error, shown by status and the command line), never raised."""
         self._package_checked = time.time()
+        self._package_busy = True
         try:
             self.refresh_recovery_package()
             self.package_error = None
         except (OSError, SecretStoreError) as error:
             self.package_error = (f"the recovery package could not be written ({type(error).__name__}); "
                                   "the change itself was saved")
+        finally:
+            self._package_busy = False
 
     @classmethod
     def restore_from_package(cls, words: str, package_path: Any, folder: Any,
@@ -322,8 +334,13 @@ class SecretStore:
         if self.policy is None or self.checkpoint is None:
             raise SecretStoreError("the secrets store is not open")
         checked = getattr(self, "_package_checked", None)
-        if checked is not None and time.time() - checked >= PACKAGE_CHECK_SECONDS and not _in_transaction():
-            self._refresh_stale_package()  # the daily age check while the store stays open
+        if checked is None or _in_transaction() or getattr(self, "_package_busy", False):
+            return
+        # A failed write is retried at the next use, a changed policy (a pull) is checked at once,
+        # and the age check runs daily while the store stays open.
+        if (getattr(self, "package_error", None) or getattr(self, "_package_policy", None) != self.policy.hash
+                or time.time() - checked >= PACKAGE_CHECK_SECONDS):
+            self._refresh_stale_package()
 
     def _open_object(self, obj: dict) -> dict:
         from . import envelope
@@ -452,9 +469,7 @@ class SecretStore:
         self._ready()
         path = self._package_path()
         marker = path.with_name(path.name + ".policy")
-        current = (path.exists() and time.time() - path.stat().st_mtime < PACKAGE_MAX_AGE
-                   and marker_current(marker, path, self.policy.hash, self._identity().ed25519.public_key()))
-        if current and not force:
+        if self.package_fresh() and not force:
             return path
         recovery_public = self.policy.enc_keys[self.policy.recovery[0]]
         recovery_package.build(self.repo, self.checkpoint_path.read_bytes(), recovery_public, path)

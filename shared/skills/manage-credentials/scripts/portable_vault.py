@@ -51,6 +51,30 @@ def find_brain_root(start: Path | None = None) -> Path:
     return Path(__file__).resolve().parents[4]
 
 
+SECRET_STORE_CONFIG = Path("memory") / "skills" / "manage-credentials" / "config" / "secret-store.json"
+STORE_ON_MESSAGE = "the secrets store is on; start the Vault Agent"
+
+
+def secret_store_enabled(brain_root: Path | None = None) -> bool:
+    """Whether secret-store.json turns the secrets store on (as store_ops.load_config reads it: a
+    file without "enabled" is on). An unreadable file counts as on, so nothing falls back."""
+    path = Path(brain_root or find_brain_root()) / SECRET_STORE_CONFIG
+    if not path.is_file():
+        return False
+    try:
+        data = json.loads(path.read_text("utf-8"))
+    except (OSError, ValueError):
+        return True
+    return not isinstance(data, dict) or bool(data.get("enabled", True))
+
+
+def refuse_when_store_on() -> None:
+    """Fail closed (round-6 review): with the store on, the passphrase vault and
+    PORTABLE_VAULT_PASSPHRASE are never a fallback for an unavailable Vault Agent."""
+    if secret_store_enabled():
+        raise CredentialError(STORE_ON_MESSAGE)
+
+
 def default_vault_path() -> Path:
     # Owner data lives in the memory checkout: /memory/projects/credential-management/.
     return find_brain_root() / "memory" / "projects" / "credential-management" / "data" / "credentials.vault"
@@ -494,6 +518,7 @@ class PortableVaultJsonStore:
         except CredentialError:
             self._broker = None
         if self._broker is None:
+            refuse_when_store_on()
             if not self.passphrase:
                 raise CredentialError(
                     "Vault Agent is locked/unavailable and no in-process unlock is present. "

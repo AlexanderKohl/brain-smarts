@@ -10,6 +10,7 @@ import subprocess
 import sys
 import warnings
 
+import portable_vault
 import secret_window
 from portable_vault import CredentialError, PortableVault
 
@@ -41,7 +42,8 @@ def _passphrase(
     *,
     allow_session: bool = True,
 ) -> str:
-    if allow_session:
+    if allow_session:  # the vault as a fallback; a new passphrase (allow_session=False) is not one
+        portable_vault.refuse_when_store_on()
         session_passphrase = os.getenv("PORTABLE_VAULT_PASSPHRASE")
         if session_passphrase:
             return session_passphrase
@@ -115,6 +117,7 @@ def _credential_environment(
     field_names = [field for _, field in mappings]
     values = _try_broker_fields(entry, field_names)
     if values is None:
+        portable_vault.refuse_when_store_on()
         if not passphrase:
             raise CredentialError(
                 "Vault Agent is locked/unavailable. "

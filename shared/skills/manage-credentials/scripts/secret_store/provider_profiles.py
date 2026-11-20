@@ -31,6 +31,9 @@ def profiles() -> dict[str, Any]:
     return found
 
 
+UNKNOWN = "unknown"  # bound in the policy for a sign-in whose provider its name does not tell
+
+
 def provider_for(entry: str | None) -> str | None:
     """The provider an entry name points to (xero, google, gohighlevel, meta), or None."""
     name = str(entry or "").lower()
@@ -52,10 +55,12 @@ def grant_fields(provider: str | None = None) -> frozenset:
     return DEFAULT_GRANT_FIELDS | extra
 
 
-def token_fields(provider: str | None) -> frozenset:
-    """Access-token fields only the refresher changes (section 7, plus the provider's overrides),
-    never a grant field."""
-    return (DEFAULT_TOKEN_FIELDS | frozenset((profile(provider) or {}).get("token_fields_extra", []))) - grant_fields()
+def token_fields(provider: str | None = None) -> frozenset:
+    """Access-token fields only the refresher changes (section 7): the default set plus every
+    profile's token_fields_extra, the same for every sign-in whatever its provider (recognised or
+    not), never a grant field. Integrity never depends on the entry's name (round-6 review)."""
+    extra = frozenset(f for found in profiles().values() for f in found.get("token_fields_extra", []))
+    return (DEFAULT_TOKEN_FIELDS | extra) - grant_fields()
 
 
 def verified(provider: str | None) -> bool:

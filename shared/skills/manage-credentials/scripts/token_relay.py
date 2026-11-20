@@ -248,6 +248,9 @@ def read_relay_key(store: Any = None) -> bytes:
             raise CredentialError("Vault Agent is locked or unavailable; the relay key cannot be read.")
         values = broker_request("get_fields", entry=KEY_ENTRY, fields=[KEY_FIELD])
     else:
+        import portable_vault
+
+        portable_vault.refuse_when_store_on()
         values = store.vault.get_fields(KEY_ENTRY, [KEY_FIELD], store.passphrase)
     if not isinstance(values, dict):
         raise CredentialError("The relay key is missing or malformed.")

@@ -253,7 +253,7 @@ def put_signin(store: Any, entry: str, field: str, record: dict, grant_fields: d
     of the same name (a placeholder) and every grant field of the entry's static object leave the
     static object in that commit; the grant fields move into the grant."""
     group = store._group(group)
-    provider = provider_profiles.provider_for(entry)
+    provider = provider_profiles.provider_for(entry) or provider_profiles.UNKNOWN
     shared, token = split_record(record, provider)
     shared[PROVIDER_KEY] = provider
     extra = dict(grant_fields or {})
@@ -299,7 +299,7 @@ def put_fields(store: Any, entry: str, plain: dict, grant_fields: dict, group: s
         static = {**{k: v for k, v in record.items() if k not in grant_keys}, **plain}
         names = signin_fields(store, entry, group)
         if not names:
-            provider = provider_profiles.provider_for(entry)
+            provider = provider_profiles.provider_for(entry) or provider_profiles.UNKNOWN
             shared, token = split_record({}, provider)
             shared[PROVIDER_KEY] = provider
             grant = {"token": token, "fields": {**moved, **grant_fields}}
