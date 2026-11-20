@@ -116,7 +116,7 @@ class StoreFixture(unittest.TestCase):
         a._write(lambda: ({"policy.json": next_policy(a.policy, a._identity().ed25519, change)}, "policy"))
 
     def token(self, **extra):
-        return {"access_token": AT1, "refresh_token": RT1, "expires_at": (19 * 10**8).5, "token_type": "Bearer",
+        return {"access_token": AT1, "refresh_token": RT1, "expires_at": (19 * 10**8 + 0.5), "token_type": "Bearer",
                 "scope": "accounting", "tenant_id": "tenant-1", **extra}
 
 
