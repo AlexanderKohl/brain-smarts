@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-23T13:00:00+10:00
-updated: 2026-11-20T13:33:25+10:00
+updated: 2026-11-20T14:21:56+10:00
 owner: brain-owner
 ---
 
@@ -15,17 +15,13 @@ owner: brain-owner
 Read `/CONTRACT.md` first. This is the prompt a new person pastes into their AI host (Claude
 Code, Codex or Cursor) to start their own brain. The same prompt resumes an unfinished setup.
 
-**Sharing it.** Never hand on the block below with `<SMARTS_REPO_URL>` still in it: the new
-person's agent then has to stop and ask for the address. The owner who shares asks their own
-agent for "the seed prompt to share". The agent runs `git remote get-url origin` in the brain
-root, puts that address in place of `<SMARTS_REPO_URL>`, and gives the owner the whole block,
-ready to paste, together with one reminder: the new person's GitHub account needs read access to
-that repository (and to `brain-skills` beside it, or they start with an empty library). This
-file keeps the placeholder because the mechanics name no owner's account (CONTRACT §3.4).
+The block below is ready to paste as it is. It names the public repository this file is published
+in, which is where a new person gets the mechanics anyway. Whoever publishes their own copy of
+the mechanics for others changes that one address to their copy's.
 
 ```text
 Set up my own portable AI brain, or resume the setup if it is already started.
-The mechanics repository is <SMARTS_REPO_URL>. If it is not cloned on this computer yet:
+The mechanics repository is https://github.com/AlexanderKohl/brain-smarts.git. If it is not cloned on this computer yet:
 1. Check that Git, Python 3.11 or later and the GitHub CLI are installed (git --version,
    python --version, gh --version). If any is missing, offer the install commands (Windows:
    winget install --id Git.Git -e, winget install --id Python.Python.3.12 -e and

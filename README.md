@@ -125,7 +125,7 @@ Rules inherit downwards – contract, generic rules, your rules, then each proje
 
 ## Getting started
 
-Open an AI host – Claude Code, Codex or Cursor – and paste the prompt from [`/SEED_PROMPT.md`](SEED_PROMPT.md), with this repository's address filled in. Nothing else needs to be installed first.
+Open an AI host – Claude Code, Codex or Cursor – and paste the prompt from [`/SEED_PROMPT.md`](SEED_PROMPT.md) as it is. Nothing else needs to be installed first.
 
 The agent checks for Git, Python and the GitHub CLI and installs whatever is missing after your yes. Signing in to GitHub stays with you: it tells you the command to run in your own terminal. It then clones the smarts, reads the contract and follows [`/SETUP.md`](SETUP.md). It makes your private copy of the smarts and a new private memory from the skeleton, interviews you for your profile, lets you choose skills, sets up the vault and any accounts, wires your host to the contract and validates everything. It asks only what it cannot detect, always with a suggested answer, and hands you the steps that must stay yours – choosing the vault passphrase, pasting secrets into a hidden prompt, registering apps and approving sign-ins. Progress is recorded as it goes, so the same prompt resumes an unfinished setup.
 
