@@ -51,6 +51,7 @@ Alphabetical, in `/shared/skills/manage-credentials/scripts/secret_store/`:
 - `canonical.py`, `envelope.py`, `hpke.py`, `signing.py`: canonical form, objects, key wrapping, signatures.
 - `checkpoint.py`: the signed local record of the newest epoch and revisions.
 - `enrol.py`: the enrolment protocol.
+- `handover.py`: the cooperative handover of a sign-in's refresher.
 - `journal.py`: the refresh journal and the per-entry lock.
 - `keys.py`: key pairs and the keychain allowlist.
 - `oauth_ops.py`, `provider_profiles.py`, `provider_profiles.json`: rotating sign-ins and provider profiles.
@@ -103,6 +104,8 @@ python brain_secrets.py team-init --owner ORGANISATION
 python brain_secrets.py team-admit --login L --group G [--group G]
 python brain_secrets.py team-groups --create G | --login L --group G
 python brain_secrets.py team-remove --login L [--computer C]
+python brain_secrets.py handover-release --entry E --to PERSON/COMPUTER [--group ops]   old refresher
+python brain_secrets.py handover-accept --entry E [--group ops]   an administrator's computer
 python migrate_to_store.py --dry-run               names only; then without it, [--replace]
 ```
 
@@ -110,7 +113,12 @@ Enrolment: the new computer runs `enrol-request --fingerprint`, the approver run
 the new computer runs `enrol-request --request`, both screens show six words, and the approver
 runs `enrol-approve` again once the words match. `migrate_to_store.py` needs the Vault Agent
 unlocked on the old vault, makes a verified backup first, never changes the old vault and prints
-no value; a clash with an existing entry stops it unless `--replace` is given.
+no value; a clash with an existing entry stops it unless `--replace` is given. `put` sends a
+grant field such as the client secret to the entry's grant, never to a static object.
+
+Handover: the old refresher runs `handover-release`, which switches refreshing off there for good,
+prepares the grant for the new computer and signs a release; an administrator's computer then runs
+`handover-accept`, which commits the policy change, the release and the grant revision together.
 
 ## Switching it on and off
 
@@ -130,5 +138,6 @@ with a message naming the refresher computer.
 
 `provider_profiles.json` holds profiles for Xero, Google and HighLevel. None is verified: each
 needs the provider's documentation plus a live test that revoking a refresh token retires the whole
-grant and that a new browser sign-in makes a separate grant. Until a profile is verified, handover
-to another refresher and recovery from an uncertain refresh are refused and the entry stays blocked.
+grant and that a new browser sign-in makes a separate grant. Until a profile is verified, moving the
+refresher away from an unreachable computer and recovery from an uncertain refresh are refused and
+the entry stays blocked. The cooperative handover needs no profile.

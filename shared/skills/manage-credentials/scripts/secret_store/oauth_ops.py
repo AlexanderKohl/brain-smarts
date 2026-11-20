@@ -25,7 +25,7 @@ from .store_ops import GROUP, new_object_id, next_policy
 
 GRANT_SUFFIX = "#grant"
 DEFAULT_FIELD = "oauth_token_json"
-PROVIDER_KEY = "signin_provider"
+PROVIDER_KEY = "provider"
 SIGNIN_MARKERS = ("access_token", "refresh_token", "accessToken", "refreshToken")
 
 
@@ -115,6 +115,16 @@ def _open(store: Any, oid: str) -> dict:
     return store._open_object(store._tree_object(oid, store.checkpoint))
 
 
+def _open_grant(store: Any, grant_id: str) -> dict:
+    """The grant's payload. A grant this computer refreshes but cannot read was superseded (design
+    section 9): it reads as empty until the new refresher writes its first revision."""
+    obj = store._tree_object(grant_id, store.checkpoint)
+    if (not any(r["key"] in store._identity().my_keys() for r in obj["readers"])
+            and store.policy.refresher(grant_id) == _me(store)):
+        return {}
+    return store._open_object(obj)
+
+
 def find(store: Any, entry: str, field: str, group: str | None = None) -> SignIn | None:
     index = store._index(group)
     oname, gname = signin_names(entry, field)
@@ -145,7 +155,7 @@ def read_shared(store: Any, signin: SignIn) -> dict:
 def read_grant(store: Any, signin: SignIn) -> dict:
     if not signin.mine:
         refuse_other(signin)
-    return _open(store, signin.grant_id)
+    return _open_grant(store, signin.grant_id)
 
 
 def read(store: Any, signin: SignIn) -> dict:
@@ -258,7 +268,7 @@ def publish(store: Any, signin: SignIn, answer: dict, operation: str) -> None:
     def build() -> tuple[dict, str]:
         shared = read_shared(store, signin)
         shared.update(new_shared)
-        grant = dict(_open(store, signin.grant_id))
+        grant = dict(_open_grant(store, signin.grant_id))
         token = dict(grant.get("token", {}))
         token.update(new_token)
         grant["token"] = token
@@ -314,7 +324,7 @@ def set_grant_fields(store: Any, signin: SignIn, fields: dict) -> None:
 
     def build() -> tuple[dict, str]:
         plan = _static_plan(store, signin.entry, signin.group, set(fields))
-        grant = dict(_open(store, signin.grant_id))
+        grant = dict(_open_grant(store, signin.grant_id))
         grant["fields"] = {**grant.get("fields", {}), **(plan[2] if plan else {}), **fields}
         files = _revision_files(store, signin, None, grant, None)
         return {**files, **_static_files(store, store.policy, plan)}, "update"
@@ -330,6 +340,6 @@ def clear_tokens(store: Any, signin: SignIn, operation: str) -> None:
     def build() -> tuple[dict, str]:
         dropped = provider_profiles.token_fields(signin.provider)
         shared = {k: v for k, v in read_shared(store, signin).items() if k not in dropped}
-        grant = {**_open(store, signin.grant_id), "token": {}}
+        grant = {**_open_grant(store, signin.grant_id), "token": {}}
         return _revision_files(store, signin, shared, grant, operation), "update"
     store._write(build)

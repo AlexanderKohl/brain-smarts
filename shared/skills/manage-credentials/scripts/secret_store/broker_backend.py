@@ -45,6 +45,16 @@ def backend_if_enabled(brain_root: Any = None) -> "StoreBackend | None":
     return StoreBackend() if store_enabled(brain_root) else None
 
 
+def put_grant_fields(st: Any, group: str, entry: str, fields: dict) -> None:
+    """Grant fields (provider_profiles.grant_fields) go to the entry's grant, created with an
+    empty sign-in when none exists yet; never to a static object."""
+    names = oauth_ops.signin_fields(st, entry, group)
+    if names:
+        oauth_ops.set_grant_fields(st, oauth_ops.find(st, entry, names[0], group), fields)
+    else:
+        oauth_ops.put_signin(st, entry, oauth_ops.DEFAULT_FIELD, {}, fields, group=group)
+
+
 class StoreBackend:
     def __init__(self, store: Any = None, sync_seconds: float = SYNC_SECONDS, team: Any = None) -> None:
         self.store = store if store is not None else SecretStore()
@@ -221,11 +231,7 @@ class StoreBackend:
             if field not in provider_profiles.grant_fields():
                 st.put_entry(entry, {field: value}, group=group)
                 return
-            names = oauth_ops.signin_fields(st, entry, group)
-            if names:
-                oauth_ops.set_grant_fields(st, oauth_ops.find(st, entry, names[0], group), {field: value})
-            else:
-                oauth_ops.put_signin(st, entry, oauth_ops.DEFAULT_FIELD, {}, {field: value}, group=group)
+            put_grant_fields(st, group, entry, {field: value})
 
     def clear(self, entry: str, field: str) -> dict[str, bool]:
         """clear() on a stored sign-in: the refresher publishes a revision without the tokens;

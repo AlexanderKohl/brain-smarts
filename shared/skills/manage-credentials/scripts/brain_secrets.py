@@ -12,6 +12,8 @@
   brain_secrets.py team-admit --login L --group G [--group G ...]
   brain_secrets.py team-groups --login L --group G [...]  |  team-groups --create G [--create G ...]
   brain_secrets.py team-remove --login L [--computer C]
+  brain_secrets.py handover-release --entry E --to PERSON/COMPUTER [--group G]   old refresher: release
+  brain_secrets.py handover-accept --entry E [--group G]                         administrator: move it
 
 --group selects the team repository. Values are typed only into the masked window and the
 enrolment and recovery words are shown only in a local window, never on the command line or in
@@ -25,7 +27,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-_GROUPED = ("list", "put", "get-check", "delete")
+_GROUPED = ("list", "put", "get-check", "delete", "handover-release", "handover-accept")
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -65,6 +67,13 @@ def _parser() -> argparse.ArgumentParser:
     remove = sub.add_parser("team-remove", help="remove a person or one of their computers")
     remove.add_argument("--login", required=True)
     remove.add_argument("--computer")
+    release = sub.add_parser("handover-release", help="old refresher: release a sign-in to another computer")
+    release.add_argument("--entry", required=True)
+    release.add_argument("--to", required=True, metavar="PERSON/COMPUTER")
+    release.add_argument("--group")
+    take = sub.add_parser("handover-accept", help="administrator: move a released sign-in to its new refresher")
+    take.add_argument("--entry", required=True)
+    take.add_argument("--group")
     return parser
 
 
@@ -74,7 +83,7 @@ def _ask_window(title: str, fields: list[str]):
 
 
 def main(argv=None, store_factory=None, team_factory=None, ask=None, confirm=None, display=None) -> int:
-    from secret_store import SecretStoreError, enrol
+    from secret_store import SecretStoreError, enrol, handover
     from secret_store import team as team_ops
     from secret_store.store import EMPTY_JSON, SecretStore
     try:
@@ -109,7 +118,15 @@ def main(argv=None, store_factory=None, team_factory=None, ask=None, confirm=Non
                     return 1
                 fields.update(answer[0])
             fields.update({name: EMPTY_JSON for name in args.empty_json})
-            store.open().put_entry(args.entry, fields, group=group)
+            from secret_store import provider_profiles
+            from secret_store.broker_backend import put_grant_fields
+            opened = store.open()
+            grant = {k: v for k, v in fields.items() if k in provider_profiles.grant_fields()}
+            plain = {k: v for k, v in fields.items() if k not in grant}
+            if plain:
+                opened.put_entry(args.entry, plain, group=group)
+            if grant:  # the same path as the agent's set_text: never into a static object
+                put_grant_fields(opened, opened._group(group), args.entry, grant)
             print(f"Stored {args.entry}: " + ", ".join(sorted(fields)))
         elif args.command == "get-check":
             record = store.open().get_record(args.entry, group)
@@ -158,6 +175,13 @@ def main(argv=None, store_factory=None, team_factory=None, ask=None, confirm=Non
         elif args.command == "team-remove":
             names = team_ops.remove(store.open(), args.login, args.computer)
             print("Removed and re-keyed. Change these provider secrets: " + (", ".join(names) or "none") + ".")
+        elif args.command == "handover-release":
+            handover.release(store.open(), args.entry, args.to, group)
+            print(f"Released {args.entry} to {args.to}; this computer no longer refreshes it. On an administrator's "
+                  f"computer run: brain_secrets.py handover-accept --entry {args.entry}" + (f" --group {group}" if group else ""))
+        elif args.command == "handover-accept":
+            person, computer = handover.accept(store.open(), args.entry, group)
+            print(f"{args.entry} now refreshes on {person}/{computer}.")
         return 0
     except (SecretStoreError, CredentialError) as error:
         print(f"Secrets store: {error}", file=sys.stderr)

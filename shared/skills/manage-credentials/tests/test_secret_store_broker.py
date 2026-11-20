@@ -19,11 +19,9 @@ import keyring  # noqa: E402
 import vault_broker_client  # noqa: E402
 import vault_credentials  # noqa: E402
 from portable_vault import CredentialError, PortableVault  # noqa: E402
-from secret_store import SecretStoreError, keys, oauth_ops  # noqa: E402
+from secret_store import SecretStoreError, enrol, keys, oauth_ops  # noqa: E402
 from secret_store.broker_backend import StoreBackend, store_enabled  # noqa: E402
-from secret_store.policy import public_entry  # noqa: E402
 from secret_store.store import SecretStore  # noqa: E402
-from secret_store.store_ops import next_policy  # noqa: E402
 from vault_agent import VaultAgent  # noqa: E402
 from vault_agent_runtime import AGENT_PROTOCOL_VERSION  # noqa: E402
 
@@ -96,9 +94,8 @@ class StoreFixture(unittest.TestCase):
             patcher.start()
             self.addCleanup(patcher.stop)
         self.a = self.make_store("A")
-        fingerprint = self.a.init_personal(words_callback=lambda words: True)
-        self.enrol("B")
-        self.b = self.make_store("B").open(fingerprint)
+        self.fingerprint = self.a.init_personal(words_callback=lambda words: True)
+        self.b = self.enrol("B")
         self.ba = StoreBackend(self.a, sync_seconds=0)
         self.bb = StoreBackend(self.b, sync_seconds=0)
 
@@ -109,13 +106,13 @@ class StoreFixture(unittest.TestCase):
                            recovery_package_dir=base / "packages", personal_repo_url=str(self.bare))
 
     def enrol(self, computer):
-        x, e = keys.generate_key_pairs()
-        keys.store_private_keys("alec", computer, x, e)
-        a = self.a
-
-        def change(doc):
-            doc["people"]["alec"]["computers"][computer] = public_entry(x.public_key(), e.public_key())
-        a._write(lambda: ({"policy.json": next_policy(a.policy, a._identity().ed25519, change)}, "policy"))
+        """The real enrolment exchange (enrol.py), approved by A; returns the new computer's store."""
+        new = self.make_store(computer)
+        rid = enrol.request(new, self.fingerprint)
+        self.assertEqual(enrol.approve_step(self.a, rid), "answered")
+        enrol.prove(new, rid, display=lambda _title, _words: True)
+        self.assertEqual(enrol.approve_step(self.a, rid, display=lambda _title, _words: True), "approved")
+        return new.open()
 
     def token(self, **extra):
         return {"access_token": AT1, "refresh_token": RT1, "expires_at": (19 * 10**8 + 0.5), "token_type": "Bearer",

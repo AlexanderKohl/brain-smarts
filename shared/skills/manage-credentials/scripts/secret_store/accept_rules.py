@@ -20,7 +20,7 @@ SUPERSESSION_FIELDS = frozenset({"schema", "type", "repository", "grant", "provi
                                  "confirmation", "writer", "signature"})
 _OBJECT_PATH = re.compile(r"objects/([A-Za-z0-9_-]{1,140})\.json")
 _RECORD_PATH = re.compile(r"releases/([A-Za-z0-9_-]{1,140})\.json")
-_REQUEST_PATH = re.compile(r"requests/[0-9a-f]{16}(\.answer|\.proof)?\.json")
+_REQUEST_PATH = re.compile(r"requests/[0-9a-f]{16}(\.answer|\.proof|\.handover)?\.json")
 _MISSING = object()
 
 
@@ -36,7 +36,8 @@ def split_files(files: Any) -> tuple[dict | None, dict[str, dict], dict[str, dic
     for path, value in files.items():
         if isinstance(path, str) and _REQUEST_PATH.fullmatch(path):
             # Enrolment exchange (section 8): public keys and challenges only, added or removed;
-            # never part of the policy or the checkpoint. enrol.py verifies these files itself.
+            # never part of the policy or the checkpoint. enrol.py verifies these files itself; a
+            # .handover file carries a release to the administrator, and accept.py judges it when cited.
             if value is not None and not isinstance(value, dict):
                 _refuse("a commit file is malformed")
             continue
@@ -147,9 +148,10 @@ def check_supersession(record: dict[str, Any], prior: Policy, result: Policy) ->
 
 
 def protected_fields(payload: dict, previous: dict | None) -> frozenset:
-    """Token fields only the refresher changes: the conservative default set, every provider's
-    token fields for the provider the shared settings name (now or before), and that name itself."""
-    fields = set(TOKEN_FIELDS) | {"provider"}
+    """Token fields only the refresher changes: the conservative default set, every grant-field
+    spelling (which never belongs in an oauth object), every provider's token fields for the
+    provider the shared settings name (now or before), and that name itself."""
+    fields = set(TOKEN_FIELDS) | provider_profiles.grant_fields() | {"provider"}
     for doc in (payload, previous or {}):
         provider = doc.get("provider")
         if isinstance(provider, str) and provider_profiles.profile(provider) is not None:
