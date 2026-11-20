@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-23T13:00:00+10:00
-updated: 2026-11-16T15:38:27+10:00
+updated: 2026-11-20T13:33:25+10:00
 owner: brain-owner
 skill_refs:
   - /shared/skills/manage-credentials
@@ -25,7 +25,8 @@ Until `/memory/OWNER.md` exists the person is called "the person"; afterwards th
 owner" (CONTRACT §3.6).
 
 Steps are in the order they must happen. Each step has a stable ID (`A` to `H`, with numbered
-sub-steps) that the progress record uses.
+sub-steps) that the progress record uses. Setup runs through every step to the end of H
+(section 1.5).
 
 ## 1. Conventions for the agent
 
@@ -98,6 +99,24 @@ passes a `/memory/...` or other `/`-path argument, for example
 It is harmless on macOS and Linux. `tasks.py` refuses a rewritten `--project` value, and the
 tasks, CRM and owner-board scripts name `MSYS_NO_PATHCONV` when a path they were given looks
 rewritten.
+
+### 1.5 Setup runs to the end
+
+Setup ends only when step H is done, or when the person says in so many words that they want to
+stop now ("stop", "that's enough for today"). Nothing else ends it:
+
+- An answer of "none", "not now", "later" or "skip" to any step closes **that step only**: mark
+  its row `skipped` and go straight on to the next step in this guide. In step C, choosing no
+  skills skips D and goes on to E.
+- A step waiting on the person (`waiting_on_owner`, for example a provider registration they
+  will finish later) does not hold up the steps after it: record it, tell them in one line, and
+  go on. Come back to it when they say it is done, or at the next resume.
+- "You can add this later" in a question means a later resume can add more, not that setup stops
+  here.
+
+After each step, say in one line which step comes next and start it in the same reply. Before
+the final report, check the `## Setup` table: every row for this machine is `done`, `skipped`,
+`waiting_on_owner` or `blocked`, and E, F, G and H each have a row.
 
 ## 2. Resuming
 
@@ -712,11 +731,15 @@ others. Numbers run through both groups so a reply stays short.
 | 8 | ui-mockup | Builds a preview of a screen for you to refine before anything is built | Nothing external |
 | 9 | xero-access | Reads Xero accounting data and, with your approval, creates planned accounts or draft invoices | A Xero organisation; a Xero developer app you register; the vault |
 
-> **Ask:** Which of 1 to 9 do you want? You can add more later by asking me to resume setup.
+> **Ask:** Which of 1 to 9 do you want? Either way setup then goes on with steps E to H (session
+> start, work settings, extras and a final check); skills can be added at any later resume.
 > 1. None for now – start local, add accounts later (recommended for a first session)
 > 2. A list you give, for example `2, 4, 9`
 >
 > **Suggested reply:** `1`
+
+For option 1, record `active_skills: []`, mark D `skipped`, and continue with step E in the same
+reply (section 1.5).
 
 Owner-board note (always on): nothing to install or register. Its scripts ship in
 `/shared/skills/owner-board/scripts/`, and the memory skeleton ships its registry,
@@ -734,6 +757,10 @@ credentialed skill is chosen, and `crm` whenever `google-workspace-access` is), 
 Order: the vault first, because every credentialed skill depends on it; then the chosen skills
 alphabetically. Each skill ends with its own verification command; a skill is `done` only when
 that command succeeds.
+
+When every chosen skill is `done`, `skipped` or `waiting_on_owner`, go on to step E. A skill the
+person stops part-way ("leave Xero for now") is marked `waiting_on_owner` and does not end setup
+(section 1.5).
 
 Every command below runs from the brain root. Commands that read the vault need the **Vault
 Agent unlocked** (tray icon red, or `vaultctl.py status` reports unlocked).

@@ -6,16 +6,22 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-23T13:00:00+10:00
-updated: 2026-09-23T16:53:00+10:00
+updated: 2026-11-20T13:33:25+10:00
 owner: brain-owner
 ---
 
 # Seed prompt
 
 Read `/CONTRACT.md` first. This is the prompt a new person pastes into their AI host (Claude
-Code, Codex or Cursor) to start their own brain. Replace `<SMARTS_REPO_URL>` with the address of
-the smarts repository they were given before sharing it. The same prompt resumes an unfinished
-setup.
+Code, Codex or Cursor) to start their own brain. The same prompt resumes an unfinished setup.
+
+**Sharing it.** Never hand on the block below with `<SMARTS_REPO_URL>` still in it: the new
+person's agent then has to stop and ask for the address. The owner who shares asks their own
+agent for "the seed prompt to share". The agent runs `git remote get-url origin` in the brain
+root, puts that address in place of `<SMARTS_REPO_URL>`, and gives the owner the whole block,
+ready to paste, together with one reminder: the new person's GitHub account needs read access to
+that repository (and to `brain-skills` beside it, or they start with an empty library). This
+file keeps the placeholder because the mechanics name no owner's account (CONTRACT §3.4).
 
 ```text
 Set up my own portable AI brain, or resume the setup if it is already started.
@@ -30,7 +36,9 @@ The mechanics repository is <SMARTS_REPO_URL>. If it is not cloned on this compu
    terminal (GitHub.com, HTTPS, login with a web browser) and wait until I say done.
 3. Clone it into C:\dev\brain (Windows) or ~/dev/brain (macOS and Linux), creating the dev
    folder first if it is missing – ask me first if you think another folder is better.
-Then read CONTRACT.md and SETUP.md in that folder and follow SETUP.md step by step.
+Then read CONTRACT.md and SETUP.md in that folder and follow SETUP.md step by step, through
+every step to the end of step H. If I answer "none", "later" or "skip" to a step, mark that
+step skipped and go straight on to the next one; only stop early if I say "stop".
 Check what you can yourself; ask me only what you cannot find out, always with a suggested answer.
 Never ask me for a passphrase, password, token or client secret in this chat: tell me the
 command to run in my own terminal and I will type or paste it into the hidden prompt there.
