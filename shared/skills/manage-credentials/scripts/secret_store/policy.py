@@ -12,6 +12,7 @@ import re
 import secrets
 from typing import Any
 
+from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PublicKey
 
@@ -27,6 +28,7 @@ HASH = re.compile(r"[0-9a-f]{64}")
 FIELDS = frozenset({"schema", "type", "repository", "epoch", "previous", "people", "recovery", "groups",
                     "assignments", "refreshers", "retired", "administrators", "cites", "writer", "signature"})
 RECOVERY = ("", "recovery")  # signer identity of the recovery key; "" is never a valid login
+ENDORSEMENT = "endorsement"  # the recovery key's signature over a trust root (section 5)
 
 
 def object_hash(obj: Any) -> str:
@@ -77,7 +79,8 @@ class Policy:
     """A shape-checked policy document. Its signature and transition are checked separately."""
 
     def __init__(self, doc: Any):
-        _require(isinstance(doc, dict) and set(doc) == FIELDS, "unexpected or missing fields")
+        _require(isinstance(doc, dict) and (set(doc) == FIELDS or (doc.get("epoch") == 1 and set(doc) == FIELDS | {ENDORSEMENT})),
+                 "unexpected or missing fields")
         _require(doc["schema"] == SCHEMA and doc["type"] == "policy", "unknown schema or type")
         _require(_name(doc["repository"]), "repository id malformed")
         epoch = doc["epoch"]
@@ -217,12 +220,37 @@ def new_repository_id() -> str:
     return secrets.token_hex(16)
 
 
+def endorsement_bytes(doc: dict[str, Any]) -> bytes:
+    """What the recovery key endorses: the canonical trust root without endorsement and signature."""
+    return canonical.dumps({k: v for k, v in doc.items() if k not in (ENDORSEMENT, "signature")})
+
+
+def endorse(doc: dict[str, Any], recovery_signer: Ed25519PrivateKey) -> str:
+    return base64.b64encode(recovery_signer.sign(endorsement_bytes(doc))).decode("ascii")
+
+
+def check_endorsement(doc: Any, recovery_public: Ed25519PublicKey) -> None:
+    """Refuse a trust root that does not name this recovery key or lacks its valid endorsement."""
+    named = isinstance(doc, dict) and isinstance(doc.get("recovery"), dict) and doc["recovery"].get(
+        "ed25519") == base64.b64encode(raw_public(recovery_public)).decode("ascii")
+    _require(named, "the trust root does not name this recovery key")
+    try:
+        recovery_public.verify(base64.b64decode(doc.get(ENDORSEMENT), validate=True), endorsement_bytes(doc))
+    except (InvalidSignature, binascii.Error, ValueError, TypeError):
+        raise SecretStoreError("policy refused: the trust root has no valid endorsement by the recovery key") from None
+
+
 def create_trust_root(people: dict, recovery: dict, groups: dict, administrators: list,
-                      signer: Ed25519PrivateKey, repository: str | None = None) -> dict[str, Any]:
-    """The first policy (epoch 1), signed by an administrator key it names."""
+                      signer: Ed25519PrivateKey, repository: str | None = None,
+                      recovery_signer: Ed25519PrivateKey | None = None) -> dict[str, Any]:
+    """The first policy (epoch 1), signed by an administrator key it names and, when
+    recovery_signer is given (while the recovery words are in memory), endorsed by the recovery key."""
     doc = {"schema": SCHEMA, "type": "policy", "repository": repository or new_repository_id(), "epoch": 1,
            "previous": None, "people": people, "recovery": recovery, "groups": groups, "assignments": {},
            "refreshers": {}, "retired": {}, "administrators": administrators, "cites": []}
+    if recovery_signer is not None:
+        doc["writer"] = key_id(signer.public_key())
+        doc[ENDORSEMENT] = endorse(doc, recovery_signer)
     signed = sign_policy(doc, signer)
     load_trust_root(signed, fingerprint(signed))
     return signed
@@ -234,6 +262,8 @@ def load_trust_root(doc: Any, expected_fingerprint: str) -> Policy:
     _require(root.epoch == 1, "a trust root has epoch 1 and no previous hash")
     _require(root.is_admin_key(doc["writer"]), "trust root is not signed by an administrator key it names")
     root.verify(doc, doc["writer"])
+    if ENDORSEMENT in doc:
+        check_endorsement(doc, root.sign_keys[root.recovery[1]])
     given = "".join(str(expected_fingerprint).split()).lower()
     _require(hmac.compare_digest(given.encode("ascii", "replace"), root.hash.encode("ascii")),
              "trust root fingerprint does not match")

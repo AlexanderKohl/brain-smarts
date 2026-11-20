@@ -19,6 +19,7 @@ SUPERSESSION_FIELDS = frozenset({"schema", "type", "repository", "grant", "perso
                                  "writer", "signature"})
 _OBJECT_PATH = re.compile(r"objects/([A-Za-z0-9_-]{1,140})\.json")
 _RECORD_PATH = re.compile(r"releases/([A-Za-z0-9_-]{1,140})\.json")
+_REQUEST_PATH = re.compile(r"requests/[0-9a-f]{16}(\.answer|\.proof)?\.json")
 _MISSING = object()
 
 
@@ -32,6 +33,12 @@ def split_files(files: Any) -> tuple[dict | None, dict[str, dict], dict[str, dic
         _refuse("a commit must change at least one file")
     policy_doc, objects, records = None, {}, {}
     for path, value in files.items():
+        if isinstance(path, str) and _REQUEST_PATH.fullmatch(path):
+            # Enrolment exchange (section 8): public keys and challenges only, added or removed;
+            # never part of the policy or the checkpoint. enrol.py verifies these files itself.
+            if value is not None and not isinstance(value, dict):
+                _refuse("a commit file is malformed")
+            continue
         if not isinstance(path, str) or not isinstance(value, dict):
             _refuse("a commit file is malformed")
         if path == "policy.json":

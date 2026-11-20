@@ -25,7 +25,7 @@ GROUP = "personal"
 INDEX_ID = INDEX_PREFIX + GROUP
 CONFIG_RELATIVE = Path("memory") / "skills" / "manage-credentials" / "config" / "secret-store.json"
 CONFIG_KEYS = frozenset({"enabled", "person", "computer", "personal_repo_url", "personal_clone",
-                         "checkpoint_dir", "recovery_package_dir"})
+                         "checkpoint_dir", "recovery_package_dir", "team_repo_url", "team_clone"})
 WRITABLE_KINDS = ("static", "oauth")
 EMPTY_JSON = "{}"
 _UNSAFE = re.compile(r"[^A-Za-z0-9_-]")
@@ -90,14 +90,16 @@ def load_config(use_config_file: bool = True, brain_root: str | os.PathLike | No
         "person": safe_name(person) if person else None,
         "computer": safe_name(data.get("computer") or socket.gethostname()),
         "personal_repo_url": data.get("personal_repo_url"),
+        "team_repo_url": data.get("team_repo_url"),
     }
     repos = project_repos_root(root) if root is not None else Path.home()
     config["personal_clone"] = Path(data.get("personal_clone") or repos / "brain-secrets")
+    config["team_clone"] = Path(data.get("team_clone") or repos / "brain-team-secrets")
     config["checkpoint_dir"] = Path(data.get("checkpoint_dir") or app_data_dir())
     config["recovery_package_dir"] = Path(data.get("recovery_package_dir") or app_data_dir() / "recovery-packages")
-    if root is not None:
-        clone, brain = config["personal_clone"].resolve(), root.resolve()
-        if clone == brain or brain in clone.parents:
+    for name in ("personal_clone", "team_clone"):
+        clone, brain = config[name].resolve(), root.resolve() if root is not None else None
+        if brain is not None and (clone == brain or brain in clone.parents):
             raise SecretStoreError("the secrets clone must not be inside the brain repository")
     return config
 
@@ -113,7 +115,7 @@ def seal_object(policy: Policy, oid: str, kind: str, payload: dict, signer: Ed25
                 entry: dict | None, epoch: int | None = None, readers: list[str] | None = None) -> dict:
     """The next signed revision of oid (revision 1 when entry, its checkpoint entry, is None)."""
     reader_ids = policy.readers_for(oid) if readers is None else readers
-    header = {"repository": policy.repository, "group": GROUP, "id": oid, "kind": kind,
+    header = {"repository": policy.repository, "group": policy.assignment(oid)[0], "id": oid, "kind": kind,
               "revision": 1 if entry is None else entry["revision"] + 1,
               "previous": None if entry is None else entry["hash"],
               "policy_epoch": policy.epoch if epoch is None else epoch,
@@ -126,6 +128,7 @@ def next_policy(current: Policy, signer: Ed25519PrivateKey, change: Callable[[di
     """The next policy document: epoch one higher, chained to the current hash, then signed."""
     doc = copy.deepcopy(current.doc)
     doc.pop("signature", None)
+    doc.pop("endorsement", None)  # only a trust root carries the recovery endorsement
     doc["epoch"], doc["previous"], doc["cites"] = current.epoch + 1, current.hash, []
     change(doc)
     return sign_policy(doc, signer)
@@ -136,8 +139,9 @@ def _path(oid: str) -> str:
 
 
 def build_put(policy: Policy, entries: dict, index: dict[str, str], name: str, payload: dict,
-              kind: str, signer: Ed25519PrivateKey) -> tuple[dict, str]:
-    """(files, message) of one commit storing payload as entry name. entries: checkpoint objects."""
+              kind: str, signer: Ed25519PrivateKey, group: str = GROUP) -> tuple[dict, str]:
+    """(files, message) of one commit storing payload as entry name in group. entries: checkpoint objects."""
+    index_id = INDEX_PREFIX + group
     if kind not in WRITABLE_KINDS:
         raise SecretStoreError(f"entries of kind {kind} cannot be stored here")
     oid = index.get(name)
@@ -149,7 +153,7 @@ def build_put(policy: Policy, entries: dict, index: dict[str, str], name: str, p
     oid = new_object_id(policy)
 
     def assign(doc: dict) -> None:
-        doc["assignments"][oid] = {"group": GROUP, "kind": kind}
+        doc["assignments"][oid] = {"group": group, "kind": kind}
 
     new_doc = next_policy(policy, signer, assign)
     result = Policy(new_doc)
@@ -157,8 +161,8 @@ def build_put(policy: Policy, entries: dict, index: dict[str, str], name: str, p
     names[name] = oid
     return {"policy.json": new_doc,
             _path(oid): seal_object(result, oid, kind, payload, signer, None),
-            _path(INDEX_ID): seal_object(result, INDEX_ID, "index", {"entries": names}, signer,
-                                         entries.get(INDEX_ID))}, "policy"
+            _path(index_id): seal_object(result, index_id, "index", {"entries": names}, signer,
+                                         entries.get(index_id))}, "policy"
 
 
 def build_delete(policy: Policy, entries: dict, index: dict[str, str], name: str,
@@ -168,6 +172,7 @@ def build_delete(policy: Policy, entries: dict, index: dict[str, str], name: str
     oid = index.get(name)
     if oid is None:
         raise SecretStoreError(f"there is no entry {name}")
+    index_id = INDEX_PREFIX + policy.assignment(oid)[0]
     tombstone = seal_object(policy, oid, "tombstone", {}, signer, entries.get(oid),
                             epoch=policy.epoch + 1, readers=policy.readers_for(oid))
     final = object_hash(tombstone)
@@ -180,5 +185,29 @@ def build_delete(policy: Policy, entries: dict, index: dict[str, str], name: str
     result = Policy(new_doc)
     names = {k: v for k, v in index.items() if k != name}
     return {"policy.json": new_doc, _path(oid): tombstone,
-            _path(INDEX_ID): seal_object(result, INDEX_ID, "index", {"entries": names}, signer,
-                                         entries.get(INDEX_ID))}, "policy"
+            _path(index_id): seal_object(result, index_id, "index", {"entries": names}, signer,
+                                         entries.get(index_id))}, "policy"
+
+
+def build_policy_change(policy: Policy, entries: dict, change: Callable[[dict], None], signer: Ed25519PrivateKey,
+                        open_payload: Callable[[str], dict]) -> dict:
+    """The files of one administrator commit (section 8): the next policy and a new revision of
+    every object whose readers change, re-keyed with its payload unchanged. Grants are left as
+    they are (section 6); a grant whose readers would change is refused."""
+    new_doc = next_policy(policy, signer, change)
+    result = Policy(new_doc)
+    files: dict = {"policy.json": new_doc}
+    for oid, entry in sorted(entries.items()):
+        if oid in result.doc["retired"]:
+            continue
+        try:
+            before, after = policy.readers_for(oid), result.readers_for(oid)
+        except SecretStoreError:
+            continue  # no longer assigned: nothing to re-key
+        if before == after:
+            continue
+        kind = result.assignment(oid)[1]
+        if kind == "grant":
+            raise SecretStoreError(f"grant {oid} would change readers; its refresher or the recovery words must re-issue it")
+        files[_path(oid)] = seal_object(result, oid, kind, open_payload(oid), signer, entry)
+    return files

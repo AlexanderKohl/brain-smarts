@@ -16,7 +16,8 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 from . import canonical, checkpoint, keys, recovery, recovery_package, signing
 from .accept import accept_commit
 from .errors import SecretStoreError
-from .policy import (Policy, create_trust_root, fingerprint, load_trust_root, object_hash, public_entry)
+from .policy import (INDEX_PREFIX, Policy, check_endorsement, create_trust_root, fingerprint, load_trust_root,
+                     object_hash, public_entry)
 from .repo import Conflict, SecretRepo
 from .store_ops import EMPTY_JSON, GROUP, INDEX_ID, build_delete, build_put, load_config
 
@@ -43,6 +44,8 @@ def _default_words_window(words: list[str]) -> bool:
 
 
 class SecretStore:
+    team = False
+
     def __init__(self, use_config_file: bool = True, brain_root: Any = None, **overrides: Any) -> None:
         self.config = load_config(use_config_file, brain_root, **overrides)
         self.clone = self.config["personal_clone"]
@@ -52,6 +55,7 @@ class SecretStore:
         self.policy: Policy | None = None
         self.checkpoint: checkpoint.Checkpoint | None = None
         self.repo: SecretRepo | None = None
+        self.group: str | None = GROUP
 
     # -- setup --------------------------------------------------------------------------------
     def _require_enabled(self) -> None:
@@ -110,13 +114,17 @@ class SecretStore:
         people = {person: {"computers": {computer: public_entry(x.public_key(), e.public_key())},
                            "disabled_refresher": []}}
         root = create_trust_root(people, public_entry(rx.public_key(), re_.public_key()),
-                                 {GROUP: [person]}, [person], e)
-        self.config["personal_repo_url"] = remote_url
+                                 {GROUP: [person]}, [person], e, recovery_signer=re_)
+        return self._publish(root, remote_url, "personal_repo_url")
+
+    def _publish(self, root: dict, remote_url: str, url_key: str) -> str:
+        """First commit of a new repository: the trust root; then pin, checkpoint and package."""
+        self.config[url_key] = remote_url
         self.repo = SecretRepo(self.clone, remote_url).clone_or_open()
         if self.repo.head() is not None:
-            raise SecretStoreError("the personal repository is not empty; refusing to set it up again")
+            raise SecretStoreError("the repository is not empty; refusing to set it up again")
         if isinstance(self.repo.write({"policy.json": root}, "policy"), Conflict):
-            raise SecretStoreError("the personal repository changed during setup; nothing was set up")
+            raise SecretStoreError("the repository changed during setup; nothing was set up")
         pinned = fingerprint(root)
         self.policy = load_trust_root(root, pinned)
         self._save_pin(pinned)
@@ -234,7 +242,7 @@ class SecretStore:
         rx, re_ = recovery.derive_recovery_keys(words)
         folder = Path(folder)
         history = folder / "restored-history"
-        package_cp = recovery_package.restore(package_path, rx, history)
+        package_cp = recovery_package.restore(package_path, rx, history, re_.public_key())
         store = cls(use_config_file=False, enabled=True, person="recovery", computer="recovery",
                     personal_clone=folder / "brain-secrets", checkpoint_dir=folder / "checkpoint",
                     recovery_package_dir=folder / "recovery-packages", personal_repo_url=str(history))
@@ -242,6 +250,7 @@ class SecretStore:
         mine = public_entry(rx.public_key(), re_.public_key())
 
         def pin(doc: dict) -> str:
+            check_endorsement(doc, re_.public_key())  # a trust root the recovery key never endorsed is refused
             if fingerprint_to_pin:
                 return fingerprint_to_pin
             if doc.get("recovery") != mine:
@@ -267,23 +276,29 @@ class SecretStore:
             raise SecretStoreError(f"this computer is not a reader of object {obj.get('id')}")
         return envelope.open_(obj, mine[0], self._identity().my_keys()[mine[0]])
 
-    def _index(self) -> dict[str, str]:
+    def _group(self, group: str | None) -> str:
+        if not (group or self.group):
+            raise SecretStoreError("name a group")
+        return group or self.group
+
+    def _index(self, group: str | None = None) -> dict[str, str]:
         self._ready()
-        if INDEX_ID not in self.checkpoint.objects:
+        index_id = INDEX_PREFIX + self._group(group)
+        if index_id not in self.checkpoint.objects:
             return {}
-        return dict(self._open_object(self._tree_object(INDEX_ID, self.checkpoint))["entries"])
+        return dict(self._open_object(self._tree_object(index_id, self.checkpoint))["entries"])
 
-    def list_entries(self) -> list[str]:
-        return sorted(self._index())
+    def list_entries(self, group: str | None = None) -> list[str]:
+        return sorted(self._index(group))
 
-    def get_record(self, entry_name: str) -> dict[str, str]:
-        oid = self._index().get(entry_name)
+    def get_record(self, entry_name: str, group: str | None = None) -> dict[str, str]:
+        oid = self._index(group).get(entry_name)
         if oid is None:
             raise SecretStoreError(f"there is no entry {entry_name}")
         return self._open_object(self._tree_object(oid, self.checkpoint))
 
-    def get_fields(self, entry_name: str, fields: list[str]) -> dict[str, str]:
-        record = self.get_record(entry_name)
+    def get_fields(self, entry_name: str, fields: list[str], group: str | None = None) -> dict[str, str]:
+        record = self.get_record(entry_name, group)
         missing = [f for f in fields if f not in record]
         if missing:
             raise SecretStoreError(f"entry {entry_name} has no field " + ", ".join(missing))
@@ -306,7 +321,8 @@ class SecretStore:
             return
         raise SecretStoreError("the personal repository kept changing; the change was not saved, try again")
 
-    def put_entry(self, entry_name: str, fields: dict[str, str], kind: str = "static") -> None:
+    def put_entry(self, entry_name: str, fields: dict[str, str], kind: str = "static",
+                  group: str | None = None) -> None:
         """Store fields in entry_name: a new entry, or the next revision with these fields changed."""
         if not isinstance(entry_name, str) or not entry_name.strip():
             raise SecretStoreError("an entry needs a name")
@@ -314,15 +330,15 @@ class SecretStore:
             raise SecretStoreError("fields must be named text values")
 
         def build() -> tuple[dict, str]:
-            index = self._index()
-            payload = self.get_record(entry_name) if entry_name in index else {}
+            index = self._index(group)
+            payload = self.get_record(entry_name, group) if entry_name in index else {}
             payload.update(fields)
             return build_put(self.policy, self.checkpoint.objects, index, entry_name, payload, kind,
-                             self._identity().ed25519)
+                             self._identity().ed25519, self._group(group))
         self._write(build)
 
-    def delete_entry(self, entry_name: str) -> None:
-        self._write(lambda: build_delete(self.policy, self.checkpoint.objects, self._index(), entry_name,
+    def delete_entry(self, entry_name: str, group: str | None = None) -> None:
+        self._write(lambda: build_delete(self.policy, self.checkpoint.objects, self._index(group), entry_name,
                                          self._identity().ed25519))
 
     # -- recovery package and status ----------------------------------------------------------

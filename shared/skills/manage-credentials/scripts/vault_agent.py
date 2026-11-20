@@ -26,10 +26,13 @@ from vault_agent_runtime import (
     singleton_lock_path,
     write_state,
 )
+from secret_store.errors import SecretStoreError
 
 
 # The errors a locked file gives on Windows (EACCES, EDEADLOCK) and on POSIX (EACCES, EAGAIN).
 LOCK_BUSY_ERRNOS = {errno.EACCES, errno.EAGAIN, errno.EDEADLK}
+# Vault-only operations the migration to the secrets store uses (secret_store/broker_backend.py).
+VAULT_OPS = frozenset({"vault_list_entries", "vault_verify_copy", "vault_get_fields", "vault_get_json"})
 
 
 class AgentAlreadyRunning(CredentialError):
@@ -43,8 +46,10 @@ class VaultAgent:
     LOCK_WAIT_SECONDS = 10.0
     LOCK_RETRY_SECONDS = 0.25
 
-    def __init__(self, vault_path: Path | str | None = None) -> None:
+    def __init__(self, vault_path: Path | str | None = None, store: Any = None) -> None:
         self.vault = PortableVault(vault_path)
+        # broker_backend.StoreBackend when the secrets store is on; None keeps today's vault.
+        self._store = store
         self._passphrase: str | None = None
         self._lock = threading.RLock()
         self._entry_locks: dict[str, threading.Lock] = {}
@@ -65,7 +70,7 @@ class VaultAgent:
 
     def status(self) -> dict[str, Any]:
         with self._lock:
-            return {
+            result = {
                 "running": True,
                 "unlocked": self._passphrase is not None,
                 "vault_path": str(self.vault.path.resolve()),
@@ -73,6 +78,9 @@ class VaultAgent:
                 "started_at": self._started_at,
                 "protocol": AGENT_PROTOCOL_VERSION,
             }
+            if self._store is not None:
+                result.update(self._store.status(), unlocked=True, vault_unlocked=self._passphrase is not None)
+            return result
 
     def unlock(self, passphrase: str) -> dict[str, Any]:
         if not passphrase:
@@ -95,10 +103,14 @@ class VaultAgent:
             return self._passphrase
 
     def get_fields(self, entry: str, fields: list[str]) -> dict[str, Any]:
+        if self._store is not None:
+            return self._store.get_fields(entry, fields)
         passphrase = self._require_passphrase()
         return self.vault.get_fields(entry, fields, passphrase)
 
     def get_json(self, entry: str, field: str) -> dict[str, Any]:
+        if self._store is not None:
+            return self._store.get_json(entry, field)
         passphrase = self._require_passphrase()
         value = self.vault.get(entry, field, passphrase)
         if not isinstance(value, dict):
@@ -108,17 +120,21 @@ class VaultAgent:
     def set_json(self, entry: str, field: str, value: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(value, dict):
             raise CredentialError("JSON credential values must be objects.")
-        passphrase = self._require_passphrase()
         with self._entry_lock(entry):
-            self.vault.set(entry, field, value, "json", passphrase)
+            if self._store is not None:
+                self._store.set_json(entry, field, value)
+            else:
+                self.vault.set(entry, field, value, "json", self._require_passphrase())
         return {"saved": True, "entry": entry, "field": field}
 
     def set_text(self, entry: str, field: str, value: str) -> dict[str, Any]:
         if not isinstance(value, str) or not value:
             raise CredentialError("Text credential values must be non-empty strings.")
-        passphrase = self._require_passphrase()
         with self._entry_lock(entry):
-            self.vault.set(entry, field, value, "text", passphrase)
+            if self._store is not None:
+                self._store.set_text(entry, field, value)
+            else:
+                self.vault.set(entry, field, value, "text", self._require_passphrase())
         return {"saved": True, "entry": entry, "field": field}
 
     def get_access_token(self, entry: str, field: str = "oauth_token_json") -> dict[str, Any]:
@@ -179,6 +195,10 @@ class VaultAgent:
                     str(request.get("entry") or ""),
                     str(request.get("field") or "oauth_token_json"),
                 )
+            elif operation in VAULT_OPS:
+                from secret_store.broker_backend import vault_request
+
+                result = vault_request(self.vault, self._require_passphrase(), operation, request)
             elif operation == "ping":
                 result = {"pong": True}
             else:
@@ -188,6 +208,8 @@ class VaultAgent:
             message = str(exc)
             code = "locked" if "locked" in message.lower() else "error"
             return {"ok": False, "id": request_id, "error": message, "code": code}
+        except SecretStoreError as exc:
+            return {"ok": False, "id": request_id, "error": str(exc), "code": "error"}
 
     @staticmethod
     def _try_lock(handle: Any) -> None:
@@ -396,7 +418,9 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
-    agent = VaultAgent(args.vault or default_vault_path())
+    from secret_store.broker_backend import backend_if_enabled
+
+    agent = VaultAgent(args.vault or default_vault_path(), store=backend_if_enabled())
     try:
         if args.operation == "serve":
             agent.serve_forever()

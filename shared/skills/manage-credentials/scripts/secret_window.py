@@ -244,3 +244,44 @@ def show_recovery_words(words: list[str]) -> bool:
     except tkinter.TclError as exc:
         raise CredentialError(NO_WINDOW) from exc
     return bool(confirmed)
+
+
+def show_words(title: str, words: list[str]) -> bool:
+    """Show the six enrolment words on this screen only: never printed, logged or returned. True
+    when the person presses "They match" after comparing them with the other computer's screen;
+    False on "They differ", Esc or close."""
+    tkinter, root = _tk()
+    matched: list[bool] = []
+    try:
+        root.title(title)
+        root.resizable(False, False)
+        frame = tkinter.Frame(root, padx=16, pady=12)
+        frame.pack(fill="both", expand=True)
+        tkinter.Label(
+            frame,
+            text="Compare these six words with the words on the other computer's screen. "
+            "They are shown only here, never in the chat.",
+            justify="left", wraplength=420,
+        ).pack(anchor="w", pady=(0, 8))
+        tkinter.Label(frame, text="  ".join(words), font=("Courier", 14, "bold")).pack(pady=(0, 10))
+        buttons = tkinter.Frame(frame)
+        buttons.pack(anchor="e")
+
+        def match(_event=None) -> None:
+            matched.append(True)
+            root.destroy()
+
+        def differ(_event=None) -> None:
+            root.destroy()
+
+        tkinter.Button(buttons, text="They match", width=12, command=match).pack(side="left", padx=4)
+        tkinter.Button(buttons, text="They differ", width=12, command=differ).pack(side="left")
+        root.bind("<Escape>", differ)
+        root.protocol("WM_DELETE_WINDOW", differ)
+        root.attributes("-topmost", True)
+        root.lift()
+        root.focus_force()
+        root.mainloop()
+    except tkinter.TclError as exc:
+        raise CredentialError(NO_WINDOW) from exc
+    return bool(matched)

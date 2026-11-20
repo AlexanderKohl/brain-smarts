@@ -1,5 +1,6 @@
 """Secrets-store Git transactions and recovery packages. Two or more local clones of a bare
 repository in a temporary folder; no network. Every key and value here is fictional."""
+import base64
 import os
 import subprocess
 import sys
@@ -12,9 +13,10 @@ from unittest import mock
 
 SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS))
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey  # noqa: E402
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey  # noqa: E402
 
-from secret_store import SecretStoreError, canonical, recovery_package  # noqa: E402
+from secret_store import SecretStoreError, canonical, keys, policy, recovery_package  # noqa: E402
 from secret_store.repo import Conflict, RefusedCommit, SecretRepo, repo_lock  # noqa: E402
 
 _ENV_KEYS = ("GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM")
@@ -234,7 +236,11 @@ class LockTests(unittest.TestCase):
 class RecoveryPackageTests(RepoCase):
     def test_round_trip_and_wrong_key(self):
         a = self.clone("a")
-        a.write({"policy.json": {"repository": "repo-test-1", "policy_epoch": 1}}, "policy")
+        signer = Ed25519PrivateKey.generate()
+        root = {"repository": "repo-test-1", "policy_epoch": 1,
+                "recovery": {"ed25519": base64.b64encode(keys.raw_public(signer.public_key())).decode("ascii")}}
+        root["endorsement"] = policy.endorse(root, signer)
+        a.write({"policy.json": root}, "policy")
         head = a.write({"objects/one.json": {"v": 1}}, "update")
         key = X25519PrivateKey.generate()
         checkpoint = canonical.dumps({"epoch": 1, "note": "fictional checkpoint"})
@@ -245,19 +251,22 @@ class RecoveryPackageTests(RepoCase):
         self.assertNotIn(b"repo-test-1", data)
         self.assertEqual(list(out.parent.iterdir()), [out])
         target = self.root / "restored"
-        self.assertEqual(recovery_package.restore(out, key, target), checkpoint)
+        with self.assertRaises(SecretStoreError):  # not endorsed by this recovery signing key
+            recovery_package.restore(out, key, self.root / "other", Ed25519PrivateKey.generate().public_key())
+        self.assertFalse((self.root / "other").exists())
+        self.assertEqual(recovery_package.restore(out, key, target, signer.public_key()), checkpoint)
         restored = subprocess.run(["git", "rev-parse", "HEAD"], cwd=target, capture_output=True, check=True)
         self.assertEqual(restored.stdout.decode().strip(), head)
         self.assertEqual((target / "objects" / "one.json").read_bytes(), canonical.dumps({"v": 1}))
         with self.assertRaises(SecretStoreError):
-            recovery_package.restore(out, X25519PrivateKey.generate(), self.root / "wrong")
+            recovery_package.restore(out, X25519PrivateKey.generate(), self.root / "wrong", signer.public_key())
         self.assertFalse((self.root / "wrong").exists())
         tampered = bytearray(data)
         tampered[-1] ^= 1
         bad = self.root / "tampered.package"
         bad.write_bytes(bytes(tampered))
         with self.assertRaises(SecretStoreError):
-            recovery_package.restore(bad, key, self.root / "t")
+            recovery_package.restore(bad, key, self.root / "t", signer.public_key())
 
 
 if __name__ == "__main__":

@@ -1,0 +1,44 @@
+{
+  "as_of": "2026-11-20",
+  "note": "verified is true only after the provider's documentation and a live test show that revoking a refresh token retires the whole grant and that a new browser sign-in makes a separate grant (design section 9). Until then handover and uncertain-refresh recovery are refused.",
+  "profiles": {
+    "xero": {
+      "label": "Xero",
+      "match": ["xero"],
+      "verified": false,
+      "refresh_tokens_rotate": true,
+      "reuse_grace": "30 minutes, reported by third-party sources only",
+      "revocation_endpoint": "https://identity.xero.com/connect/revocation",
+      "revocation_retires_whole_grant": "not verified",
+      "new_sign_in_is_separate_grant": "not verified",
+      "separate_grants_per_computer": "not verified",
+      "grant_fields_extra": [],
+      "token_fields_extra": []
+    },
+    "google": {
+      "label": "Google",
+      "match": ["google", "gmail", "gdrive"],
+      "verified": false,
+      "revocation_endpoint": "https://oauth2.googleapis.com/revoke",
+      "refresh_token_limit": "up to 100 refresh tokens per account per client",
+      "separate_grants_per_computer": true,
+      "revocation_retires_whole_grant": "not verified",
+      "new_sign_in_is_separate_grant": "not verified",
+      "grant_fields_extra": [],
+      "token_fields_extra": ["id_token"]
+    },
+    "gohighlevel": {
+      "label": "HighLevel",
+      "match": ["gohighlevel", "highlevel", "ghl"],
+      "verified": false,
+      "refresh_tokens_rotate": true,
+      "old_refresh_token_invalid_on_use": true,
+      "revocation_endpoint": null,
+      "revocation_retires_whole_grant": "not verified; no documented revocation endpoint",
+      "new_sign_in_is_separate_grant": "not verified",
+      "separate_grants_per_computer": "not verified",
+      "grant_fields_extra": ["refreshToken", "clientSecret"],
+      "token_fields_extra": ["accessToken", "expiresIn", "expiresAt"]
+    }
+  }
+}

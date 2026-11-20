@@ -191,11 +191,9 @@ class PersonalStoreTests(StoreCase):
 
     def test_command_line_names_fields_only(self):
         self.init()
-        spec = importlib.util.spec_from_file_location("secrets_cli", SCRIPTS / "secrets.py")
+        spec = importlib.util.spec_from_file_location("secrets_cli", SCRIPTS / "brain_secrets.py")
         cli = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(cli)
-        import secrets as standard
-        self.assertTrue(callable(standard.token_hex))  # the standard library module, not the script
         factory = lambda: self.store("a")  # noqa: E731
         ask = lambda title, fields: ({"password": VALUE}, None)  # noqa: E731
         self.assertEqual(cli.main(["put", "--entry", "CLI Entry", "--secret", "password", "--empty-json",

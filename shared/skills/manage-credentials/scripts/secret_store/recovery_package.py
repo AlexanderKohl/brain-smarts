@@ -10,17 +10,21 @@ metadata ({"repository": id, "version": 1}), the checkpoint bytes, the bundle by
 from __future__ import annotations
 
 import os
+import shutil
+import stat
 import struct
 import subprocess
 import tempfile
 from pathlib import Path
 
 from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from . import canonical, hpke
 from .errors import SecretStoreError
+from .policy import check_endorsement
 from .repo import BRANCH, SecretRepo
 
 MAGIC = b"BRAIN-SECRETS-RECOVERY-PACKAGE-1\n"
@@ -124,10 +128,23 @@ def _open(package: bytes, recovery_private_key: X25519PrivateKey) -> tuple[str, 
     return identity, checkpoint, bundle
 
 
+def _check_trust_root(target: Path, recovery_signing_public: Ed25519PublicKey) -> None:
+    """The first commit's policy.json must carry a valid endorsement by this recovery key."""
+    roots = subprocess.run(["git", "rev-list", "--max-parents=0", "HEAD"], cwd=str(target), capture_output=True)
+    first = roots.stdout.decode().split()
+    if roots.returncode != 0 or len(first) != 1:
+        raise SecretStoreError("the restored history has no single first commit")
+    blob = subprocess.run(["git", "cat-file", "blob", f"{first[0]}:policy.json"], cwd=str(target), capture_output=True)
+    if blob.returncode != 0:
+        raise SecretStoreError("the restored history has no trust root")
+    check_endorsement(canonical.loads(blob.stdout), recovery_signing_public)
+
+
 def restore(package_path: str | os.PathLike, recovery_private_key: X25519PrivateKey,
-            target_dir: str | os.PathLike) -> bytes:
+            target_dir: str | os.PathLike, recovery_signing_public: Ed25519PublicKey) -> bytes:
     """Decrypt the package, clone the repository from its bundle into target_dir and return the
-    checkpoint. The clone's repository id must match the package's."""
+    checkpoint. The clone's repository id must match the package's, and its trust root must be
+    endorsed by the recovery signing key derived from the same words; otherwise the clone is removed."""
     identity, checkpoint, bundle = _open(Path(package_path).read_bytes(), recovery_private_key)
     target = Path(target_dir)
     if target.exists() and any(target.iterdir()):
@@ -142,7 +159,16 @@ def restore(package_path: str | os.PathLike, recovery_private_key: X25519Private
             raise SecretStoreError("git clone of the recovery bundle failed")
     subprocess.run(["git", "remote", "remove", "origin"], cwd=str(target), capture_output=True)
     subprocess.run(["git", "config", "--local", "core.autocrlf", "false"], cwd=str(target), capture_output=True)
-    restored = SecretRepo(target, "")
-    if repository_id(restored) != identity:
-        raise SecretStoreError("the restored repository id does not match the package")
+    try:
+        if repository_id(SecretRepo(target, "")) != identity:
+            raise SecretStoreError("the restored repository id does not match the package")
+        _check_trust_root(target, recovery_signing_public)
+    except SecretStoreError:
+        for path in target.rglob("*"):  # Git keeps its pack files read-only on Windows
+            try:
+                os.chmod(path, stat.S_IREAD | stat.S_IWRITE)
+            except OSError:
+                pass
+        shutil.rmtree(target, ignore_errors=True)
+        raise
     return checkpoint
