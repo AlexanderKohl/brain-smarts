@@ -167,3 +167,80 @@ def ask_secrets(
         intro += " The vault is locked, so its passphrase is needed too."
     values = _dialog(title, intro, labels, validate)
     return None if values is None else split(values)
+
+
+def check_words_stored(ticked: bool) -> str | None:
+    """The problem with closing the recovery-words window, or None once the box is ticked."""
+    if not ticked:
+        return "Tick the box once the words are written down and stored safely."
+    return None
+
+
+def show_recovery_words(words: list[str]) -> bool:
+    """Show the recovery words once, in a local window only: hidden behind the mask until
+    "Show words" is pressed, never printed or returned. True only when the person ticks
+    "I have stored these words" and presses OK; False on Cancel, Esc or close."""
+    tkinter, root = _tk()
+    confirmed: list[bool] = []
+    try:
+        root.title("Recovery words")
+        root.resizable(False, False)
+        frame = tkinter.Frame(root, padx=16, pady=12)
+        frame.pack(fill="both", expand=True)
+        tkinter.Label(
+            frame,
+            text="These 24 words are the only way back to your secrets if every computer is lost. "
+            "Write them down in order and keep them somewhere safe, away from this computer. "
+            "They are shown here once and never in the chat.",
+            justify="left", wraplength=440,
+        ).grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 8))
+        labels = []
+        for index in range(len(words)):
+            label = tkinter.Label(frame, text=f"{index + 1:2d}. {MASK * 6}", font=("Courier", 11),
+                                  anchor="w", width=16)
+            label.grid(row=1 + index // 4, column=index % 4, sticky="w", padx=4, pady=1)
+            labels.append(label)
+        rows = 1 + (len(words) + 3) // 4
+        shown = [False]
+        ticked = tkinter.BooleanVar(master=root, value=False)
+        message = tkinter.Label(frame, text="", fg="#b00020", justify="left", wraplength=440)
+        buttons = tkinter.Frame(frame)
+
+        def toggle() -> None:
+            shown[0] = not shown[0]
+            for index, (label, word) in enumerate(zip(labels, words)):
+                label.configure(text=f"{index + 1:2d}. {word if shown[0] else MASK * 6}")
+            show_button.configure(text="Hide words" if shown[0] else "Show words")
+
+        def changed() -> None:
+            ok_button.configure(state="normal" if ticked.get() else "disabled")
+
+        def ok(_event=None) -> None:
+            problem = check_words_stored(ticked.get())
+            if problem:
+                message.configure(text=problem)
+                return
+            confirmed.append(True)
+            root.destroy()
+
+        def cancel(_event=None) -> None:
+            root.destroy()
+
+        tkinter.Checkbutton(frame, text="I have stored these words", variable=ticked,
+                            command=changed).grid(row=rows, column=0, columnspan=4, sticky="w", pady=(8, 0))
+        message.grid(row=rows + 1, column=0, columnspan=4, sticky="w")
+        buttons.grid(row=rows + 2, column=0, columnspan=4, sticky="e", pady=(10, 0))
+        show_button = tkinter.Button(buttons, text="Show words", width=12, command=toggle)
+        show_button.pack(side="left", padx=4)
+        ok_button = tkinter.Button(buttons, text="OK", width=10, command=ok, state="disabled")
+        ok_button.pack(side="left", padx=4)
+        tkinter.Button(buttons, text="Cancel", width=10, command=cancel).pack(side="left")
+        root.bind("<Escape>", cancel)
+        root.protocol("WM_DELETE_WINDOW", cancel)
+        root.attributes("-topmost", True)
+        root.lift()
+        root.focus_force()
+        root.mainloop()
+    except tkinter.TclError as exc:
+        raise CredentialError(NO_WINDOW) from exc
+    return bool(confirmed)
