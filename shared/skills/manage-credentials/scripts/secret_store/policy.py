@@ -283,4 +283,7 @@ def validate_transition(current: Policy, proposed: Any) -> Policy:
         _require(nxt.doc["retired"].get(oid) == final, f"retired id {oid} was changed or dropped")
     for oid in current.doc["assignments"]:
         _require(oid in nxt.doc["assignments"] or oid in nxt.doc["retired"], f"assignment {oid} removed without retiring it")
+        if oid in nxt.doc["assignments"]:
+            _require(nxt.doc["assignments"][oid] == current.doc["assignments"][oid],
+                     f"assignment {oid} changed its group or kind")
     return nxt

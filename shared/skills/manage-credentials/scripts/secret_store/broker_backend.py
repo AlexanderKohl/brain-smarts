@@ -3,8 +3,11 @@ Consumers). With /memory/skills/manage-credentials/config/secret-store.json enab
 serves get_fields, get_json, set_json, set_text and get_access_token from the store, with the
 computer keys from the keychain and no passphrase. Per sign-in: the refresher reads the merged
 record and publishes refreshed tokens through the refresh journal; any other computer reads the
-access token and shared settings and may change shared settings only. Also the vault-only
-operations the migration uses. Messages never carry values."""
+access token and shared settings and may change shared settings only. An entry is served from
+the personal store or the team store by which index holds its name (personal first; a name held
+twice is refused as ambiguous; a new name goes to the personal store). Grant fields are never
+stored in or served from a static object. Also the vault-only operations the migration uses.
+Messages never carry values."""
 
 from __future__ import annotations
 
@@ -22,8 +25,9 @@ from .store_ops import load_config
 
 SYNC_SECONDS = 30.0
 REFRESH_TIMEOUT = 600.0  # a begun refresh without its save by then stays uncertain
-VAULT_OPS = frozenset({"vault_list_entries", "vault_verify_copy", "vault_get_fields", "vault_get_json"})
-STORE_OPS = frozenset({"begin_refresh", "abort_refresh", "poll_refresh"})
+VAULT_OPS = frozenset({"vault_get_fields", "vault_get_json", "vault_list_entries", "vault_verify_copy"})
+STORE_OPS = frozenset({"abort_refresh", "begin_refresh", "clear_signin", "poll_refresh", "release_refresh",
+                       "sync_store"})
 AGENT_OPS = VAULT_OPS | STORE_OPS
 
 
@@ -42,9 +46,11 @@ def backend_if_enabled(brain_root: Any = None) -> "StoreBackend | None":
 
 
 class StoreBackend:
-    def __init__(self, store: Any = None, sync_seconds: float = SYNC_SECONDS) -> None:
+    def __init__(self, store: Any = None, sync_seconds: float = SYNC_SECONDS, team: Any = None) -> None:
         self.store = store if store is not None else SecretStore()
+        self.team = team  # a TeamStore, or None for the personal store alone
         self.sync_seconds = sync_seconds
+        self.sync_error: str | None = None
         self._synced: float | None = None
         self._journal: Journal | None = None
         self._lock = threading.RLock()
@@ -52,76 +58,122 @@ class StoreBackend:
         self.refresh_timeout = REFRESH_TIMEOUT
 
     # -- plumbing ---------------------------------------------------------------------------
+    def _stores(self) -> list:
+        return [st for st in (self.store, self.team) if st is not None]
+
+    def _pull_all(self, tolerate: bool) -> None:
+        """Open or pull every store. With tolerate, an unreachable or refused remote leaves reads
+        on the last verified local state, and the reason is kept for status."""
+        for st in self._stores():
+            if st.policy is None:
+                st.open()
+                continue
+            try:
+                st._sync(None, st.checkpoint)
+                self.sync_error = None
+            except SecretStoreError as error:
+                if not tolerate:
+                    raise
+                self.sync_error = str(error)
+        self._synced = time.monotonic()
+
     def _ready(self) -> Any:
-        st = self.store
-        if st.policy is None:
-            st.open()
-            self._synced = time.monotonic()
-        elif self._synced is None or time.monotonic() - self._synced >= self.sync_seconds:
-            st._sync(None, st.checkpoint)
-            self._synced = time.monotonic()
+        if (any(st.policy is None for st in self._stores()) or self._synced is None
+                or time.monotonic() - self._synced >= self.sync_seconds):
+            self._pull_all(tolerate=True)
         if self._journal is None:
-            self._journal = Journal(st.config["checkpoint_dir"], st._identity().x25519)
-        return st
+            self._journal = Journal(self.store.config["checkpoint_dir"], self.store._identity().x25519)
+        return self.store
 
     def status(self) -> dict[str, Any]:
         try:
             text = self.store.status()
         except SecretStoreError as error:
             text = str(error)
-        return {"backend": "store", "store": text}
+        out = {"backend": "store", "store": text}
+        if self.sync_error:
+            out["store_sync"] = f"the last pull failed, so reads use this computer's copy: {self.sync_error}"
+        return out
 
-    def _policy_disabled(self, st: Any) -> bool:
+    def _groups(self, st: Any) -> list[str]:
+        if st.group:
+            return [st.group]
+        person = st.config["person"]
+        return sorted(g for g in st.policy.doc.get("groups", {}) if person in st.policy.members(g))
+
+    def _route(self, entry: str) -> tuple[Any, str]:
+        """(store, group) whose index holds entry, personal first."""
+        found = []
+        for st in self._stores():
+            for group in self._groups(st):
+                names = st._index(group)
+                if entry in names or any(n.startswith(entry + "#") for n in names):
+                    found.append((st, group))
+        if len(found) > 1:
+            raise SecretStoreError(f"{entry} is held in more than one store or group, so it is ambiguous; "
+                                   "rename or remove one of them")
+        return found[0] if found else (self.store, self.store._group(None))
+
+    @staticmethod
+    def _policy_disabled(st: Any) -> bool:
         person, computer = st.config["person"], st.config["computer"]
         return computer in st.policy.doc["people"].get(person, {}).get("disabled_refresher", [])
 
-    def _hooks(self, signin: oauth_ops.SignIn) -> tuple:
-        st = self.store
+    @staticmethod
+    def _hooks(st: Any, signin: oauth_ops.SignIn) -> tuple:
         return (lambda op, answer: oauth_ops.publish(st, signin, answer, op),
                 lambda op, answer: oauth_ops.is_published(st, signin, op, answer))
 
-    def _signin(self, st: Any, entry: str, field: str) -> oauth_ops.SignIn | None:
-        signin = oauth_ops.find(st, entry, field)
+    def _signin(self, st: Any, group: str, entry: str, field: str) -> oauth_ops.SignIn | None:
+        signin = oauth_ops.find(st, entry, field, group)
         if signin is not None and signin.mine and signin.journal_key not in self._pending:
-            self._journal.reconcile(signin.journal_key, *self._hooks(signin))
+            self._journal.reconcile(signin.journal_key, *self._hooks(st, signin), disabled=self._policy_disabled(st))
         return signin
 
     @staticmethod
-    def _static(st: Any, entry: str) -> dict:
-        return st.get_record(entry) if entry in st._index() else {}
+    def _static(st: Any, entry: str, group: str) -> dict:
+        return st.get_record(entry, group) if entry in st._index(group) else {}
 
     # -- the broker operations --------------------------------------------------------------
     def get_fields(self, entry: str, fields: list[str]) -> dict[str, Any]:
         with self._lock:
-            st = self._ready()
-            static, out = self._static(st, entry), {}
+            self._ready()
+            st, group = self._route(entry)
+            static, out = self._static(st, entry, group), {}
             for field in fields:
-                if field in static:
+                if field in provider_profiles.grant_fields():
+                    out[field] = self._grant_field(st, group, entry, field, field in static)
+                elif field in static:
                     out[field] = static[field]
-                    continue
-                signin = self._signin(st, entry, field)
-                out[field] = oauth_ops.read(st, signin) if signin else self._grant_field(st, entry, field)
+                else:
+                    signin = self._signin(st, group, entry, field)
+                    out[field] = oauth_ops.read(st, signin) if signin else self._grant_field(st, group, entry, field)
             return out
 
-    def _grant_field(self, st: Any, entry: str, field: str) -> str:
-        for name in oauth_ops.signin_fields(st, entry):
-            signin = oauth_ops.find(st, entry, name)
+    @staticmethod
+    def _grant_field(st: Any, group: str, entry: str, field: str, in_static: bool = False) -> str:
+        for name in oauth_ops.signin_fields(st, entry, group):
+            signin = oauth_ops.find(st, entry, name, group)
             if not signin.mine:
-                if field in provider_profiles.grant_fields(signin.provider):
+                if field in provider_profiles.grant_fields():
                     oauth_ops.refuse_other(signin)
                 continue
             found = oauth_ops.read_grant(st, signin).get("fields", {})
             if field in found:
                 return found[field]
+        if in_static:
+            raise SecretStoreError(f"{entry}#{field} is a grant field kept in a plain entry, so it is not served; "
+                                   "store it again with set_text on the computer that refreshes the sign-in")
         raise SecretStoreError(f"Credential field does not exist: {entry}#{field}")
 
     def get_json(self, entry: str, field: str) -> dict[str, Any]:
         with self._lock:
-            st = self._ready()
-            signin = self._signin(st, entry, field)
+            self._ready()
+            st, group = self._route(entry)
+            signin = self._signin(st, group, entry, field)
             if signin is not None:
                 return oauth_ops.read(st, signin)
-            text = self._static(st, entry).get(field)
+            text = self._static(st, entry, group).get(field)
             if text is None:
                 raise SecretStoreError(f"Credential field does not exist: {entry}#{field}")
             try:
@@ -134,19 +186,20 @@ class StoreBackend:
 
     def set_json(self, entry: str, field: str, value: dict[str, Any], operation: str | None = None) -> None:
         with self._lock:
-            st = self._ready()
+            self._ready()
             value = oauth_ops.plain_numbers(value)
             if operation is not None:
                 self._complete_refresh(entry, field, value, operation)
                 return
             if f"{entry}#{field}" in self._pending:
                 raise SecretStoreError(f"a refresh of {entry} is under way; only its own save may change the token")
-            signin = self._signin(st, entry, field)
+            st, group = self._route(entry)
+            signin = self._signin(st, group, entry, field)
             if signin is None:
-                if field not in self._static(st, entry) and oauth_ops.looks_like_signin(value):
-                    oauth_ops.put_signin(st, entry, field, value)
+                if oauth_ops.looks_like_signin(value):  # a static placeholder is promoted in the same commit
+                    oauth_ops.put_signin(st, entry, field, value, group=group)
                 else:
-                    st.put_entry(entry, {field: json.dumps(value, sort_keys=True)})
+                    st.put_entry(entry, {field: json.dumps(value, sort_keys=True)}, group=group)
                 return
             if not signin.mine:
                 oauth_ops.save_settings(st, signin, value)
@@ -155,22 +208,49 @@ class StoreBackend:
             watched = provider_profiles.token_fields(signin.provider) | provider_profiles.grant_fields(signin.provider)
             if any(k in value and value[k] != current.get(k) for k in watched):
                 revision = st.checkpoint.objects[signin.oauth_id]["revision"]
-                self._journal.publish_answer(signin.journal_key, revision, value, *self._hooks(signin),
+                self._journal.publish_answer(signin.journal_key, revision, value, *self._hooks(st, signin),
                                              provider=signin.provider, policy_disabled=self._policy_disabled(st))
             else:
                 oauth_ops.save_settings(st, signin, value)
 
     def set_text(self, entry: str, field: str, value: str) -> None:
+        """A text field; a grant field goes to the entry's grant, created when no sign-in exists yet."""
         with self._lock:
-            st = self._ready()
-            if field not in self._static(st, entry):
-                for name in oauth_ops.signin_fields(st, entry):
-                    signin = oauth_ops.find(st, entry, name)
-                    if field in provider_profiles.grant_fields(signin.provider):
-                        oauth_ops.set_grant_fields(st, signin, {field: value})
-                        return
-            st.put_entry(entry, {field: value})
+            self._ready()
+            st, group = self._route(entry)
+            if field not in provider_profiles.grant_fields():
+                st.put_entry(entry, {field: value}, group=group)
+                return
+            names = oauth_ops.signin_fields(st, entry, group)
+            if names:
+                oauth_ops.set_grant_fields(st, oauth_ops.find(st, entry, names[0], group), {field: value})
+            else:
+                oauth_ops.put_signin(st, entry, oauth_ops.DEFAULT_FIELD, {}, {field: value}, group=group)
 
+    def clear(self, entry: str, field: str) -> dict[str, bool]:
+        """clear() on a stored sign-in: the refresher publishes a revision without the tokens;
+        elsewhere it is refused. A plain JSON field is emptied as before."""
+        with self._lock:
+            self._ready()
+            st, group = self._route(entry)
+            signin = self._signin(st, group, entry, field)
+            if signin is None:
+                self.set_json(entry, field, {})
+                return {"cleared": True}
+            if signin.journal_key in self._pending:
+                raise SecretStoreError(f"a refresh of {entry} is under way; clear it once that ends")
+            if not signin.mine:
+                oauth_ops.clear_tokens(st, signin, "")
+            with self._journal.lock(signin.journal_key):
+                oauth_ops.clear_tokens(st, signin, oauth_ops.new_operation())
+            return {"cleared": True}
+
+    def sync(self) -> dict[str, bool]:
+        """Pull every store now (PortableVaultJsonStore.sync); a failed pull is reported."""
+        with self._lock:
+            self._ready()
+            self._pull_all(tolerate=False)
+            return {"synced": True}
 
     # -- the refresh through the agent (section 9, refresh steps 1 to 7) --------------------
     def _pull(self, st: Any) -> None:
@@ -178,12 +258,13 @@ class StoreBackend:
         self._synced = time.monotonic()
 
     def begin_refresh(self, entry: str, field: str) -> dict[str, Any]:
-        """On the refresher: take the per-entry lock, refuse a disabled or unresolved entry, write
-        and flush the calling record; return its operation id and the full record. Elsewhere: the
-        refresher's name and the latest published record, after a pull."""
+        """On the refresher: read the record, then take the per-entry lock, refuse a disabled or
+        unresolved entry, write and flush the calling record; return its operation id and the full
+        record. Elsewhere: the refresher's name and the latest published record, after a pull."""
         with self._lock:
-            st = self._ready()
-            signin = self._signin(st, entry, field)
+            self._ready()
+            st, group = self._route(entry)
+            signin = self._signin(st, group, entry, field)
             if signin is None:
                 return {"signin": False}
             if not signin.mine:
@@ -194,13 +275,13 @@ class StoreBackend:
             if key in self._pending:
                 raise SecretStoreError(f"a refresh of {entry} is already under way on this computer; try again shortly")
             revision = st.checkpoint.objects[signin.oauth_id]["revision"]
-            stack, record = self._journal.begin(key, revision, signin.provider, self._policy_disabled(st))
-            timer = threading.Timer(self.refresh_timeout, self._expire, (key, record["operation"]))
+            record = oauth_ops.read(st, signin)  # first: a failure to read never leaves a calling record
+            stack, begun = self._journal.begin(key, revision, signin.provider, self._policy_disabled(st))
+            timer = threading.Timer(self.refresh_timeout, self._expire, (key, begun["operation"]))
             timer.daemon = True
-            self._pending[key] = {"stack": stack, "record": record, "timer": timer, "signin": signin}
+            self._pending[key] = {"stack": stack, "record": begun, "timer": timer, "signin": signin, "store": st}
             timer.start()
-            return {"signin": True, "refresher": True, "operation": record["operation"],
-                    "record": oauth_ops.read(st, signin)}
+            return {"signin": True, "refresher": True, "operation": begun["operation"], "record": record}
 
     def _expire(self, key: str, operation: str) -> None:
         """The time limit: release the lock and leave the record in calling (uncertain)."""
@@ -224,12 +305,14 @@ class StoreBackend:
             raise SecretStoreError(f"the refresh of {entry} was not begun here or ran past its time limit; "
                                    "nothing was saved")
         try:
-            self._journal.complete(held["signin"].journal_key, held["record"], value, self._hooks(held["signin"])[0])
+            publish = self._hooks(held["store"], held["signin"])[0]
+            self._journal.complete(held["signin"].journal_key, held["record"], value, publish)
         finally:
             held["stack"].close()
 
     def abort_refresh(self, entry: str, field: str, operation: str) -> dict[str, bool]:
-        """The connector failed before any provider call: remove the calling record, release."""
+        """The provider was certainly not called (the token was already fresh, or the connector
+        raised ProviderNotCalled): remove the calling record and release the lock."""
         with self._lock:
             held = self._take(f"{entry}#{field}", operation)
             if held is None:
@@ -239,12 +322,22 @@ class StoreBackend:
             finally:
                 held["stack"].close()
 
+    def release_refresh(self, entry: str, field: str, operation: str) -> dict[str, bool]:
+        """The connector's block raised after begin_refresh: the provider may have been called, so
+        the record stays in calling (uncertain) and only the lock is released."""
+        with self._lock:
+            held = self._take(f"{entry}#{field}", operation)
+            if held is not None:
+                held["stack"].close()
+            return {"released": held is not None}
+
     def poll_refresh(self, entry: str, field: str) -> dict[str, Any]:
         """The latest published record after a pull (another computer waiting for the refresher)."""
         with self._lock:
-            st = self._ready()
+            self._ready()
+            st, group = self._route(entry)
             self._pull(st)
-            signin = self._signin(st, entry, field)
+            signin = self._signin(st, group, entry, field)
             if signin is None:
                 raise SecretStoreError(f"there is no sign-in {entry}#{field}")
             return oauth_ops.read(st, signin)
@@ -256,11 +349,18 @@ def agent_operation(agent: Any, operation: str, request: dict) -> Any:
         return vault_request(agent.vault, agent._require_passphrase(), operation, request)
     if agent._store is None:
         raise SecretStoreError("the secrets store is off on this computer")
-    entry, field = str(request.get("entry") or ""), str(request.get("field") or "oauth_token_json")
+    if operation == "sync_store":
+        return agent._store.sync()
+    entry, field = str(request.get("entry") or ""), str(request.get("field") or oauth_ops.DEFAULT_FIELD)
+    held = str(request.get("operation") or "")
     if operation == "begin_refresh":
         return agent._store.begin_refresh(entry, field)
     if operation == "abort_refresh":
-        return agent._store.abort_refresh(entry, field, str(request.get("operation") or ""))
+        return agent._store.abort_refresh(entry, field, held)
+    if operation == "release_refresh":
+        return agent._store.release_refresh(entry, field, held)
+    if operation == "clear_signin":
+        return agent._store.clear(entry, field)
     return agent._store.poll_refresh(entry, field)
 
 

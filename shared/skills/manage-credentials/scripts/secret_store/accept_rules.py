@@ -6,17 +6,18 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from . import envelope
+from . import envelope, provider_profiles
 from .errors import SecretStoreError
 from .policy import HASH, INDEX_PREFIX, Policy, object_hash
 
-TOKEN_FIELDS = ("access_token", "expires_at", "token_type", "scope")
+TOKEN_FIELDS = frozenset({"access_token", "accessToken", "expires_at", "expiresAt", "expires_in", "id_token",
+                          "token_type", "scope"})
 OBJECT_FIELDS = frozenset({"schema", "suite", "repository", "policy_epoch", "group", "id", "kind", "revision",
                            "previous", "operation", "readers", "nonce", "ciphertext", "writer", "signature"})
 RELEASE_FIELDS = frozenset({"schema", "type", "repository", "grant", "source_epoch", "new_refresher",
                             "revision_hash", "writer", "signature"})
-SUPERSESSION_FIELDS = frozenset({"schema", "type", "repository", "grant", "person", "computer", "confirmation",
-                                 "writer", "signature"})
+SUPERSESSION_FIELDS = frozenset({"schema", "type", "repository", "grant", "provider", "person", "computer",
+                                 "confirmation", "writer", "signature"})
 _OBJECT_PATH = re.compile(r"objects/([A-Za-z0-9_-]{1,140})\.json")
 _RECORD_PATH = re.compile(r"releases/([A-Za-z0-9_-]{1,140})\.json")
 _REQUEST_PATH = re.compile(r"requests/[0-9a-f]{16}(\.answer|\.proof)?\.json")
@@ -131,6 +132,9 @@ def check_supersession(record: dict[str, Any], prior: Policy, result: Policy) ->
         _refuse("supersession record is not signed by an administrator")
     result.verify(record, record["writer"])
     grant, old = record["grant"], (record["person"], record["computer"])
+    refusal = provider_profiles.recovery_refusal(record["provider"])
+    if refusal is not None:  # fail closed (design section 9): no supersession without a verified profile
+        _refuse("supersession refused: " + refusal)
     if not record["confirmation"].strip():
         _refuse("supersession record has no revocation confirmation")
     if prior.refresher(grant) != old:
@@ -142,16 +146,30 @@ def check_supersession(record: dict[str, Any], prior: Policy, result: Policy) ->
     return grant
 
 
+def protected_fields(payload: dict, previous: dict | None) -> frozenset:
+    """Token fields only the refresher changes: the conservative default set, every provider's
+    token fields for the provider the shared settings name (now or before), and that name itself."""
+    fields = set(TOKEN_FIELDS) | {"provider"}
+    for doc in (payload, previous or {}):
+        provider = doc.get("provider")
+        if isinstance(provider, str) and provider_profiles.profile(provider) is not None:
+            fields |= provider_profiles.token_fields(provider)
+    return frozenset(fields)
+
+
 def check_oauth_payload(payload: dict, previous: dict | None, obj: dict, token_writer: bool, admin_writer: bool) -> bool:
-    """Section 7 field rules. Returns whether the object is usable; raises when a revision changes
-    access-token fields without the refresher's operation id."""
+    """Section 7 field rules. Raises when a revision changes token fields without the refresher's
+    operation id, or when there is no verified baseline and the writer has no standing to set one."""
     if token_writer:
         return True
     if previous is None:
-        # No verified baseline on this computer: the first revision, or an administrator's
-        # re-key (a newly admitted reader's baseline), is taken as it is; anything else waits.
-        return obj["revision"] == 1 or admin_writer
-    for name in TOKEN_FIELDS:
+        # No verified baseline on this computer: only the first revision or an administrator's
+        # re-key (a newly admitted reader's baseline) is taken as it is; anything else is refused.
+        if obj["revision"] == 1 or admin_writer:
+            return True
+        _refuse(f"object {obj['id']}: no verified baseline here and the writer is neither an administrator "
+                "nor the refresher's operation")
+    for name in protected_fields(payload, previous):
         if payload.get(name, _MISSING) != previous.get(name, _MISSING):
             _refuse(f"object {obj['id']}: access-token fields changed without the refresher's operation")
     return True

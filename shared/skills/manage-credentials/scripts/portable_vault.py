@@ -101,43 +101,18 @@ def _derive_key(passphrase: str, salt: bytes, kdf: dict[str, Any]) -> bytes:
         raise CredentialError("The vault key could not be derived on this device.") from exc
 
 
-def _acquire_lock(handle: Any) -> None:
-    handle.seek(0)
-    if os.name == "nt":
-        import msvcrt
-
-        msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
-    else:
-        import fcntl
-
-        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-
-
-def _release_lock(handle: Any) -> None:
-    handle.seek(0)
-    if os.name == "nt":
-        import msvcrt
-
-        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
-    else:
-        import fcntl
-
-        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+LOCK_TIMEOUT_SECONDS = 300.0  # the longest wait for a vault or rotation lock, the relay's lease
 
 
 @contextmanager
 def _file_lock(path: Path) -> Iterator[None]:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a+b") as handle:
-        handle.seek(0, os.SEEK_END)
-        if handle.tell() == 0:
-            handle.write(b"0")
-            handle.flush()
-        _acquire_lock(handle)
-        try:
-            yield
-        finally:
-            _release_lock(handle)
+    from secret_store import fileio
+
+    def busy() -> CredentialError:
+        return CredentialError(f"Another process on this computer holds the lock {path.name} and did not release "
+                               f"it within {LOCK_TIMEOUT_SECONDS:.0f} seconds. Try again shortly.")
+    with fileio.locked(path, LOCK_TIMEOUT_SECONDS, busy):
+        yield
 
 
 class PortableVault:
@@ -451,7 +426,15 @@ class BrokerOAuthStore:
         self._broker_request("set_json", entry=self.entry, field=self.field, value=value, **extra)
 
     def clear(self) -> None:
+        if self.store_mode():
+            self._broker_request("clear_signin", entry=self.entry, field=self.field)
+            return
         self.save({})
+
+    def sync_store(self) -> None:
+        """Pull the secrets store now (PortableVaultJsonStore.sync)."""
+        if self.store_mode():
+            self._broker_request("sync_store")
 
     @contextmanager
     def rotation_lock(self) -> Iterator[None]:
@@ -554,6 +537,9 @@ class PortableVaultJsonStore:
         if self._relay is not None:
             self._relay.clear()
             return
+        if self._broker is not None:
+            self._broker.clear()
+            return
         self.save({})
 
     def rotation_lock(
@@ -578,16 +564,19 @@ class PortableVaultJsonStore:
         refuse_unrelayed_refresh(
             self, refresh=refresh, leeway_seconds=leeway_seconds, new_authorisation=new_authorisation
         )
-        # Secrets store: a refresh goes through the agent's journal, or waits for the refresher.
-        if self._broker is not None and (refresh or leeway_seconds is not None) and self._broker.store_mode():
+        # Secrets store: every lock on a sign-in, a plain one too, goes through the agent's journal on
+        # the refresher; elsewhere a refresh waits for the refresher.
+        if self._broker is not None and self._broker.store_mode():
             return self._broker.refresh_lock(self._local_rotation_lock, refresh=refresh,
                                              leeway_seconds=leeway_seconds, new_authorisation=new_authorisation)
         return self._local_rotation_lock()
 
     def sync(self) -> None:
-        """Adopt the shared record without a lease; without the relay, nothing to do."""
+        """Adopt the shared record: the relay's without a lease, or a pull of the secrets store."""
         if self._relay is not None:
             self._relay.sync()
+        elif self._broker is not None:
+            self._broker.sync_store()
 
     def set_chain_keys(self, keys: Any) -> None:
         """The keys a provider's token answer sets; the relay lets only a lease holder change them."""

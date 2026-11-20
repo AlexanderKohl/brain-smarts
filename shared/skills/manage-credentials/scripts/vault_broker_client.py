@@ -137,13 +137,19 @@ def _wait_for_refresher(store: Any, begun: dict, leeway: Any) -> None:
 @contextmanager
 def store_refresh(store: Any, local_lock: Any, *, refresh: bool = False, leeway_seconds: Any = None,
                   new_authorisation: bool = False) -> Any:
-    """rotation_lock(refresh=True), or one whose token expires within leeway_seconds, when the agent
-    serves the secrets store. On the refresher, begin_refresh opens the journal record and the save
-    inside carries its operation id; leaving the block before a save (an exception, or a token
-    another process already refreshed) aborts it. Elsewhere the block runs once the refresher has
-    published a newer access token."""
+    """Every rotation_lock on a sign-in when the agent serves the secrets store. A plain lock (no
+    refresh, no leeway) takes the refresh path on the refresher too; elsewhere its block runs at
+    once (a settings save). On the refresher, begin_refresh opens the journal record and the save
+    inside carries its operation id. Leaving the block without a save removes the record only on
+    a normal exit (the token was already fresh, nothing was called) or on ProviderNotCalled raised
+    before the request; any other exception may follow a provider call, so the record stays in
+    calling (uncertain) and only the lock is released. Elsewhere a refresh runs once the refresher
+    has published a newer access token."""
+    from secret_store.journal import ProviderNotCalled
+
+    plain = not refresh and leeway_seconds is None
     with local_lock():
-        if not refresh and not _expiring(_load_or_empty(store), leeway_seconds):
+        if not refresh and not plain and not _expiring(_load_or_empty(store), leeway_seconds):
             yield
             return
         begun = store._broker_request("begin_refresh", entry=store.entry, field=store.field)
@@ -153,13 +159,20 @@ def store_refresh(store: Any, local_lock: Any, *, refresh: bool = False, leeway_
         if not begun.get("refresher"):
             if new_authorisation:
                 raise CredentialError(f"this sign-in refreshes on {begun.get('computer')}; sign in again there")
-            _wait_for_refresher(store, begun, None if refresh else leeway_seconds)
+            if not plain:
+                _wait_for_refresher(store, begun, None if refresh else leeway_seconds)
             yield
             return
         store._operation, store._saved = begun["operation"], False
+        ending = "abort_refresh"
         try:
             yield
+        except ProviderNotCalled:
+            raise
+        except BaseException:
+            ending = "release_refresh"
+            raise
         finally:
             operation, store._operation = store._operation, None
             if not store._saved:
-                store._broker_request("abort_refresh", entry=store.entry, field=store.field, operation=operation)
+                store._broker_request(ending, entry=store.entry, field=store.field, operation=operation)

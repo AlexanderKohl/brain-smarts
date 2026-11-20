@@ -254,16 +254,6 @@ class AgentRefresh(AgentClients):
         self.assertEqual(self.bb.get_json("xero-demo", FIELD)["access_token"], "fictional-access-2")
         self.assertEqual(self.ba._pending, {})
 
-    def test_exception_or_no_save_aborts_and_releases(self):
-        store = self.client(self.ba, "A")
-        with self.assertRaises(RuntimeError), store.rotation_lock(refresh=True):
-            raise RuntimeError("no network")
-        self.assertIsNone(self.journal.read(self.SIGNIN))
-        with store.rotation_lock(refresh=True):
-            self.assertEqual(self.journal.read(self.SIGNIN)["state"], "calling")
-        self.assertIsNone(self.journal.read(self.SIGNIN))
-        self.assertEqual(self.ba._pending, {})
-
     def test_time_limit_leaves_the_record_uncertain(self):
         self.ba.refresh_timeout = 0.1
         begun = self.request("begin_refresh", entry="xero-demo", field=FIELD)

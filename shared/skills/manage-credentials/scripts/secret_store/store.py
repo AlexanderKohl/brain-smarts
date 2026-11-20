@@ -18,8 +18,9 @@ from .accept import accept_commit
 from .errors import SecretStoreError
 from .policy import (INDEX_PREFIX, Policy, check_endorsement, create_trust_root, fingerprint, load_trust_root,
                      object_hash, public_entry)
-from .repo import Conflict, SecretRepo
-from .store_ops import EMPTY_JSON, GROUP, INDEX_ID, build_delete, build_put, load_config
+from .repo import Conflict, MovedHead, SecretRepo
+from .store_ops import (EMPTY_JSON, GROUP, INDEX_ID, build_delete, build_put, checkpoint_commit, load_config,
+                        marker_current, store_status, write_marker)
 
 RETRIES = 3
 PACKAGE_MAX_AGE = 7 * 24 * 3600
@@ -56,6 +57,7 @@ class SecretStore:
         self.checkpoint: checkpoint.Checkpoint | None = None
         self.repo: SecretRepo | None = None
         self.group: str | None = GROUP
+        self.unusable: set[str] = set()  # accepted but not usable here: never served, never a baseline
 
     # -- setup --------------------------------------------------------------------------------
     def _require_enabled(self) -> None:
@@ -96,8 +98,7 @@ class SecretStore:
 
     def init_personal(self, remote_url: str | None = None,
                       words_callback: Callable[[list[str]], bool] | None = None) -> str:
-        """First computer: keys, recovery words, trust root, first commit, checkpoint and recovery
-        package. Returns the trust root fingerprint (not secret) for pinning on other computers."""
+        """First computer: keys, words, trust root, first commit, checkpoint, package; returns the fingerprint."""
         self._require_enabled()
         if self.checkpoint_path.exists() or (self.clone / ".git").exists():
             raise SecretStoreError("the secrets store is already set up on this computer")
@@ -168,21 +169,31 @@ class SecretStore:
         out = {}
         for path, value in files.items():
             oid = path[len("objects/"):-len(".json")] if path.startswith("objects/") else None
-            if oid and isinstance(value, dict) and value.get("kind") == "oauth" and oid in cp.objects:
+            if (oid and isinstance(value, dict) and value.get("kind") == "oauth" and oid in cp.objects
+                    and oid not in self.unusable):
                 previous = self._tree_object(oid, cp)
                 if any(r["key"] in self._identity().my_keys() for r in previous["readers"]):
                     out[oid] = self._open_object(previous)  # else opaque: structural checks only
         return out
 
-    def _from_tree(self, saved: checkpoint.Checkpoint | None) -> Policy:
+    def _from_tree(self, saved: checkpoint.Checkpoint | None, retry: bool = True) -> Policy:
         if saved is None:
             raise SecretStoreError("this computer has a local copy but no checkpoint; move the copy aside and open again")
-        doc = self.repo.read("policy.json")
-        if object_hash(doc) != saved.policy_hash:
-            raise SecretStoreError("the local copy does not match this computer's checkpoint")
-        for oid in saved.objects:
-            self._tree_object(oid, saved)
-        return Policy(doc)
+        try:
+            doc = self.repo.read("policy.json")
+            if object_hash(doc) != saved.policy_hash:
+                raise SecretStoreError("the local copy does not match this computer's checkpoint")
+            for oid in saved.objects:
+                self._tree_object(oid, saved)
+            return Policy(doc)
+        except (SecretStoreError, OSError, ValueError):
+            if retry is False:
+                raise
+        commit = checkpoint_commit(self.repo, saved)  # after a crash; pull re-verifies later commits
+        if commit is None:  # the checkpoint is ahead of the clone
+            raise SecretStoreError("this computer's checkpoint is ahead of its local copy; refusing to use the copy")
+        self.repo.reset_to(commit)
+        return self._from_tree(saved, retry=False)
 
     def _sync(self, pinned: Any, saved: checkpoint.Checkpoint | None) -> None:
         """Pull, verifying every new commit with accept_commit; save the checkpoint after each
@@ -200,17 +211,20 @@ class SecretStore:
                 accepted = accept_commit(state["policy"], state["cp"], files, self._identity().my_keys(),
                                          self._baseline(state["cp"], files))
                 state["policy"], state["cp"] = accepted.policy, accepted.checkpoint
+                self._note_usable(accepted)
+            return True
+
+        def advanced(_commit: str) -> None:  # after the clone moved, so the checkpoint never leads it
             if not state["caught"]:
                 try:
                     checkpoint.advance(saved, state["cp"])
                     state["caught"] = True
                 except SecretStoreError:
-                    return True
+                    return
             self._save_checkpoint(state["cp"])
-            return True
 
         try:
-            self.repo.pull(verify)
+            self.repo.pull(verify, advanced)
         finally:
             self.policy, self.checkpoint = state["policy"], state["cp"]
         if self.policy is None:
@@ -219,7 +233,7 @@ class SecretStore:
             raise SecretStoreError("the repository is older than this computer's checkpoint; refusing to use it")
 
     def open(self, fingerprint_to_pin: str | None = None) -> "SecretStore":
-        """Pull and verify. A first open on this computer needs the trust root fingerprint."""
+        """Pull and verify; a first open here needs the trust root fingerprint."""
         self._require_enabled()
         self._identity()
         self.repo = SecretRepo(self.clone, self._remote_url()).clone_or_open()
@@ -228,9 +242,10 @@ class SecretStore:
         if pinned is None and fingerprint_to_pin:
             pinned = "".join(fingerprint_to_pin.split()).lower()
         self.policy, self.checkpoint = None, None
-        if self.repo.head() is not None:
-            self.policy, self.checkpoint = self._from_tree(saved), saved
-        self._sync(pinned, saved)
+        with self.repo.lock():
+            if self.repo.head() is not None:
+                self.policy, self.checkpoint = self._from_tree(saved), saved
+            self._sync(pinned, saved)
         if not self.pin_path.exists() and pinned:
             self._save_pin(pinned)
         return self
@@ -238,9 +253,7 @@ class SecretStore:
     @classmethod
     def restore_from_package(cls, words: str, package_path: Any, folder: Any,
                              fingerprint_to_pin: str | None = None) -> "SecretStore":
-        """Recover with the words and a recovery package alone, into an empty folder. The trust
-        root must name this recovery key (or match fingerprint_to_pin), every commit is verified
-        again, and the result must not be older than the package's checkpoint."""
+        """Recover into an empty folder from the words and a package; every commit is verified again."""
         rx, re_ = recovery.derive_recovery_keys(words)
         folder = Path(folder)
         history = folder / "restored-history"
@@ -278,6 +291,10 @@ class SecretStore:
             raise SecretStoreError(f"this computer is not a reader of object {obj.get('id')}")
         return envelope.open_(obj, mine[0], self._identity().my_keys()[mine[0]])
 
+    def _note_usable(self, accepted: Any) -> None:  # e.g. a superseded grant waits for its new revision
+        self.unusable = (self.unusable | {o for o, i in accepted.objects.items() if i.payload is not None and not i.usable}
+                         ) - {o for o, i in accepted.objects.items() if i.payload is None or i.usable}
+
     def _group(self, group: str | None) -> str:
         if not (group or self.group):
             raise SecretStoreError("name a group")
@@ -297,7 +314,10 @@ class SecretStore:
         oid = self._index(group).get(entry_name)
         if oid is None:
             raise SecretStoreError(f"there is no entry {entry_name}")
-        return self._open_object(self._tree_object(oid, self.checkpoint))
+        obj = self._tree_object(oid, self.checkpoint)
+        if oid in self.unusable or sorted(r["key"] for r in obj["readers"]) != self.policy.readers_for(oid):
+            raise SecretStoreError(f"entry {entry_name} is not usable yet: it waits for a verified new revision")
+        return self._open_object(obj)
 
     def get_fields(self, entry_name: str, fields: list[str], group: str | None = None) -> dict[str, str]:
         record = self.get_record(entry_name, group)
@@ -308,27 +328,31 @@ class SecretStore:
 
     # -- writing ------------------------------------------------------------------------------
     def _write(self, build: Callable[[], tuple[dict, str]]) -> None:
-        self._ready()
-        for _attempt in range(1 + RETRIES):
-            self._sync(None, self.checkpoint)
-            files, message = build()
-            baseline, before = self._baseline(self.checkpoint, files), self.repo.head()
-            accepted = accept_commit(self.policy, self.checkpoint, files, self._identity().my_keys(), baseline)
-            try:
-                written = self.repo.write(files, message)
-            except SecretStoreError:  # a lost acknowledgement: accept the commit only if the remote has it
-                written = self.repo.settle_failed_write(before)
-                if written is None:
-                    raise
-                accepted = accept_commit(self.policy, self.checkpoint, self.repo._changed_files(written),
-                                         self._identity().my_keys(), baseline)
-            if isinstance(written, Conflict):
-                continue
-            self._save_checkpoint(accepted.checkpoint)
-            self.policy, self.checkpoint = accepted.policy, accepted.checkpoint
-            if "policy.json" in files:
-                self.refresh_recovery_package()
-            return
+        self._ready()  # one repository lock spans sync, build, verify, commit, push and checkpoint
+        with self.repo.lock():
+            for _attempt in range(1 + RETRIES):
+                self._sync(None, self.checkpoint)
+                files, message = build()
+                baseline, before = self._baseline(self.checkpoint, files), self.repo.head()
+                accepted = accept_commit(self.policy, self.checkpoint, files, self._identity().my_keys(), baseline)
+                try:
+                    written = self.repo.write(files, message, expected_parent=before)
+                except SecretStoreError as error:
+                    if isinstance(error, MovedHead):  # else a lost acknowledgement: settle it with the remote
+                        raise
+                    written = self.repo.settle_failed_write(before)
+                    if written is None:
+                        raise
+                    accepted = accept_commit(self.policy, self.checkpoint, self.repo._changed_files(written),
+                                             self._identity().my_keys(), baseline)
+                if isinstance(written, Conflict):
+                    continue
+                self._save_checkpoint(accepted.checkpoint)
+                self.policy, self.checkpoint = accepted.policy, accepted.checkpoint
+                self._note_usable(accepted)
+                if "policy.json" in files:
+                    self.refresh_recovery_package()
+                return
         raise SecretStoreError("the personal repository kept changing; the change was not saved, try again")
 
     def put_entry(self, entry_name: str, fields: dict[str, str], kind: str = "static",
@@ -360,29 +384,16 @@ class SecretStore:
         self._ready()
         path = self._package_path()
         marker = path.with_name(path.name + ".policy")
-        current = (path.exists() and marker.exists() and marker.read_text("ascii") == self.policy.hash
-                   and time.time() - path.stat().st_mtime < PACKAGE_MAX_AGE)
+        current = (path.exists() and time.time() - path.stat().st_mtime < PACKAGE_MAX_AGE
+                   and marker_current(marker, path, self.policy.hash, self._identity().ed25519.public_key()))
         if current and not force:
             return path
         recovery_public = self.policy.enc_keys[self.policy.recovery[0]]
         recovery_package.build(self.repo, self.checkpoint_path.read_bytes(), recovery_public, path)
-        marker.write_text(self.policy.hash, "ascii")
+        write_marker(marker, path, self.policy.hash, self._identity().ed25519)
         return path
 
     def status(self) -> str:
-        if not self.config["enabled"] or not self.config["person"]:
-            return "The secrets store is off on this computer."
-        if not (self.clone / ".git").is_dir():
-            return "The secrets store is on but not set up here: run init (first computer) or open."
-        repo = self.repo or SecretRepo(self.clone, self._remote_url())
-        lines = [repo.status()]
-        path = self._package_path()
-        if path.exists():
-            days = int((time.time() - path.stat().st_mtime) // 86400)
-            lines.append(f"Recovery package: made {days} day(s) ago at {path}.")
-        else:
-            lines.append("Recovery package: none yet; run recovery-package.")
-        return " ".join(lines)
-
+        return store_status(self)
 
 __all__ = ["SecretStore", "Identity", "EMPTY_JSON"]

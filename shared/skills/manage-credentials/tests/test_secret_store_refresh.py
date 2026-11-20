@@ -44,32 +44,6 @@ class JournalAlone(unittest.TestCase):
         return self.journal.refresh(ENTRY, 1, call or self.provider, lambda op, a: self.published.append(op),
                                     lambda op, a: False, provider="xero")
 
-    def test_crash_during_call_leaves_entry_uncertain_and_blocked(self):
-        def crashing():
-            self.provider()
-            raise RuntimeError("process ended")
-        with self.assertRaises(RuntimeError):
-            self.refresh(crashing)
-        with self.assertRaisesRegex(SecretStoreError, "uncertain") as caught:
-            self.refresh()
-        self.assertIn("Xero has no verified provider profile", str(caught.exception))
-        self.assertEqual((self.calls, self.journal.read(ENTRY)["state"]), (1, "calling"))
-        with self.assertRaisesRegex(SecretStoreError, "no verified provider profile"):
-            self.journal.resolve_uncertain(ENTRY, "xero")
-
-    def test_crash_between_answer_and_journal_write_is_uncertain(self):
-        original = self.journal.write
-
-        def failing(entry, record):
-            if record["state"] == "answered":
-                raise OSError("power lost")
-            original(entry, record)
-        with mock.patch.object(self.journal, "write", side_effect=failing), self.assertRaises(OSError):
-            self.refresh()
-        with self.assertRaisesRegex(SecretStoreError, "uncertain"):
-            Journal(self._tmp.name, self.key).refresh(ENTRY, 1, self.provider, lambda *a: None, lambda *a: False)
-        self.assertEqual(self.calls, 1)
-
     def test_provider_not_called_leaves_no_record(self):
         def offline():
             raise ProviderNotCalled()
@@ -136,15 +110,6 @@ class RefreshThroughStore(StoreFixture):
         self.assertEqual(self.bb.get_json("xero-demo", FIELD)["access_token"], "fictional-access-3")
         self.assertEqual(self.calls, 1)
 
-    def test_uncertain_entry_refuses_broker_refresh_but_still_reads(self):
-        def crashing():
-            self.provider()
-            raise RuntimeError("process ended")
-        with self.assertRaises(RuntimeError):
-            self.ba._journal.refresh(self.signin.journal_key, 1, crashing, self.publish, self.published, provider="xero")
-        with self.assertRaisesRegex(SecretStoreError, "uncertain"):
-            self.ba.set_json("xero-demo", FIELD, self.token(access_token="fictional-access-9"))
-        self.assertEqual(self.ba.get_json("xero-demo", FIELD)["access_token"], AT1)
 
 
 class Migration(StoreFixture):

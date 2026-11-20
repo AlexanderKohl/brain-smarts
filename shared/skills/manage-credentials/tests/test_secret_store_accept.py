@@ -6,10 +6,12 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 from secret_store import SecretStoreError, canonical, checkpoint, envelope, keys, policy, signing  # noqa: E402
+from secret_store import accept_rules  # noqa: E402
 from secret_store.accept import accept_commit  # noqa: E402
 
 NAMES = ("alice-pc", "bob-pc", "carol-pc", "dave-pc", "recovery")
@@ -201,8 +203,8 @@ class AcceptTest(Base):
                      text="access-token")
         good = w.accept(commit(w.obj("o1", dict(tok_b, tenant="t2"), "carol-pc")), latest={"o1": tok_b})
         self.assertTrue(good.objects["o1"].usable)
-        no_baseline = w.accept(commit(w.obj("o1", dict(tok_b, tenant="t2"), "carol-pc")))
-        self.assertFalse(no_baseline.objects["o1"].usable)
+        # No verified baseline here: a member's revision is refused, not merely flagged (S3, A3).
+        self.refused(commit(w.obj("o1", dict(tok_b, tenant="t2"), "carol-pc")), text="no verified baseline")
 
     def retire(self, oid, writer="alice-pc"):
         w = self.w
@@ -254,24 +256,71 @@ class AcceptTest(Base):
         self.assertEqual(w.policy.refresher("g1"), ("carol", "pc"))
         self.assertEqual(result.objects["g1"].payload, {"refresh_token": "r2"})
 
-    def test_supersession(self):
+    def supersede(self, signer="alice-pc", confirmation="revoked at the provider", grant=False):
         w = self.w
 
         def change(d):
             d["refreshers"]["g1"]["person"] = "carol"
             d["people"]["bob"]["disabled_refresher"] = ["pc"]
-
-        def record(signer):
-            return signing.sign({"schema": 1, "type": "supersession", "repository": w.policy.repository,
-                                 "grant": "g1", "person": "bob", "computer": "pc",
-                                 "confirmation": "revoked at the provider", "writer": w.sign_id(signer)}, w.k[signer][1])
         doc = w.next_policy(change)
-        self.refused(commit(pol=doc), text="readers change")
-        self.refused(commit(pol=doc, sup=record("bob-pc")), text="administrator")
-        resulting = policy.Policy(doc)
-        self.refused(commit(w.obj("g1", {"refresh_token": "n"}, "carol-pc", resulting), pol=doc), text="authority")
-        w.apply(commit(pol=doc, sup=record("alice-pc")), me="carol-pc")
+        record = signing.sign({"schema": 1, "type": "supersession", "repository": w.policy.repository,
+                               "grant": "g1", "provider": "xero", "person": "bob", "computer": "pc",
+                               "confirmation": confirmation, "writer": w.sign_id(signer)}, w.k[signer][1])
+        objs = [w.obj("g1", {"refresh_token": "n"}, "carol-pc", policy.Policy(doc))] if grant else []
+        return commit(*objs, pol=doc, sup=record)
+
+    def test_supersession_refused_without_a_verified_profile(self):
+        self.refused(self.supersede(), me="carol-pc", text="no verified provider profile")
+
+    def test_supersession(self):
+        w = self.w
+        doc = self.supersede()["policy.json"]
+        self.refused(commit(pol=doc), text="exactly one release or supersession")
+        with mock.patch.object(accept_rules.provider_profiles, "recovery_refusal", return_value=None):
+            self.refused(self.supersede(signer="bob-pc"), text="administrator")
+            self.refused(self.supersede(confirmation=" "), text="confirmation")
+            w.apply(self.supersede(), me="carol-pc")
         self.assertEqual(w.policy.refresher("o1"), ("carol", "pc"))
+        # The new refresher's first grant revision is accepted although the old one was never readable.
+        first = w.apply(commit(w.obj("g1", {"refresh_token": "fresh"}, "carol-pc")), me="carol-pc")
+        self.assertEqual(first.objects["g1"].payload, {"refresh_token": "fresh"})
+
+    def test_recovery_key_cannot_move_a_refresher_without_a_record(self):
+        w = self.w
+        doc = w.next_policy(lambda d: d["refreshers"]["g1"].update(person="carol"))
+        grant = w.obj("g1", {"refresh_token": "r2"}, "recovery", policy.Policy(doc))
+        self.refused(commit(grant, pol=doc), me="carol-pc", text="exactly one release or supersession")
+
+    def test_provider_token_fields_are_protected(self):
+        w = self.w
+        tok = {"provider": "gohighlevel", "accessToken": "fictional-a", "expiresAt": 1, "id_token": "i", "tenant": "t1"}
+        w.apply(commit(w.obj("o1", tok, "bob-pc", operation="op-1")), latest={"o1": dict(TOK_A)})
+        for name, value in (("accessToken", "fictional-b"), ("expiresAt", 2), ("id_token", "j"), ("provider", "x")):
+            self.refused(commit(w.obj("o1", dict(tok, **{name: value}), "carol-pc")), latest={"o1": tok},
+                         text="access-token")
+        w.accept(commit(w.obj("o1", dict(tok, tenant="t2"), "carol-pc")), latest={"o1": tok})
+
+    def test_reader_change_needs_an_administrator(self):
+        w = self.w
+        doc = w.next_policy(lambda d: d["groups"]["ops"].append("dave"))
+        p = policy.Policy(doc)
+        objs = [w.obj("s1", {"password": "x"}, "carol-pc", p), w.obj("o1", dict(TOK_A), "alice-pc", p),
+                w.obj("index-ops", w.index(p, "ops"), "alice-pc", p)]
+        self.refused(commit(*objs, pol=doc), me="dave-pc", text="administrator")
+
+    def test_assignments_keep_group_and_kind(self):
+        w = self.w
+        for change in ({"group": "fin", "kind": "static"}, {"group": "ops", "kind": "oauth"}):
+            doc = w.next_policy(lambda d: d["assignments"].update(s1=dict(change)))
+            with self.assertRaises(SecretStoreError) as ctx:
+                policy.validate_transition(w.policy, doc)
+            self.assertIn("group or kind", str(ctx.exception))
+
+    def test_new_assignment_needs_its_object(self):
+        w = self.w
+        doc = w.next_policy(lambda d: d["assignments"].update(s2={"group": "ops", "kind": "static"}))
+        p = policy.Policy(doc)
+        self.refused(commit(w.obj("index-ops", w.index(p, "ops"), "carol-pc", p), pol=doc), text="new assignment")
 
     def test_index_must_equal_assignments(self):
         w = self.w

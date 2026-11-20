@@ -54,8 +54,8 @@ def accept_commit(current: Policy, checkpoint: Checkpoint, files: dict[str, Any]
             superseded.add(check_supersession(record, current, result))
     moved = {g for g in result.doc["refreshers"]
              if g in current.doc["refreshers"] and current.refresher(g) != result.refresher(g)}
-    if not set(releases) <= moved or not superseded <= moved:
-        raise SecretStoreError("a release or supersession names a grant whose refresher does not change")
+    if set(releases) & superseded or set(releases) | superseded != moved:
+        raise SecretStoreError("every grant whose refresher moves needs exactly one release or supersession")
     for oid, obj in objects.items():
         _structural(obj, oid, current, result, checkpoint, moved, releases, superseded)
     _completeness(current, result, checkpoint, objects, superseded)
@@ -100,6 +100,13 @@ def _structural(obj: dict, oid: str, prior: Policy, result: Policy, checkpoint: 
     if obj["kind"] != kind:
         raise SecretStoreError(f"object {oid}: kind does not match the policy")
     check_readers(obj, oid, result.readers_for(oid))
+    if kind != "grant" and oid in checkpoint.objects and not result.is_admin_key(writer):
+        try:
+            before = prior.readers_for(oid)
+        except SecretStoreError:
+            before = None
+        if before != result.readers_for(oid):
+            raise SecretStoreError(f"object {oid}: a revision that changes its readers must be an administrator's")
     refresher = result.refresher_sign_id(oid)
     if kind == "grant" and oid in moved:
         old = prior.refresher_sign_id(oid)
@@ -127,6 +134,9 @@ def _completeness(prior: Policy, result: Policy, checkpoint: Checkpoint, objects
     for oid in set(result.doc["retired"]) - set(prior.doc["retired"]):
         if objects.get(oid, {}).get("kind") != "tombstone":
             raise SecretStoreError(f"retiring {oid} needs its tombstone in the same commit")
+    for oid in set(result.doc["assignments"]) - set(prior.doc["assignments"]):
+        if oid not in objects:
+            raise SecretStoreError(f"new assignment {oid} needs its object in the same commit")
     for group in result.doc["groups"]:
         before = prior.assigned_ids(group) if group in prior.doc["groups"] else []
         if before != result.assigned_ids(group) and INDEX_PREFIX + group not in objects:

@@ -9,18 +9,18 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import secrets
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from typing import Any, Callable, Iterator
 
-from . import envelope, provider_profiles
+from . import envelope, fileio, provider_profiles
 from .errors import SecretStoreError
 from .keys import key_id
 from .oauth_ops import plain_numbers
 
 STATES = ("calling", "answered", "published", "superseded")
+LOCK_SECONDS = 30.0  # how long a second process waits for the per-entry lock
 
 
 class ProviderNotCalled(Exception):
@@ -30,32 +30,16 @@ class ProviderNotCalled(Exception):
 
 def uncertain_message(entry: str, provider: str | None) -> str:
     return (f"The last refresh of {entry} is uncertain: the provider was called but its answer was never "
-            "recorded, so the old refresh token must not be used again. " + (
+            "recorded, so the old refresh token must not be used again and the entry is not refreshed. "
+            "Next step: revoke the old sign-in at the provider, then sign in again in the browser on the "
+            "computer that refreshes it. " + (
                 provider_profiles.recovery_refusal(provider)
-                or "Run the uncertain-refresh procedure for this provider before refreshing it again."))
-
-
-def _lock(handle: Any, release: bool = False) -> None:
-    handle.seek(0)
-    if os.name == "nt":
-        import msvcrt
-        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK if release else msvcrt.LK_LOCK, 1)
-    else:
-        import fcntl
-        fcntl.flock(handle.fileno(), fcntl.LOCK_UN if release else fcntl.LOCK_EX)
-
-
-def _write_flushed(path: Path, data: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(path.name + ".tmp")
-    with open(temporary, "wb") as handle:
-        handle.write(data)
-        handle.flush()
-        os.fsync(handle.fileno())
-    os.replace(temporary, path)
+                or "Run the uncertain-refresh procedure for this provider first."))
 
 
 class Journal:
+    lock_timeout = LOCK_SECONDS
+
     def __init__(self, checkpoint_dir: Any, x25519_private: Any) -> None:
         self.folder = Path(checkpoint_dir) / "journal"
         self._key = x25519_private
@@ -69,19 +53,11 @@ class Journal:
 
     @contextmanager
     def lock(self, entry: str) -> Iterator[None]:
-        """The per-entry refresh lock (exclusive, across processes)."""
-        path = self.folder / f"{self._name(entry)}.lock"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a+b") as handle:
-            handle.seek(0, os.SEEK_END)
-            if handle.tell() == 0:
-                handle.write(b"0")
-                handle.flush()
-            _lock(handle)
-            try:
-                yield
-            finally:
-                _lock(handle, release=True)
+        """The per-entry refresh lock (exclusive, across processes), waited for up to lock_timeout."""
+        def busy() -> SecretStoreError:
+            return SecretStoreError(f"another refresh of {entry} holds its lock on this computer; try again shortly")
+        with fileio.locked(self.folder / f"{self._name(entry)}.lock", self.lock_timeout, busy):
+            yield
 
     def read(self, entry: str) -> dict | None:
         path = self.path(entry)
@@ -102,14 +78,14 @@ class Journal:
         header = {"repository": "local-journal", "group": "local", "id": self._name(entry), "kind": "static",
                   "revision": 1}
         obj = envelope.seal(record, [(self._key_id, self._key.public_key())], header)
-        _write_flushed(self.path(entry), json.dumps(obj).encode("utf-8"))
+        fileio.write_durable(self.path(entry), json.dumps(obj).encode("utf-8"))
 
     def disabled(self, entry: str) -> bool:
         return (self.folder / f"{self._name(entry)}.disabled").exists()
 
     def set_disabled(self, entry: str) -> None:
         """Persist this computer's local disabled flag for the entry (handover, section 9)."""
-        _write_flushed(self.folder / f"{self._name(entry)}.disabled", b"disabled\n")
+        fileio.write_durable(self.folder / f"{self._name(entry)}.disabled", b"disabled\n")
 
     def check(self, entry: str, provider: str | None = None, policy_disabled: bool = False) -> dict | None:
         """Steps 1 and 2: refuse a disabled refresher and an uncertain record; return a record whose
@@ -191,12 +167,20 @@ class Journal:
         self.path(entry).unlink(missing_ok=True)
         return True
 
-    def reconcile(self, entry: str, publish: Callable, is_published: Callable) -> None:
-        """Finish a pending publication (never a provider call); an uncertain record stays as it is."""
+    def reconcile(self, entry: str, publish: Callable, is_published: Callable, disabled: bool = False) -> None:
+        """Finish a pending publication (never a provider call); an uncertain record stays as it is.
+        A disabled refresher (the local flag, or disabled in the policy) publishes nothing. A failed
+        publication (an unreachable remote) leaves the answer journalled for a later attempt, so
+        reads go on from the local clone."""
+        if disabled or self.disabled(entry):
+            return
         with self.lock(entry):
             record = self.read(entry)
             if record is not None and record["state"] == "answered":
-                self._finish(entry, record, publish, is_published)
+                try:
+                    self._finish(entry, record, publish, is_published)
+                except SecretStoreError:
+                    return
 
     def resolve_uncertain(self, entry: str, provider: str | None) -> None:
         """Mark an uncertain record superseded: only for a provider with a verified profile, after

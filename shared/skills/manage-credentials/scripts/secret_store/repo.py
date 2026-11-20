@@ -11,6 +11,7 @@ import contextlib
 import json
 import os
 import subprocess
+import threading
 import time
 from pathlib import Path
 from typing import Any, Callable, Iterator
@@ -25,6 +26,8 @@ GITATTRIBUTES = ".gitattributes"
 GITATTRIBUTES_BYTES = b"* -text\n"
 _STATE_FILE = "secret-store-state.json"
 _LOCK_FILE = "secret-store.lock"
+_ANY = object()
+_HELD: dict[tuple[str, int], int] = {}  # (clone, thread) -> nesting depth of the lock
 
 
 class RefusedCommit(SecretStoreError):
@@ -33,6 +36,10 @@ class RefusedCommit(SecretStoreError):
     def __init__(self, commit: str) -> None:
         super().__init__(f"remote commit {commit} was refused by verification")
         self.commit = commit
+
+
+class MovedHead(SecretStoreError):
+    """The head moved after the change was built and verified."""
 
 
 class Conflict:
@@ -91,6 +98,39 @@ class SecretRepo:
     def __init__(self, path: str | os.PathLike, remote_url: str) -> None:
         self.path = Path(path)
         self.remote_url = str(remote_url)
+
+    @contextlib.contextmanager
+    def lock(self) -> Iterator[None]:
+        """The repository lock, re-entrant within one thread: store.py holds it across a whole
+        transaction (sync, build, verify, commit, push, checkpoint) and write/pull nest inside."""
+        key = (str((self.path / ".git").resolve()), threading.get_ident())
+        if _HELD.get(key):  # this thread already holds it, through this or another SecretRepo
+            _HELD[key] += 1
+            try:
+                yield
+            finally:
+                _HELD[key] -= 1
+            return
+        with repo_lock(self.path / ".git" / _LOCK_FILE):
+            _HELD[key] = 1
+            try:
+                yield
+            finally:
+                _HELD.pop(key, None)
+
+    def commits(self) -> list[str]:
+        """Commits reachable from HEAD, newest first."""
+        return self._out("rev-list", "HEAD").split() if self.head() else []
+
+    def read_at(self, commit: str, name: str) -> Any:
+        found = self._git("cat-file", "blob", f"{commit}:{name}", check=False)
+        return canonical.loads(found.stdout) if found.returncode == 0 else None
+
+    def reset_to(self, commit: str) -> None:
+        """Move the clone back to a verified commit; the commits after it are verified again on pull."""
+        with self.lock():
+            self._restore(commit)
+            self._set_state()
 
     # -- git plumbing -------------------------------------------------------------------------
     def _git(self, *args: str, check: bool = True, cwd: Path | None = None) -> subprocess.CompletedProcess:
@@ -163,9 +203,16 @@ class SecretRepo:
     def head(self) -> str | None:
         return self._rev("HEAD")
 
-    def pull(self, verify: Callable[[str, dict[str, Any]], bool]) -> str | None:
+    def pull(self, verify: Callable[[str, dict[str, Any]], bool],
+             advanced: Callable[[str], None] | None = None) -> str | None:
         """Fetch, then verify every new remote commit in order; the working tree advances only to
-        the last accepted commit. On refusal raise RefusedCommit naming the bad commit."""
+        the last accepted commit, and advanced(commit) runs after each move (where the caller saves
+        its checkpoint, so a checkpoint is never ahead of the clone). On refusal raise RefusedCommit."""
+        with self.lock():
+            return self._pull(verify, advanced)
+
+    def _pull(self, verify: Callable[[str, dict[str, Any]], bool],
+              advanced: Callable[[str], None] | None) -> str | None:
         remote = self._fetch()
         local = self.head()
         if remote is None or remote == local:
@@ -186,6 +233,8 @@ class SecretRepo:
             if accepted is not True:
                 self._refuse(commit)
             self._advance(commit)
+            if advanced is not None:
+                advanced(commit)
         self._set_state()
         return self.head()
 
@@ -216,8 +265,9 @@ class SecretRepo:
             self._git("read-tree", "-u", "-m", old, commit)
         self._git("update-ref", f"refs/heads/{BRANCH}", commit, *(([old]) if old else []))
 
-    def write(self, change: dict[str, Any], message: str) -> "str | Conflict":
-        """One change, one commit on the verified remote head, pushed without force."""
+    def write(self, change: dict[str, Any], message: str, expected_parent: Any = _ANY) -> "str | Conflict":
+        """One change, one commit on the verified remote head, pushed without force. With
+        expected_parent (the head the change was built and verified on), refuse when the head moved."""
         if message not in ALLOWED_MESSAGES:
             raise SecretStoreError("commit message is not in the allowed set")
         if not change:
@@ -226,7 +276,9 @@ class SecretRepo:
             parts = Path(name).parts
             if name == GITATTRIBUTES or not parts or ".." in parts or ".git" in parts or Path(name).is_absolute():
                 raise SecretStoreError("change path is not allowed")
-        with repo_lock(self.path / ".git" / _LOCK_FILE):
+        with self.lock():
+            if expected_parent is not _ANY and self.head() != expected_parent:
+                raise MovedHead("the local copy moved since this change was built and verified; refusing to write it")
             if self._state().get("refused"):
                 raise SecretStoreError("a remote commit was refused; resolve it before writing")
             remote = self._fetch()
@@ -272,7 +324,7 @@ class SecretRepo:
         """After write raised: the commit it made when the remote head is that very commit (the
         push landed and only its acknowledgement was lost); otherwise None, with any local commit
         dropped back to before, so nothing unverified stays ahead of the checkpoint."""
-        with repo_lock(self.path / ".git" / _LOCK_FILE):
+        with self.lock():
             local = self.head()
             if local is None or local == before:
                 return None

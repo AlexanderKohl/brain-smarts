@@ -5,18 +5,20 @@ No Git and no keychain here; store.py runs them."""
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import os
 import re
 import secrets
 import socket
 import sys
+import time
 from pathlib import Path
 from typing import Any, Callable
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from . import envelope, signing
+from . import canonical, envelope, signing
 from .errors import SecretStoreError
 from .keys import key_id
 from .policy import INDEX_PREFIX, Policy, object_hash, sign_policy
@@ -211,3 +213,53 @@ def build_policy_change(policy: Policy, entries: dict, change: Callable[[dict], 
             raise SecretStoreError(f"grant {oid} would change readers; its refresher or the recovery words must re-issue it")
         files[_path(oid)] = seal_object(result, oid, kind, open_payload(oid), signer, entry)
     return files
+
+
+def checkpoint_commit(repo: Any, cp: Any) -> str | None:
+    """The newest commit of the clone whose policy and objects are exactly the checkpoint's, or
+    None (the checkpoint is ahead of, or apart from, the clone)."""
+    for commit in repo.commits():
+        doc = repo.read_at(commit, "policy.json")
+        if doc is None or object_hash(doc) != cp.policy_hash:
+            continue
+        if all(object_hash(repo.read_at(commit, f"objects/{oid}.json")) == entry["hash"]
+               for oid, entry in cp.objects.items()):
+            return commit
+    return None
+
+
+def _marker_doc(package: Path, policy_hash: str) -> dict:
+    return {"policy": policy_hash, "package": hashlib.sha256(package.read_bytes()).hexdigest()}
+
+
+def marker_current(marker: Path, package: Path, policy_hash: str, public_key: Any) -> bool:
+    """The recovery package's policy marker: signed by this computer's key and naming both the
+    current policy and the package's own hash; anything stale, unsigned or tampered is not current."""
+    try:
+        doc = canonical.loads(marker.read_bytes())
+        signing.verify(doc, public_key)
+        return {k: v for k, v in doc.items() if k != "signature"} == _marker_doc(package, policy_hash)
+    except (OSError, ValueError, TypeError, KeyError, AttributeError, SecretStoreError):
+        return False
+
+
+def write_marker(marker: Path, package: Path, policy_hash: str, signer: Ed25519PrivateKey) -> None:
+    marker.write_bytes(canonical.dumps(signing.sign(_marker_doc(package, policy_hash), signer)))
+
+
+def store_status(self: Any) -> str:
+    """SecretStore.status: one line on the clone and one on the recovery package."""
+    if not self.config["enabled"] or not self.config["person"]:
+        return "The secrets store is off on this computer."
+    if not (self.clone / ".git").is_dir():
+        return "The secrets store is on but not set up here: run init (first computer) or open."
+    from .repo import SecretRepo
+    repo = self.repo or SecretRepo(self.clone, self._remote_url())
+    lines = [repo.status()]
+    path = self._package_path()
+    if path.exists():
+        days = int((time.time() - path.stat().st_mtime) // 86400)
+        lines.append(f"Recovery package: made {days} day(s) ago at {path}.")
+    else:
+        lines.append("Recovery package: none yet; run recovery-package.")
+    return " ".join(lines)

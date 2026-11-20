@@ -13,8 +13,8 @@ from typing import Any
 from .errors import SecretStoreError
 
 DATA_FILE = Path(__file__).with_name("provider_profiles.json")
-DEFAULT_GRANT_FIELDS = frozenset({"refresh_token", "client_secret", "refresh_token_expires_in",
-                                  "refresh_token_expires_at"})
+FIXED_GRANT_FIELDS = frozenset({"clientSecret", "client_secret", "id_token", "refreshToken", "refresh_token"})
+DEFAULT_GRANT_FIELDS = FIXED_GRANT_FIELDS | frozenset({"refresh_token_expires_at", "refresh_token_expires_in"})
 DEFAULT_TOKEN_FIELDS = frozenset({"access_token", "expires_at", "token_type", "scope", "expires_in"})
 
 
@@ -43,15 +43,18 @@ def profile(provider: str | None) -> dict[str, Any] | None:
     return profiles().get(provider) if provider else None
 
 
-def grant_fields(provider: str | None) -> frozenset:
-    """Fields only the refresher computer and the recovery key read: the default list plus the
-    provider's overrides."""
-    return DEFAULT_GRANT_FIELDS | frozenset((profile(provider) or {}).get("grant_fields_extra", []))
+def grant_fields(provider: str | None = None) -> frozenset:
+    """Fields only the refresher computer and the recovery key read: the fixed list plus every
+    profile's grant_fields_extra, the same for every entry and provider (conservative: a spelling
+    one provider uses is grant-only everywhere, so no entry name can expose it)."""
+    extra = frozenset(f for found in profiles().values() for f in found.get("grant_fields_extra", []))
+    return DEFAULT_GRANT_FIELDS | extra
 
 
 def token_fields(provider: str | None) -> frozenset:
-    """Access-token fields only the refresher changes (section 7, plus the provider's overrides)."""
-    return DEFAULT_TOKEN_FIELDS | frozenset((profile(provider) or {}).get("token_fields_extra", []))
+    """Access-token fields only the refresher changes (section 7, plus the provider's overrides),
+    never a grant field."""
+    return (DEFAULT_TOKEN_FIELDS | frozenset((profile(provider) or {}).get("token_fields_extra", []))) - grant_fields()
 
 
 def verified(provider: str | None) -> bool:

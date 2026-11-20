@@ -24,8 +24,8 @@
       "separate_grants_per_computer": true,
       "revocation_retires_whole_grant": "not verified",
       "new_sign_in_is_separate_grant": "not verified",
-      "grant_fields_extra": [],
-      "token_fields_extra": ["id_token"]
+      "grant_fields_extra": ["id_token"],
+      "token_fields_extra": []
     },
     "gohighlevel": {
       "label": "HighLevel",
