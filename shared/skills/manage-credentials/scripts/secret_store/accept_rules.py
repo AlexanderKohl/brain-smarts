@@ -133,6 +133,9 @@ def check_supersession(record: dict[str, Any], prior: Policy, result: Policy) ->
         _refuse("supersession record is not signed by an administrator")
     result.verify(record, record["writer"])
     grant, old = record["grant"], (record["person"], record["computer"])
+    recorded = prior.provider(grant)
+    if recorded is None or record["provider"] != recorded:
+        _refuse("supersession record's provider is not the provider recorded for the sign-in")
     refusal = provider_profiles.recovery_refusal(record["provider"])
     if refusal is not None:  # fail closed (design section 9): no supersession without a verified profile
         _refuse("supersession refused: " + refusal)

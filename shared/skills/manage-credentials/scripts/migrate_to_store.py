@@ -3,7 +3,8 @@
 Needs the Vault Agent unlocked on the OLD vault. First a verified backup copy of the vault (a byte
 copy, then an authenticated load of the copy by the agent), then every entry into the store: text
 fields as a static object, JSON sign-in fields (oauth_token_json) as an oauth plus a grant object
-with this computer as refresher. The old vault is never changed or deleted and no value is ever
+with this computer as refresher. Grant fields (client_secret and the like) always go to a grant,
+never a static object: with no sign-in yet, to an empty sign-in created for them. The old vault is never changed or deleted and no value is ever
 printed. A migration record (entry names, time, backup path) is written beside the backup.
 
   python migrate_to_store.py --dry-run     list entry and field names only
@@ -27,6 +28,7 @@ if str(SCRIPTS) not in sys.path:
 
 from portable_vault import CredentialError  # noqa: E402
 from secret_store import oauth_ops, provider_profiles  # noqa: E402
+from secret_store.broker_backend import put_grant_fields  # noqa: E402
 from secret_store.errors import SecretStoreError  # noqa: E402
 
 
@@ -42,9 +44,14 @@ def _plan(request: Callable, entry: str, fields: dict[str, str]) -> dict[str, An
         else:
             static[field] = json.dumps(value, sort_keys=True)
     grant_keys = provider_profiles.grant_fields(provider_profiles.provider_for(entry))
-    grant = {f: v for f, v in values.items() if signins and f in grant_keys}
+    grant = {f: v for f, v in values.items() if f in grant_keys}
     static.update({f: v for f, v in values.items() if f not in grant})
-    names = ([entry] if static else []) + [n for f in signins for n in oauth_ops.signin_names(entry, f)]
+    fields_of_signins = list(signins)
+    if grant and not signins:  # an empty sign-in holds them; its placeholder leaves the static object
+        if static.get(oauth_ops.DEFAULT_FIELD) == "{}":
+            del static[oauth_ops.DEFAULT_FIELD]
+        fields_of_signins = [oauth_ops.DEFAULT_FIELD]
+    names = ([entry] if static else []) + [n for f in fields_of_signins for n in oauth_ops.signin_names(entry, f)]
     return {"entry": entry, "static": static, "signins": signins, "grant": grant, "names": names}
 
 
@@ -52,6 +59,8 @@ def _copy(store: Any, plan: dict[str, Any], replace: bool) -> None:
     for number, (field, record) in enumerate(sorted(plan["signins"].items())):
         oauth_ops.put_signin(store, plan["entry"], field, record,
                              grant_fields=plan["grant"] if number == 0 else None, replace=replace)
+    if plan["grant"] and not plan["signins"]:
+        put_grant_fields(store, store._group(None), plan["entry"], plan["grant"])
     if plan["static"]:
         store.put_entry(plan["entry"], plan["static"])
 

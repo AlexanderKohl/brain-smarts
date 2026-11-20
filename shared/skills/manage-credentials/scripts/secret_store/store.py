@@ -13,13 +13,14 @@ from typing import Any, Callable
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 
-from . import canonical, checkpoint, keys, recovery, recovery_package, signing
+from . import canonical, checkpoint, keys, provider_profiles, recovery, recovery_package, signing
 from .accept import accept_commit
+from .delete_ops import build_delete
 from .errors import SecretStoreError
 from .policy import (INDEX_PREFIX, Policy, check_endorsement, create_trust_root, fingerprint, load_trust_root,
                      object_hash, public_entry)
 from .repo import Conflict, MovedHead, SecretRepo
-from .store_ops import (EMPTY_JSON, GROUP, INDEX_ID, build_delete, build_put, checkpoint_commit, load_config,
+from .store_ops import (EMPTY_JSON, GROUP, INDEX_ID, build_put, checkpoint_commit, load_config,
                         marker_current, store_status, write_marker)
 
 RETRIES = 3
@@ -258,9 +259,14 @@ class SecretStore:
         folder = Path(folder)
         history = folder / "restored-history"
         package_cp = recovery_package.restore(package_path, rx, history, re_.public_key())
+        if cls.team:  # the team target: team clone, team checkpoint and pin, never the personal paths
+            paths = {"team_clone": folder / "brain-team-secrets", "team_repo_url": str(history),
+                     "personal_clone": folder / "unused-personal"}
+        else:
+            paths = {"personal_clone": folder / "brain-secrets", "personal_repo_url": str(history),
+                     "team_clone": folder / "unused-team"}
         store = cls(use_config_file=False, enabled=True, person="recovery", computer="recovery",
-                    personal_clone=folder / "brain-secrets", checkpoint_dir=folder / "checkpoint",
-                    recovery_package_dir=folder / "recovery-packages", personal_repo_url=str(history))
+                    checkpoint_dir=folder / "checkpoint", recovery_package_dir=folder / "recovery-packages", **paths)
         store.identity = Identity(None, "recovery", rx, re_)
         mine = public_entry(rx.public_key(), re_.public_key())
 
@@ -362,6 +368,10 @@ class SecretStore:
             raise SecretStoreError("an entry needs a name")
         if not fields or not all(isinstance(k, str) and k and isinstance(v, str) for k, v in fields.items()):
             raise SecretStoreError("fields must be named text values")
+        exposed = sorted(set(fields) & provider_profiles.grant_fields()) if kind == "static" else []
+        if exposed:  # every group reader could decrypt a static object: grant fields go to the grant
+            raise SecretStoreError(f"{', '.join(exposed)} is a grant field and never goes in a plain entry; "
+                                   "store it as the sign-in's grant field instead")
 
         def build() -> tuple[dict, str]:
             index = self._index(group)
@@ -374,6 +384,29 @@ class SecretStore:
     def delete_entry(self, entry_name: str, group: str | None = None) -> None:
         self._write(lambda: build_delete(self.policy, self.checkpoint.objects, self._index(group), entry_name,
                                          self._identity().ed25519))
+
+    def static_grant_exposures(self) -> list[str]:
+        """'group/entry: field, ...' for every static object this computer can read that holds a
+        grant-field spelling (made before put_entry refused them). Names only, never values; each
+        credential listed was readable by the whole group and must be changed at the provider."""
+        self._ready()
+        grant_keys, found = provider_profiles.grant_fields(), []
+        for group in sorted(self.policy.doc["groups"]):
+            try:
+                index = self._index(group)
+            except SecretStoreError:
+                continue  # an index this computer cannot read
+            for name, oid in sorted(index.items()):
+                if self.policy.assignment(oid)[1] != "static":
+                    continue
+                try:
+                    record = self._open_object(self._tree_object(oid, self.checkpoint))
+                except SecretStoreError:
+                    continue
+                held = sorted(set(record) & grant_keys)
+                if held:
+                    found.append(f"{group}/{name}: " + ", ".join(held))
+        return found
 
     # -- recovery package and status ----------------------------------------------------------
     def _package_path(self) -> Path:

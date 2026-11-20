@@ -167,30 +167,6 @@ def build_put(policy: Policy, entries: dict, index: dict[str, str], name: str, p
                                          entries.get(index_id))}, "policy"
 
 
-def build_delete(policy: Policy, entries: dict, index: dict[str, str], name: str,
-                 signer: Ed25519PrivateKey) -> tuple[dict, str]:
-    """The tombstone transaction (section 7): the empty final revision signed by an administrator,
-    the policy change retiring its id with that revision's hash, and the index without the name."""
-    oid = index.get(name)
-    if oid is None:
-        raise SecretStoreError(f"there is no entry {name}")
-    index_id = INDEX_PREFIX + policy.assignment(oid)[0]
-    tombstone = seal_object(policy, oid, "tombstone", {}, signer, entries.get(oid),
-                            epoch=policy.epoch + 1, readers=policy.readers_for(oid))
-    final = object_hash(tombstone)
-
-    def retire(doc: dict) -> None:
-        del doc["assignments"][oid]
-        doc["retired"][oid] = final
-
-    new_doc = next_policy(policy, signer, retire)
-    result = Policy(new_doc)
-    names = {k: v for k, v in index.items() if k != name}
-    return {"policy.json": new_doc, _path(oid): tombstone,
-            _path(index_id): seal_object(result, index_id, "index", {"entries": names}, signer,
-                                         entries.get(index_id))}, "policy"
-
-
 def build_policy_change(policy: Policy, entries: dict, change: Callable[[dict], None], signer: Ed25519PrivateKey,
                         open_payload: Callable[[str], dict]) -> dict:
     """The files of one administrator commit (section 8): the next policy and a new revision of

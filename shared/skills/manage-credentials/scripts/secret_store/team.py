@@ -134,6 +134,10 @@ def set_groups(store: SecretStore, login: str, groups: list[str]) -> None:
                 members.append(login)
             elif name not in groups and login in members:
                 members.remove(login)
+        for grant, r in doc["refreshers"].items():
+            group = doc["assignments"][grant]["group"]
+            if r["person"] == login and login not in doc["groups"][group] and login not in doc["administrators"]:
+                raise SecretStoreError(f"{login} refreshes grant {grant} of group {group}; move its refresher first")
     _transact(store, change)
 
 

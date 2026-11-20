@@ -19,7 +19,7 @@ from __future__ import annotations
 import secrets
 from typing import Any
 
-from . import oauth_ops, signing
+from . import oauth_ops, provider_profiles, signing
 from .errors import SecretStoreError
 from .journal import Journal, uncertain_message
 from .keys import key_id
@@ -41,11 +41,14 @@ def _find(store: Any, entry: str, group: str | None, field: str) -> oauth_ops.Si
     return signin
 
 
-def _target(store: Any, to: str) -> tuple[str, str]:
+def _target(store: Any, to: str, signin: oauth_ops.SignIn) -> tuple[str, str]:
     person, _sep, computer = str(to).partition("/")
     target = (person, computer)
     if not person or not computer or target not in store.policy.computers:
         raise SecretStoreError(f"{to} is not an enrolled computer; name it as PERSON/COMPUTER")
+    group = store.policy.assignment(signin.grant_id)[0]
+    if person not in store.policy.members(group):
+        raise SecretStoreError(f"{to} is not a member of group {group}, so it may not refresh {signin.entry}")
     if computer in store.policy.doc["people"][person]["disabled_refresher"]:
         raise SecretStoreError(f"{to} may not refresh sign-ins: the policy disables it")
     return target
@@ -57,7 +60,7 @@ def release(store: Any, entry: str, to: str, group: str | None = None, field: st
     signin = _find(store, entry, group, field)
     if not signin.mine:
         oauth_ops.refuse_other(signin)
-    target = _target(store, to)
+    target = _target(store, to, signin)
     if target == signin.refresher:
         raise SecretStoreError(f"{to} already refreshes {entry}")
     journal = journal or Journal(store.config["checkpoint_dir"], store._identity().x25519)
@@ -138,3 +141,49 @@ def accept(store: Any, entry: str, group: str | None = None, field: str = oauth_
         return files, "policy"
     store._write(build)
     return moved["to"]
+
+
+def supersede(store: Any, entry: str, to: str, confirmation: str, group: str | None = None,
+              field: str = oauth_ops.DEFAULT_FIELD) -> tuple:
+    """Section 9, Handing over item 2 (old refresher unreachable): an administrator's commit that
+    disables the old computer as a refresher, names the new one and carries a supersession record
+    bound to the provider recorded for the sign-in. Refused with the plain message unless that
+    provider's profile is verified. Returns the new refresher."""
+    signin = _find(store, entry, group, field)
+    provider = store.policy.provider(signin.grant_id)
+    refusal = provider_profiles.recovery_refusal(provider or signin.provider)
+    if refusal is not None:
+        raise SecretStoreError(refusal)
+    if provider is None:
+        raise SecretStoreError(f"{entry} was created before providers were recorded in the policy, so it cannot "
+                               "be superseded; sign in again under a new entry")
+    if not isinstance(confirmation, str) or not confirmation.strip():
+        raise SecretStoreError("say how the old grant was revoked at the provider (--confirmation)")
+    target, old = _target(store, to, signin), signin.refresher
+    if target == old:
+        raise SecretStoreError(f"{to} already refreshes {entry}")
+    signer = store._identity().ed25519
+    me = key_id(signer.public_key())
+
+    def build() -> tuple[dict, str]:
+        policy, cp = store.policy, store.checkpoint
+        if not policy.is_admin_key(me):
+            raise SecretStoreError("only an administrator may supersede a refresher")
+        if policy.refresher(signin.grant_id) != old:
+            raise SecretStoreError(f"the refresher of {entry} changed meanwhile; nothing was superseded")
+        body = {"schema": 1, "type": "supersession", "repository": policy.repository, "grant": signin.grant_id,
+                "provider": provider, "person": old[0], "computer": old[1], "confirmation": confirmation.strip(),
+                "writer": me}
+
+        def change(doc: dict) -> None:
+            doc["refreshers"][signin.grant_id].update(person=target[0], computer=target[1])
+            disabled = doc["people"][old[0]]["disabled_refresher"]
+            if old[1] not in disabled:
+                disabled.append(old[1])
+        others = {oid: e for oid, e in cp.objects.items() if oid != signin.grant_id}
+        files = build_policy_change(policy, others, change, signer,
+                                    lambda oid: store._open_object(store._tree_object(oid, cp)))
+        files[f"releases/{secrets.token_hex(16)}.json"] = signing.sign(body, signer)
+        return files, "policy"
+    store._write(build)
+    return target

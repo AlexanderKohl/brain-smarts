@@ -14,6 +14,9 @@
   brain_secrets.py team-remove --login L [--computer C]
   brain_secrets.py handover-release --entry E --to PERSON/COMPUTER [--group G]   old refresher: release
   brain_secrets.py handover-accept --entry E [--group G]                         administrator: move it
+  brain_secrets.py supersede --entry E --to PERSON/COMPUTER --confirmation TEXT [--group G]
+                                                  administrator, old refresher unreachable
+  brain_secrets.py grant-scan [--team]            plain entries holding a grant field (names only)
 
 --group selects the team repository. Values are typed only into the masked window and the
 enrolment and recovery words are shown only in a local window, never on the command line or in
@@ -27,7 +30,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-_GROUPED = ("list", "put", "get-check", "delete", "handover-release", "handover-accept")
+_GROUPED = ("list", "put", "get-check", "delete", "handover-release", "handover-accept", "supersede")
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -74,6 +77,12 @@ def _parser() -> argparse.ArgumentParser:
     take = sub.add_parser("handover-accept", help="administrator: move a released sign-in to its new refresher")
     take.add_argument("--entry", required=True)
     take.add_argument("--group")
+    sup = sub.add_parser("supersede", help="administrator: move a sign-in whose refresher is unreachable")
+    sup.add_argument("--entry", required=True)
+    sup.add_argument("--to", required=True, metavar="PERSON/COMPUTER")
+    sup.add_argument("--confirmation", required=True, help="how the old grant was revoked at the provider")
+    sup.add_argument("--group")
+    sub.add_parser("grant-scan", help="plain entries holding a grant field").add_argument("--team", action="store_true")
     return parser
 
 
@@ -182,6 +191,14 @@ def main(argv=None, store_factory=None, team_factory=None, ask=None, confirm=Non
         elif args.command == "handover-accept":
             person, computer = handover.accept(store.open(), args.entry, group)
             print(f"{args.entry} now refreshes on {person}/{computer}.")
+        elif args.command == "supersede":
+            person, computer = handover.supersede(store.open(), args.entry, args.to, args.confirmation, group)
+            print(f"{args.entry} now refreshes on {person}/{computer}; the old computer may no longer refresh.")
+        elif args.command == "grant-scan":
+            found = store.open().static_grant_exposures()
+            print("No plain entry holds a grant field." if not found else
+                  "These plain entries hold grant fields every group member could read; move them to the "
+                  "sign-in's grant and change them at the provider:\n" + "\n".join(found))
         return 0
     except (SecretStoreError, CredentialError) as error:
         print(f"Secrets store: {error}", file=sys.stderr)

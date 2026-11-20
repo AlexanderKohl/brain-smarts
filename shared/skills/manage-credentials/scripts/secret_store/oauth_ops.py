@@ -43,10 +43,12 @@ class SignIn:
     mine: bool
     provider: str | None
     group: str = GROUP
+    repository: str = ""
 
     @property
     def journal_key(self) -> str:
-        return f"{self.entry}#{self.field}"
+        """Entry and field (for messages), then the repository id and the grant object id."""
+        return f"{self.entry}#{self.field} @ {self.repository}/{self.grant_id}"
 
 
 def signin_names(entry: str, field: str) -> tuple[str, str]:
@@ -135,7 +137,8 @@ def find(store: Any, entry: str, field: str, group: str | None = None) -> SignIn
     if grant_id is None or who is None:
         raise SecretStoreError(f"sign-in {entry}#{field} has no grant or refresher in the policy")
     provider = _open(store, oauth_id).get(PROVIDER_KEY) or provider_profiles.provider_for(entry)
-    return SignIn(entry, field, oauth_id, grant_id, who, who == _me(store), provider, store._group(group))
+    return SignIn(entry, field, oauth_id, grant_id, who, who == _me(store), provider, store._group(group),
+                  store.policy.repository)
 
 
 def signin_fields(store: Any, entry: str, group: str | None = None) -> list[str]:
@@ -201,7 +204,7 @@ def _static_files(store: Any, policy: Policy, plan: tuple | None) -> dict:
 
 
 def _new_signin_files(store: Any, entry: str, field: str, shared: dict, grant: dict,
-                      group: str) -> tuple[Policy, dict]:
+                      group: str, provider: str | None = None) -> tuple[Policy, dict]:
     policy, signer, index = store.policy, store._identity().ed25519, store._index(group)
     oname, gname = signin_names(entry, field)
     if gname in index:
@@ -213,8 +216,11 @@ def _new_signin_files(store: Any, entry: str, field: str, shared: dict, grant: d
     person, computer = _me(store)
 
     def change(doc: dict) -> None:
-        doc["assignments"][oauth_id] = {"group": group, "kind": "oauth"}
-        doc["assignments"][grant_id] = {"group": group, "kind": "grant"}
+        # The provider is bound in the policy (immutable) so a supersession can be checked
+        # against it.
+        bound = {"provider": provider} if provider else {}
+        doc["assignments"][oauth_id] = {"group": group, "kind": "oauth", **bound}
+        doc["assignments"][grant_id] = {"group": group, "kind": "grant", **bound}
         doc["refreshers"][grant_id] = {"person": person, "computer": computer, "oauth": oauth_id}
 
     doc = next_policy(policy, signer, change)
@@ -247,7 +253,7 @@ def put_signin(store: Any, entry: str, field: str, record: dict, grant_fields: d
         grant = {"token": token, "fields": {**(plan[2] if plan else {}), **extra}}
         signin = find(store, entry, field, group)
         if signin is None:
-            result, files = _new_signin_files(store, entry, field, shared, grant, group)
+            result, files = _new_signin_files(store, entry, field, shared, grant, group, provider)
             return {**files, **_static_files(store, result, plan)}, "policy"
         if not replace:
             raise SecretStoreError(f"the store already holds {entry}#{field}; use replace to overwrite it")

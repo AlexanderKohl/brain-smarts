@@ -184,5 +184,51 @@ class TeamTests(TeamCase):
             check_endorsement(canonical.loads(blob), keys.generate_key_pairs()[1].public_key())
 
 
+
+class RefresherGroupAndRecoveryTests(TeamCase):
+    def signin_setup(self):
+        from secret_store import oauth_ops
+        admin, pinned = self.team_setup()
+        bob = self.enrol_member(admin, pinned, "tb", "bob", "pc")
+        team_ops.admit(admin, "bob", ["ops"])
+        self.enrol_member(admin, pinned, "td", "dave", "pc")
+        team_ops.admit(admin, "dave", ["finance"])
+        token = {"access_token": "fictional-access", "refresh_token": "fictional-refresh", "token_type": "Bearer"}
+        oauth_ops.put_signin(admin, "Ops sign-in", oauth_ops.DEFAULT_FIELD, token, group="ops")
+        return admin, bob, oauth_ops.find(admin, "Ops sign-in", oauth_ops.DEFAULT_FIELD, "ops")
+
+    def test_refresher_outside_the_group_is_refused(self):
+        from secret_store import handover
+        from secret_store.store_ops import next_policy
+        admin, _bob, signin = self.signin_setup()
+        with self.assertRaisesRegex(SecretStoreError, "not a member of group ops"):
+            handover.release(admin, "Ops sign-in", "dave/pc", group="ops")
+
+        def move(doc):
+            doc["refreshers"][signin.grant_id].update(person="dave", computer="pc")
+        with self.assertRaisesRegex(SecretStoreError, "not a member of the grant's group"):
+            Policy(next_policy(admin.policy, admin._identity().ed25519, move))
+        handover.release(admin, "Ops sign-in", "bob/pc", group="ops")
+        handover.accept(admin, "Ops sign-in", group="ops")
+        with self.assertRaisesRegex(SecretStoreError, "move its refresher first"):
+            team_ops.set_groups(admin, "bob", ["finance"])
+        self.assertIn("bob", admin.open().policy.doc["groups"]["ops"])
+
+    def test_team_recovery_restores_into_the_team_target(self):
+        from unittest import mock
+        from secret_store import store_ops
+        admin, _pinned = self.team_setup()
+        words = " ".join(self.words)
+        package = admin.refresh_recovery_package(force=True)
+        target = self.root / "team-recovered"
+        with mock.patch.object(store_ops, "project_repos_root", lambda _root: self.root / "defaults"):
+            restored = team_ops.TeamStore.restore_from_package(words, package, target)
+        self.assertEqual(restored.clone, target / "brain-team-secrets")
+        self.assertTrue((target / "brain-team-secrets" / ".git").is_dir())
+        self.assertFalse((self.root / "defaults").exists())
+        self.assertEqual(restored.get_record("Ops API", group="ops"), {"api_key": VALUE})
+        self.assertEqual(restored.get_record("Finance API", group="finance"), {"api_key": OTHER})
+
+
 if __name__ == "__main__":
     unittest.main()

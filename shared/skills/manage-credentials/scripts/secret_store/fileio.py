@@ -101,3 +101,15 @@ def write_durable(path: Path, data: bytes) -> None:
     else:
         os.replace(temporary, path)
         _sync_folder(path.parent)
+
+
+def remove_durable(path) -> None:
+    """Remove a file and, on POSIX, flush its folder so the removal survives a power cut."""
+    path = Path(path)
+    path.unlink(missing_ok=True)
+    if os.name != "nt" and path.parent.is_dir():
+        handle = os.open(str(path.parent), os.O_RDONLY)
+        try:
+            os.fsync(handle)
+        finally:
+            os.close(handle)

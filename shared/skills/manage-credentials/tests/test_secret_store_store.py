@@ -212,5 +212,26 @@ class PersonalStoreTests(StoreCase):
         self.assertIn("Deleted CLI Entry.", output)
 
 
+
+class StaticGrantFieldTests(StoreCase):
+    def test_put_entry_refuses_grant_fields_in_a_static_object(self):
+        first, _pinned = self.init()
+        first.open()
+        for name in ("refreshToken", "refresh_token", "client_secret"):
+            with self.assertRaisesRegex(SecretStoreError, "grant field"):
+                first.put_entry("Legacy", {name: VALUE, "api_key": OTHER})
+        self.assertNotIn("Legacy", first.list_entries())
+
+    def test_scan_reports_static_objects_holding_grant_fields(self):
+        from secret_store.store_ops import build_put
+        first, _pinned = self.init()
+        first.open().put_entry("Clean", {"api_key": VALUE})
+        self.assertEqual(first.static_grant_exposures(), [])
+        first._write(lambda: build_put(first.policy, first.checkpoint.objects, first._index(), "Legacy",
+                                       {"client_secret": VALUE, "api_key": OTHER}, "static",
+                                       first._identity().ed25519))
+        self.assertEqual(first.static_grant_exposures(), ["personal/Legacy: client_secret"])
+
+
 if __name__ == "__main__":
     unittest.main()

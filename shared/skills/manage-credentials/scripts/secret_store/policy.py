@@ -118,7 +118,11 @@ class Policy:
         for oid, a in assignments.items():
             _require(_name(oid) and not oid.startswith(INDEX_PREFIX), "assignment id malformed")
             _require(oid not in retired, f"assignment {oid} reuses a retired id")
-            _require(isinstance(a, dict) and set(a) == {"group", "kind"} and isinstance(a["group"], str)
+            # A sign-in's oauth and grant ids may record their provider when the sign-in is created
+            # (design section 9); it never changes afterwards (validate_transition).
+            _require(isinstance(a, dict) and (set(a) == {"group", "kind"} or (
+                         set(a) == {"group", "kind", "provider"} and a.get("kind") in ("oauth", "grant")
+                         and _name(a["provider"]))) and isinstance(a["group"], str)
                      and a["group"] in groups and a["kind"] in ASSIGNABLE_KINDS, f"assignment {oid} malformed")
         refreshers = doc["refreshers"]
         _require(isinstance(refreshers, dict), "refreshers malformed")
@@ -129,8 +133,12 @@ class Policy:
                      and _name(r["computer"]) and (r["person"], r["computer"]) in self.computers,
                      f"refresher of {grant} malformed or unknown")
             _require(r["computer"] not in people[r["person"]]["disabled_refresher"], f"refresher of {grant} is disabled")
+            # The grant is encrypted to its refresher: someone outside the group may never hold it.
+            _require(r["person"] in set(groups[assignments[grant]["group"]]) | set(admins),
+                     f"refresher of {grant} is not a member of the grant's group")
             oauth = assignments.get(r["oauth"]) if _name(r["oauth"]) else None
             _require(oauth is not None and oauth["kind"] == "oauth" and oauth["group"] == assignments[grant]["group"]
+                     and oauth.get("provider") == assignments[grant].get("provider")
                      and r["oauth"] not in self.oauth_refresher, f"refresher of {grant} names a bad oauth id")
             self.oauth_refresher[r["oauth"]] = grant
         _require(all(a["kind"] != "grant" or oid in refreshers for oid, a in assignments.items()), "a grant has no refresher")
@@ -167,6 +175,11 @@ class Policy:
             a = self.doc["assignments"][oid]
             return a["group"], a["kind"]
         raise SecretStoreError(f"object {oid} is not assigned by the policy")
+
+    def provider(self, oid: str) -> str | None:
+        """The provider recorded in the assignment of a sign-in's oauth or grant id, or None."""
+        a = self.doc["assignments"].get(oid) if isinstance(oid, str) else None
+        return a.get("provider") if isinstance(a, dict) else None
 
     def assigned_ids(self, group: str) -> list[str]:
         return sorted(o for o, a in self.doc["assignments"].items() if a["group"] == group)
@@ -285,5 +298,13 @@ def validate_transition(current: Policy, proposed: Any) -> Policy:
         _require(oid in nxt.doc["assignments"] or oid in nxt.doc["retired"], f"assignment {oid} removed without retiring it")
         if oid in nxt.doc["assignments"]:
             _require(nxt.doc["assignments"][oid] == current.doc["assignments"][oid],
-                     f"assignment {oid} changed its group or kind")
+                     f"assignment {oid} changed its group, kind or provider")
+    # A grant stays bound to its oauth id for life; its refresher moves only through a release or a
+    # supersession (accept.py). A new grant binds a new oauth id, never an existing one.
+    for grant, r in nxt.doc["refreshers"].items():
+        before = current.doc["refreshers"].get(grant)
+        if before is not None:
+            _require(r["oauth"] == before["oauth"], f"grant {grant} was rebound to another oauth id")
+        else:
+            _require(r["oauth"] not in current.doc["assignments"], f"grant {grant} is bound to an existing oauth id")
     return nxt

@@ -5,15 +5,19 @@ computer keys from the keychain and no passphrase. Per sign-in: the refresher re
 record and publishes refreshed tokens through the refresh journal; any other computer reads the
 access token and shared settings and may change shared settings only. An entry is served from
 the personal store or the team store by which index holds its name (personal first; a name held
-twice is refused as ambiguous; a new name goes to the personal store). Grant fields are never
-stored in or served from a static object. Also the vault-only operations the migration uses.
-Messages never carry values."""
+twice is refused as ambiguous; a new name goes to the personal store). The team store is built
+and opened when the configuration names one (team_repo_url, or a team_clone that holds a
+clone). Grant fields are never stored in or served from a static object. A token field of a
+sign-in changes only inside a begun refresh (begin_refresh, then set_json with its operation
+id); a first sign-in begins with new_authorisation. Also the vault-only operations the
+migration uses. Messages never carry values."""
 
 from __future__ import annotations
 
 import json
 import threading
 import time
+from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
 
@@ -42,7 +46,17 @@ def store_enabled(brain_root: Any = None) -> bool:
 
 
 def backend_if_enabled(brain_root: Any = None) -> "StoreBackend | None":
-    return StoreBackend() if store_enabled(brain_root) else None
+    return StoreBackend(brain_root=brain_root) if store_enabled(brain_root) else None
+
+
+def team_configured(config: dict) -> bool:
+    """The configuration names a team store: team_repo_url, or a team_clone holding a clone."""
+    return bool(config.get("team_repo_url")) or (Path(config["team_clone"]) / ".git").is_dir()
+
+
+def unbegun_message(entry: str, field: str) -> str:
+    return (f"{entry}#{field}: a sign-in token is saved only inside a begun refresh (rotation_lock with "
+            "refresh=True, leeway_seconds, or new_authorisation=True for a first sign-in); nothing was saved")
 
 
 def put_grant_fields(st: Any, group: str, entry: str, fields: dict) -> None:
@@ -56,11 +70,17 @@ def put_grant_fields(st: Any, group: str, entry: str, fields: dict) -> None:
 
 
 class StoreBackend:
-    def __init__(self, store: Any = None, sync_seconds: float = SYNC_SECONDS, team: Any = None) -> None:
-        self.store = store if store is not None else SecretStore()
+    def __init__(self, store: Any = None, sync_seconds: float = SYNC_SECONDS, team: Any = None,
+                 brain_root: Any = None) -> None:
+        if store is None:
+            store = SecretStore(brain_root=brain_root)
+            if team is None and team_configured(store.config):
+                from .team import TeamStore
+                team = TeamStore(brain_root=brain_root)
+        self.store = store
         self.team = team  # a TeamStore, or None for the personal store alone
         self.sync_seconds = sync_seconds
-        self.sync_error: str | None = None
+        self._sync_errors: dict[int, str] = {}  # per store: the reason its last pull failed
         self._synced: float | None = None
         self._journal: Journal | None = None
         self._lock = threading.RLock()
@@ -71,20 +91,31 @@ class StoreBackend:
     def _stores(self) -> list:
         return [st for st in (self.store, self.team) if st is not None]
 
+    @property
+    def sync_error(self) -> str | None:
+        return "; ".join(self._sync_errors[n] for n in sorted(self._sync_errors)) or None
+
     def _pull_all(self, tolerate: bool) -> None:
         """Open or pull every store. With tolerate, an unreachable or refused remote leaves reads
-        on the last verified local state, and the reason is kept for status."""
-        for st in self._stores():
+        on the last verified local state, and the reason is kept for status, per store: a later
+        store's success never clears an earlier store's error."""
+        for number, st in enumerate(self._stores()):
             if st.policy is None:
-                st.open()
+                try:
+                    st.open()
+                    self._sync_errors.pop(number, None)
+                except SecretStoreError as error:  # a team store not reachable yet leaves the personal one
+                    if not tolerate or st is self.store:
+                        raise
+                    self._sync_errors[number] = str(error)
                 continue
             try:
                 st._sync(None, st.checkpoint)
-                self.sync_error = None
+                self._sync_errors.pop(number, None)
             except SecretStoreError as error:
                 if not tolerate:
                     raise
-                self.sync_error = str(error)
+                self._sync_errors[number] = str(error)
         self._synced = time.monotonic()
 
     def _ready(self) -> Any:
@@ -114,7 +145,7 @@ class StoreBackend:
     def _route(self, entry: str) -> tuple[Any, str]:
         """(store, group) whose index holds entry, personal first."""
         found = []
-        for st in self._stores():
+        for st in (st for st in self._stores() if st.policy is not None):
             for group in self._groups(st):
                 names = st._index(group)
                 if entry in names or any(n.startswith(entry + "#") for n in names):
@@ -136,7 +167,7 @@ class StoreBackend:
 
     def _signin(self, st: Any, group: str, entry: str, field: str) -> oauth_ops.SignIn | None:
         signin = oauth_ops.find(st, entry, field, group)
-        if signin is not None and signin.mine and signin.journal_key not in self._pending:
+        if signin is not None and signin.mine and f"{entry}#{field}" not in self._pending:
             self._journal.reconcile(signin.journal_key, *self._hooks(st, signin), disabled=self._policy_disabled(st))
         return signin
 
@@ -206,10 +237,9 @@ class StoreBackend:
             st, group = self._route(entry)
             signin = self._signin(st, group, entry, field)
             if signin is None:
-                if oauth_ops.looks_like_signin(value):  # a static placeholder is promoted in the same commit
-                    oauth_ops.put_signin(st, entry, field, value, group=group)
-                else:
-                    st.put_entry(entry, {field: json.dumps(value, sort_keys=True)}, group=group)
+                if oauth_ops.looks_like_signin(value):  # a first sign-in begins with new_authorisation
+                    raise SecretStoreError(unbegun_message(entry, field))
+                st.put_entry(entry, {field: json.dumps(value, sort_keys=True)}, group=group)
                 return
             if not signin.mine:
                 oauth_ops.save_settings(st, signin, value)
@@ -217,11 +247,8 @@ class StoreBackend:
             current = oauth_ops.read(st, signin)
             watched = provider_profiles.token_fields(signin.provider) | provider_profiles.grant_fields(signin.provider)
             if any(k in value and value[k] != current.get(k) for k in watched):
-                revision = st.checkpoint.objects[signin.oauth_id]["revision"]
-                self._journal.publish_answer(signin.journal_key, revision, value, *self._hooks(st, signin),
-                                             provider=signin.provider, policy_disabled=self._policy_disabled(st))
-            else:
-                oauth_ops.save_settings(st, signin, value)
+                raise SecretStoreError(unbegun_message(entry, field))
+            oauth_ops.save_settings(st, signin, value)
 
     def set_text(self, entry: str, field: str, value: str) -> None:
         """A text field; a grant field goes to the entry's grant, created when no sign-in exists yet."""
@@ -243,7 +270,7 @@ class StoreBackend:
             if signin is None:
                 self.set_json(entry, field, {})
                 return {"cleared": True}
-            if signin.journal_key in self._pending:
+            if f"{entry}#{field}" in self._pending:
                 raise SecretStoreError(f"a refresh of {entry} is under way; clear it once that ends")
             if not signin.mine:
                 oauth_ops.clear_tokens(st, signin, "")
@@ -263,31 +290,39 @@ class StoreBackend:
         st._sync(None, st.checkpoint)
         self._synced = time.monotonic()
 
-    def begin_refresh(self, entry: str, field: str) -> dict[str, Any]:
-        """On the refresher: read the record, then take the per-entry lock, refuse a disabled or
-        unresolved entry, write and flush the calling record; return its operation id and the full
-        record. Elsewhere: the refresher's name and the latest published record, after a pull."""
+    def begin_refresh(self, entry: str, field: str, new_authorisation: bool = False) -> dict[str, Any]:
+        """Called only when a provider call is due. On the refresher: read the record, then take
+        the per-entry lock, refuse a disabled or unresolved entry, write and flush the calling
+        record; return its operation id and the full record. Elsewhere: the refresher's name and
+        the latest published record, after a pull. No sign-in yet: with new_authorisation (a code
+        exchange) an operation id for the first save, which creates the sign-in; else nothing."""
         with self._lock:
             self._ready()
             st, group = self._route(entry)
             signin = self._signin(st, group, entry, field)
-            if signin is None:
-                return {"signin": False}
-            if not signin.mine:
+            key = f"{entry}#{field}"
+            if signin is not None and not signin.mine:
                 self._pull(st)
                 return {"signin": True, "refresher": False, "computer": signin.refresher[1],
                         "record": oauth_ops.read(st, signin)}
-            key = signin.journal_key
+            if signin is None and not new_authorisation:
+                return {"signin": False}
             if key in self._pending:
                 raise SecretStoreError(f"a refresh of {entry} is already under way on this computer; try again shortly")
-            revision = st.checkpoint.objects[signin.oauth_id]["revision"]
-            record = oauth_ops.read(st, signin)  # first: a failure to read never leaves a calling record
-            stack, begun = self._journal.begin(key, revision, signin.provider, self._policy_disabled(st))
+            if signin is None:
+                stack, begun, record = ExitStack(), {"operation": oauth_ops.new_operation()}, {}
+            else:
+                revision = st.checkpoint.objects[signin.oauth_id]["revision"]
+                record = oauth_ops.read(st, signin)  # first: a failure to read never leaves a calling record
+                stack, begun = self._journal.begin(signin.journal_key, revision, signin.provider,
+                                                   self._policy_disabled(st))
             timer = threading.Timer(self.refresh_timeout, self._expire, (key, begun["operation"]))
             timer.daemon = True
-            self._pending[key] = {"stack": stack, "record": begun, "timer": timer, "signin": signin, "store": st}
+            self._pending[key] = {"stack": stack, "record": begun, "timer": timer, "signin": signin, "store": st,
+                                  "group": group}
             timer.start()
-            return {"signin": True, "refresher": True, "operation": begun["operation"], "record": record}
+            return {"signin": signin is not None, "refresher": True, "operation": begun["operation"],
+                    "record": record}
 
     def _expire(self, key: str, operation: str) -> None:
         """The time limit: release the lock and leave the record in calling (uncertain)."""
@@ -311,6 +346,11 @@ class StoreBackend:
             raise SecretStoreError(f"the refresh of {entry} was not begun here or ran past its time limit; "
                                    "nothing was saved")
         try:
+            if held["signin"] is None:  # a first sign-in (new_authorisation): it is created now
+                if oauth_ops.find(held["store"], entry, field, held["group"]) is not None:
+                    raise SecretStoreError(f"{entry}#{field} was signed in elsewhere meanwhile; nothing was saved")
+                oauth_ops.put_signin(held["store"], entry, field, value, group=held["group"])
+                return
             publish = self._hooks(held["store"], held["signin"])[0]
             self._journal.complete(held["signin"].journal_key, held["record"], value, publish)
         finally:
@@ -324,6 +364,8 @@ class StoreBackend:
             if held is None:
                 return {"aborted": False}
             try:
+                if held["signin"] is None:
+                    return {"aborted": True}
                 return {"aborted": self._journal.abandon(held["signin"].journal_key, held["record"])}
             finally:
                 held["stack"].close()
@@ -360,7 +402,7 @@ def agent_operation(agent: Any, operation: str, request: dict) -> Any:
     entry, field = str(request.get("entry") or ""), str(request.get("field") or oauth_ops.DEFAULT_FIELD)
     held = str(request.get("operation") or "")
     if operation == "begin_refresh":
-        return agent._store.begin_refresh(entry, field)
+        return agent._store.begin_refresh(entry, field, bool(request.get("new_authorisation")))
     if operation == "abort_refresh":
         return agent._store.abort_refresh(entry, field, held)
     if operation == "release_refresh":

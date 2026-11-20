@@ -134,45 +134,55 @@ def _wait_for_refresher(store: Any, begun: dict, leeway: Any) -> None:
     raise CredentialError(f"this sign-in refreshes on {begun.get('computer')}; it has not refreshed it yet")
 
 
+def unsaved_message(entry: str) -> str:
+    return (f"The refresh of {entry} ended without saving the provider's answer, so it is held as uncertain: "
+            "the provider may have been called. A connector that certainly sent nothing raises "
+            "ProviderNotCalled instead.")
+
+
 @contextmanager
 def store_refresh(store: Any, local_lock: Any, *, refresh: bool = False, leeway_seconds: Any = None,
                   new_authorisation: bool = False) -> Any:
-    """Every rotation_lock on a sign-in when the agent serves the secrets store. A plain lock (no
-    refresh, no leeway) takes the refresh path on the refresher too; elsewhere its block runs at
-    once (a settings save). On the refresher, begin_refresh opens the journal record and the save
-    inside carries its operation id. Leaving the block without a save removes the record only on
-    a normal exit (the token was already fresh, nothing was called) or on ProviderNotCalled raised
-    before the request; any other exception may follow a provider call, so the record stays in
-    calling (uncertain) and only the lock is released. Elsewhere a refresh runs once the refresher
-    has published a newer access token."""
+    """Every rotation_lock on a sign-in when the agent serves the secrets store. A refresh is
+    begun only when a provider call is due: refresh=True, new_authorisation=True (a code
+    exchange, also a first sign-in) or a token expiring within leeway_seconds. Otherwise the block
+    runs under the lock and nothing is written; a token change saved there is refused. On the
+    refresher, begin_refresh opens the journal record and the save inside carries its operation
+    id. Only ProviderNotCalled removes the record; any other exception, and a normal exit without
+    a save, leave it in calling (uncertain) and release the lock (the latter with a plain
+    message). Elsewhere a refresh runs once the refresher has published a newer access token."""
     from secret_store.journal import ProviderNotCalled
 
-    plain = not refresh and leeway_seconds is None
     with local_lock():
-        if not refresh and not plain and not _expiring(_load_or_empty(store), leeway_seconds):
+        due = refresh or new_authorisation or (
+            leeway_seconds is not None and _expiring(_load_or_empty(store), leeway_seconds))
+        if not due:
             yield
             return
-        begun = store._broker_request("begin_refresh", entry=store.entry, field=store.field)
-        if not begun.get("signin"):
-            yield
-            return
-        if not begun.get("refresher"):
-            if new_authorisation:
-                raise CredentialError(f"this sign-in refreshes on {begun.get('computer')}; sign in again there")
-            if not plain:
+        begun = store._broker_request("begin_refresh", entry=store.entry, field=store.field,
+                                      new_authorisation=new_authorisation)
+        if not begun.get("operation"):
+            if begun.get("signin"):  # another computer refreshes this sign-in
+                if new_authorisation:
+                    raise CredentialError(f"this sign-in refreshes on {begun.get('computer')}; sign in again there")
                 _wait_for_refresher(store, begun, None if refresh else leeway_seconds)
             yield
             return
-        store._operation, store._saved = begun["operation"], False
-        ending = "abort_refresh"
+        operation = begun["operation"]
+        store._operation, store._saved = operation, False
+
+        def end(how: str) -> None:
+            store._operation = None
+            if not store._saved:
+                store._broker_request(how, entry=store.entry, field=store.field, operation=operation)
         try:
             yield
         except ProviderNotCalled:
+            end("abort_refresh")
             raise
         except BaseException:
-            ending = "release_refresh"
+            end("release_refresh")
             raise
-        finally:
-            operation, store._operation = store._operation, None
-            if not store._saved:
-                store._broker_request(ending, entry=store.entry, field=store.field, operation=operation)
+        end("release_refresh")
+        if not store._saved:
+            raise CredentialError(unsaved_message(store.entry))

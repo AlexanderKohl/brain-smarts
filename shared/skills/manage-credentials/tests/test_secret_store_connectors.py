@@ -70,7 +70,7 @@ def settings_save(store, tenant):
 class ConnectorPatterns(AgentClients):
     def setUp(self):
         super().setUp()
-        self.ba.set_json("xero-demo", FIELD, self.token(expires_at=EXPIRED))
+        self.sign_in(self.ba, "xero-demo", self.token(expires_at=EXPIRED))
         self.a, self.b = self.client(self.ba, "A"), self.client(self.bb, "B")
         self.calls = []
 
@@ -80,7 +80,7 @@ class ConnectorPatterns(AgentClients):
 
     def test_refresher_leeway_refresh_goes_through_the_journal(self):
         leeway_refresh(self.a, self.provider)
-        self.assertEqual(self.ba._journal.read(self.SIGNIN)["state"], "published")
+        self.assertIsNone(self.ba._journal.read(self.SIGNIN))  # published, then retired
         self.assertEqual(leeway_refresh(self.a, self.provider)["access_token"], NEW["access_token"])
         self.assertEqual(self.calls, [RT1])
         self.assertEqual(self.b.load()["access_token"], NEW["access_token"])
@@ -88,7 +88,9 @@ class ConnectorPatterns(AgentClients):
     def test_refresher_forced_refresh_code_exchange_plain_lock_and_settings(self):
         leeway_refresh(self.a, self.provider, force=True)
         code_exchange(self.a, self.provider)
-        plain_lock_refresh(self.a, self.provider)
+        with self.assertRaisesRegex(CredentialError, "only inside a begun refresh"):
+            plain_lock_refresh(self.a, lambda grant: self.calls.append(grant) or {**NEW, "access_token": "fictional-6"})
+        # the provider was called but its token change was refused: the connector must pass refresh or leeway
         settings_save(self.a, "tenant-9")
         self.assertEqual(self.calls, [RT1, "code", NEW["refresh_token"]])
         self.assertEqual((self.b.load()["tenant_id"], self.ba._pending), ("tenant-9", {}))

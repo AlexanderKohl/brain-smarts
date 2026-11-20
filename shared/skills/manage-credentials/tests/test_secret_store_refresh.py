@@ -59,19 +59,23 @@ class JournalAlone(unittest.TestCase):
         self.assertEqual(self.calls, 0)
 
     def test_journal_is_encrypted_and_retired_after_publication(self):
-        self.refresh()
-        self.assertEqual(self.journal.read(ENTRY)["state"], "published")
-        self.assertEqual(len(self.published), 1)
-        raw = self.journal.path(ENTRY).read_bytes()
-        self.assertNotIn(b"fictional-refresh-3", raw)
-        with self.assertRaises(SecretStoreError):
-            Journal(self._tmp.name, X25519PrivateKey.generate()).read(ENTRY)
+        seen = []
+
+        def publish(op, answer):
+            seen.append(self.journal.path(ENTRY).read_bytes())
+            with self.assertRaises(SecretStoreError):
+                Journal(self._tmp.name, X25519PrivateKey.generate()).read(ENTRY)
+        self.journal.refresh(ENTRY, 1, self.provider, publish, lambda op, a: False, provider="xero")
+        self.assertEqual(len(seen), 1)
+        self.assertNotIn(b"fictional-refresh-3", seen[0])
+        self.assertIsNone(self.journal.read(ENTRY))
+        self.assertFalse(self.journal.path(ENTRY).exists())
 
 
 class RefreshThroughStore(StoreFixture):
     def setUp(self):
         super().setUp()
-        self.ba.set_json("xero-demo", FIELD, self.token())
+        self.sign_in(self.ba, "xero-demo", self.token())
         self.signin = oauth_ops.find(self.a, "xero-demo", FIELD)
         self.calls = 0
 
@@ -93,12 +97,12 @@ class RefreshThroughStore(StoreFixture):
             raise SecretStoreError("push acknowledgement lost")
         with self.assertRaisesRegex(SecretStoreError, "acknowledgement lost"):
             journal.refresh(self.signin.journal_key, 1, self.provider, lost, self.published, provider="xero")
+        operation = journal.read(self.signin.journal_key)["operation"]
         self.assertEqual(journal.read(self.signin.journal_key)["state"], "answered")
         journal.refresh(self.signin.journal_key, 1, self.provider, self.publish, self.published, provider="xero")
-        record = journal.read(self.signin.journal_key)
-        self.assertEqual((self.calls, record["state"]), (1, "published"))
+        self.assertEqual((self.calls, journal.read(self.signin.journal_key)), (1, None))
         obj = self.a._tree_object(self.signin.oauth_id, self.a.checkpoint)
-        self.assertEqual(obj["operation"], record["operation"])
+        self.assertEqual(obj["operation"], operation)
         self.assertEqual(obj["revision"], 2)
 
     def test_failed_publication_is_retried_without_calling_the_provider(self):
@@ -139,6 +143,16 @@ class Migration(StoreFixture):
         self.assertEqual(self.a.list_entries(), [])
         self.assertFalse((self.vault.path.parent / "migration-backups").exists())
 
+    def test_grant_fields_without_a_signin_go_to_a_grant(self):
+        self.vault.set_fields("agency", {FIELD: ({}, "json"), "client_secret": (SECRET, "text"),
+                                         "api_key": (KEY, "text")}, PASS)
+        self.assertEqual(self.migrate()[0], 0)
+        self.assertEqual(self.a.get_record("agency"), {"api_key": KEY})
+        self.assertEqual(self.ba.get_fields("agency", ["client_secret", "api_key"]),
+                         {"client_secret": SECRET, "api_key": KEY})
+        with self.assertRaisesRegex(SecretStoreError, "refreshes on A"):
+            self.bb.get_fields("agency", ["client_secret"])
+
     def test_real_run_backs_up_copies_and_refuses_a_second_copy(self):
         before = self.vault.path.read_bytes()
         code, _text = self.migrate()
@@ -170,7 +184,7 @@ class StoreGaps(StoreFixture):
         from secret_store.broker_backend import StoreBackend
         from secret_store.policy import public_entry
         from secret_store.store_ops import build_policy_change
-        self.ba.set_json("xero-demo", FIELD, self.token())
+        self.sign_in(self.ba, "xero-demo", self.token())
         x, e = keys.generate_key_pairs()
         keys.store_private_keys("alec", "C", x, e)
         a = self.a

@@ -83,8 +83,8 @@ class Base(unittest.TestCase):
         w = self.w = World()
 
         def assign(d):
-            d["assignments"] = {"s1": {"group": "ops", "kind": "static"}, "o1": {"group": "ops", "kind": "oauth"},
-                                "g1": {"group": "ops", "kind": "grant"}, "f1": {"group": "fin", "kind": "static"}}
+            d["assignments"] = {"s1": {"group": "ops", "kind": "static"}, "o1": {"group": "ops", "kind": "oauth", "provider": "xero"},
+                                "g1": {"group": "ops", "kind": "grant", "provider": "xero"}, "f1": {"group": "fin", "kind": "static"}}
             d["refreshers"] = {"g1": {"person": "bob", "computer": "pc", "oauth": "o1"}}
         doc = w.next_policy(assign)
         p = policy.Policy(doc)
@@ -314,7 +314,7 @@ class AcceptTest(Base):
             doc = w.next_policy(lambda d: d["assignments"].update(s1=dict(change)))
             with self.assertRaises(SecretStoreError) as ctx:
                 policy.validate_transition(w.policy, doc)
-            self.assertIn("group or kind", str(ctx.exception))
+            self.assertIn("group, kind or provider", str(ctx.exception))
 
     def test_new_assignment_needs_its_object(self):
         w = self.w

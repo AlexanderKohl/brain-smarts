@@ -20,7 +20,7 @@ import vault_broker_client  # noqa: E402
 import vault_credentials  # noqa: E402
 from portable_vault import CredentialError, PortableVault  # noqa: E402
 from secret_store import SecretStoreError, enrol, keys, oauth_ops  # noqa: E402
-from secret_store.broker_backend import StoreBackend, store_enabled  # noqa: E402
+from secret_store.broker_backend import StoreBackend, backend_if_enabled, store_enabled  # noqa: E402
 from secret_store.store import SecretStore  # noqa: E402
 from vault_agent import VaultAgent  # noqa: E402
 from vault_agent_runtime import AGENT_PROTOCOL_VERSION  # noqa: E402
@@ -114,6 +114,13 @@ class StoreFixture(unittest.TestCase):
         self.assertEqual(enrol.approve_step(self.a, rid, display=lambda _title, _words: True), "approved")
         return new.open()
 
+    def sign_in(self, backend, entry, value, field=FIELD):
+        """A sign-in or refresh saved the only way a token may change: inside a begun refresh
+        (a first sign-in begins with new_authorisation=True). Returns the operation id."""
+        begun = backend.begin_refresh(entry, field, new_authorisation=True)
+        backend.set_json(entry, field, value, operation=begun["operation"])
+        return begun["operation"]
+
     def token(self, **extra):
         return {"access_token": AT1, "refresh_token": RT1, "expires_at": (19 * 10**8 + 0.5), "token_type": "Bearer",
                 "scope": "accounting", "tenant_id": "tenant-1", **extra}
@@ -121,7 +128,7 @@ class StoreFixture(unittest.TestCase):
 
 class BrokerRoles(StoreFixture):
     def test_refresher_reads_whole_record_other_computer_access_token_only(self):
-        self.ba.set_json("xero-demo", FIELD, self.token())
+        self.sign_in(self.ba, "xero-demo", self.token())
         mine = self.ba.get_json("xero-demo", FIELD)
         self.assertEqual((mine["refresh_token"], mine["expires_at"]), (RT1, (19 * 10**8)))
         theirs = self.bb.get_json("xero-demo", FIELD)
@@ -133,7 +140,7 @@ class BrokerRoles(StoreFixture):
         self.assertEqual((status["backend"], status["unlocked"], status["vault_unlocked"]), ("store", True, False))
 
     def test_member_settings_save_keeps_token_fields(self):
-        self.ba.set_json("xero-demo", FIELD, self.token())
+        self.sign_in(self.ba, "xero-demo", self.token())
         seen = self.bb.get_json("xero-demo", FIELD)
         seen.update(tenant_id="tenant-2", access_token="fictional-stale")
         self.bb.set_json("xero-demo", FIELD, seen)
@@ -143,17 +150,17 @@ class BrokerRoles(StoreFixture):
             self.bb.set_json("xero-demo", FIELD, {**seen, "refresh_token": "fictional-other"})
 
     def test_refresher_publication_carries_operation_and_reaches_other_computer(self):
-        self.ba.set_json("xero-demo", FIELD, self.token())
-        self.ba.set_json("xero-demo", FIELD, self.token(access_token="fictional-access-2", refresh_token="fictional-r2"))
+        self.sign_in(self.ba, "xero-demo", self.token())
+        operation = self.sign_in(self.ba, "xero-demo",
+                                 self.token(access_token="fictional-access-2", refresh_token="fictional-r2"))
         signin = oauth_ops.find(self.a, "xero-demo", FIELD)
-        record = self.ba._journal.read(signin.journal_key)
-        self.assertEqual(record["state"], "published")
-        self.assertEqual(self.a._tree_object(signin.oauth_id, self.a.checkpoint)["operation"], record["operation"])
+        self.assertIsNone(self.ba._journal.read(signin.journal_key))  # retired once published
+        self.assertEqual(self.a._tree_object(signin.oauth_id, self.a.checkpoint)["operation"], operation)
         self.assertEqual(self.bb.get_json("xero-demo", FIELD)["access_token"], "fictional-access-2")
         self.assertEqual(self.ba.get_json("xero-demo", FIELD)["refresh_token"], "fictional-r2")
 
     def test_run_maps_static_fields_and_refuses_grant_fields_elsewhere(self):
-        self.ba.set_json("xero-demo", FIELD, self.token())
+        self.sign_in(self.ba, "xero-demo", self.token())
         self.ba.set_text("xero-demo", "client_secret", SECRET)
         self.ba.set_text("plain", "api_key", KEY)
         self.assertEqual(self.ba.get_fields("xero-demo", ["client_secret"]), {"client_secret": SECRET})
@@ -170,6 +177,33 @@ class BrokerRoles(StoreFixture):
                 else:
                     with self.assertRaisesRegex(CredentialError, "this sign-in refreshes on A"):
                         vault_credentials._credential_environment(vault, "xero-demo", ["S=client_secret"], None)
+
+
+class TeamConfigured(unittest.TestCase):
+    def config(self, root, **extra):
+        brain = root / "brain"
+        path = brain / "memory" / "skills" / "manage-credentials" / "config" / "secret-store.json"
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps({"enabled": True, "person": "alec", "computer": "A",
+                                    "personal_clone": str(root / "p"), "team_clone": str(root / "t"),
+                                    "checkpoint_dir": str(root / "c"), "recovery_package_dir": str(root / "k"),
+                                    "personal_repo_url": str(root / "p.git"), **extra}), "utf-8")
+        return brain
+
+    def test_backend_constructs_and_opens_the_configured_team_store(self):
+        from secret_store.team import TeamStore
+        with tempfile.TemporaryDirectory() as tmp:
+            backend = backend_if_enabled(self.config(Path(tmp), team_repo_url=str(Path(tmp) / "t.git")))
+            self.assertIsInstance(backend.team, TeamStore)
+            self.assertEqual(backend.team.clone, Path(tmp) / "t")
+            with mock.patch.object(backend.store, "open") as personal, mock.patch.object(backend.team, "open") as team:
+                backend._pull_all(tolerate=True)
+            personal.assert_called_once_with()
+            team.assert_called_once_with()
+
+    def test_no_team_store_without_its_configuration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertIsNone(backend_if_enabled(self.config(Path(tmp))).team)
 
 
 class StoreOff(unittest.TestCase):
@@ -199,7 +233,11 @@ class StoreOff(unittest.TestCase):
 class AgentClients(StoreFixture):
     """A connector's PortableVaultJsonStore on computer A (the refresher) or B, each talking to its
     own in-process Vault Agent. No tests of its own."""
-    SIGNIN = "xero-demo#" + FIELD
+
+    @property
+    def SIGNIN(self):
+        """The journal key: the entry, field, repository id and grant object id."""
+        return oauth_ops.find(self.ba.store, "xero-demo", FIELD).journal_key
 
     def setUp(self):
         super().setUp()
@@ -233,7 +271,7 @@ class AgentRefresh(AgentClients):
 
     def setUp(self):
         super().setUp()
-        self.ba.set_json("xero-demo", FIELD, self.token())
+        self.sign_in(self.ba, "xero-demo", self.token())
         self.journal = self.ba._journal
         self.request = agent_request(VaultAgent(self.root / "A.vault", store=self.ba))
 
@@ -244,8 +282,7 @@ class AgentRefresh(AgentClients):
             begun = self.journal.read(self.SIGNIN)
             self.assertEqual(begun["state"], "calling")
             store.save({**current, "access_token": "fictional-access-2", "refresh_token": "fictional-r2"})
-        record = self.journal.read(self.SIGNIN)
-        self.assertEqual((record["state"], record["operation"]), ("published", begun["operation"]))
+        self.assertIsNone(self.journal.read(self.SIGNIN))
         signin = oauth_ops.find(self.a, "xero-demo", FIELD)
         self.assertEqual(self.a._tree_object(signin.oauth_id, self.a.checkpoint)["operation"], begun["operation"])
         self.assertEqual(self.bb.get_json("xero-demo", FIELD)["access_token"], "fictional-access-2")
@@ -276,6 +313,40 @@ class AgentRefresh(AgentClients):
         self.journal.set_disabled(self.SIGNIN)
         with self.assertRaisesRegex(CredentialError, "switched off"):
             self.request("begin_refresh", entry="xero-demo", field=FIELD)
+
+    def test_unmarked_token_change_is_refused_settings_are_not(self):
+        for entry, value in (("xero-demo", self.token(access_token="fictional-x")),
+                             ("new-signin", {"access_token": AT1, "refresh_token": RT1})):
+            with self.assertRaisesRegex(SecretStoreError, "only inside a begun refresh"):
+                self.ba.set_json(entry, FIELD, value)
+        self.assertEqual(self.ba.get_json("xero-demo", FIELD)["access_token"], AT1)
+        self.assertNotIn("new-signin", self.a.list_entries())
+        self.ba.set_json("xero-demo", FIELD, self.token(tenant_id="tenant-3"))
+        self.assertEqual(self.bb.get_json("xero-demo", FIELD)["tenant_id"], "tenant-3")
+        self.assertIsNone(self.journal.read(self.SIGNIN))
+
+    def test_first_signin_begins_with_new_authorisation(self):
+        self.assertEqual(self.ba.begin_refresh("new-signin", FIELD), {"signin": False})
+        begun = self.ba.begin_refresh("new-signin", FIELD, new_authorisation=True)
+        self.ba.set_json("new-signin", FIELD, {"access_token": AT1, "refresh_token": RT1}, operation=begun["operation"])
+        self.assertEqual(self.ba.get_json("new-signin", FIELD)["refresh_token"], RT1)
+        self.assertEqual(self.ba._pending, {})
+
+    def test_plain_or_fresh_lock_writes_nothing(self):
+        store = self.client(self.ba, "A")
+        for options in ({}, {"leeway_seconds": 60}):
+            with store.rotation_lock(**options):
+                self.assertEqual((self.journal.read(self.SIGNIN), self.ba._pending), (None, {}))
+        with self.assertRaisesRegex(CredentialError, "only inside a begun refresh"), store.rotation_lock():
+            store.save({**store.load(), "access_token": "fictional-access-2", "refresh_token": "fictional-r2"})
+        self.assertEqual(self.ba.get_json("xero-demo", FIELD)["refresh_token"], RT1)
+
+    def test_normal_exit_without_save_stays_uncertain(self):
+        store = self.client(self.ba, "A")
+        with self.assertRaisesRegex(CredentialError, "ended without saving"):
+            with store.rotation_lock(refresh=True):
+                pass
+        self.assertEqual((self.journal.read(self.SIGNIN)["state"], self.ba._pending), ("calling", {}))
 
     def test_other_computer_waits_for_the_refresher(self):
         a, b = self.client(self.ba, "A"), self.client(self.bb, "B")

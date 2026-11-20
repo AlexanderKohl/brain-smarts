@@ -71,7 +71,7 @@ class Locks(unittest.TestCase):
 class RefreshPath(AgentClients):
     def setUp(self):
         super().setUp()
-        self.ba.set_json("xero-demo", FIELD, self.token())
+        self.sign_in(self.ba, "xero-demo", self.token())
         self.journal = self.ba._journal
         self.a = self.client(self.ba, "A")
 
@@ -102,15 +102,16 @@ class RefreshPath(AgentClients):
         with self.assertRaises(ProviderNotCalled), self.a.rotation_lock(refresh=True):
             raise ProviderNotCalled()
         self.assertIsNone(self.journal.read(self.SIGNIN))
-        with self.a.rotation_lock(refresh=True):
-            self.assertEqual(self.journal.read(self.SIGNIN)["state"], "calling")
+        with self.a.rotation_lock(leeway_seconds=60):  # the token is fresh: nothing is begun
+            self.assertIsNone(self.journal.read(self.SIGNIN))
         self.assertEqual((self.journal.read(self.SIGNIN), self.ba._pending), (None, {}))
 
-    def test_plain_lock_on_the_refresher_goes_through_the_journal(self):
-        with self.a.rotation_lock():
+    def test_refresh_on_the_refresher_publishes_and_retires_the_record(self):
+        with self.a.rotation_lock(refresh=True):
             self.assertEqual(self.journal.read(self.SIGNIN)["state"], "calling")
             self.a.save({**self.a.load(), **NEW})
-        self.assertEqual(self.journal.read(self.SIGNIN)["state"], "published")
+        self.assertIsNone(self.journal.read(self.SIGNIN))
+        self.assertFalse(self.journal.path(self.SIGNIN).exists())
         self.assertEqual(self.bb.get_json("xero-demo", FIELD)["access_token"], NEW["access_token"])
 
     def test_begin_refresh_reads_before_writing_calling(self):
@@ -147,15 +148,16 @@ class RefreshPath(AgentClients):
                 self.ba.get_json("xero-demo", FIELD)
             publish.assert_not_called()
         self.ba.get_json("xero-demo", FIELD)
-        self.assertEqual(self.journal.read(self.SIGNIN)["state"], "published")
+        self.assertIsNone(self.journal.read(self.SIGNIN))
 
 
 class GrantFields(StoreFixture):
     NAME = "Agency account"
 
     def test_signin_promotes_a_static_placeholder_and_its_client_secret(self):
-        self.a.put_entry(self.NAME, {"client_secret": SECRET, FIELD: "{}", "api_key": KEY})
-        self.ba.set_json(self.NAME, FIELD, {"accessToken": AT1, "refreshToken": RT1, "id_token": "fictional-id"})
+        self.a.put_entry(self.NAME, {FIELD: "{}", "api_key": KEY})
+        self.ba.set_text(self.NAME, "client_secret", SECRET)  # a grant field goes to the grant at once
+        self.sign_in(self.ba, self.NAME, {"accessToken": AT1, "refreshToken": RT1, "id_token": "fictional-id"})
         self.assertEqual(self.a.get_record(self.NAME), {"api_key": KEY})
         self.assertEqual(self.ba.get_json(self.NAME, FIELD)["refreshToken"], RT1)
         self.assertEqual(self.ba.get_fields(self.NAME, ["client_secret"]), {"client_secret": SECRET})
@@ -165,23 +167,22 @@ class GrantFields(StoreFixture):
             self.bb.get_fields(self.NAME, ["client_secret"])
 
     def test_grant_field_is_never_served_from_a_static_object(self):
-        self.a.put_entry("legacy", {"refreshToken": RT1, "api_key": KEY})
+        with self.assertRaisesRegex(SecretStoreError, "grant field"):
+            self.a.put_entry("legacy", {"refreshToken": RT1, "api_key": KEY})
+        self.a.put_entry("legacy", {"api_key": KEY})
         self.assertEqual(self.bb.get_fields("legacy", ["api_key"]), {"api_key": KEY})
-        for backend in (self.ba, self.bb):
-            with self.assertRaisesRegex(SecretStoreError, "grant field"):
-                backend.get_fields("legacy", ["refreshToken"])
 
     def test_grant_text_before_any_signin_creates_the_grant(self):
         self.ba.set_text(self.NAME, "clientSecret", SECRET)
         self.assertNotIn(self.NAME, self.a._index())
-        self.ba.set_json(self.NAME, FIELD, {"access_token": AT1, "refresh_token": RT1})
+        self.sign_in(self.ba, self.NAME, {"access_token": AT1, "refresh_token": RT1})
         self.assertEqual(self.ba.get_fields(self.NAME, ["clientSecret"]), {"clientSecret": SECRET})
         self.assertEqual(self.ba.get_json(self.NAME, FIELD)["refresh_token"], RT1)
         with self.assertRaisesRegex(SecretStoreError, "refreshes on A"):
             self.bb.get_fields(self.NAME, ["clientSecret"])
 
     def test_provider_is_recorded_in_the_shared_settings(self):
-        self.ba.set_json("xero-demo", FIELD, self.token())
+        self.sign_in(self.ba, "xero-demo", self.token())
         signin = oauth_ops.find(self.a, "xero-demo", FIELD)
         self.assertEqual((signin.provider, oauth_ops.read_shared(self.a, signin)[oauth_ops.PROVIDER_KEY]),
                          ("xero", "xero"))
@@ -189,12 +190,45 @@ class GrantFields(StoreFixture):
 
 class Groups(StoreFixture):
     def test_a_revision_takes_its_group_from_the_assignment(self):
-        self.ba.set_json("xero-demo", FIELD, self.token())
+        self.sign_in(self.ba, "xero-demo", self.token())
         signin = oauth_ops.find(self.a, "xero-demo", FIELD)
         readers = self.a.policy.readers_for(signin.oauth_id)
         with mock.patch.object(self.a.policy, "assignment", return_value=("ops", "oauth")),                 mock.patch.object(self.a.policy, "readers_for", return_value=readers):
             obj = oauth_ops.seal_revision(self.a.policy, signin.oauth_id, "oauth", {}, self.a._identity().ed25519, None)
         self.assertEqual(obj["group"], "ops")
+
+    def test_journal_key_holds_repository_and_grant(self):
+        import dataclasses
+        self.sign_in(self.ba, "xero-demo", self.token())
+        signin = oauth_ops.find(self.a, "xero-demo", FIELD)
+        self.assertIn(self.a.policy.repository, signin.journal_key)
+        self.assertIn(signin.grant_id, signin.journal_key)
+        other = dataclasses.replace(signin, repository="another-repository", grant_id="another-grant")
+        self.ba._ready()
+        self.ba._journal.set_disabled(other.journal_key)
+        self.assertNotEqual(other.journal_key, signin.journal_key)
+        self.assertFalse(self.ba._journal.disabled(signin.journal_key))
+        with self.assertRaisesRegex(SecretStoreError, "^refreshing xero-demo#oauth_token_json is switched off"):
+            self.ba._journal.check(other.journal_key)
+
+    def test_a_later_store_does_not_clear_an_earlier_sync_error(self):
+        other = self.second_store()
+        backend = StoreBackend(self.a, sync_seconds=0, team=other)
+        backend._ready()
+        with mock.patch.object(self.a, "_sync", side_effect=SecretStoreError("personal remote unreachable")):
+            backend._pull_all(tolerate=True)
+        self.assertIn("personal remote unreachable", backend.status()["store_sync"])
+
+    def second_store(self):
+        bare = self.root / "other.git"
+        subprocess.run(["git", "init", "--quiet", "--bare", "--initial-branch=main", str(bare)],
+                       check=True, capture_output=True)
+        base = self.root / "C"
+        other = type(self.a)(use_config_file=False, enabled=True, person="alec", computer="C",
+                             personal_clone=base / "brain-secrets", checkpoint_dir=base / "checkpoint",
+                             recovery_package_dir=base / "packages", personal_repo_url=str(bare))
+        other.init_personal(words_callback=lambda words: True)
+        return other
 
     def test_backend_routes_by_index_and_refuses_an_ambiguous_name(self):
         bare = self.root / "other.git"
@@ -217,7 +251,7 @@ class Groups(StoreFixture):
 class ClearAndSync(AgentClients):
     def setUp(self):
         super().setUp()
-        self.ba.set_json("xero-demo", FIELD, self.token())
+        self.sign_in(self.ba, "xero-demo", self.token())
 
     def test_clear_removes_the_tokens_on_the_refresher_only(self):
         with self.assertRaisesRegex(CredentialError, "refreshes on A"):
@@ -230,7 +264,7 @@ class ClearAndSync(AgentClients):
         slow = StoreBackend(self.b, sync_seconds=3600)
         b = self.client(slow, "B2")
         self.assertEqual(b.load()["tenant_id"], "tenant-1")
-        self.ba.set_json("xero-demo", FIELD, self.token(tenant_id="tenant-5"))
+        self.sign_in(self.ba, "xero-demo", self.token(tenant_id="tenant-5"))
         self.assertEqual(b.load()["tenant_id"], "tenant-1")
         b.sync()
         self.assertEqual(b.load()["tenant_id"], "tenant-5")

@@ -65,11 +65,16 @@ class Fields(unittest.TestCase):
 class PersonalHandover(StoreFixture):
     def setUp(self):
         super().setUp()
-        self.ba.set_json("xero-demo", FIELD, self.token())
+        self.sign_in(self.ba, "xero-demo", self.token())
 
     def signin(self, store):
         store.open()
         return oauth_ops.find(store, "xero-demo", FIELD, "personal")
+
+    def test_new_signin_binds_its_provider_in_the_policy(self):
+        signin = self.signin(self.a)
+        for oid in (signin.oauth_id, signin.grant_id):
+            self.assertEqual(self.a.policy.doc["assignments"][oid].get("provider"), "xero")
 
     def test_fixture_enrols_through_the_enrolment_exchange(self):
         self.a.put_entry("plain", {"api_key": KEY})
@@ -90,7 +95,7 @@ class PersonalHandover(StoreFixture):
         handover.release(self.a, "xero-demo", "alec/B")
         journal = Journal(self.a.config["checkpoint_dir"], self.a._identity().x25519)
         with self.assertRaisesRegex(SecretStoreError, "switched off"):
-            journal.check("xero-demo#" + FIELD)
+            journal.check(self.signin(self.a).journal_key)
         handover.accept(self.b, "xero-demo")
         mine = self.signin(self.b)
         self.assertTrue(mine.mine)

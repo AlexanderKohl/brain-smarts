@@ -3,7 +3,10 @@ refresh steps 1 to 7). One exclusive file lock per entry is held from step 1 to 
 (calling, answered, published, superseded) is flushed to disk before the next step, encrypted to
 this computer's X25519 key only, under the checkpoint folder. A record left in calling is
 uncertain: every further refresh of the entry is refused. Publication retries never call the
-provider. A persisted local disabled flag per entry is honoured at every start."""
+provider. A persisted local disabled flag per entry is honoured at every start. A published
+record is retired (its file removed). A journal key names the entry and field for messages, then
+the repository id and the grant object id after KEY_SEPARATOR, so same-named sign-ins in
+different repositories or groups never share a lock, record or disabled flag."""
 
 from __future__ import annotations
 
@@ -21,6 +24,12 @@ from .oauth_ops import plain_numbers
 
 STATES = ("calling", "answered", "published", "superseded")
 LOCK_SECONDS = 30.0  # how long a second process waits for the per-entry lock
+KEY_SEPARATOR = " @ "
+
+
+def label(key: str) -> str:
+    """The entry and field of a journal key, for messages."""
+    return key.split(KEY_SEPARATOR, 1)[0]
 
 
 class ProviderNotCalled(Exception):
@@ -29,7 +38,7 @@ class ProviderNotCalled(Exception):
 
 
 def uncertain_message(entry: str, provider: str | None) -> str:
-    return (f"The last refresh of {entry} is uncertain: the provider was called but its answer was never "
+    return (f"The last refresh of {label(entry)} is uncertain: the provider was called but its answer was never "
             "recorded, so the old refresh token must not be used again and the entry is not refreshed. "
             "Next step: revoke the old sign-in at the provider, then sign in again in the browser on the "
             "computer that refreshes it. " + (
@@ -55,7 +64,7 @@ class Journal:
     def lock(self, entry: str) -> Iterator[None]:
         """The per-entry refresh lock (exclusive, across processes), waited for up to lock_timeout."""
         def busy() -> SecretStoreError:
-            return SecretStoreError(f"another refresh of {entry} holds its lock on this computer; try again shortly")
+            return SecretStoreError(f"another refresh of {label(entry)} holds its lock on this computer; try again shortly")
         with fileio.locked(self.folder / f"{self._name(entry)}.lock", self.lock_timeout, busy):
             yield
 
@@ -66,10 +75,10 @@ class Journal:
         try:
             obj = json.loads(path.read_text("utf-8"))
         except (OSError, ValueError):
-            raise SecretStoreError(f"the refresh journal of {entry} cannot be read; the entry is held") from None
+            raise SecretStoreError(f"the refresh journal of {label(entry)} cannot be read; the entry is held") from None
         record = envelope.open_(obj, self._key_id, self._key)
         if record.get("entry") != entry or record.get("state") not in STATES:
-            raise SecretStoreError(f"the refresh journal of {entry} is malformed; the entry is held")
+            raise SecretStoreError(f"the refresh journal of {label(entry)} is malformed; the entry is held")
         return record
 
     def write(self, entry: str, record: dict) -> None:
@@ -91,17 +100,18 @@ class Journal:
         """Steps 1 and 2: refuse a disabled refresher and an uncertain record; return a record whose
         publication is still pending (answered), else None."""
         if policy_disabled or self.disabled(entry):
-            raise SecretStoreError(f"refreshing {entry} is switched off on this computer; it is not refreshed here")
+            raise SecretStoreError(f"refreshing {label(entry)} is switched off on this computer; it is not refreshed here")
         record = self.read(entry)
         if record is not None and record["state"] == "calling":
             raise SecretStoreError(uncertain_message(entry, provider))
         return record if record is not None and record["state"] == "answered" else None
 
     def _finish(self, entry: str, record: dict, publish: Callable, is_published: Callable) -> dict:
-        """Step 6: publish (or find the publication already there), then retire the record."""
+        """Step 6: publish (or find the publication already there), then retire the record: its
+        file is removed, so no answer stays on disk once the remote holds it."""
         if not is_published(record["operation"], record["answer"]):
             publish(record["operation"], record["answer"])
-        self.write(entry, {**record, "state": "published"})
+        fileio.remove_durable(self.path(entry))
         return record["answer"]
 
     def refresh(self, entry: str, revision: int, call: Callable[[], dict], publish: Callable,
@@ -123,19 +133,6 @@ class Journal:
             self.write(entry, record)
             return self._finish(entry, record, publish, lambda *_: False)
 
-    def publish_answer(self, entry: str, revision: int, answer: dict, publish: Callable, is_published: Callable,
-                       provider: str | None = None, policy_disabled: bool = False) -> dict:
-        """The broker path: the connector already called the provider and hands the answer over.
-        It is journalled as answered, then published like step 6."""
-        with self.lock(entry):
-            pending = self.check(entry, provider, policy_disabled)
-            if pending is not None:
-                self._finish(entry, pending, publish, is_published)
-            record = {"operation": secrets.token_hex(16), "entry": entry, "revision": revision,
-                      "state": "answered", "answer": plain_numbers(dict(answer))}
-            self.write(entry, record)
-            return self._finish(entry, record, publish, lambda *_: False)
-
     def begin(self, entry: str, revision: int, provider: str | None = None,
               policy_disabled: bool = False) -> tuple[ExitStack, dict]:
         """Steps 1 to 3 for a provider call made in another process (the Vault Agent's
@@ -145,7 +142,7 @@ class Journal:
         stack.enter_context(self.lock(entry))
         try:
             if self.check(entry, provider, policy_disabled) is not None:
-                raise SecretStoreError(f"a refreshed token of {entry} is still waiting to be published; try again")
+                raise SecretStoreError(f"a refreshed token of {label(entry)} is still waiting to be published; try again")
             record = {"operation": secrets.token_hex(16), "entry": entry, "revision": revision, "state": "calling"}
             self.write(entry, record)
         except BaseException:
@@ -191,5 +188,5 @@ class Journal:
         with self.lock(entry):
             record = self.read(entry)
             if record is None or record["state"] != "calling":
-                raise SecretStoreError(f"{entry} has no uncertain refresh to resolve")
+                raise SecretStoreError(f"{label(entry)} has no uncertain refresh to resolve")
             self.write(entry, {**record, "state": "superseded"})
