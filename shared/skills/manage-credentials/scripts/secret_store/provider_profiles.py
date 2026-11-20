@@ -15,7 +15,8 @@ from .errors import SecretStoreError
 DATA_FILE = Path(__file__).with_name("provider_profiles.json")
 FIXED_GRANT_FIELDS = frozenset({"clientSecret", "client_secret", "id_token", "refreshToken", "refresh_token"})
 DEFAULT_GRANT_FIELDS = FIXED_GRANT_FIELDS | frozenset({"refresh_token_expires_at", "refresh_token_expires_in"})
-DEFAULT_TOKEN_FIELDS = frozenset({"access_token", "expires_at", "token_type", "scope", "expires_in"})
+DEFAULT_TOKEN_FIELDS = frozenset({"access_token", "accessToken", "expires_at", "expiresAt", "token_type", "scope",
+                                  "expires_in"})
 
 
 @lru_cache(maxsize=1)

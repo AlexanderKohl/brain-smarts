@@ -422,8 +422,10 @@ class BrokerOAuthStore:
         if not isinstance(value, dict):
             raise CredentialError("JSON credential values must be objects.")
         extra = {"operation": self._operation} if self._operation else {}
-        self._saved = self._saved or bool(extra)
         self._broker_request("set_json", entry=self.entry, field=self.field, value=value, **extra)
+        # Saved only once the broker confirms: a failed save leaves the refresh to be released with
+        # its record kept (uncertain), never removed.
+        self._saved = self._saved or bool(extra)
 
     def clear(self) -> None:
         if self.store_mode():

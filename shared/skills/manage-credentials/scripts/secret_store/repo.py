@@ -356,7 +356,8 @@ class SecretRepo:
         if refused:
             return f"Refused at commit {refused}: a remote change failed verification; nothing after it is used."
         try:
-            remote = self._fetch()
+            with self.lock():  # never races a write or pull on refs/remotes/origin/main
+                remote = self._fetch()
         except SecretStoreError:
             return "Could not reach the secrets repository; working from the local copy."
         local = self.head()

@@ -168,5 +168,6 @@ def _content(obj: dict, oid: str, result: Policy, my_keys: dict, latest: dict) -
         check_index_payload(payload, oid, result)
     if kind == "oauth":
         token_writer = obj["writer"] == result.refresher_sign_id(oid) and obj["operation"] is not None
-        usable = check_oauth_payload(payload, latest.get(oid), obj, token_writer, result.is_admin_key(obj["writer"]))
+        usable = check_oauth_payload(payload, latest.get(oid), obj, token_writer, result.is_admin_key(obj["writer"]),
+                                     result.provider(oid))
     return AcceptedObject(obj, payload, usable)

@@ -2,8 +2,11 @@
 section 9, Handing over item 1): one provider key, grant fields kept out of oauth revisions and static
 objects, a superseded grant read as empty, the broker fixture enrolling for real, and a full handover in
 a personal and a team repository. Every value is fictional."""
+import contextlib
+import io
 import sys
 import unittest
+from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -11,7 +14,8 @@ from test_secret_store_broker import FIELD, KEY, RT1, SECRET, StoreFixture, setU
 from test_secret_store_team import TeamCase  # noqa: E402
 
 import brain_secrets  # noqa: E402
-from secret_store import SecretStoreError, handover, oauth_ops  # noqa: E402
+from secret_store import SecretStoreError, handover, oauth_ops, provider_profiles  # noqa: E402
+from secret_store.broker_backend import put_grant_fields  # noqa: E402
 from secret_store import team as team_ops  # noqa: E402
 from secret_store.accept_rules import check_oauth_payload  # noqa: E402
 from secret_store.journal import Journal  # noqa: E402
@@ -21,6 +25,9 @@ from secret_store.store_ops import next_policy, seal_object  # noqa: E402
 class Fields(unittest.TestCase):
     def test_one_provider_key(self):
         self.assertEqual(oauth_ops.PROVIDER_KEY, "provider")
+
+    def test_default_token_fields_include_the_camel_case_spellings(self):
+        self.assertLessEqual({"accessToken", "expiresAt"}, provider_profiles.DEFAULT_TOKEN_FIELDS)
 
     def test_oauth_revision_may_not_change_a_grant_field(self):
         obj = {"id": "o1", "revision": 2}
@@ -89,6 +96,62 @@ class PersonalHandover(StoreFixture):
         self.assertEqual(self.a.get_record("acme-app"), {"api_key": KEY})
         signin = oauth_ops.find(self.a, "acme-app", FIELD, "personal")
         self.assertEqual(oauth_ops.read_grant(self.a, signin)["fields"], {"client_secret": SECRET})
+
+    def cli(self, argv, store):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            code = brain_secrets.main(argv, store_factory=lambda: store, ask=lambda _t, _f: (
+                {"client_secret": SECRET, "api_key": KEY}, None))
+        return code, out.getvalue()
+
+    def test_get_check_and_list_show_signins_by_entry_name_without_values(self):
+        self.cli(["put", "--entry", "acme-app", "--secret", "client_secret", "--secret", "api_key"], self.a)
+        code, text = self.cli(["get-check", "--entry", "acme-app"], self.a)
+        self.assertEqual(code, 0)
+        self.assertIn("acme-app has fields: api_key", text)
+        self.assertIn("grant fields: client_secret", text)
+        code, signin = self.cli(["get-check", "--entry", "xero-demo"], self.a)
+        self.assertEqual(code, 0)
+        self.assertIn("refresh_token", signin)
+        self.assertIn("provider", signin)
+        code, listed = self.cli(["list"], self.a)
+        self.assertIn("acme-app", listed)
+        self.assertIn("xero-demo", listed)
+        for shown in (text, signin, listed):
+            self.assertNotIn("#", shown)
+            for value in (SECRET, KEY, RT1):
+                self.assertNotIn(value, shown)
+
+    def test_replace_keeps_the_grant_fields(self):
+        put_grant_fields(self.a, "personal", "xero-demo", {"client_secret": SECRET})
+        oauth_ops.put_signin(self.a, "xero-demo", FIELD, self.token(), replace=True)
+        fields = oauth_ops.read_grant(self.a, self.signin(self.a))["fields"]
+        self.assertEqual(fields.get("client_secret"), SECRET)
+        oauth_ops.put_signin(self.a, "xero-demo", FIELD, self.token(), {"client_id": "fictional-id"}, replace=True)
+        fields = oauth_ops.read_grant(self.a, self.signin(self.a))["fields"]
+        self.assertEqual((fields.get("client_secret"), fields.get("client_id")), (SECRET, "fictional-id"))
+
+    def test_release_refused_on_an_uncertain_record_leaves_the_refresher_enabled(self):
+        journal = Journal(self.a.config["checkpoint_dir"], self.a._identity().x25519)
+        key = self.signin(self.a).journal_key
+        stack, _record = journal.begin(key, 1)
+        stack.close()
+        with self.assertRaises(SecretStoreError):
+            handover.release(self.a, "xero-demo", "alec/B", journal=journal)
+        self.assertFalse(journal.disabled(key))
+
+    def test_supersede_moves_every_grant_of_the_lost_computer(self):
+        self.sign_in(self.ba, "xero-two", self.token())
+        with self.assertRaisesRegex(SecretStoreError, "no verified provider profile"):
+            handover.supersede(self.b, None, "alec/B", "revoked at the provider", all_from="alec/A")
+        code, _text = self.cli(["supersede", "--all-from", "alec/A", "--to", "alec/B", "--confirmation", "revoked"],
+                               self.b)
+        self.assertEqual(code, 1)  # refused with the plain message today: no profile is verified
+        with mock.patch.object(provider_profiles, "recovery_refusal", return_value=None):
+            handover.supersede(self.b, "xero-demo", "alec/B", "revoked at the provider")
+        self.b.open()
+        for entry in ("xero-demo", "xero-two"):
+            self.assertTrue(oauth_ops.find(self.b, entry, FIELD, "personal").mine)
 
     def test_full_handover_between_two_computers(self):
         self.assertIn(oauth_ops.PROVIDER_KEY, oauth_ops.read_shared(self.a, self.signin(self.a)))

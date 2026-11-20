@@ -269,5 +269,23 @@ class RecoveryPackageTests(RepoCase):
             recovery_package.restore(bad, key, self.root / "t", signer.public_key())
 
 
+class StatusLockTest(unittest.TestCase):
+    def test_status_fetches_under_the_repository_lock(self):
+        from secret_store import repo as repo_module
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / ".git").mkdir()
+            repo = repo_module.SecretRepo(Path(tmp), "fictional-remote")
+            held = []
+
+            def fetch():
+                held.append(any(k[1] == threading.get_ident() for k in repo_module._HELD))
+                return "c1"
+            with mock.patch.object(repo, "_state", return_value={}), \
+                    mock.patch.object(repo, "head", return_value="c1"), \
+                    mock.patch.object(repo, "_fetch", side_effect=fetch):
+                self.assertEqual(repo.status(), "Up to date.")
+            self.assertEqual(held, [True])
+
+
 if __name__ == "__main__":
     unittest.main()

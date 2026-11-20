@@ -77,13 +77,50 @@ def _parser() -> argparse.ArgumentParser:
     take = sub.add_parser("handover-accept", help="administrator: move a released sign-in to its new refresher")
     take.add_argument("--entry", required=True)
     take.add_argument("--group")
-    sup = sub.add_parser("supersede", help="administrator: move a sign-in whose refresher is unreachable")
-    sup.add_argument("--entry", required=True)
+    sup = sub.add_parser("supersede", help="administrator: move every sign-in of an unreachable refresher")
+    which = sup.add_mutually_exclusive_group(required=True)
+    which.add_argument("--entry", help="one sign-in of the lost computer")
+    which.add_argument("--all-from", metavar="PERSON/COMPUTER", help="the lost computer")
     sup.add_argument("--to", required=True, metavar="PERSON/COMPUTER")
     sup.add_argument("--confirmation", required=True, help="how the old grant was revoked at the provider")
     sup.add_argument("--group")
     sub.add_parser("grant-scan", help="plain entries holding a grant field").add_argument("--team", action="store_true")
     return parser
+
+
+def _entries(names: list[str]) -> dict[str, list[str]]:
+    """Index names by entry name: a static entry as it is, a sign-in ("<entry>#<field>") under its
+    entry with its field; the grant's own name is never shown."""
+    from secret_store.oauth_ops import GRANT_SUFFIX
+    entries: dict[str, list[str]] = {}
+    for name in names:
+        if name.endswith(GRANT_SUFFIX):
+            continue
+        entry, sep, field = name.partition("#")
+        entries.setdefault(entry if sep else name, []).extend([field] if sep else [])
+    return entries
+
+
+def _describe(store, entry: str, group) -> list[str]:
+    """Field names (never values) of an entry's static record and of each of its sign-ins: the
+    shared settings, and the grant's fields on the refresher (elsewhere, where the grant is held)."""
+    from secret_store import SecretStoreError, oauth_ops
+    lines, fields = [], oauth_ops.signin_fields(store, entry, group)
+    if entry in store._index(group) or not fields:
+        lines.append(f"{entry} has fields: " + ", ".join(sorted(store.get_record(entry, group))))
+    for field in fields:
+        signin = oauth_ops.find(store, entry, field, group)
+        if signin is None:
+            raise SecretStoreError(f"there is no sign-in {entry} {field}")
+        shared = ", ".join(sorted(oauth_ops.read_shared(store, signin))) or "none"
+        if signin.mine:
+            grant = oauth_ops.read_grant(store, signin)
+            names = sorted(set(grant.get("token") or {}) | set(grant.get("fields") or {}))
+            held = "grant fields: " + (", ".join(names) or "none")
+        else:
+            held = f"its grant is held on {signin.refresher[0]}/{signin.refresher[1]}"
+        lines.append(f"{entry} sign-in {field}: shared fields: {shared}; {held}")
+    return lines
 
 
 def _ask_window(title: str, fields: list[str]):
@@ -111,8 +148,9 @@ def main(argv=None, store_factory=None, team_factory=None, ask=None, confirm=Non
             print("Trust root fingerprint (compare it on screen when another computer joins):")
             print(store.init_personal())
         elif args.command == "list":
-            names = store.open().list_entries(group)
-            print("\n".join(names) if names else "No entries.")
+            entries = _entries(store.open().list_entries(group))
+            print("\n".join(name + (f" (sign-in: {', '.join(fields)})" if fields else "")
+                            for name, fields in sorted(entries.items())) if entries else "No entries.")
         elif args.command == "recovery-package":
             print(f"Recovery package written: {store.open().refresh_recovery_package(force=True)}")
         elif args.command == "put":
@@ -138,8 +176,7 @@ def main(argv=None, store_factory=None, team_factory=None, ask=None, confirm=Non
                 put_grant_fields(opened, opened._group(group), args.entry, grant)
             print(f"Stored {args.entry}: " + ", ".join(sorted(fields)))
         elif args.command == "get-check":
-            record = store.open().get_record(args.entry, group)
-            print(f"{args.entry} has fields: " + ", ".join(sorted(record)))
+            print("\n".join(_describe(store.open(), args.entry, group)))
         elif args.command == "delete":
             typed = (confirm or input)(f"Type the entry name {args.entry} to delete it: ")
             if typed.strip() != args.entry:
@@ -192,8 +229,10 @@ def main(argv=None, store_factory=None, team_factory=None, ask=None, confirm=Non
             person, computer = handover.accept(store.open(), args.entry, group)
             print(f"{args.entry} now refreshes on {person}/{computer}.")
         elif args.command == "supersede":
-            person, computer = handover.supersede(store.open(), args.entry, args.to, args.confirmation, group)
-            print(f"{args.entry} now refreshes on {person}/{computer}; the old computer may no longer refresh.")
+            person, computer = handover.supersede(store.open(), args.entry, args.to, args.confirmation, group,
+                                                  all_from=args.all_from)
+            print(f"Every sign-in of the old computer now refreshes on {person}/{computer}; the old computer may "
+                  "no longer refresh.")
         elif args.command == "grant-scan":
             found = store.open().static_grant_exposures()
             print("No plain entry holds a grant field." if not found else

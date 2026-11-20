@@ -67,10 +67,10 @@ def release(store: Any, entry: str, to: str, group: str | None = None, field: st
     key, signer = signin.journal_key, store._identity().ed25519
     me = key_id(signer.public_key())
     with journal.lock(key):
-        journal.set_disabled(key)  # persisted first: no refresh starts here from now on
         record = journal.read(key)
-        if record is not None and record["state"] == "calling":
+        if record is not None and record["state"] == "calling":  # refused before anything is persisted
             raise SecretStoreError(uncertain_message(key, signin.provider))
+        journal.set_disabled(key)  # persisted before the release: no refresh starts here from now on
         if record is not None and record["state"] == "answered":
             journal._finish(key, record, lambda op, answer: oauth_ops.publish(store, signin, answer, op),
                             lambda op, answer: oauth_ops.is_published(store, signin, op, answer))
@@ -143,25 +143,41 @@ def accept(store: Any, entry: str, group: str | None = None, field: str = oauth_
     return moved["to"]
 
 
-def supersede(store: Any, entry: str, to: str, confirmation: str, group: str | None = None,
-              field: str = oauth_ops.DEFAULT_FIELD) -> tuple:
+def supersede(store: Any, entry: str | None, to: str, confirmation: str, group: str | None = None,
+              field: str = oauth_ops.DEFAULT_FIELD, all_from: str | None = None) -> tuple:
     """Section 9, Handing over item 2 (old refresher unreachable): an administrator's commit that
-    disables the old computer as a refresher, names the new one and carries a supersession record
-    bound to the provider recorded for the sign-in. Refused with the plain message unless that
-    provider's profile is verified. Returns the new refresher."""
-    signin = _find(store, entry, group, field)
-    provider = store.policy.provider(signin.grant_id)
-    refusal = provider_profiles.recovery_refusal(provider or signin.provider)
-    if refusal is not None:
-        raise SecretStoreError(refusal)
-    if provider is None:
-        raise SecretStoreError(f"{entry} was created before providers were recorded in the policy, so it cannot "
-                               "be superseded; sign in again under a new entry")
+    disables the old computer as a refresher and moves every grant it refreshes to the new one, with
+    one signed supersession record per grant bound to the provider recorded for that sign-in (the
+    policy refuses a disabled computer as any grant's refresher, so none may stay behind). Name the
+    old computer by one of its sign-ins (entry) or directly (all_from, PERSON/COMPUTER). Refused with
+    the plain message unless every moved sign-in's provider profile is verified. Returns the new
+    refresher."""
+    store.open()
+    policy = store.policy
+    if all_from is not None:
+        person, _sep, computer = str(all_from).partition("/")
+        old = (person, computer)
+        if not person or not computer or old not in policy.computers:
+            raise SecretStoreError(f"{all_from} is not an enrolled computer; name it as PERSON/COMPUTER")
+    elif entry:
+        old = _find(store, entry, group, field).refresher
+    else:
+        raise SecretStoreError("name the sign-in (--entry) or the lost computer (--all-from PERSON/COMPUTER)")
+    grants = sorted(g for g in policy.doc["refreshers"] if policy.refresher(g) == old)
+    if not grants:
+        raise SecretStoreError(f"no sign-in refreshes on {old[0]}/{old[1]}")
+    providers = {}
+    for grant in grants:
+        provider = policy.provider(grant)
+        refusal = provider_profiles.recovery_refusal(provider)
+        if refusal is not None:
+            raise SecretStoreError(refusal)
+        providers[grant] = provider
     if not isinstance(confirmation, str) or not confirmation.strip():
         raise SecretStoreError("say how the old grant was revoked at the provider (--confirmation)")
-    target, old = _target(store, to, signin), signin.refresher
+    target = _target_for(store, to, grants)
     if target == old:
-        raise SecretStoreError(f"{to} already refreshes {entry}")
+        raise SecretStoreError(f"{to} is the computer being superseded")
     signer = store._identity().ed25519
     me = key_id(signer.public_key())
 
@@ -169,21 +185,39 @@ def supersede(store: Any, entry: str, to: str, confirmation: str, group: str | N
         policy, cp = store.policy, store.checkpoint
         if not policy.is_admin_key(me):
             raise SecretStoreError("only an administrator may supersede a refresher")
-        if policy.refresher(signin.grant_id) != old:
-            raise SecretStoreError(f"the refresher of {entry} changed meanwhile; nothing was superseded")
-        body = {"schema": 1, "type": "supersession", "repository": policy.repository, "grant": signin.grant_id,
-                "provider": provider, "person": old[0], "computer": old[1], "confirmation": confirmation.strip(),
-                "writer": me}
+        if sorted(g for g in policy.doc["refreshers"] if policy.refresher(g) == old) != grants:
+            raise SecretStoreError(f"the sign-ins refreshed on {old[0]}/{old[1]} changed meanwhile; nothing was superseded")
 
         def change(doc: dict) -> None:
-            doc["refreshers"][signin.grant_id].update(person=target[0], computer=target[1])
+            for grant in grants:
+                doc["refreshers"][grant].update(person=target[0], computer=target[1])
             disabled = doc["people"][old[0]]["disabled_refresher"]
             if old[1] not in disabled:
                 disabled.append(old[1])
-        others = {oid: e for oid, e in cp.objects.items() if oid != signin.grant_id}
+        others = {oid: e for oid, e in cp.objects.items() if oid not in grants}
         files = build_policy_change(policy, others, change, signer,
                                     lambda oid: store._open_object(store._tree_object(oid, cp)))
-        files[f"releases/{secrets.token_hex(16)}.json"] = signing.sign(body, signer)
+        for grant in grants:
+            body = {"schema": 1, "type": "supersession", "repository": policy.repository, "grant": grant,
+                    "provider": providers[grant], "person": old[0], "computer": old[1],
+                    "confirmation": confirmation.strip(), "writer": me}
+            files[f"releases/{secrets.token_hex(16)}.json"] = signing.sign(body, signer)
         return files, "policy"
     store._write(build)
+    return target
+
+
+def _target_for(store: Any, to: str, grants: list[str]) -> tuple[str, str]:
+    """The new refresher: enrolled, not disabled, and a member of every moved grant's group."""
+    person, _sep, computer = str(to).partition("/")
+    target = (person, computer)
+    policy = store.policy
+    if not person or not computer or target not in policy.computers:
+        raise SecretStoreError(f"{to} is not an enrolled computer; name it as PERSON/COMPUTER")
+    if computer in policy.doc["people"][person]["disabled_refresher"]:
+        raise SecretStoreError(f"{to} may not refresh sign-ins: the policy disables it")
+    for grant in grants:
+        group = policy.assignment(grant)[0]
+        if person not in policy.members(group):
+            raise SecretStoreError(f"{to} is not a member of group {group}, so it may not refresh its sign-ins")
     return target

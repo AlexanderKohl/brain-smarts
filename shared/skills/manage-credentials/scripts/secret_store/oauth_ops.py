@@ -250,15 +250,18 @@ def put_signin(store: Any, entry: str, field: str, record: dict, grant_fields: d
 
     def build() -> tuple[dict, str]:
         plan = _static_plan(store, entry, group, {field})
-        grant = {"token": token, "fields": {**(plan[2] if plan else {}), **extra}}
+        moved = {**(plan[2] if plan else {}), **extra}
         signin = find(store, entry, field, group)
         if signin is None:
+            grant = {"token": token, "fields": moved}
             result, files = _new_signin_files(store, entry, field, shared, grant, group, provider)
             return {**files, **_static_files(store, result, plan)}, "policy"
         if not replace:
             raise SecretStoreError(f"the store already holds {entry}#{field}; use replace to overwrite it")
         if not signin.mine:
             refuse_other(signin)
+        kept = _open_grant(store, signin.grant_id).get("fields", {})  # replace keeps them; new ones merge in
+        grant = {"token": token, "fields": {**kept, **moved}}
         files = _revision_files(store, signin, shared, grant, new_operation())
         return {**files, **_static_files(store, store.policy, plan)}, "update"
     store._write(build)

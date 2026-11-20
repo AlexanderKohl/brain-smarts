@@ -15,7 +15,7 @@ from secret_store import accept_rules  # noqa: E402
 from secret_store.accept import accept_commit  # noqa: E402
 
 NAMES = ("alice-pc", "bob-pc", "carol-pc", "dave-pc", "recovery")
-TOK_A = {"access_token": "fictional-a", "expires_at": 100, "token_type": "Bearer", "scope": "s", "tenant": "t1"}
+TOK_A = {"provider": "xero", "access_token": "fictional-a", "expires_at": 100, "token_type": "Bearer", "scope": "s", "tenant": "t1"}
 
 
 def commit(*objs, pol=None, **records):
@@ -195,6 +195,17 @@ class AcceptTest(Base):
         opaque = w.accept(commit(w.obj("o1", changed, "carol-pc")), me="dave-pc", latest=latest)
         self.assertFalse(opaque.objects["o1"].usable)  # dave cannot read: structural only, never used
 
+    def test_refresher_operation_never_carries_a_grant_field_or_another_provider(self):
+        w, latest = self.w, {"o1": dict(TOK_A)}
+        for name in ("refresh_token", "client_secret", "refreshToken", "id_token"):
+            self.refused(commit(w.obj("o1", dict(TOK_A, **{name: "fictional"}), "bob-pc", operation="op-1")),
+                         latest=latest, text="grant field")
+        self.refused(commit(w.obj("o1", dict(TOK_A, provider="gohighlevel"), "bob-pc", operation="op-1")),
+                     latest=latest, text="provider")
+        self.refused(commit(w.obj("o1", {k: v for k, v in TOK_A.items() if k != "provider"}, "bob-pc",
+                                  operation="op-1")), latest=latest, text="provider")
+        w.accept(commit(w.obj("o1", dict(TOK_A, access_token="fictional-b"), "bob-pc", operation="op-1")), latest=latest)
+
     def test_stale_token_save_refused(self):
         w = self.w
         tok_b = dict(TOK_A, access_token="fictional-b", expires_at=200)
@@ -293,9 +304,9 @@ class AcceptTest(Base):
 
     def test_provider_token_fields_are_protected(self):
         w = self.w
-        tok = {"provider": "gohighlevel", "accessToken": "fictional-a", "expiresAt": 1, "id_token": "i", "tenant": "t1"}
+        tok = {"provider": "xero", "accessToken": "fictional-a", "expiresAt": 1, "tenant": "t1"}
         w.apply(commit(w.obj("o1", tok, "bob-pc", operation="op-1")), latest={"o1": dict(TOK_A)})
-        for name, value in (("accessToken", "fictional-b"), ("expiresAt", 2), ("id_token", "j"), ("provider", "x")):
+        for name, value in (("accessToken", "fictional-b"), ("expiresAt", 2), ("provider", "x")):
             self.refused(commit(w.obj("o1", dict(tok, **{name: value}), "carol-pc")), latest={"o1": tok},
                          text="access-token")
         w.accept(commit(w.obj("o1", dict(tok, tenant="t2"), "carol-pc")), latest={"o1": tok})

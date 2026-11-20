@@ -1,7 +1,10 @@
 """The skill library's connectors against the secrets store, in both roles, without importing the
-library: each function below reproduces one call sequence found by grep in library/skills (xero-
-access, gohighlevel-access, google-workspace-access, linkedin-access, meta-access). Computer A is
-the refresher, B another computer of the same person. Every value is fictional."""
+library: each function below reproduces one call sequence of the adapted connectors in
+library/skills (xero-access, gohighlevel-access, google-workspace-access, linkedin-access,
+meta-access): on another computer, which holds no refresh token, a refresh adopts the access token
+the refresher published. Computer A is the refresher, B another computer of the same person. Every
+value is fictional."""
+import contextlib
 import sys
 import time
 import unittest
@@ -25,6 +28,14 @@ class NoRefreshToken(Exception):
     """The connector's own "No refresh token is stored" error."""
 
 
+def adopt(current, leeway):
+    """Another computer holds no refresh token: it adopts the access token the refresher published
+    (the store waited for it), or stops with the connector's own error."""
+    if current.get("access_token") and float(current.get("expires_at", 0)) > time.time() + leeway:
+        return current
+    raise NoRefreshToken()
+
+
 def leeway_refresh(store, provider, force=False, leeway=90):
     """xero_oauth and ghl_oauth Client.refresh (access_token() calls it with the leeway)."""
     with store.rotation_lock(refresh=force, leeway_seconds=leeway):
@@ -32,7 +43,7 @@ def leeway_refresh(store, provider, force=False, leeway=90):
         if not force and float(current.get("expires_at", 0)) > time.time() + leeway:
             return current
         if not current.get("refresh_token"):
-            raise NoRefreshToken()
+            return adopt(current, leeway)
         updated = provider(current["refresh_token"])
         updated["tenant_id"] = current.get("tenant_id")
         store.save(updated)
@@ -54,6 +65,17 @@ def plain_lock_refresh(store, provider):
         current = store.load()
         if not current.get("refresh_token"):
             raise NoRefreshToken()
+        updated = provider(current["refresh_token"])
+        store.save(updated)
+    return updated
+
+
+def adapted_refresh(store, provider):
+    """google_oauth Client.refresh and linkedin_client refresh after the adaptation: a begun refresh."""
+    with store.rotation_lock(refresh=True):
+        current = store.load()
+        if not current.get("refresh_token"):
+            return adopt(current, 60)
         updated = provider(current["refresh_token"])
         store.save(updated)
     return updated
@@ -113,14 +135,36 @@ class ConnectorPatterns(AgentClients):
         with self.assertRaisesRegex(CredentialError, "this sign-in refreshes on A"):
             code_exchange(self.b, self.provider)
         self.later(lambda: leeway_refresh(self.a, lambda grant: dict(NEW)))
-        with self.assertRaises(NoRefreshToken):  # waits for A, then the forced body finds no refresh token
-            leeway_refresh(self.b, self.provider, force=True)
-        self.assertEqual(self.calls, [])
+        seen = leeway_refresh(self.b, self.provider, force=True)  # waits for A, then adopts A's newer token
+        self.assertEqual((seen["access_token"], self.calls), (NEW["access_token"], []))
 
-    def test_other_computer_plain_lock_refresh_needs_the_connector_change(self):
-        with self.assertRaises(NoRefreshToken):
-            plain_lock_refresh(self.b, self.provider)
-        self.assertEqual(self.calls, [])
+    def test_other_computer_adapted_refresh_adopts_the_refresher_token(self):
+        self.later(lambda: leeway_refresh(self.a, lambda grant: dict(NEW)))
+        seen = adapted_refresh(self.b, self.provider)
+        self.assertEqual((seen["access_token"], self.calls), (NEW["access_token"], []))
+
+
+class SaveConfirmation(unittest.TestCase):
+    def test_failed_save_releases_the_refresh_and_keeps_the_record(self):
+        from portable_vault import BrokerOAuthStore
+        from vault_broker_client import store_refresh
+        store = object.__new__(BrokerOAuthStore)
+        store.entry, store.field, store._operation, store._saved = "xero-demo", FIELD, None, False
+        calls = []
+
+        def broker(name, **_payload):
+            calls.append(name)
+            if name == "begin_refresh":
+                return {"operation": "op-1"}
+            if name == "set_json":
+                raise CredentialError("the broker refused the save")
+            return {}
+        store._broker_request = broker
+        with self.assertRaisesRegex(CredentialError, "refused the save"):
+            with store_refresh(store, contextlib.nullcontext, refresh=True):
+                store.save({"access_token": "fictional-7"})
+        self.assertFalse(store._saved)
+        self.assertEqual(calls, ["begin_refresh", "set_json", "release_refresh"])  # never abort: the record stays
 
 
 class StoreOffPatterns(AgentClients):

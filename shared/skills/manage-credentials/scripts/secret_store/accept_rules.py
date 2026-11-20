@@ -162,10 +162,20 @@ def protected_fields(payload: dict, previous: dict | None) -> frozenset:
     return frozenset(fields)
 
 
-def check_oauth_payload(payload: dict, previous: dict | None, obj: dict, token_writer: bool, admin_writer: bool) -> bool:
-    """Section 7 field rules. Raises when a revision changes token fields without the refresher's
-    operation id, or when there is no verified baseline and the writer has no standing to set one."""
+def check_oauth_payload(payload: dict, previous: dict | None, obj: dict, token_writer: bool, admin_writer: bool,
+                        recorded_provider: str | None = None) -> bool:
+    """Section 7 field rules. Raises when an oauth payload carries any grant-field spelling, whoever
+    signs it (the refresher included); when the refresher's operation names another provider than
+    the policy records for the oauth id; when a revision changes token fields without the
+    refresher's operation id; or when there is no verified baseline and the writer has no standing
+    to set one. A sign-in whose policy assignment records no provider (created before providers
+    were recorded) has no provider to compare."""
+    exposed = sorted(set(payload) & provider_profiles.grant_fields())
+    if exposed:
+        _refuse(f"object {obj['id']}: an oauth object never carries a grant field ({', '.join(exposed)})")
     if token_writer:
+        if recorded_provider is not None and payload.get("provider") != recorded_provider:
+            _refuse(f"object {obj['id']}: the provider is not the provider the policy records for the sign-in")
         return True
     if previous is None:
         # No verified baseline on this computer: only the first revision or an administrator's
