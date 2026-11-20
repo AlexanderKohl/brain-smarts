@@ -410,6 +410,16 @@ the JSON store itself does not make that check.
 `status` prints, per entry, the shared and local versions, the lease and whether a local change
 is still unpushed; never a secret.
 
+## Synced secrets store (opt-in)
+
+An alternative provider keeps secrets as encrypted, signed files in private Git repositories, with
+each computer's keys in the operating system's keychain and no passphrase. Its code is in
+`scripts/secret_store/`, its commands are `scripts/brain_secrets.py` and `scripts/migrate_to_store.py`,
+and `scripts/secret_store/README.md` describes the rules, files, roles, commands and recovery. The
+*Credential policy* vault rules above apply until the owner accepts `PROPOSAL-synced-secrets-store`
+and switches the store on (`config/secret-store.json` in the owner's memory folder for this skill,
+`enabled` true).
+
 ## Change the recovery passphrase
 
 ```powershell
