@@ -10,6 +10,7 @@ import subprocess
 import sys
 import warnings
 
+import secret_window
 from portable_vault import CredentialError, PortableVault
 
 
@@ -132,11 +133,76 @@ def _credential_environment(
     return environment
 
 
+CANCELLED = 1
+
+
+def _cancelled() -> int:
+    print("Cancelled; nothing stored.", file=sys.stderr)
+    return CANCELLED
+
+
+def _agent_unlocked() -> bool:
+    try:
+        from vault_broker_client import broker_unlocked
+    except ImportError:
+        return False
+    return broker_unlocked()
+
+
+def _put_entry_window(
+    vault: PortableVault, entry: str, secret_fields: list[str], json_fields: list[str]
+) -> int:
+    """put-entry --window. With the Vault Agent unlocked, each field goes through the agent
+    (set_text, set_json) and no passphrase is asked. With the agent locked, the window asks for
+    the passphrase too and the whole entry is written at once with set_fields."""
+    unlocked = _agent_unlocked()
+    if unlocked and not secret_fields:
+        values, passphrase = {}, None  # only empty JSON fields: nothing to ask
+    else:
+        answer = secret_window.ask_secrets(
+            f"Store credentials: {entry}", secret_fields, need_passphrase=not unlocked
+        )
+        if answer is None:
+            return _cancelled()
+        values, passphrase = answer
+    problem = secret_window.check_secret_values(values, secret_fields)
+    if problem is None and not unlocked:
+        problem = secret_window.check_passphrase_given(passphrase)
+    if problem:
+        raise CredentialError(problem + " Nothing stored.")
+    try:
+        if unlocked:
+            from vault_broker_client import broker_request
+
+            for field in secret_fields:
+                broker_request("set_text", entry=entry, field=field, value=values[field])
+            for field in json_fields:
+                broker_request("set_json", entry=entry, field=field, value={})
+        else:
+            stored: dict[str, tuple[object, str]] = {
+                field: (values[field], "text") for field in secret_fields
+            }
+            stored.update({field: ({}, "json") for field in json_fields})
+            vault.set_fields(entry, stored, passphrase)
+            stored.clear()
+    finally:
+        values.clear()
+        passphrase = None
+    names = ", ".join([*secret_fields, *json_fields])
+    print(f"Stored encrypted credential entry: {entry} ({names})")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--vault", help="Override the portable vault path")
     commands = parser.add_subparsers(dest="operation", required=True)
-    commands.add_parser("init", help="Create a new empty encrypted vault")
+    initialise_vault = commands.add_parser("init", help="Create a new empty encrypted vault")
+    initialise_vault.add_argument(
+        "--window",
+        action="store_true",
+        help="Ask for the new passphrase in a small masked window instead of the terminal",
+    )
     commands.add_parser("check", help="Verify the passphrase and vault integrity")
     commands.add_parser(
         "list",
@@ -181,6 +247,11 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="FIELD",
         help="JSON field to initialise as an empty object; repeat as needed",
     )
+    put_entry.add_argument(
+        "--window",
+        action="store_true",
+        help="Ask for the secrets (and the passphrase when the agent is locked) in a small masked window",
+    )
 
     initialise = commands.add_parser("init-json", help="Store an empty JSON object")
     initialise.add_argument("--entry", required=True)
@@ -214,7 +285,14 @@ def main() -> int:
     vault = PortableVault(args.vault)
     try:
         if args.operation == "init":
-            vault.initialize(_new_passphrase())
+            if args.window:
+                new_passphrase = secret_window.ask_new_passphrase()
+                if new_passphrase is None:
+                    return _cancelled()
+            else:
+                new_passphrase = _new_passphrase()
+            vault.initialize(new_passphrase)
+            new_passphrase = None
             print(f"Initialised encrypted credential vault: {vault.path}")
             return 0
         if args.operation == "check":
@@ -287,6 +365,8 @@ def main() -> int:
                 parser.error(
                     "Each field may be provided only once: " + ", ".join(duplicates)
                 )
+            if args.window:
+                return _put_entry_window(vault, args.entry, args.secret, args.empty_json)
             passphrase = _passphrase()
             values = {
                 field: (_secret_value(False, field), "text")

@@ -142,6 +142,9 @@ cd <brain-root>   # the folder holding CONTRACT.md (brain_root in /memory/OWNER.
 python shared/skills/manage-credentials/scripts/vault_credentials.py init
 ```
 
+An agent can start `init --window` instead, so the person types the passphrase in a small window,
+not a terminal (see Password windows under Store credentials).
+
 The default file is `/memory/projects/credential-management/data/credentials.vault`. It is explicitly excluded from Git. To use another location, add `--vault "D:\secure\credentials.vault"` or set `PORTABLE_VAULT_PATH`.
 
 Verify the passphrase and authenticated vault:
@@ -235,6 +238,26 @@ python shared/skills/manage-credentials/scripts/vault_credentials.py put-entry `
 ```
 
 With an unlocked agent, `put` / `vaultctl secret-put` can store fields without a second passphrase prompt. Use `--empty-json` for rotating OAuth records that an authorised connector will populate.
+
+### Password windows (`--window`)
+
+`init --window` and `put-entry --window` ask in a small masked window instead of a terminal, so an
+agent can start them and the person only types or pastes. One script, `scripts/secret_window.py`
+(Python's own tkinter), serves Windows, macOS and Linux. The window stays on top; Enter is OK,
+Esc or closing it is Cancel, which exits with code 1 and `Cancelled; nothing stored.`
+
+- `init --window` asks for the new passphrase twice and refuses, inside the window, fewer than
+  20 characters or a mismatch. There is no reset.
+- `put-entry --window` shows one masked field per `--secret`. With the Vault Agent unlocked, each
+  field is stored through the agent (`set_text`, and `set_json` with an empty object for each
+  `--empty-json`) and no passphrase is asked; that path writes field by field. With the agent
+  locked, the window asks for the vault passphrase too and the whole entry is written at once.
+  With the agent unlocked and only `--empty-json` fields, no window opens.
+
+Values are never printed, logged, or put in the command line or the environment; the output names
+only the entry and its fields. Where tkinter is missing or there is no display, the command fails
+at once and says to install python-tk (macOS with Homebrew: `brew install python-tk`) or to run
+the terminal command without `--window`. Without `--window` both commands behave as before.
 
 Delete an obsolete complete entry only after the owner explicitly requests it:
 
