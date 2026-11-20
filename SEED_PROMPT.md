@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-23T13:00:00+10:00
-updated: 2026-11-20T14:21:56+10:00
+updated: 2026-11-20T15:02:29+10:00
 owner: brain-owner
 ---
 
@@ -25,19 +25,23 @@ The mechanics repository is https://github.com/AlexanderKohl/brain-smarts.git. I
 1. Check that Git, Python 3.11 or later and the GitHub CLI are installed (git --version,
    python --version, gh --version). If any is missing, offer the install commands (Windows:
    winget install --id Git.Git -e, winget install --id Python.Python.3.12 -e and
-   winget install --id GitHub.cli -e; macOS: brew install git python gh; Linux:
-   sudo apt install git python3, and gh from GitHub's own package repository) and run them
+   winget install --id GitHub.cli -e; macOS: brew install git python python-tk gh; Linux:
+   sudo apt install git python3 python3-tk, and gh from GitHub's own package repository) and run them
    only after my yes. I may need to open a new terminal afterwards.
-2. Check gh auth status. If I am not signed in, tell me to run gh auth login in my own
-   terminal (GitHub.com, HTTPS, login with a web browser) and wait until I say done.
+2. Check gh auth status. If I am not signed in, run
+   gh auth login --web --hostname github.com --git-protocol https --skip-ssh-key yourself in the
+   background, show me the one-time code and link it prints, and wait until I have approved it
+   in the browser.
 3. Clone it into C:\dev\brain (Windows) or ~/dev/brain (macOS and Linux), creating the dev
    folder first if it is missing – ask me first if you think another folder is better.
 Then read CONTRACT.md and SETUP.md in that folder and follow SETUP.md step by step, through
 every step to the end of step H. If I answer "none", "later" or "skip" to a step, mark that
 step skipped and go straight on to the next one; only stop early if I say "stop".
 Check what you can yourself; ask me only what you cannot find out, always with a suggested answer.
-Never ask me for a passphrase, password, token or client secret in this chat: tell me the
-command to run in my own terminal and I will type or paste it into the hidden prompt there.
+Run every command yourself and ask me only questions in this chat; never ask me to copy a
+command into a terminal unless it cannot run from you. Never ask me for a passphrase,
+password, token or client secret in this chat: open the vault's window and I will type or
+paste it there.
 Confirm with me before installing anything, creating a repository or changing a setting.
 Record progress under "## Setup" in memory/STATE.md so we can stop and pick up later.
 ```

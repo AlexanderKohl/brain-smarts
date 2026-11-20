@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-23T13:00:00+10:00
-updated: 2026-11-20T13:33:25+10:00
+updated: 2026-11-20T15:02:29+10:00
 owner: brain-owner
 skill_refs:
   - /shared/skills/manage-credentials
@@ -54,17 +54,21 @@ Each step splits the work into **Agent does** and **You do** (addressed to the p
 agent never takes over a "You do" item, even when the host would let it. These stay with the
 person without exception:
 
-1. **Choosing and typing the vault passphrase.** It is typed only into the vault's own hidden
-   prompt, in a terminal the person opens themselves. It never appears in chat, in a file, in
-   a command argument or in an environment variable (`/shared/skills/manage-credentials/`).
+1. **Choosing and typing the vault passphrase.** It is typed only into the vault's own masked
+   window, which the agent opens with `vault_credentials.py init --window` (D.1), or into the
+   hidden prompt of the same command run without `--window` in a terminal the person opens
+   themselves. It never appears in chat, in a file, in a command argument or in an environment
+   variable (`/shared/skills/manage-credentials/`).
 2. **Pasting a secret.** Client secrets, API tokens and the ABR GUID are pasted only into the
-   hidden prompt of `vault_credentials.py put-entry`, run by the person in their own terminal.
-   If a secret is pasted into chat by mistake, stop, tell the person it must be rotated at the
-   provider, and do not store or repeat it.
+   masked window of `vault_credentials.py put-entry --window`, which the agent opens, or into
+   the hidden prompt of `put-entry` in the person's own terminal. If a secret is pasted into chat
+   by mistake, stop, tell the person it must be rotated at the provider, and do not store or
+   repeat it.
 3. **Registering an application** at an external provider (Google Cloud, Xero, HighLevel,
    Railway, ABR) and accepting that provider's terms.
 4. **Approving an OAuth consent screen** and signing in to a provider.
-5. **Signing in to GitHub** (`gh auth login`) and to the AI host.
+5. **Approving the GitHub sign-in** in the browser (the agent starts it and shows the one-time
+   code, B1), and signing in to the AI host.
 
 The agent may show the **last four characters** of a stored secret for confirmation, never more.
 
@@ -117,6 +121,24 @@ stop now ("stop", "that's enough for today"). Nothing else ends it:
 After each step, say in one line which step comes next and start it in the same reply. Before
 the final report, check the `## Setup` table: every row for this machine is `done`, `skipped`,
 `waiting_on_owner` or `blocked`, and E, F, G and H each have a row.
+
+### 1.6 Everything happens in the chat
+
+The person answers questions in the chat, clicks through provider pages in the browser and
+types secrets into the vault's masked window. They never copy a command into a terminal. The
+agent runs every command itself; where this guide shows a command block, it is the agent's.
+
+- **One yes for the plan.** After step A, list everything setup will install, create or change
+  on this machine and account (the repositories of B, the vault packages and sign-in start-up of
+  D.1, the host files and settings of E and F, the scheduled task of G.2), and ask once. A
+  later action outside that list gets its own question (section 1.3).
+- **Work settings early.** Once the smarts are in place (B3), offer E and F straight away, so the
+  rest of setup runs with fewer permission prompts; record their rows then.
+- **When the host asks.** A host may show its own approval prompt before the agent runs a
+  command or changes a host file. Say in one line what the prompt is for, and ask the person to
+  allow it there; that click is theirs.
+- **Fallback.** Only when a step cannot run from the agent (no window can open, the host refuses
+  the command outright) give the person that one command, with its `cd`, and say why.
 
 ## 2. Resuming
 
@@ -248,10 +270,22 @@ The brain is four layers (CONTRACT §3.4). The person gets:
 
 **Done when:** `gh auth status` reports a signed-in account.
 
-**You do:** run `gh auth login`, choose GitHub.com, HTTPS, and "Login with a web browser", then
-enter the one-time code in the browser.
+**Agent does**, when `gh auth status` reports no account: starts the sign-in itself, in the
+background, so nothing waits on a terminal:
 
-**Agent does:** runs `gh auth status` and `gh api user --jq .login` to learn the account name.
+```powershell
+gh auth login --web --hostname github.com --git-protocol https --skip-ssh-key
+```
+
+Without a terminal, `gh` prints a one-time code and `https://github.com/login/device` and waits
+for the browser. Show both in the chat; when the command ends, run `gh auth status` again.
+
+**You do:** open the link, sign in to GitHub, enter the code and approve.
+
+Fallback: when the background run prints no code, the person runs `gh auth login` in their own
+terminal (GitHub.com, HTTPS, "Login with a web browser").
+
+**Agent does** next: runs `gh auth status` and `gh api user --jq .login` to learn the account name.
 If more than one account is signed in, ask which one owns the brain:
 
 > **Ask:** Which GitHub account should own your brain repositories?
@@ -817,25 +851,29 @@ cd C:\dev\brain
 powershell -NoProfile -File shared/skills/manage-credentials/scripts/install_vault_agent_login.ps1
 ```
 
-**You do:**
+Then the agent opens the window that creates the vault. Before it does, it tells the person in
+the chat: choose a passphrase of **at least 20 characters** used nowhere else, keep it in a
+password manager or on paper away from the computer, **there is no reset: a lost passphrase is
+a lost vault**, and never type it into the chat.
 
-1. Choose a passphrase of **at least 20 characters** that you use nowhere else. Store it in your
-   password manager or on paper kept away from the computer. **There is no reset: a lost
-   passphrase is a lost vault.** Never type it into the chat.
-2. Open your own terminal (not the agent's) and create the vault; it asks for the passphrase
-   twice through a hidden prompt:
+```powershell
+cd C:\dev\brain
+python shared/skills/manage-credentials/scripts/vault_credentials.py init --window
+```
 
-   ```powershell
-   cd C:\dev\brain
-   python shared/skills/manage-credentials/scripts/vault_credentials.py init
-   ```
+**You do:** type the passphrase twice into the window and press OK.
 
-3. Start the tray and unlock it from its menu (**Unlock…**); the icon turns from grey to red:
+**Agent does** next: starts the tray in the background; it opens its own unlock window at once:
 
-   ```powershell
-   cd C:\dev\brain
-   pythonw shared\skills\manage-credentials\scripts\vault_tray.py
-   ```
+```powershell
+cd C:\dev\brain
+pythonw shared\skills\manage-credentials\scripts\vault_tray.py
+```
+
+**You do:** type the passphrase into the unlock window; the tray icon turns from grey to red.
+
+Fallback, when no window can open (section 1.6): the person runs `vault_credentials.py init`
+without `--window` in their own terminal, then starts the tray the same way.
 
 **Agent verifies:**
 
@@ -852,16 +890,21 @@ alternative is `python shared/skills/manage-credentials/scripts/vault_agent.py s
 terminal the person keeps open, then `vaultctl.py unlock` in another; the broker uses a socket
 under `$XDG_RUNTIME_DIR` or `~/.cache`. The Windows logon task has no equivalent yet.
 
-**Storing a secret**, used by every skill below. **You do**, in your own terminal:
+**Storing a secret**, used by every skill below. **Agent does:** opens the window, with the
+entry and fields filled in:
 
 ```powershell
 cd C:\dev\brain
-python shared/skills/manage-credentials/scripts/vault_credentials.py put-entry `
+python shared/skills/manage-credentials/scripts/vault_credentials.py put-entry --window `
   --entry <entry> --secret <field> [--secret <field> ...] [--empty-json oauth_token_json]
 ```
 
-Each `--secret` opens a hidden prompt; paste that value there and nowhere else. The agent gives
-the exact command with the entry and fields filled in.
+**You do:** paste each value into its field of the window and press OK. While the tray is
+unlocked the window asks for nothing else; when it is locked, it also asks for the passphrase.
+
+Every `put-entry` command in the skills below runs this way: the agent runs it with `--window`
+added, and the person pastes into the window, never into the chat. Without a window, the person
+runs the same command without `--window` in their own terminal (section 1.6).
 
 ### D.2 abr-access
 
@@ -1206,22 +1249,49 @@ Two kinds of file, two owners:
 - **In the brain and in project repositories** (`CLAUDE.md`, `AGENTS.md`, `memory/AGENTS.md`, a
   project's `.cursor/rules/`): ordinary repository files. **Agent does:** writes them and commits
   them like any other change.
-- **In the host's own configuration** (`~/.claude/`, `~/.codex/`, Cursor's settings and its saved
-  workspaces, any other host's app settings): **You do.** Hosts rightly refuse to let an agent edit
-  its own startup or permission files, even with the person's go-ahead, so the agent never tries.
+- **In the host's own configuration** (`~/.claude/`, `~/.codex/`, `~/.cursor/`): written by
+  `host_wiring.py`, which the agent runs after the person's yes. It fills each template, backs up
+  every file it changes, and checks what it wrote. The person's part is the yes in the chat and,
+  when the host shows its own approval prompt for the command, allowing it there (section 1.6).
+  Cursor's User Rules live in Cursor's own database, not a file: that one paste stays with the
+  person (below).
 
-**Agent does**, for each host-configuration file:
+**Agent does:**
 
-1. Read the file if it exists (read-only) and show the person what is there. If it carries
-   behavioural rules, point out that `SMART-RULE-0007` wants them in `/memory/RULES.md` and offer
-   to draft that proposal.
-2. Fill **each** template separately with this machine's paths (templates can change
+1. For each host-configuration file that exists, read it (read-only). If it carries behavioural
+   rules, point out that `SMART-RULE-0007` wants them in `/memory/RULES.md` and offer to draft
+   that proposal.
+2. Show what would change, for the hosts the person uses and the settings level they choose in
+   step F (E and F run together, section 1.6). `plan` writes nothing:
+
+   ```powershell
+   cd C:\dev\brain
+   python shared/skills/repository-preflight/scripts/host_wiring.py plan --host claude-code --host codex --level routine
+   ```
+
+   It prints one line per file (create, replace, merge or unchanged, and the backup it would
+   make), then any setting the person already has that differs from the template; those are
+   kept, and the F.1 question decides each.
+3. After a yes, run the same command with `apply` in place of `plan`. It makes a dated backup of
+   each file it changes (only one per date, so a second run never overwrites the first backup),
+   writes, and re-reads what it wrote. A second run reports `unchanged`. The worker definitions
+   load from the next session; after an update that changes a file under
+   `<brain_root>/.claude/agents/`, run `apply` again.
+4. Record the result under `## Setup`.
+
+**Fallback** (section 1.6), when the host refuses to run `host_wiring.py` at all: give the person
+the `apply` command above, with its `cd`, to run once in their own terminal. Failing that, the
+manual steps below still work.
+
+**Manual steps** (only for the fallback):
+
+1. Fill **each** template separately with this machine's paths (templates can change
    independently, so never reuse one host's filled file for another) and save each result to its own scratch file, for example
    `<brain_root>/temp/setup/claude-CLAUDE.md` and `<brain_root>/temp/setup/codex-AGENTS.md`. Take
    only the text below the template's front matter. Write every filled path with forward slashes
    (`C:/dev/brain`, then `C:/dev/brain/CONTRACT.md`), so a path joined from `<BRAIN_ROOT>` never
    mixes `\` and `/`; Windows and every host accept forward slashes.
-3. Give the person the exact commands: create the host folder if it is missing, back up an
+2. Give the person the exact commands: create the host folder if it is missing, back up an
    existing file, then copy. Example for Windows (PowerShell):
 
    ```powershell
@@ -1259,15 +1329,14 @@ Two kinds of file, two owners:
    Give only the lines for the hosts the person uses. A backup is made only when none exists
    for that date, so running the commands a second time never overwrites the first backup with
    the already-replaced file. The Codex trust entry belongs to the settings, step F.3.
-4. After the person says done, verify read-only: each installed file matches its scratch file,
+3. After the person says done, verify read-only: each installed file matches its scratch file,
    each worker definition matches its original in `<brain_root>/.claude/agents/` (line endings
    aside), and, only where a file existed before, its backup exists. Record the result under
    `## Setup`.
 
 **You do:**
 
-1. Run the commands. If a file already exists and you want to keep its other content, paste the
-   pointer at the top instead of replacing the file.
+1. Say yes to the plan in the chat, and allow the command if the host asks.
 2. **Cursor:** open **Cursor Settings** (Ctrl+Shift+J or the gear at the top right; `Ctrl+,`
    opens the editor settings, which have no rules) → **Rules** → **User Rules**. Older versions
    call it **General → Rules for AI**. If User Rules already hold text, show it to the agent
@@ -1321,14 +1390,14 @@ another way (a script, a different shell), so treat the lists as guard rails, no
 >
 > **Suggested reply:** `1`
 
-**Who installs these files:** the same split as Step E. The agent fills each template into a
-scratch file under `<brain_root>/temp/setup/`, prepares the merged result there too, and gives
-the person backup-then-copy commands; **the person runs them**, because hosts refuse to let an
-agent change its own permission settings. The agent then verifies read-only (the file parses and
-holds the chosen lists) and records the result under `## Setup`.
+**Who installs these files:** `host_wiring.py`, run by the agent together with step E: the chosen
+level is its `--level` (`routine` for option 1, `edits` for 2, `defaults` for 3). It merges each
+template into the person's file as described below, backs it up first and checks that the result
+parses. The person's part is the yes, and allowing the command where the host asks (section
+1.6). The manual merge below is the fallback only.
 
-**Merging a JSON settings file** (Claude Code, Cursor CLI). The agent runs this in the brain
-root. It reads the person's existing file (or starts empty when there is none), adds every
+**Merging a JSON settings file** (Claude Code, Cursor CLI), as `host_wiring.py` does it; by hand,
+only for the fallback. It reads the person's existing file (or starts empty when there is none), adds every
 template entry to the `permissions` lists without duplicates, keeps any value the person already
 set (for example their own `defaultMode`), and writes the result to a scratch file; it never
 touches the host's own file:
@@ -1349,7 +1418,7 @@ file keeps theirs; say so and ask:
 > **Ask:** Your settings already use `defaultMode: "<their value>"`; the template suggests
 > `"acceptEdits"`. Which should stay?
 > 1. Keep yours (recommended – it is what you chose)
-> 2. Use `acceptEdits` – I change it in the merged scratch file before you copy it
+> 2. Use `acceptEdits` – I change that one value in your settings file after `apply`
 >
 > **Suggested reply:** `1`
 
@@ -1386,12 +1455,12 @@ Merge `codex.config.template.toml` into `~/.codex/config.toml`. TOML has no merg
 top-level key (`approval_policy = ...`, `sandbox_mode = ...`) must sit **above the first
 `[table]` line** of the file, or TOML reads it as part of that table; a `[table]` section goes at
 the end. When the file already sets a key or table, change its value there instead of adding it
-a second time (TOML refuses duplicates). The agent writes the merged file to
-`<brain_root>/temp/setup/codex-config.toml` and gives the person the step E backup-then-copy
-commands for it.
+a second time (TOML refuses duplicates). `host_wiring.py --host codex` follows these rules and
+always adds the brain root's trust entry when it is missing, at every level. By hand, for the
+fallback only: write the merged file to `<brain_root>/temp/setup/codex-config.toml` and use the
+step E backup-then-copy commands for it.
 
-The brain root's trust entry is the one line most often added on its own. The person adds it
-only once; the check makes a second run harmless:
+The trust entry alone, by hand (fallback only); the check makes a second run harmless:
 
 ```powershell
 New-Item -ItemType Directory -Force "$HOME\.codex" | Out-Null
@@ -1543,7 +1612,7 @@ Record each configured schedule in `/memory/STATE.md` so the next session knows 
 ## 10. Step H – Final validation and tour
 
 **Done when:** preflight passes on every repository, the memory has a pushed commit, the smarts
-and library working trees are clean, and the tour is given.
+and library working trees are clean, and the tour (H.1) is given or declined.
 
 **Agent does:**
 
@@ -1595,22 +1664,57 @@ and library working trees are clean, and the tour is given.
 4. Report the memory commit hash and its push status, and that the smarts and library are
    clean (`SMART-RULE-0014`).
 
-**Tour** – five minutes, in this order (the order the owner will meet them):
+### H.1 The tour
 
-1. `/memory/OWNER.md` – who the brain works for; change it any time.
-2. Say a task out loud ("remind me to renew the domain by Friday") – watch it land in
-   `/memory/tasks/open/`.
-3. Drop a file in the chat – it is kept unchanged under `/memory/raw/` with a readable copy in
-   `/memory/sources/`.
-4. "From now on…" – a standing preference becomes a proposal you accept before it applies.
-5. Getting improvements: `cd <brain_root>; git fetch upstream; git merge upstream/main`, then
-   regenerate the manifest with
-   `python shared/skills/repository-preflight/scripts/preflight.py --root . --write-manifest`
-   (if the merge stopped on a conflict in `repository-manifest.json`, the regenerated file
-   resolves it), stage `repository-manifest.json`, commit and push to `origin`. Improvements you
-   make to the mechanics can be offered back to the original as a pull request, provided they
-   carry no personal data.
-6. Adding a skill later: "resume setup" – the agent reads this guide and your `## Setup` table.
+The tour happens in the chat, after the commits, and the owner chooses how deep it goes. It is
+optional: "no tour" marks it `skipped`, and any later session gives it on "show me around".
+
+> **Ask:** Setup is done. Would you like a tour?
+> 1. The quick one – two minutes: the five things to try first (recommended)
+> 2. Quick, then where your projects stand – what is open, waiting on you or due
+> 3. The full tour – both of those, then a closer look at each area you pick
+> 4. No tour now
+>
+> **Suggested reply:** `1`, or `2` when the person joined existing projects
+
+Give each part as a short chat message, end it with "more, or stop here?", and go on only on
+"more". Show, do not lecture: where a part says *try*, offer to do it with them now.
+
+**Part 1 – Quick tour** (options 1 to 3). In this order, the order the owner will meet them:
+
+1. **Ask anything, in plain words.** The agent works from the brain: "what's on my plate this
+   week?", "draft a reply to …", "what do we know about …".
+2. **Tasks.** *Try:* "remind me to renew the domain by Friday" – it lands in
+   `/memory/tasks/open/` and on the personal board, `/memory/boards/index.html` (bookmark it).
+3. **Files.** *Try:* drop a file in the chat – it is kept unchanged under `/memory/raw/` with a
+   readable copy in `/memory/sources/`.
+4. **Preferences.** "From now on …" becomes a rule proposal you accept before it applies.
+5. **Coming back.** "Resume setup" adds a skill or finishes a skipped step; "show me around"
+   repeats this tour; "what changed?" reports improvements from the original brain and asks
+   before merging them (`SMART-RULE-0032`).
+
+**Part 2 – Where your projects stand** (options 2 and 3). Read, do not guess: the brain-wide
+`/memory/STATE.md`; each project node's `STATE.md` under `/memory/projects/`, and for a project
+in its own repository its `brain/STATE.md` (CONTRACT §16); open tasks with `tasks.py`; and the
+boards in `/memory/boards/`. Then give one short block per project, most active first: what it
+is, where it stands, the next step, and anything waiting on the owner. End with the boards'
+link. A new brain with no projects yet says so in one line and offers to start one ("tell me
+about a piece of work you want tracked").
+
+**Part 3 – Closer look** (option 3). Offer the areas as a numbered list, alphabetical, and go
+into the ones the owner picks, one at a time:
+
+1. **Accounts and skills** – which skills are on (`active_skills`), what each can do, and how to
+   connect another.
+2. **Boards** – the personal board, project boards and how cards move.
+3. **Improvements** – how upstream changes arrive, what `follow_upstream` does, and how an
+   improvement of their own can be offered back without personal data.
+4. **Rules** – the owner's own rules in `/memory/RULES.md`, how a rule is proposed and accepted,
+   and that every decision stays theirs.
+5. **Working in parallel** – workers, what they cost, and the machine limits recorded in B7.
+
+Record the depth given in the `H` row's note (`tour: quick`, `tour: projects`, `tour: full` or
+`tour: skipped`).
 
 ## 11. Items to verify against current host and provider documentation
 
