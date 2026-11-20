@@ -88,7 +88,7 @@ class Base(unittest.TestCase):
             d["refreshers"] = {"g1": {"person": "bob", "computer": "pc", "oauth": "o1"}}
         doc = w.next_policy(assign)
         p = policy.Policy(doc)
-        objs = [w.obj("s1", {"password": "x"}, "carol-pc", p), w.obj("o1", dict(TOK_A), "bob-pc", p),
+        objs = [w.obj("s1", {"password": "x"}, "carol-pc", p), w.obj("o1", dict(TOK_A), "bob-pc", p, operation="op-0"),
                 w.obj("g1", {"refresh_token": "r"}, "bob-pc", p), w.obj("f1", {"k": "v"}, "dave-pc", p),
                 w.obj("index-ops", w.index(p, "ops"), "bob-pc", p), w.obj("index-fin", w.index(p, "fin"), "dave-pc", p)]
         self.setup_result = w.apply(commit(*objs, pol=doc))

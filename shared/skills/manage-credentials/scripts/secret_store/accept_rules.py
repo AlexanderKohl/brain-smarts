@@ -167,8 +167,8 @@ def check_oauth_payload(payload: dict, previous: dict | None, obj: dict, token_w
     """Section 7 field rules. Raises when an oauth payload carries any grant-field spelling, whoever
     signs it (the refresher included); when any revision names another provider than the policy
     records for the oauth id; when a revision changes token fields without the
-    refresher's operation id; or when there is no verified baseline and the writer has no standing
-    to set one. A sign-in whose policy assignment records no provider (created before providers
+    refresher's operation id; or when there is no verified baseline and the writer is neither the
+    refresher with an operation id (revision 1 included) nor an administrator. A sign-in whose policy assignment records no provider (created before providers
     were recorded) has no provider to compare."""
     exposed = sorted(set(payload) & provider_profiles.grant_fields())
     if exposed:
@@ -178,9 +178,11 @@ def check_oauth_payload(payload: dict, previous: dict | None, obj: dict, token_w
     if token_writer:
         return True
     if previous is None:
-        # No verified baseline on this computer: only the first revision or an administrator's
-        # re-key (a newly admitted reader's baseline) is taken as it is; anything else is refused.
-        if obj["revision"] == 1 or admin_writer:
+        # No verified baseline on this computer: only the refresher's operation (a first
+        # authorisation is revision 1 with an operation id, taken above) or an administrator's
+        # re-key (a newly admitted reader's baseline) is taken as it is. Any other revision 1 is
+        # refused: a member could otherwise set an access token in a rewritten fork.
+        if admin_writer:
             return True
         _refuse(f"object {obj['id']}: no verified baseline here and the writer is neither an administrator "
                 "nor the refresher's operation")

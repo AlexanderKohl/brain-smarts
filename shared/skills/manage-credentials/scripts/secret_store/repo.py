@@ -226,6 +226,8 @@ class SecretRepo:
         for commit in commits:
             if len(self._out("rev-list", "--parents", "-n", "1", commit).split()) > 2:
                 self._refuse(commit)
+            if self._out("log", "-1", "--format=%B", commit).strip() not in ALLOWED_MESSAGES:
+                self._refuse(commit)  # a subject could expose an entry or service name
             try:
                 accepted = verify(commit, self._changed_files(commit))
             except SecretStoreError:

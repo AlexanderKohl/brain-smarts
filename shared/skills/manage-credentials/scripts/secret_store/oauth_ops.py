@@ -21,7 +21,7 @@ from . import envelope, provider_profiles, signing
 from .errors import SecretStoreError
 from .keys import key_id
 from .policy import INDEX_PREFIX, Policy, object_hash
-from .store_ops import GROUP, new_object_id, next_policy
+from .store_ops import GROUP, build_put, new_object_id, next_policy
 
 GRANT_SUFFIX = "#grant"
 DEFAULT_FIELD = "oauth_token_json"
@@ -204,7 +204,9 @@ def _static_files(store: Any, policy: Policy, plan: tuple | None) -> dict:
 
 
 def _new_signin_files(store: Any, entry: str, field: str, shared: dict, grant: dict,
-                      group: str, provider: str | None = None) -> tuple[Policy, dict]:
+                      group: str, provider: str | None = None, static: dict | None = None) -> tuple[Policy, dict]:
+    """A new sign-in (policy, oauth and grant revision 1 carrying the first authorisation's
+    operation id, index) and, with static, a new static object for the entry in the same commit."""
     policy, signer, index = store.policy, store._identity().ed25519, store._index(group)
     oname, gname = signin_names(entry, field)
     if gname in index:
@@ -213,6 +215,9 @@ def _new_signin_files(store: Any, entry: str, field: str, shared: dict, grant: d
     grant_id = new_object_id(policy)
     while grant_id == oauth_id:
         grant_id = new_object_id(policy)
+    static_id = None
+    while static is not None and static_id in (None, oauth_id, grant_id):
+        static_id = new_object_id(policy)
     person, computer = _me(store)
 
     def change(doc: dict) -> None:
@@ -222,17 +227,24 @@ def _new_signin_files(store: Any, entry: str, field: str, shared: dict, grant: d
         doc["assignments"][oauth_id] = {"group": group, "kind": "oauth", **bound}
         doc["assignments"][grant_id] = {"group": group, "kind": "grant", **bound}
         doc["refreshers"][grant_id] = {"person": person, "computer": computer, "oauth": oauth_id}
+        if static_id is not None:
+            doc["assignments"][static_id] = {"group": group, "kind": "static"}
 
     doc = next_policy(policy, signer, change)
     result = Policy(doc)
     names = dict(index)
     names[oname], names[gname] = oauth_id, grant_id
+    operation = new_operation()  # the first authorisation: revision 1 is accepted only with it
+    files = {"policy.json": doc,
+             _path(oauth_id): seal_revision(result, oauth_id, "oauth", shared, signer, None, operation),
+             _path(grant_id): seal_revision(result, grant_id, "grant", grant, signer, None, operation)}
+    if static_id is not None:
+        names[entry] = static_id
+        files[_path(static_id)] = seal_revision(result, static_id, "static", static, signer, None)
     index_id = INDEX_PREFIX + group
-    return result, {"policy.json": doc,
-                    _path(oauth_id): seal_revision(result, oauth_id, "oauth", shared, signer, None),
-                    _path(grant_id): seal_revision(result, grant_id, "grant", grant, signer, None),
-                    _path(index_id): seal_revision(result, index_id, "index", {"entries": names}, signer,
-                                                   store.checkpoint.objects.get(index_id))}
+    files[_path(index_id)] = seal_revision(result, index_id, "index", {"entries": names}, signer,
+                                           store.checkpoint.objects.get(index_id))
+    return result, files
 
 
 def put_signin(store: Any, entry: str, field: str, record: dict, grant_fields: dict | None = None,
@@ -264,6 +276,52 @@ def put_signin(store: Any, entry: str, field: str, record: dict, grant_fields: d
         grant = {"token": token, "fields": {**kept, **moved}}
         files = _revision_files(store, signin, shared, grant, new_operation())
         return {**files, **_static_files(store, store.policy, plan)}, "update"
+    store._write(build)
+
+
+def put_fields(store: Any, entry: str, plain: dict, grant_fields: dict, group: str | None = None) -> None:
+    """Plain and grant fields of one entry in one commit (brain_secrets.py put): the static object
+    (plain fields, less any grant field it held), the grant (those grant fields and the new ones;
+    a new sign-in with this computer as its refresher when none exists), and the policy and index
+    when either object is new."""
+    group = store._group(group)
+    if not plain or not grant_fields or not all(isinstance(v, str) and v for v in grant_fields.values()):
+        raise SecretStoreError("put_fields needs plain fields and non-empty grant text fields")
+
+    def build() -> tuple[dict, str]:
+        signer, cp, index = store._identity().ed25519, store.checkpoint.objects, store._index(group)
+        sid = index.get(entry)
+        if sid is not None and store.policy.assignment(sid)[1] != "static":
+            raise SecretStoreError(f"entry {entry} is not a plain entry")
+        record = store.get_record(entry, group) if sid is not None else {}
+        grant_keys = provider_profiles.grant_fields()
+        moved = {k: v for k, v in record.items() if k in grant_keys}
+        static = {**{k: v for k, v in record.items() if k not in grant_keys}, **plain}
+        names = signin_fields(store, entry, group)
+        if not names:
+            provider = provider_profiles.provider_for(entry)
+            shared, token = split_record({}, provider)
+            shared[PROVIDER_KEY] = provider
+            grant = {"token": token, "fields": {**moved, **grant_fields}}
+            result, files = _new_signin_files(store, entry, DEFAULT_FIELD, shared, grant, group, provider,
+                                              static if sid is None else None)
+            if sid is not None:
+                files[_path(sid)] = seal_revision(result, sid, "static", static, signer, cp.get(sid))
+            return files, "policy"
+        signin = find(store, entry, names[0], group)
+        if not signin.mine:
+            refuse_other(signin)
+        grant = dict(_open_grant(store, signin.grant_id))
+        grant["fields"] = {**grant.get("fields", {}), **moved, **grant_fields}
+        if sid is None:
+            files, message = build_put(store.policy, cp, index, entry, static, "static", signer, group)
+            result = Policy(files["policy.json"])
+        else:
+            result, message = store.policy, "update"
+            files = {_path(sid): seal_revision(result, sid, "static", static, signer, cp.get(sid))}
+        files[_path(signin.grant_id)] = seal_revision(result, signin.grant_id, "grant", grant, signer,
+                                                      cp.get(signin.grant_id))
+        return files, message
     store._write(build)
 
 

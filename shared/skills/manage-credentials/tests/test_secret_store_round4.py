@@ -38,7 +38,7 @@ class MetaProfile(unittest.TestCase):
             d["refreshers"] = {"g1": {"person": "bob", "computer": "pc", "oauth": "o1"}}
         doc = w.next_policy(assign)
         p = policy.Policy(doc)
-        w.apply(commit(w.obj("o1", dict(META), "bob-pc", p), w.obj("g1", {}, "bob-pc", p),
+        w.apply(commit(w.obj("o1", dict(META), "bob-pc", p, operation="op-0"), w.obj("g1", {}, "bob-pc", p),
                        w.obj("index-ops", w.index(p, "ops"), "bob-pc", p), pol=doc))
 
     def test_profile_and_signin_marker(self):
@@ -205,7 +205,7 @@ class RecordedProviderEverywhere(unittest.TestCase):
                                                  {"id": "o1", "revision": revision}, False, admin,
                                                  recorded_provider="xero")
         self.assertTrue(accept_rules.check_oauth_payload({"provider": "xero"}, None, {"id": "o1", "revision": 1},
-                                                         False, False, recorded_provider="xero"))
+                                                         False, True, recorded_provider="xero"))
 
 
 if __name__ == "__main__":

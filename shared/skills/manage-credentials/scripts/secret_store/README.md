@@ -139,7 +139,7 @@ with a message naming the refresher computer.
 
 ## Provider profiles
 
-`provider_profiles.json` holds profiles for Xero, Google and HighLevel. None is verified: each
+`provider_profiles.json` holds profiles for Xero, Google, HighLevel and Meta. None is verified: each
 needs the provider's documentation plus a live test that revoking a refresh token retires the whole
 grant and that a new browser sign-in makes a separate grant. Until a profile is verified, moving the
 refresher away from an unreachable computer and recovery from an uncertain refresh are refused and

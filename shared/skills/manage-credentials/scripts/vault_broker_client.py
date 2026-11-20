@@ -104,9 +104,20 @@ def broker_unlocked() -> bool:
 
 
 # -- the secrets store's refresh (design synced-secrets-repository.md, section 9, Consumers) ------
+def _expiry(value: Any) -> float:
+    """expires_at as epoch seconds: a number, or an ISO-8601 time (LinkedIn); else ValueError."""
+    if isinstance(value, str) and not value.strip().replace(".", "", 1).isdigit():
+        import datetime as dt
+        moment = dt.datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=dt.timezone.utc)
+        return moment.timestamp()
+    return float(value)
+
+
 def _expiring(record: dict, leeway: Any) -> bool:
     try:
-        return float(record.get("expires_at")) <= time.time() + float(leeway or 0)
+        return _expiry(record.get("expires_at")) <= time.time() + float(leeway or 0)
     except (TypeError, ValueError):
         return True
 
@@ -118,11 +129,17 @@ def _load_or_empty(store: Any) -> dict:
         return {}
 
 
-def _wait_for_refresher(store: Any, begun: dict, leeway: Any) -> None:
+def _wait_for_refresher(store: Any, begun: dict, leeway: Any, before: dict | None = None) -> None:
     """Another computer never calls the provider: pull until the refresher publishes a newer
-    access token, or stop in plain words."""
+    access token, or stop in plain words. A token newer than the one this computer held before
+    begin_refresh (before), and not expired, is that newer token: the refresher published it
+    just before, so it is returned at once instead of waiting for another refresh."""
     baseline = begun.get("record") or {}
     if leeway is not None and not _expiring(baseline, leeway):
+        return
+    token = baseline.get("access_token")
+    if (before is not None and token and token != before.get("access_token")
+            and not _expiring(baseline, leeway or 0)):
         return
     deadline = time.monotonic() + REFRESH_WAIT_SECONDS
     while time.monotonic() < deadline:
@@ -158,8 +175,9 @@ def store_refresh(store: Any, local_lock: Any, *, refresh: bool = False, leeway_
     from secret_store.journal import ProviderNotCalled
 
     with local_lock():
+        before = _load_or_empty(store) if (refresh or leeway_seconds is not None) and not new_authorisation else {}
         due = refresh or new_authorisation or (
-            leeway_seconds is not None and _expiring(_load_or_empty(store), leeway_seconds))
+            leeway_seconds is not None and _expiring(before, leeway_seconds))
         if not due:
             yield
             return
@@ -169,7 +187,7 @@ def store_refresh(store: Any, local_lock: Any, *, refresh: bool = False, leeway_
             if begun.get("signin"):  # another computer refreshes this sign-in
                 if new_authorisation:
                     raise CredentialError(f"this sign-in refreshes on {begun.get('computer')}; sign in again there")
-                _wait_for_refresher(store, begun, None if refresh else leeway_seconds)
+                _wait_for_refresher(store, begun, None if refresh else leeway_seconds, before)
             yield
             return
         operation = begun["operation"]

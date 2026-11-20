@@ -195,16 +195,23 @@ class RecoveryTest(unittest.TestCase):
         with self.assertRaises(SecretStoreError):
             recovery.mnemonic_to_entropy(" ".join(words))  # checksum wrong
         good = recovery.generate_mnemonic().split()
-        swapped = good[:]
-        swapped[0], swapped[1] = good[1], good[0]
-        if swapped != good:
-            with self.assertRaises(SecretStoreError):
-                recovery.mnemonic_to_entropy(" ".join(swapped))
+        # One altered word keeps a valid 8-bit checksum about once in 256 tries, so a single
+        # alteration cannot be asserted to fail. Alter the last word 64 ways: nearly all must fail.
+        candidates = [w for w in recovery.wordlist() if w != good[-1]][:64]
+        refused = 0
+        for word in candidates:
+            try:
+                recovery.mnemonic_to_entropy(" ".join(good[:-1] + [word]))
+            except SecretStoreError:
+                refused += 1
+        self.assertGreaterEqual(refused, len(candidates) - 8)
         for bad in (" ".join(good[:23]), " ".join(good[:23] + ["notaword"]), ""):
             with self.assertRaises(SecretStoreError) as caught:
                 recovery.mnemonic_to_entropy(bad)
-            for word in good:
-                self.assertNotIn(f" {word} ", f" {caught.exception} ")
+            # A leak shows as the words in sequence; a single word may also be ordinary English in
+            # the fixed message (for example "list"), so check every consecutive pair instead.
+            for first, second in zip(good, good[1:]):
+                self.assertNotIn(f" {first} {second} ", f" {caught.exception} ")
 
 
 HEADER = {"repository": "fictional-repo", "group": "fictional-group", "id": "obj-1", "kind": "static",

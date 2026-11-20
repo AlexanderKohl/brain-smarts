@@ -170,9 +170,12 @@ def main(argv=None, store_factory=None, team_factory=None, ask=None, confirm=Non
             opened = store.open()
             grant = {k: v for k, v in fields.items() if k in provider_profiles.grant_fields()}
             plain = {k: v for k, v in fields.items() if k not in grant}
-            if plain:
+            if plain and grant:  # one commit: static object, grant, index and policy together
+                from secret_store.oauth_ops import put_fields
+                put_fields(opened, args.entry, plain, grant, group)
+            elif plain:
                 opened.put_entry(args.entry, plain, group=group)
-            if grant:  # the same path as the agent's set_text: never into a static object
+            else:  # the same path as the agent's set_text: never into a static object
                 put_grant_fields(opened, opened._group(group), args.entry, grant)
             print(f"Stored {args.entry}: " + ", ".join(sorted(fields)))
         elif args.command == "get-check":
@@ -238,6 +241,10 @@ def main(argv=None, store_factory=None, team_factory=None, ask=None, confirm=Non
             print("No plain entry holds a grant field." if not found else
                   "These plain entries hold grant fields every group member could read; move them to the "
                   "sign-in's grant and change them at the provider:\n" + "\n".join(found))
+        warning = getattr(store, "package_error", None)
+        if warning:  # the operation succeeded; only the recovery package needs attention
+            print(f"Warning: {warning}. Run brain_secrets.py recovery-package once the folder is reachable.",
+                  file=sys.stderr)
         return 0
     except (SecretStoreError, CredentialError) as error:
         print(f"Secrets store: {error}", file=sys.stderr)

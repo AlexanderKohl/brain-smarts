@@ -5,6 +5,7 @@ fields, never values, keys or recovery words."""
 from __future__ import annotations
 
 import subprocess
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,6 +26,13 @@ from .store_ops import (EMPTY_JSON, GROUP, INDEX_ID, build_put, checkpoint_commi
 
 RETRIES = 3
 PACKAGE_MAX_AGE = 7 * 24 * 3600
+PACKAGE_CHECK_SECONDS = 24 * 3600
+
+
+def _in_transaction() -> bool:
+    """True while this thread holds a repository lock: the package is never built inside one."""
+    from .repo import _HELD
+    return any(n and k[1] == threading.get_ident() for k, n in _HELD.items())
 _CHECKPOINT = "personal-checkpoint.json"
 _PIN = "personal-trust-root.json"
 
@@ -253,16 +261,27 @@ class SecretStore:
         return self
 
     def _refresh_stale_package(self) -> None:
-        """A package on this computer older than seven days is rebuilt when the store opens; a
-        failure (an offline cloud drive) never stops the opening and shows in status."""
-        self.package_error = None
+        """A package on this computer that is missing or older than seven days is rebuilt when the
+        store opens, and on the first use after each day the store stays open (a Vault Agent
+        running for weeks); a failure (an offline cloud drive) never stops the operation and shows
+        in status."""
+        self._package_checked = time.time()
         path = self._package_path()
-        if self.policy is None or not path.exists() or time.time() - path.stat().st_mtime < PACKAGE_MAX_AGE:
+        if self.policy is None or (path.exists() and time.time() - path.stat().st_mtime < PACKAGE_MAX_AGE):
+            self.package_error = None
             return
+        self._package_upkeep()
+
+    def _package_upkeep(self) -> None:
+        """refresh_recovery_package after a saved change or on schedule; a failure is kept as a
+        warning (package_error, shown by status and the command line), never raised."""
+        self._package_checked = time.time()
         try:
             self.refresh_recovery_package()
-        except (OSError, SecretStoreError):
-            self.package_error = "the automatic refresh failed"
+            self.package_error = None
+        except (OSError, SecretStoreError) as error:
+            self.package_error = (f"the recovery package could not be written ({type(error).__name__}); "
+                                  "the change itself was saved")
 
     @classmethod
     def restore_from_package(cls, words: str, package_path: Any, folder: Any,
@@ -302,6 +321,9 @@ class SecretStore:
     def _ready(self) -> None:
         if self.policy is None or self.checkpoint is None:
             raise SecretStoreError("the secrets store is not open")
+        checked = getattr(self, "_package_checked", None)
+        if checked is not None and time.time() - checked >= PACKAGE_CHECK_SECONDS and not _in_transaction():
+            self._refresh_stale_package()  # the daily age check while the store stays open
 
     def _open_object(self, obj: dict) -> dict:
         from . import envelope
@@ -369,8 +391,8 @@ class SecretStore:
                 self._save_checkpoint(accepted.checkpoint)
                 self.policy, self.checkpoint = accepted.policy, accepted.checkpoint
                 self._note_usable(accepted)
-                if "policy.json" in files:
-                    self.refresh_recovery_package()
+                if "policy.json" in files:  # the change is saved: package upkeep only ever warns
+                    self._package_upkeep()
                 return
         raise SecretStoreError("the personal repository kept changing; the change was not saved, try again")
 
