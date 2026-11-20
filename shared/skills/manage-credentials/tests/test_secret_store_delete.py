@@ -61,9 +61,13 @@ class RotatingSignIns(StoreFixture):
             self.policy_write(swap)
 
     def test_recorded_provider_is_immutable(self):
+        # A new sign-in records its provider ("xero" for this entry); changing it is refused.
+        for oid in (self.signin.oauth_id, self.signin.grant_id):
+            self.assertEqual(self.a.policy.doc["assignments"][oid].get("provider"), "xero")
+
         def record(doc):
             for oid in (self.signin.oauth_id, self.signin.grant_id):
-                doc["assignments"][oid]["provider"] = "xero"
+                doc["assignments"][oid]["provider"] = "google"
         with self.assertRaisesRegex(SecretStoreError, "provider"):
             self.policy_write(record)
 
@@ -85,7 +89,7 @@ class RotatingSignIns(StoreFixture):
             doc["people"]["alec"]["disabled_refresher"].append("A")
         result = Policy(next_policy(self.a.policy, signer, move))
         body = {"schema": 1, "type": "supersession", "repository": result.repository, "grant": gid,
-                "provider": "xero", "person": "alec", "computer": "A", "confirmation": "revoked in the console",
+                "provider": "google", "person": "alec", "computer": "A", "confirmation": "revoked in the console",
                 "writer": key_id(signer.public_key())}
         with self.assertRaisesRegex(SecretStoreError, "provider recorded"):
             check_supersession(signing.sign(body, signer), self.a.policy, result)
