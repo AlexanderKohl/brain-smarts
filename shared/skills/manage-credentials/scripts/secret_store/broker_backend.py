@@ -21,7 +21,10 @@ from .store import SecretStore
 from .store_ops import load_config
 
 SYNC_SECONDS = 30.0
+REFRESH_TIMEOUT = 600.0  # a begun refresh without its save by then stays uncertain
 VAULT_OPS = frozenset({"vault_list_entries", "vault_verify_copy", "vault_get_fields", "vault_get_json"})
+STORE_OPS = frozenset({"begin_refresh", "abort_refresh", "poll_refresh"})
+AGENT_OPS = VAULT_OPS | STORE_OPS
 
 
 def store_enabled(brain_root: Any = None) -> bool:
@@ -45,6 +48,8 @@ class StoreBackend:
         self._synced: float | None = None
         self._journal: Journal | None = None
         self._lock = threading.RLock()
+        self._pending: dict[str, dict] = {}  # journal key -> the begun refresh holding its lock
+        self.refresh_timeout = REFRESH_TIMEOUT
 
     # -- plumbing ---------------------------------------------------------------------------
     def _ready(self) -> Any:
@@ -77,7 +82,7 @@ class StoreBackend:
 
     def _signin(self, st: Any, entry: str, field: str) -> oauth_ops.SignIn | None:
         signin = oauth_ops.find(st, entry, field)
-        if signin is not None and signin.mine:
+        if signin is not None and signin.mine and signin.journal_key not in self._pending:
             self._journal.reconcile(signin.journal_key, *self._hooks(signin))
         return signin
 
@@ -127,10 +132,15 @@ class StoreBackend:
                 raise SecretStoreError(f"Vault field must contain a JSON object: {entry}#{field}")
             return value
 
-    def set_json(self, entry: str, field: str, value: dict[str, Any]) -> None:
+    def set_json(self, entry: str, field: str, value: dict[str, Any], operation: str | None = None) -> None:
         with self._lock:
             st = self._ready()
             value = oauth_ops.plain_numbers(value)
+            if operation is not None:
+                self._complete_refresh(entry, field, value, operation)
+                return
+            if f"{entry}#{field}" in self._pending:
+                raise SecretStoreError(f"a refresh of {entry} is under way; only its own save may change the token")
             signin = self._signin(st, entry, field)
             if signin is None:
                 if field not in self._static(st, entry) and oauth_ops.looks_like_signin(value):
@@ -160,6 +170,98 @@ class StoreBackend:
                         oauth_ops.set_grant_fields(st, signin, {field: value})
                         return
             st.put_entry(entry, {field: value})
+
+
+    # -- the refresh through the agent (section 9, refresh steps 1 to 7) --------------------
+    def _pull(self, st: Any) -> None:
+        st._sync(None, st.checkpoint)
+        self._synced = time.monotonic()
+
+    def begin_refresh(self, entry: str, field: str) -> dict[str, Any]:
+        """On the refresher: take the per-entry lock, refuse a disabled or unresolved entry, write
+        and flush the calling record; return its operation id and the full record. Elsewhere: the
+        refresher's name and the latest published record, after a pull."""
+        with self._lock:
+            st = self._ready()
+            signin = self._signin(st, entry, field)
+            if signin is None:
+                return {"signin": False}
+            if not signin.mine:
+                self._pull(st)
+                return {"signin": True, "refresher": False, "computer": signin.refresher[1],
+                        "record": oauth_ops.read(st, signin)}
+            key = signin.journal_key
+            if key in self._pending:
+                raise SecretStoreError(f"a refresh of {entry} is already under way on this computer; try again shortly")
+            revision = st.checkpoint.objects[signin.oauth_id]["revision"]
+            stack, record = self._journal.begin(key, revision, signin.provider, self._policy_disabled(st))
+            timer = threading.Timer(self.refresh_timeout, self._expire, (key, record["operation"]))
+            timer.daemon = True
+            self._pending[key] = {"stack": stack, "record": record, "timer": timer, "signin": signin}
+            timer.start()
+            return {"signin": True, "refresher": True, "operation": record["operation"],
+                    "record": oauth_ops.read(st, signin)}
+
+    def _expire(self, key: str, operation: str) -> None:
+        """The time limit: release the lock and leave the record in calling (uncertain)."""
+        with self._lock:
+            held = self._pending.get(key)
+            if held is not None and held["record"]["operation"] == operation:
+                del self._pending[key]
+                held["stack"].close()
+
+    def _take(self, key: str, operation: str) -> dict | None:
+        held = self._pending.get(key)
+        if held is None or held["record"]["operation"] != operation:
+            return None
+        del self._pending[key]
+        held["timer"].cancel()
+        return held
+
+    def _complete_refresh(self, entry: str, field: str, value: dict, operation: str) -> None:
+        held = self._take(f"{entry}#{field}", operation)
+        if held is None:
+            raise SecretStoreError(f"the refresh of {entry} was not begun here or ran past its time limit; "
+                                   "nothing was saved")
+        try:
+            self._journal.complete(held["signin"].journal_key, held["record"], value, self._hooks(held["signin"])[0])
+        finally:
+            held["stack"].close()
+
+    def abort_refresh(self, entry: str, field: str, operation: str) -> dict[str, bool]:
+        """The connector failed before any provider call: remove the calling record, release."""
+        with self._lock:
+            held = self._take(f"{entry}#{field}", operation)
+            if held is None:
+                return {"aborted": False}
+            try:
+                return {"aborted": self._journal.abandon(held["signin"].journal_key, held["record"])}
+            finally:
+                held["stack"].close()
+
+    def poll_refresh(self, entry: str, field: str) -> dict[str, Any]:
+        """The latest published record after a pull (another computer waiting for the refresher)."""
+        with self._lock:
+            st = self._ready()
+            self._pull(st)
+            signin = self._signin(st, entry, field)
+            if signin is None:
+                raise SecretStoreError(f"there is no sign-in {entry}#{field}")
+            return oauth_ops.read(st, signin)
+
+
+def agent_operation(agent: Any, operation: str, request: dict) -> Any:
+    """The Vault Agent operations answered here: vault-only ones and the store's refresh ones."""
+    if operation in VAULT_OPS:
+        return vault_request(agent.vault, agent._require_passphrase(), operation, request)
+    if agent._store is None:
+        raise SecretStoreError("the secrets store is off on this computer")
+    entry, field = str(request.get("entry") or ""), str(request.get("field") or "oauth_token_json")
+    if operation == "begin_refresh":
+        return agent._store.begin_refresh(entry, field)
+    if operation == "abort_refresh":
+        return agent._store.abort_refresh(entry, field, str(request.get("operation") or ""))
+    return agent._store.poll_refresh(entry, field)
 
 
 def vault_request(vault: Any, passphrase: str, operation: str, request: dict) -> Any:

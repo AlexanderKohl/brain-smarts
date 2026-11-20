@@ -15,6 +15,7 @@ import stat
 import struct
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 from cryptography.exceptions import InvalidTag
@@ -140,6 +141,21 @@ def _check_trust_root(target: Path, recovery_signing_public: Ed25519PublicKey) -
     check_endorsement(canonical.loads(blob.stdout), recovery_signing_public)
 
 
+def _remove_tree(target: Path) -> None:
+    """Remove a refused clone. Git keeps its pack files read-only on Windows, and a virus scanner
+    or indexer may hold a new file open for a moment, so removal is retried briefly."""
+    for attempt in range(15):
+        for path in target.rglob("*"):
+            try:
+                os.chmod(path, stat.S_IREAD | stat.S_IWRITE)
+            except OSError:
+                pass
+        shutil.rmtree(target, ignore_errors=True)
+        if not target.exists():
+            return
+        time.sleep(0.05 * (attempt + 1))
+
+
 def restore(package_path: str | os.PathLike, recovery_private_key: X25519PrivateKey,
             target_dir: str | os.PathLike, recovery_signing_public: Ed25519PublicKey) -> bytes:
     """Decrypt the package, clone the repository from its bundle into target_dir and return the
@@ -164,11 +180,6 @@ def restore(package_path: str | os.PathLike, recovery_private_key: X25519Private
             raise SecretStoreError("the restored repository id does not match the package")
         _check_trust_root(target, recovery_signing_public)
     except SecretStoreError:
-        for path in target.rglob("*"):  # Git keeps its pack files read-only on Windows
-            try:
-                os.chmod(path, stat.S_IREAD | stat.S_IWRITE)
-            except OSError:
-                pass
-        shutil.rmtree(target, ignore_errors=True)
+        _remove_tree(target)
         raise
     return checkpoint

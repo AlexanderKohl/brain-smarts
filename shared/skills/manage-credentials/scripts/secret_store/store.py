@@ -169,7 +169,9 @@ class SecretStore:
         for path, value in files.items():
             oid = path[len("objects/"):-len(".json")] if path.startswith("objects/") else None
             if oid and isinstance(value, dict) and value.get("kind") == "oauth" and oid in cp.objects:
-                out[oid] = self._open_object(self._tree_object(oid, cp))
+                previous = self._tree_object(oid, cp)
+                if any(r["key"] in self._identity().my_keys() for r in previous["readers"]):
+                    out[oid] = self._open_object(previous)  # else opaque: structural checks only
         return out
 
     def _from_tree(self, saved: checkpoint.Checkpoint | None) -> Policy:
@@ -310,9 +312,17 @@ class SecretStore:
         for _attempt in range(1 + RETRIES):
             self._sync(None, self.checkpoint)
             files, message = build()
-            accepted = accept_commit(self.policy, self.checkpoint, files, self._identity().my_keys(),
-                                     self._baseline(self.checkpoint, files))
-            if isinstance(self.repo.write(files, message), Conflict):
+            baseline, before = self._baseline(self.checkpoint, files), self.repo.head()
+            accepted = accept_commit(self.policy, self.checkpoint, files, self._identity().my_keys(), baseline)
+            try:
+                written = self.repo.write(files, message)
+            except SecretStoreError:  # a lost acknowledgement: accept the commit only if the remote has it
+                written = self.repo.settle_failed_write(before)
+                if written is None:
+                    raise
+                accepted = accept_commit(self.policy, self.checkpoint, self.repo._changed_files(written),
+                                         self._identity().my_keys(), baseline)
+            if isinstance(written, Conflict):
                 continue
             self._save_checkpoint(accepted.checkpoint)
             self.policy, self.checkpoint = accepted.policy, accepted.checkpoint

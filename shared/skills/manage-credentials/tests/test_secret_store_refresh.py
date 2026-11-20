@@ -2,6 +2,7 @@
 flag, refused recovery for unverified providers, and migration from the portable vault. A bare
 local repository is the remote and a fake keyring the keychain. Every value is fictional."""
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -193,6 +194,56 @@ class Migration(StoreFixture):
         self.assertEqual(code, 3)
         self.assertIn("--replace", text)
         self.assertEqual(self.migrate(replace=True)[0], 0)
+
+
+class StoreGaps(StoreFixture):
+    """store.py: a computer enrolled after a sign-in exists verifies the commit that re-keys it,
+    and a write whose push acknowledgement is lost is accepted only when the remote has it."""
+
+    def test_computer_enrolled_after_a_signin_verifies_the_rekey(self):
+        from secret_store import keys
+        from secret_store.broker_backend import StoreBackend
+        from secret_store.policy import public_entry
+        from secret_store.store_ops import build_policy_change
+        self.ba.set_json("xero-demo", FIELD, self.token())
+        x, e = keys.generate_key_pairs()
+        keys.store_private_keys("alec", "C", x, e)
+        a = self.a
+
+        def change(doc):
+            doc["people"]["alec"]["computers"]["C"] = public_entry(x.public_key(), e.public_key())
+        a._write(lambda: (build_policy_change(a.policy, a.checkpoint.objects, change, a._identity().ed25519,
+                                              lambda oid: a._open_object(a._tree_object(oid, a.checkpoint))),
+                          "policy"))
+        theirs = StoreBackend(self.make_store("C").open(a._load_pin()), sync_seconds=0).get_json("xero-demo", FIELD)
+        self.assertEqual(theirs["access_token"], AT1)
+        self.assertNotIn("refresh_token", theirs)
+
+    def _push_fails(self, lands):
+        real = self.a.repo._git
+
+        def git(*args, **kwargs):
+            if args and args[0] == "push":
+                if lands:
+                    real(*args, **kwargs)
+                return subprocess.CompletedProcess(args, 1, b"", b"connection reset")
+            return real(*args, **kwargs)
+        return mock.patch.object(self.a.repo, "_git", side_effect=git)
+
+    def test_lost_push_acknowledgement_is_accepted_when_the_remote_has_the_commit(self):
+        with self._push_fails(lands=True):
+            self.a.put_entry("plain", {"api_key": KEY})
+        self.assertEqual(self.a.get_fields("plain", ["api_key"]), {"api_key": KEY})
+        self.a.put_entry("plain", {"api_key": "fictional-key-2"})
+        self.assertEqual(self.b.open().get_fields("plain", ["api_key"]), {"api_key": "fictional-key-2"})
+
+    def test_failed_push_leaves_no_local_commit_ahead_of_the_checkpoint(self):
+        before = self.a.repo.head()
+        with self._push_fails(lands=False), self.assertRaisesRegex(SecretStoreError, "push did not complete"):
+            self.a.put_entry("plain", {"api_key": KEY})
+        self.assertEqual(self.a.repo.head(), before)
+        self.a.put_entry("plain", {"api_key": KEY})
+        self.assertEqual(self.b.open().get_fields("plain", ["api_key"]), {"api_key": KEY})
 
 
 if __name__ == "__main__":

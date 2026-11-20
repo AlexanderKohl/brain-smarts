@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 import secrets
+import time
+from contextlib import contextmanager
 from multiprocessing.connection import Client
 from typing import Any
 
 from portable_vault import CredentialError
 from vault_agent_runtime import AGENT_PROTOCOL_VERSION, _pid_is_running, ipc_address, read_state
+
+
+REFRESH_POLL_SECONDS = 3.0
+REFRESH_WAIT_SECONDS = 300.0  # the token relay's default lease, the existing rotation-lock limit
 
 
 class BrokerUnavailable(CredentialError):
@@ -95,3 +101,65 @@ def broker_unlocked() -> bool:
         return bool(broker_status().get("unlocked"))
     except (BrokerUnavailable, CredentialError, OSError):
         return False
+
+
+# -- the secrets store's refresh (design synced-secrets-repository.md, section 9, Consumers) ------
+def _expiring(record: dict, leeway: Any) -> bool:
+    try:
+        return float(record.get("expires_at")) <= time.time() + float(leeway or 0)
+    except (TypeError, ValueError):
+        return True
+
+
+def _load_or_empty(store: Any) -> dict:
+    try:
+        return store.load()
+    except CredentialError:
+        return {}
+
+
+def _wait_for_refresher(store: Any, begun: dict, leeway: Any) -> None:
+    """Another computer never calls the provider: pull until the refresher publishes a newer
+    access token, or stop in plain words."""
+    baseline = begun.get("record") or {}
+    if leeway is not None and not _expiring(baseline, leeway):
+        return
+    deadline = time.monotonic() + REFRESH_WAIT_SECONDS
+    while time.monotonic() < deadline:
+        time.sleep(max(0.0, min(REFRESH_POLL_SECONDS, deadline - time.monotonic())))
+        record = store._broker_request("poll_refresh", entry=store.entry, field=store.field)
+        token = record.get("access_token")
+        if token and token != baseline.get("access_token") and (leeway is None or not _expiring(record, leeway)):
+            return
+    raise CredentialError(f"this sign-in refreshes on {begun.get('computer')}; it has not refreshed it yet")
+
+
+@contextmanager
+def store_refresh(store: Any, local_lock: Any, *, refresh: bool = False, leeway_seconds: Any = None,
+                  new_authorisation: bool = False) -> Any:
+    """rotation_lock(refresh=True), or one whose token expires within leeway_seconds, when the agent
+    serves the secrets store. On the refresher, begin_refresh opens the journal record and the save
+    inside carries its operation id; leaving the block before a save (an exception, or a token
+    another process already refreshed) aborts it. Elsewhere the block runs once the refresher has
+    published a newer access token."""
+    with local_lock():
+        if not refresh and not _expiring(_load_or_empty(store), leeway_seconds):
+            yield
+            return
+        begun = store._broker_request("begin_refresh", entry=store.entry, field=store.field)
+        if not begun.get("signin"):
+            yield
+            return
+        if not begun.get("refresher"):
+            if new_authorisation:
+                raise CredentialError(f"this sign-in refreshes on {begun.get('computer')}; sign in again there")
+            _wait_for_refresher(store, begun, None if refresh else leeway_seconds)
+            yield
+            return
+        store._operation, store._saved = begun["operation"], False
+        try:
+            yield
+        finally:
+            operation, store._operation = store._operation, None
+            if not store._saved:
+                store._broker_request("abort_refresh", entry=store.entry, field=store.field, operation=operation)

@@ -11,7 +11,7 @@ import hashlib
 import json
 import os
 import secrets
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from typing import Any, Callable, Iterator
 
@@ -159,6 +159,37 @@ class Journal:
                       "state": "answered", "answer": plain_numbers(dict(answer))}
             self.write(entry, record)
             return self._finish(entry, record, publish, lambda *_: False)
+
+    def begin(self, entry: str, revision: int, provider: str | None = None,
+              policy_disabled: bool = False) -> tuple[ExitStack, dict]:
+        """Steps 1 to 3 for a provider call made in another process (the Vault Agent's
+        begin_refresh). The per-entry lock stays held in the returned stack until the caller closes
+        it after complete or abandon, or at its own time limit (the record then stays uncertain)."""
+        stack = ExitStack()
+        stack.enter_context(self.lock(entry))
+        try:
+            if self.check(entry, provider, policy_disabled) is not None:
+                raise SecretStoreError(f"a refreshed token of {entry} is still waiting to be published; try again")
+            record = {"operation": secrets.token_hex(16), "entry": entry, "revision": revision, "state": "calling"}
+            self.write(entry, record)
+        except BaseException:
+            stack.close()
+            raise
+        return stack, record
+
+    def complete(self, entry: str, record: dict, answer: dict, publish: Callable) -> dict:
+        """Steps 5 and 6 for a begun refresh; the caller holds the per-entry lock."""
+        answered = {**record, "state": "answered", "answer": plain_numbers(dict(answer))}
+        self.write(entry, answered)
+        return self._finish(entry, answered, publish, lambda *_: False)
+
+    def abandon(self, entry: str, record: dict) -> bool:
+        """Remove a begun record still in calling: the connector failed before any provider call."""
+        current = self.read(entry)
+        if current is None or current["state"] != "calling" or current["operation"] != record["operation"]:
+            return False
+        self.path(entry).unlink(missing_ok=True)
+        return True
 
     def reconcile(self, entry: str, publish: Callable, is_published: Callable) -> None:
         """Finish a pending publication (never a provider call); an uncertain record stays as it is."""

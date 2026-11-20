@@ -431,6 +431,9 @@ class BrokerOAuthStore:
             / f"{digest}.lock"
         )
         self._broker_request = broker_request
+        self._operation: str | None = None  # an open store refresh (vault_broker_client.store_refresh)
+        self._saved = False
+        self._store_mode: bool | None = None
 
     def load(self) -> dict[str, Any]:
         value = self._broker_request("get_json", entry=self.entry, field=self.field)
@@ -443,12 +446,9 @@ class BrokerOAuthStore:
     def save(self, value: dict[str, Any]) -> None:
         if not isinstance(value, dict):
             raise CredentialError("JSON credential values must be objects.")
-        self._broker_request(
-            "set_json",
-            entry=self.entry,
-            field=self.field,
-            value=value,
-        )
+        extra = {"operation": self._operation} if self._operation else {}
+        self._saved = self._saved or bool(extra)
+        self._broker_request("set_json", entry=self.entry, field=self.field, value=value, **extra)
 
     def clear(self) -> None:
         self.save({})
@@ -457,6 +457,18 @@ class BrokerOAuthStore:
     def rotation_lock(self) -> Iterator[None]:
         with _file_lock(self.rotation_lock_path):
             yield
+
+    def store_mode(self) -> bool:
+        """Whether the Vault Agent serves the secrets store (asked once)."""
+        if self._store_mode is None:
+            status = self._broker_request("status")
+            self._store_mode = isinstance(status, dict) and status.get("backend") == "store"
+        return self._store_mode
+
+    def refresh_lock(self, local_lock: Any, **options: Any) -> Any:
+        from vault_broker_client import store_refresh
+
+        return store_refresh(self, local_lock, **options)
 
 
 class PortableVaultJsonStore:
@@ -566,6 +578,10 @@ class PortableVaultJsonStore:
         refuse_unrelayed_refresh(
             self, refresh=refresh, leeway_seconds=leeway_seconds, new_authorisation=new_authorisation
         )
+        # Secrets store: a refresh goes through the agent's journal, or waits for the refresher.
+        if self._broker is not None and (refresh or leeway_seconds is not None) and self._broker.store_mode():
+            return self._broker.refresh_lock(self._local_rotation_lock, refresh=refresh,
+                                             leeway_seconds=leeway_seconds, new_authorisation=new_authorisation)
         return self._local_rotation_lock()
 
     def sync(self) -> None:

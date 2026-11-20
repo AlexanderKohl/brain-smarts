@@ -31,8 +31,8 @@ from secret_store.errors import SecretStoreError
 
 # The errors a locked file gives on Windows (EACCES, EDEADLOCK) and on POSIX (EACCES, EAGAIN).
 LOCK_BUSY_ERRNOS = {errno.EACCES, errno.EAGAIN, errno.EDEADLK}
-# Vault-only operations the migration to the secrets store uses (secret_store/broker_backend.py).
-VAULT_OPS = frozenset({"vault_list_entries", "vault_verify_copy", "vault_get_fields", "vault_get_json"})
+# Operations answered in secret_store/broker_backend.py: vault-only ones and the store's refresh ones.
+from secret_store.broker_backend import AGENT_OPS, agent_operation  # noqa: E402
 
 
 class AgentAlreadyRunning(CredentialError):
@@ -117,12 +117,12 @@ class VaultAgent:
             raise CredentialError(f"Vault field must contain a JSON object: {entry}#{field}")
         return value
 
-    def set_json(self, entry: str, field: str, value: dict[str, Any]) -> dict[str, Any]:
+    def set_json(self, entry: str, field: str, value: dict[str, Any], operation: Any = None) -> dict[str, Any]:
         if not isinstance(value, dict):
             raise CredentialError("JSON credential values must be objects.")
         with self._entry_lock(entry):
             if self._store is not None:
-                self._store.set_json(entry, field, value)
+                self._store.set_json(entry, field, value, operation if isinstance(operation, str) else None)
             else:
                 self.vault.set(entry, field, value, "json", self._require_passphrase())
         return {"saved": True, "entry": entry, "field": field}
@@ -183,6 +183,7 @@ class VaultAgent:
                     str(request.get("entry") or ""),
                     str(request.get("field") or "oauth_token_json"),
                     value,
+                    request.get("operation"),
                 )
             elif operation == "set_text":
                 result = self.set_text(
@@ -195,10 +196,8 @@ class VaultAgent:
                     str(request.get("entry") or ""),
                     str(request.get("field") or "oauth_token_json"),
                 )
-            elif operation in VAULT_OPS:
-                from secret_store.broker_backend import vault_request
-
-                result = vault_request(self.vault, self._require_passphrase(), operation, request)
+            elif operation in AGENT_OPS:
+                result = agent_operation(self, operation, request)
             elif operation == "ping":
                 result = {"pong": True}
             else:

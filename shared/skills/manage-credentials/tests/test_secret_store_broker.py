@@ -6,6 +6,8 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -195,6 +197,117 @@ class StoreOff(unittest.TestCase):
             self.assertEqual(env["API_KEY"], KEY)
             agent.set_json("xero-demo", FIELD, {"access_token": AT1, "refresh_token": RT1})
             self.assertEqual(agent.get_json("xero-demo", FIELD)["refresh_token"], RT1)
+
+
+class AgentClients(StoreFixture):
+    """A connector's PortableVaultJsonStore on computer A (the refresher) or B, each talking to its
+    own in-process Vault Agent. No tests of its own."""
+    SIGNIN = "xero-demo#" + FIELD
+
+    def setUp(self):
+        super().setUp()
+        for name, value in (("REFRESH_POLL_SECONDS", 0.05), ("REFRESH_WAIT_SECONDS", 10.0)):
+            patcher = mock.patch.object(vault_broker_client, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def client(self, backend, computer, agent=None):
+        from portable_vault import PortableVaultJsonStore
+        path = self.root / f"{computer}.vault"
+        request = agent_request(agent or VaultAgent(path, store=backend))
+        with mock.patch.object(vault_broker_client, "broker_unlocked", return_value=True), \
+                mock.patch.object(vault_broker_client, "broker_request", side_effect=request):
+            return PortableVaultJsonStore("xero-demo", FIELD, path=path)
+
+    def later(self, action, delay=0.3):
+        """Run action on another thread after delay (the refresher, while B waits)."""
+        def run():
+            time.sleep(delay)
+            action()
+        thread = threading.Thread(target=run)
+        thread.start()
+        self.addCleanup(thread.join)
+        return thread
+
+
+class AgentRefresh(AgentClients):
+    """begin_refresh and abort_refresh through the Vault Agent, the ten-minute limit, and a
+    computer that is not the refresher waiting for it."""
+
+    def setUp(self):
+        super().setUp()
+        self.ba.set_json("xero-demo", FIELD, self.token())
+        self.journal = self.ba._journal
+        self.request = agent_request(VaultAgent(self.root / "A.vault", store=self.ba))
+
+    def test_save_inside_the_lock_publishes_with_the_begun_operation(self):
+        store = self.client(self.ba, "A")
+        with store.rotation_lock(refresh=True):
+            current = store.load()
+            begun = self.journal.read(self.SIGNIN)
+            self.assertEqual(begun["state"], "calling")
+            store.save({**current, "access_token": "fictional-access-2", "refresh_token": "fictional-r2"})
+        record = self.journal.read(self.SIGNIN)
+        self.assertEqual((record["state"], record["operation"]), ("published", begun["operation"]))
+        signin = oauth_ops.find(self.a, "xero-demo", FIELD)
+        self.assertEqual(self.a._tree_object(signin.oauth_id, self.a.checkpoint)["operation"], begun["operation"])
+        self.assertEqual(self.bb.get_json("xero-demo", FIELD)["access_token"], "fictional-access-2")
+        self.assertEqual(self.ba._pending, {})
+
+    def test_exception_or_no_save_aborts_and_releases(self):
+        store = self.client(self.ba, "A")
+        with self.assertRaises(RuntimeError), store.rotation_lock(refresh=True):
+            raise RuntimeError("no network")
+        self.assertIsNone(self.journal.read(self.SIGNIN))
+        with store.rotation_lock(refresh=True):
+            self.assertEqual(self.journal.read(self.SIGNIN)["state"], "calling")
+        self.assertIsNone(self.journal.read(self.SIGNIN))
+        self.assertEqual(self.ba._pending, {})
+
+    def test_time_limit_leaves_the_record_uncertain(self):
+        self.ba.refresh_timeout = 0.1
+        begun = self.request("begin_refresh", entry="xero-demo", field=FIELD)
+        deadline = time.monotonic() + 10
+        while self.ba._pending and time.monotonic() < deadline:
+            time.sleep(0.05)
+        self.assertEqual(self.journal.read(self.SIGNIN)["state"], "calling")
+        with self.assertRaisesRegex(CredentialError, "ran past its time limit"):
+            self.request("set_json", entry="xero-demo", field=FIELD, value=self.token(), operation=begun["operation"])
+        with self.assertRaisesRegex(CredentialError, "uncertain"):
+            self.request("begin_refresh", entry="xero-demo", field=FIELD)
+        self.assertEqual(self.ba.get_json("xero-demo", FIELD)["access_token"], AT1)
+
+    def test_second_begin_unmarked_save_and_disabled_refresher_are_refused(self):
+        begun = self.request("begin_refresh", entry="xero-demo", field=FIELD)
+        self.assertEqual(begun["record"]["refresh_token"], RT1)
+        with self.assertRaisesRegex(CredentialError, "already under way"):
+            self.request("begin_refresh", entry="xero-demo", field=FIELD)
+        with self.assertRaisesRegex(CredentialError, "only its own save"):
+            self.request("set_json", entry="xero-demo", field=FIELD, value=self.token(access_token="fictional-x"))
+        self.assertEqual(self.request("abort_refresh", entry="xero-demo", field=FIELD, operation=begun["operation"]),
+                         {"aborted": True})
+        self.journal.set_disabled(self.SIGNIN)
+        with self.assertRaisesRegex(CredentialError, "switched off"):
+            self.request("begin_refresh", entry="xero-demo", field=FIELD)
+
+    def test_other_computer_waits_for_the_refresher(self):
+        a, b = self.client(self.ba, "A"), self.client(self.bb, "B")
+
+        def refresh_on_a():
+            with a.rotation_lock(refresh=True):
+                a.save({**a.load(), "access_token": "fictional-access-2", "refresh_token": "fictional-r2"})
+        self.later(refresh_on_a)
+        with b.rotation_lock(refresh=True):
+            seen = b.load()
+        self.assertEqual(seen["access_token"], "fictional-access-2")
+        self.assertNotIn("refresh_token", seen)
+
+    def test_other_computer_stops_in_plain_words(self):
+        b = self.client(self.bb, "B")
+        with mock.patch.object(vault_broker_client, "REFRESH_WAIT_SECONDS", 0.3), \
+                self.assertRaisesRegex(CredentialError, "^this sign-in refreshes on A; it has not refreshed it yet$"):
+            with b.rotation_lock(refresh=True):
+                self.fail("the block must not run")
 
 
 if __name__ == "__main__":

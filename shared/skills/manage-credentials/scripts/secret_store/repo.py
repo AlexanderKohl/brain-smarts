@@ -268,6 +268,24 @@ class SecretRepo:
             self._git("update-ref", self._remote_ref(), new)
             return new
 
+    def settle_failed_write(self, before: str | None) -> str | None:
+        """After write raised: the commit it made when the remote head is that very commit (the
+        push landed and only its acknowledgement was lost); otherwise None, with any local commit
+        dropped back to before, so nothing unverified stays ahead of the checkpoint."""
+        with repo_lock(self.path / ".git" / _LOCK_FILE):
+            local = self.head()
+            if local is None or local == before:
+                return None
+            try:
+                remote = self._fetch()
+            except SecretStoreError:
+                remote = None
+            if remote == local:
+                self._set_state()
+                return local
+            self._restore(before)
+            return None
+
     def _restore(self, commit: str | None) -> None:
         """Drop a local commit that the remote refused, back to the verified head."""
         if commit is None:
