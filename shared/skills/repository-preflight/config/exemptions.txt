@@ -4,6 +4,7 @@
 # Only public or generic values belong here; never an owner's own. Alphabetical within each kind.
 
 path: */openapi/*  # a vendor's published API documentation, kept verbatim with the vendor's own sample values
+path: SEED_PROMPT.md  # names the public address of the published mechanics repository, so a new person can clone it without asking; the file holds nothing else of the owner's
 value: C:\dev  # documented default folder for project repositories on Windows (SETUP)
 value: C:\dev\  # the same default folder as written in the README layout diagram
 value: C:\dev\brain  # documented default brain root on Windows (SETUP, seed prompt)
