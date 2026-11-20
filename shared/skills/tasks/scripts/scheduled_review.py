@@ -119,6 +119,22 @@ def digest_due(root: Path, now: datetime) -> str | None:
     return f"due since {match.group(1)}" if due <= now else None
 
 
+def secrets_package(root: Path) -> str | None:
+    """Read-only: the problem with an enabled secrets store's recovery package (stale, missing or not
+    matching the current policy), else None. A store that is off has no configuration file."""
+    if not (root / "memory" / "skills" / "manage-credentials" / "config" / "secret-store.json").is_file():
+        return None
+    scripts = str(HERE.parent.parent / "manage-credentials" / "scripts")
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    try:
+        from secret_store import store_ops
+
+        return store_ops.package_health(store_ops.load_config(brain_root=root))
+    except Exception as error:  # a broken check is reported, never fatal to the review
+        return f"the check could not run ({type(error).__name__})"
+
+
 def digest_reason(digest: str | None) -> str | None:
     """The notification's reason for the digest state digest_due returned."""
     if not digest:
@@ -142,6 +158,8 @@ def review(root: Path, now: datetime, jobs: bool = True) -> tuple[str, list[str]
     if any("up to date" not in line for line in fresh):
         lines += ["The lists below are read from this checkout, so they may miss work that is only on origin.", ""]
     lines += ["## Weekly learning digest", "", f"- {digest}" if digest else "- not due", ""]
+    package = secrets_package(root)
+    lines += ["## Secrets recovery package", "", f"- {package}" if package else "- fresh, or the store is off", ""]
     for title, text in sections:
         lines += [f"## {title}", "", "```", text[-6000:] or "(nothing)", "```", ""]
     # The morning jobs run last, after the review's own report is complete.
@@ -153,6 +171,8 @@ def review(root: Path, now: datetime, jobs: bool = True) -> tuple[str, list[str]
         reasons.append(f"{count.group(1)} task(s) need attention")
     if digest_reason(digest):
         reasons.append(digest_reason(digest))
+    if package:
+        reasons.append("secrets recovery package: " + package)
     if not preflight.startswith("PASS"):
         reasons.append("preflight not passing")
     reasons += morning_jobs.reasons(results)
