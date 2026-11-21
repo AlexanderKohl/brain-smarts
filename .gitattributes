@@ -2,3 +2,5 @@
 LOG.md merge=union
 # Shell hooks must keep LF line endings or sh cannot run them.
 .githooks/* text eol=lf
+# The recovery word list is verified by its hash; keep it byte for byte the same on every computer.
+shared/skills/manage-credentials/scripts/secret_store/bip39_english.txt text eol=lf

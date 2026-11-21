@@ -4,6 +4,7 @@ keychain is an in-memory fake patched in per test, never the real one."""
 import copy
 import hashlib
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -173,10 +174,27 @@ class KeysTest(unittest.TestCase):
 
 class RecoveryTest(unittest.TestCase):
     def test_wordlist_hash_and_known_vectors(self):
-        data = recovery.WORDLIST_PATH.read_bytes()
+        data = recovery.WORDLIST_PATH.read_bytes().replace(b"\r\n", b"\n")
         self.assertEqual(hashlib.sha256(data).hexdigest(), recovery.WORDLIST_SHA256)
         self.assertEqual(recovery.entropy_to_mnemonic(bytes(32)), " ".join(["abandon"] * 23 + ["art"]))
         self.assertEqual(recovery.entropy_to_mnemonic(b"\xff" * 32), " ".join(["zoo"] * 23 + ["vote"]))
+
+    def test_a_word_list_checked_out_with_windows_line_endings_still_verifies(self):
+        # Git on Windows may write the file with CRLF line endings; the words are the same.
+        lf = recovery.WORDLIST_PATH.read_bytes().replace(b"\r\n", b"\n")
+        with tempfile.TemporaryDirectory() as tmp:
+            copied = Path(tmp) / "bip39_english.txt"
+            copied.write_bytes(lf.replace(b"\n", b"\r\n"))
+            with mock.patch.object(recovery, "WORDLIST_PATH", copied):
+                recovery.wordlist.cache_clear()
+                try:
+                    self.assertEqual(len(recovery.wordlist()), 2048)
+                    copied.write_bytes(lf.replace(b"abandon", b"abandom", 1).replace(b"\n", b"\r\n"))
+                    recovery.wordlist.cache_clear()
+                    with self.assertRaises(SecretStoreError):
+                        recovery.wordlist()
+                finally:
+                    recovery.wordlist.cache_clear()
 
     def test_round_trip_and_determinism(self):
         phrase = recovery.generate_mnemonic()
