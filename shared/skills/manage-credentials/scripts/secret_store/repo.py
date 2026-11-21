@@ -224,10 +224,8 @@ class SecretRepo:
         span = remote if local is None else f"{local}..{remote}"
         commits = self._out("rev-list", "--reverse", "--topo-order", span).split()
         for commit in commits:
-            if len(self._out("rev-list", "--parents", "-n", "1", commit).split()) > 2:
+            if not self._shape_ok(commit):
                 self._refuse(commit)
-            if self._out("log", "-1", "--format=%B", commit).strip() not in ALLOWED_MESSAGES:
-                self._refuse(commit)  # a subject could expose an entry or service name
             try:
                 accepted = verify(commit, self._changed_files(commit))
             except SecretStoreError:
@@ -239,6 +237,27 @@ class SecretRepo:
                 advanced(commit)
         self._set_state()
         return self.head()
+
+    def _shape_ok(self, commit: str) -> bool:
+        """One parent at most, and a subject from the allowed set (a subject could expose an entry
+        or service name)."""
+        return (len(self._out("rev-list", "--parents", "-n", "1", commit).split()) <= 2
+                and self._out("log", "-1", "--format=%B", commit).strip() in ALLOWED_MESSAGES)
+
+    def local_commits(self, start: str | None) -> list[str]:
+        """The clone's commits after start, oldest first, for a process that holds the state at
+        start while another process on this computer moved the clone (plan section G). The
+        caller verifies each one; a clone that does not contain start, or a commit of the wrong
+        shape, is refused here without marking the clone refused for other processes."""
+        head = self.head()
+        if start is None or head is None or not self._is_ancestor(start, head):
+            raise SecretStoreError("the local copy does not follow from the state this process holds; "
+                                   "open the store again")
+        commits = self._out("rev-list", "--reverse", "--topo-order", f"{start}..{head}").split()
+        for commit in commits:
+            if not self._shape_ok(commit):
+                raise RefusedCommit(commit)
+        return commits
 
     def _refuse(self, commit: str) -> None:
         self._set_state(refused=commit)
