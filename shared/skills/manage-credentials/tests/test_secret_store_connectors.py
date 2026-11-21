@@ -30,6 +30,7 @@ import xero_oauth.client as xero  # noqa: E402
 from portable_vault import CredentialError, PortableVault, PortableVaultJsonStore  # noqa: E402
 from test_secret_store_broker import (AT1, FIELD, PASS, RT1, AgentClients, agent_request,  # noqa: E402,F401
                                       setUpModule, tearDownModule)
+from test_token_endpoint import FakeNetwork, answer  # noqa: E402
 from vault_agent import VaultAgent  # noqa: E402
 
 EXPIRED = 10**9
@@ -117,25 +118,29 @@ class Google(Connectors):
                                        redirect_uri="http://localhost/cb", scopes="s", account=account)
         return google.GoogleConnection(config, store)
 
+    def assert_one_refresh(self, net):
+        """The production path, token_endpoint.post_token, reached Google's token endpoint exactly
+        once (A's refresh, with A's refresh token); B never connected."""
+        self.assertEqual([(c.host, c.port) for c in net.connections], [("oauth2.googleapis.com", 443)])
+        sent = net.sockets[0].sent.decode()
+        self.assertIn("POST /token HTTP/1.1", sent)
+        self.assertIn("grant_type=refresh_token", sent)
+        self.assertIn(f"refresh_token={RT1}", sent)
+
     def test_follower_returns_a_token_published_just_before_begin_refresh(self):
         a, b = self.pair("google-demo", self.token(expires_at=EXPIRED))
         self.cached_follower(b)
-        provider = Provider(body())
         with mock.patch.object(vault_broker_client, "REFRESH_WAIT_SECONDS", 1.0), \
-                mock.patch.object(google, "_request", side_effect=provider.request):
+                mock.patch.object(google, "_request", side_effect=AssertionError("the old request code ran")), \
+                FakeNetwork(reply=answer(200, body())) as net:
             self.connection(a).refresh()
             # before the fix B took the published token as its baseline and waited for a second
             # refresh that never came, so this raised "it has not refreshed it yet"
             self.assertEqual(self.connection(b).refresh()["access_token"], NEW_AT)
-        self.assertEqual(provider.calls, 1)
+        self.assert_one_refresh(net)
 
     def test_tray_refresh_on_both_computers(self):
         a, b = self.pair("google-tray-demo", self.token(expires_at=EXPIRED))
-        provider = Provider(body())
-
-        def urlopen(*_args, **_kwargs):
-            provider.calls += 1
-            return contextlib.nullcontext(types.SimpleNamespace(read=lambda: provider.answer))
 
         def run(store):
             broker = lambda *_a, **_k: {"client_id": "id-example", "client_secret": "fictional-secret"}  # noqa: E731
@@ -145,11 +150,13 @@ class Google(Connectors):
                     mock.patch.object(tray, "get_account", return_value=None), \
                     mock.patch.object(tray, "resolve_alias", return_value="demo"), \
                     mock.patch.object(tray, "_portable_vault_token_store", return_value=store), \
-                    mock.patch.object(tray.urllib.request, "urlopen", side_effect=urlopen):
+                    mock.patch.object(tray.urllib.request, "urlopen",
+                                      side_effect=AssertionError("the old request code ran")):
                 return tray.refresh_tray_access_token(account_alias="demo")
-        self.later(lambda: run(a))
-        self.assertEqual(run(b)["access_token"], NEW_AT)
-        self.assertEqual(provider.calls, 1)
+        with FakeNetwork(reply=answer(200, body())) as net:
+            self.later(lambda: run(a))
+            self.assertEqual(run(b)["access_token"], NEW_AT)
+        self.assert_one_refresh(net)
 
 
 class LinkedIn(Connectors):
