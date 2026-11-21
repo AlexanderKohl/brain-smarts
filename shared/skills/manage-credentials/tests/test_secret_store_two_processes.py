@@ -19,8 +19,10 @@ SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 import keyring  # noqa: E402
 
-from secret_store import SecretStoreError, canonical, checkpoint, keys, signing  # noqa: E402
+from secret_store import SecretStoreError, canonical, checkpoint, enrol, keys, oauth_ops, signing  # noqa: E402
 from secret_store.broker_backend import StoreBackend  # noqa: E402
+from secret_store.journal import Journal  # noqa: E402
+from secret_store.repo import SecretRepo  # noqa: E402
 from secret_store.store import EMPTY_JSON, SecretStore  # noqa: E402
 from vault_agent import VaultAgent  # noqa: E402
 from vault_agent_runtime import AGENT_PROTOCOL_VERSION  # noqa: E402
@@ -92,6 +94,15 @@ class FakeKeyring:
         self.items[(service, user)] = password
 
 
+class Crash(BaseException):
+    """The writing process dies: no handler in the store catches it."""
+
+
+def token(n):
+    return {"access_token": f"fictional-access-{n}", "refresh_token": f"fictional-refresh-{n}",
+            "expires_at": 19 * 10**8 + n, "token_type": "Bearer"}
+
+
 def load_cli():
     spec = importlib.util.spec_from_file_location("secrets_cli_two", SCRIPTS / "brain_secrets.py")
     cli = importlib.util.module_from_spec(spec)
@@ -116,7 +127,7 @@ class TwoInstances(unittest.TestCase):
             patcher.start()
             self.addCleanup(patcher.stop)
         first = self.make_store()
-        first.init_personal(words_callback=lambda words: True)
+        self.fingerprint = first.init_personal(words_callback=lambda words: True)
         first.put_entry("before", {"api_key": VALUE})
         self.a = self.make_store().open()
 
@@ -243,6 +254,105 @@ class TwoInstances(unittest.TestCase):
         b.put_entry("newer", {"api_key": VALUE})
         index.write_bytes(old_index)  # the working tree no longer matches the newer checkpoint
         self.assert_refused_and_unchanged("index-personal in the local copy does not match the checkpoint")
+
+    # -- a local commit is followed only when it is confirmed (plan section J) --------------------
+    def crash_before_push(self):
+        """The writing process dies after its local commit and before its push."""
+        real = SecretRepo._git
+
+        def git(repo, *args, **kwargs):
+            if args and args[0] == "push":
+                raise Crash()
+            return real(repo, *args, **kwargs)
+        return mock.patch.object(SecretRepo, "_git", git)
+
+    def enrol_b(self):
+        new = SecretStore(use_config_file=False, enabled=True, **dict(
+            self.config(), computer="B", personal_clone=self.root / "B" / "brain-secrets",
+            checkpoint_dir=self.root / "B" / "checkpoint", recovery_package_dir=self.root / "B" / "packages"))
+        rid = enrol.request(new, self.fingerprint)
+        self.assertEqual(enrol.approve_step(self.make_store().open(), rid), "answered")
+        enrol.prove(new, rid, display=lambda _title, _words: True)
+        self.assertEqual(enrol.approve_step(self.make_store().open(), rid, display=lambda _t, _w: True), "approved")
+        return StoreBackend(new.open(), sync_seconds=0)
+
+    def refresh_left_unpushed(self):
+        """Sol round 9, steps 1 to 3: a sign-in the agent has read, then a refresh in another
+        process whose answer is journalled and committed locally, and a crash before the push.
+        Returns the agent's backend, the journal and the sign-in's journal key."""
+        agent = StoreBackend(self.a, sync_seconds=3600)
+        writer = StoreBackend(self.make_store().open(), sync_seconds=3600)
+        begun = writer.begin_refresh("xero-demo", FIELD, new_authorisation=True)
+        writer.set_json("xero-demo", FIELD, token(1), operation=begun["operation"])
+        self.assertEqual(agent.get_json("xero-demo", FIELD)["refresh_token"], "fictional-refresh-1")
+        self.held, self.held_bytes, self.held_head = (self.a.checkpoint, self.a.checkpoint_path.read_bytes(),
+                                                      self.a._head)
+        journal = Journal(self.a.config["checkpoint_dir"], self.a._identity().x25519)
+        key = oauth_ops.find(self.a, "xero-demo", FIELD).journal_key
+        begun = writer.begin_refresh("xero-demo", FIELD)
+        with self.crash_before_push(), self.assertRaises(Crash):
+            writer.set_json("xero-demo", FIELD, token(2), operation=begun["operation"])
+        self.assertNotEqual(self.a.repo.head(), self.held_head)  # the unpushed commit is in the clone
+        self.assertEqual(self.remote_head().decode(), self.held_head)
+        self.assertEqual(journal.read(key)["state"], "answered")
+        return agent, journal, key
+
+    def assert_nothing_followed(self, journal, key):
+        self.assertIs(self.a.checkpoint, self.held)
+        self.assertEqual(self.a.checkpoint_path.read_bytes(), self.held_bytes)
+        self.assertEqual(journal.read(key)["state"], "answered")
+        self.assertEqual(self.a.repo.head(), self.held_head)  # settled back to the held commit
+
+    def assert_published_and_read_elsewhere(self, agent, journal, key, b):
+        self.assertEqual(agent.get_json("xero-demo", FIELD)["refresh_token"], "fictional-refresh-2")
+        self.assertIsNone(journal.read(key))  # retired only once the remote holds it
+        self.assertEqual(self.remote_head().decode(), self.a.repo.head())
+        self.assertEqual(b.get_json("xero-demo", FIELD)["access_token"], "fictional-access-2")
+
+    def test_a_commit_a_crash_left_unpushed_is_never_followed(self):
+        b = self.enrol_b()
+        agent, journal, key = self.refresh_left_unpushed()
+        self.a._follow(clone=True)  # step 5: the open agent meets the clone's newer HEAD
+        self.assert_nothing_followed(journal, key)
+        self.assertEqual(self.a.get_record("before"), {"api_key": VALUE})
+        self.assert_published_and_read_elsewhere(agent, journal, key, b)
+
+    def test_offline_nothing_is_followed_from_the_clone(self):
+        b = self.enrol_b()
+        agent, journal, key = self.refresh_left_unpushed()
+        moved = self.bare.with_name("remote-away.git")
+        self.bare.rename(moved)  # the fetch fails
+        self.assertEqual(agent.get_json("xero-demo", FIELD)["refresh_token"], "fictional-refresh-1")
+        self.assert_nothing_followed(journal, key)
+        moved.rename(self.bare)
+        self.assert_published_and_read_elsewhere(agent, journal, key, b)
+
+    def test_a_newer_checkpoint_is_followed_but_not_an_unpushed_commit_past_it(self):
+        writer = self.make_store().open()
+        writer.put_entry("saved", {"api_key": VALUE})
+        saved = self.a.checkpoint_path.read_bytes()
+        with self.crash_before_push(), self.assertRaises(Crash):
+            writer.put_entry("unpushed", {"api_key": VALUE})
+        self.assertEqual(self.a.list_entries(), ["before", "saved"])
+        self.assertEqual(self.a.checkpoint_path.read_bytes(), saved)
+        self.assertEqual(self.a.repo.head(), self.remote_head().decode())
+
+    def test_a_pushed_commit_the_remote_has_built_on_is_followed(self):
+        held = self.a.checkpoint_path.read_bytes()
+        self.make_store().open().put_entry("pushed", {"api_key": VALUE})
+        self.a.checkpoint_path.write_bytes(held)  # the writer stopped between its push and its checkpoint
+        local = self.a.repo.head()
+        elsewhere = self.root / "elsewhere"  # another computer's push on top of it
+        subprocess.run(["git", "clone", "--quiet", str(self.bare), str(elsewhere)], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(elsewhere), "commit", "--quiet", "--allow-empty", "-m", "update"],
+                       check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(elsewhere), "push", "--quiet", "origin", "main"], check=True,
+                       capture_output=True)
+        self.a._follow(clone=True)
+        self.assertEqual(self.a._head, local)
+        self.assertEqual(self.a.get_record("pushed"), {"api_key": VALUE})
+        self.assertEqual(checkpoint.load(self.a.checkpoint_path, self.a._identity().ed25519.public_key()),
+                         self.a.checkpoint)
 
     # -- a real second process ------------------------------------------------------------------
     def test_a_second_process_writes_while_the_first_holds_its_instance(self):

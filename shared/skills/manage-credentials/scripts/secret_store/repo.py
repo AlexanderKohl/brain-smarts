@@ -246,9 +246,11 @@ class SecretRepo:
 
     def local_commits(self, start: str | None) -> list[str]:
         """The clone's commits after start, oldest first, for a process that holds the state at
-        start while another process on this computer moved the clone (plan section G). The
-        caller verifies each one; a clone that does not contain start, or a commit of the wrong
-        shape, is refused here without marking the clone refused for other processes."""
+        start while another process on this computer moved the clone (plan section G). They are
+        not confirmed: the caller verifies each one and follows none past its checkpoint on disk
+        unless settle_failed_write finds it on the remote (plan section J). A clone that does not
+        contain start, or a commit of the wrong shape, is refused here without marking the clone
+        refused for other processes."""
         head = self.head()
         if start is None or head is None or not self._is_ancestor(start, head):
             raise SecretStoreError("the local copy does not follow from the state this process holds; "
@@ -361,9 +363,11 @@ class SecretRepo:
             self._git("add", "--", GITATTRIBUTES)
 
     def settle_failed_write(self, before: str | None) -> str | None:
-        """After write raised: the commit it made when the remote head is that very commit (the
-        push landed and only its acknowledgement was lost); otherwise None, with any local commit
-        dropped back to before, so nothing unverified stays ahead of the checkpoint."""
+        """After write raised, or a writer in another process crashed (plan section J): the local
+        head when the fetched remote branch holds it (the push landed and only its acknowledgement
+        or the writer's checkpoint was lost; the remote may have moved on since); otherwise, and
+        when the fetch fails, None, with any local commit dropped back to before, so nothing
+        unconfirmed stays ahead of the checkpoint."""
         with self.lock():
             local = self.head()
             if local is None or local == before:
@@ -372,7 +376,7 @@ class SecretRepo:
                 remote = self._fetch()
             except SecretStoreError:
                 remote = None
-            if remote == local:
+            if remote is not None and (remote == local or self._is_ancestor(local, remote)):
                 self._set_state()
                 return local
             self._restore(before)

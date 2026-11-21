@@ -171,18 +171,19 @@ class SecretStore:
         return checkpoint.load(self.checkpoint_path, self._identity().ed25519.public_key())
 
     # -- verified sync ------------------------------------------------------------------------
-    def _tree_object(self, oid: str, cp: checkpoint.Checkpoint, at: str | None = None) -> dict:
+    def _tree_object(self, oid: str, cp: checkpoint.Checkpoint, at: str | None = None,
+                     follow: bool = True) -> dict:
         """The clone's file for oid (or its version at commit at), refused unless its hash is the
         checkpoint's. A mismatch against the held checkpoint first follows a newer checkpoint that
-        another process on this computer wrote meanwhile (_follow), then checks again."""
+        another process on this computer wrote meanwhile, or settles an unfinished write it left
+        in the clone (_follow), then checks once again."""
         path = f"objects/{oid}.json"
         obj = self.repo.read(path) if at is None else self.repo.read_at(at, path)
         if oid in cp.objects and obj is not None and object_hash(obj) == cp.objects[oid]["hash"]:
             return obj
-        if at is None and cp is self.checkpoint and not self._syncing:
+        if follow and at is None and cp is self.checkpoint and not self._syncing:
             self._follow(clone=True)
-            if self.checkpoint is not cp:
-                return self._tree_object(oid, self.checkpoint)
+            return self._tree_object(oid, self.checkpoint, follow=False)
         raise SecretStoreError(f"object {oid} in the local copy does not match the checkpoint")
 
     def _follow(self, clone: bool = False) -> None:
@@ -192,9 +193,16 @@ class SecretStore:
         (signature, pin) and taken only when it follows from the held one; the commits between
         the held state and the clone are verified one by one (accept_commit, the policy chain)
         and the local copy is checked against the result. A refusal writes nothing and leaves the
-        held state as it was. With clone, a clone moved past the held commit is followed the same
-        way while the checkpoint on disk is still the held one (the other process stopped between
-        its push and its checkpoint); that git call is made only there, not on every read."""
+        held state as it was. With clone, a clone moved past the held commit is looked at while the
+        checkpoint on disk is still the held one; that git call is made only there, not on every read.
+
+        Plan section J: a writer saves its checkpoint only after its push, so commits up to the
+        checkpoint on disk are confirmed. A commit past it is followed only when the fetched remote
+        branch holds it (the writer pushed and stopped before its checkpoint). Any other commit past
+        it is an unfinished write (a crash before the push: under the lock no writer is mid-write)
+        and is settled by the store's own path for a failed write, settle_failed_write, which drops
+        it from the clone, offline too. It is never followed or checkpointed; a refresh answer it
+        held stays in the journal as answered, and the next write publishes it."""
         if self.policy is None or self.checkpoint is None or self.repo is None or self._syncing:
             return
         with self.repo.lock():
@@ -207,7 +215,12 @@ class SecretStore:
             if self._load_pin() != self._pinned:
                 raise SecretStoreError("this computer's trust-root pin changed while the store was open; open it again")
             policy, cp, previous, accepted_all = self.policy, self.checkpoint, self._head, []
+            confirmed = False  # the commits past the checkpoint on disk are on the remote
             for commit in self.repo.local_commits(self._head):
+                if cp == disk and not confirmed:
+                    if not self._settle_unfinished(previous):
+                        break  # dropped back to previous: nothing past the checkpoint is followed
+                    confirmed = True
                 files = self.repo._changed_files(commit)
                 accepted = accept_commit(policy, cp, files, self._identity().my_keys(),
                                          self._baseline(cp, files, at=previous))
@@ -227,6 +240,16 @@ class SecretStore:
             self.policy, self.checkpoint, self._head = policy, cp, previous
             for accepted in accepted_all:
                 self._note_usable(accepted)
+
+    def _settle_unfinished(self, confirmed: str) -> bool:
+        """The clone has commits past confirmed (the commit of the checkpoint on disk). True when
+        the fetched remote branch holds the clone's HEAD; else settle_failed_write has dropped
+        them back to confirmed and the caller follows nothing past it. Called under the lock."""
+        try:
+            return self.repo.settle_failed_write(confirmed) is not None
+        except SecretStoreError:
+            raise SecretStoreError("an unfinished write is in this computer's local copy and could not be "
+                                   "settled; nothing was followed from it, try again") from None
 
     def _baseline(self, cp: checkpoint.Checkpoint, files: dict, at: str | None = None) -> dict:
         """Latest verified payloads of oauth objects a commit changes (the field-rule baseline)."""
