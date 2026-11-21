@@ -77,6 +77,12 @@ Tests: `tests/test_secret_store_*.py`.
   and status then warns that the package is only on this computer; `recovery_package_dir` sets
   another place. A package older than seven days is rebuilt when the store opens (after the
   opening transaction) and after every policy change. A package is encrypted to the recovery key.
+  While the Vault Agent serves the store it also runs a timer, at least every 6 hours: it pulls
+  every store and rebuilds a package that is stale or does not match the current policy, with no
+  credential request. A failed run is kept in `status` (`package_timer`, and `store_sync` for a pull)
+  and in a `<package file name>.upkeep-error` file in the checkpoint folder on this computer (never
+  in the package folder, which may be the drive that failed). The daily due check reads that file and
+  reports the failure; the next run retries, and a success removes the file.
 - Every file of one change is one commit with a generic message (`update`, `policy`, `recovery`).
 
 ## Roles
@@ -130,6 +136,14 @@ On: create `config/secret-store.json` in the owner's memory folder for this skil
 `personal_repo_url`, `team_repo_url`, `personal_clone`, `team_clone`, `checkpoint_dir` and
 `recovery_package_dir`. Unknown keys are refused. Off: set `"enabled": false` or remove the file;
 the vault and its passphrase work as before. Without the file the store is off.
+
+A configuration that cannot be read, has unknown keys, or is enabled without a `person` is fatal:
+the Vault Agent refuses to start (exit code 2) and never serves the old vault in the store's place.
+A Vault Agent started before the store was switched on reports no store backend; with the store on,
+`vaultctl.py`, the broker client and the vault stores refuse it with "the Vault Agent was started
+before the secrets store was switched on; restart it". The token relay is ignored while the store is
+on: no relay is built, whatever `token-relay.json` lists, the store's journal decides every refresh,
+and `vaultctl.py status` shows the ignored file as "Token relay".
 
 ## A computer that is not a sign-in's refresher
 

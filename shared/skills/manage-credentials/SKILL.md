@@ -420,6 +420,22 @@ and `scripts/secret_store/README.md` describes the rules, files, roles, commands
 and switches the store on (`config/secret-store.json` in the owner's memory folder for this skill,
 `enabled` true).
 
+With the store on:
+
+- A Vault Agent that was started before the store was switched on still serves only the old vault.
+  `vaultctl.py` (except `unlock` and `lock`), the broker client and the vault stores refuse it with
+  "the Vault Agent was started before the secrets store was switched on; restart it". Restart the agent.
+- A store configuration that cannot be read, has unknown keys, or is enabled without a person stops
+  the Vault Agent at start (exit code 2, with the reason on stderr). It never falls back to the old vault.
+- The token relay is ignored: no relay is built, whatever `token-relay.json` lists, and the store's
+  journal decides every refresh. `vaultctl.py status` shows a line "Token relay: ignored while the
+  secrets store is on (<path>)" when such a file is still found.
+- The Vault Agent rebuilds the personal recovery package on a timer, at least every 6 hours, with no
+  credential request: it pulls the stores, then rebuilds a package that is stale or no longer matches
+  the policy. If a check fails, `vaultctl.py status` shows "Package timer: ..." and the failure is
+  written to a `.upkeep-error` file beside the checkpoint on this computer. The daily due check reads
+  that file and reports it; the next timer run retries, and a success clears the file.
+
 ## Change the recovery passphrase
 
 ```powershell
