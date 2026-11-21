@@ -71,7 +71,8 @@ class Session:
 
     def _newest_package(self) -> tuple[str, int] | None:
         folder = Path(self._config()["recovery_package_dir"])
-        files = [p for p in folder.glob("*") if p.is_file()] if folder.is_dir() else []
+        # the package itself: its .policy marker beside it is written after it and would be newer
+        files = [p for p in folder.glob("*.package") if p.is_file()] if folder.is_dir() else []
         newest = max(files, key=lambda p: p.stat().st_mtime_ns, default=None)
         return (str(newest), newest.stat().st_mtime_ns) if newest else None
 
@@ -92,9 +93,9 @@ class Session:
     def put_static(self, group: str | None = None) -> tuple[str, dict]:
         entry, label = (TEAM_ENTRY, "team") if group else (STATIC_ENTRY, "static")
         argv = ["put", "--entry", entry, "--secret", "value"] + (["--group", group] if group else [])
-        code, _ = self._cli(argv, ask=self._ask(label))
+        code, said = self._cli(argv, ask=self._ask(label))
         if code != 0:
-            raise Failed(f"put {entry} returned {code}")
+            raise Failed(f"put {entry} returned {code}: {' '.join(said.split())[:300]}")
         return f"{entry} stored through brain_secrets put", {}
 
     def agent_read(self, entry: str, label: str) -> tuple[str, dict]:
@@ -126,9 +127,9 @@ class Session:
         if not url.startswith(TOKEN_URL_PREFIX):
             raise Failed("the token URL is not the run's own loopback endpoint")
         if create:
-            code, _ = self._cli(["put", "--entry", SIGNIN_ENTRY, "--empty-json", SIGNIN_FIELD])
+            code, said = self._cli(["put", "--entry", SIGNIN_ENTRY, "--empty-json", SIGNIN_FIELD])
             if code != 0:
-                raise Failed(f"put --empty-json returned {code}")
+                raise Failed(f"put --empty-json returned {code}: {' '.join(said.split())[:300]}")
         store = self._oauth_store()
         with store.refresh_lock(store.rotation_lock, new_authorisation=True):
             _status, body = post_token(url, {}, {"grant_type": "authorization_code", "code": "rehearsal"}, timeout=10)
@@ -166,7 +167,7 @@ class Session:
     def replace_signin(self) -> tuple[str, dict]:
         code, text = self._cli(["replace-signin", SIGNIN_ENTRY, "--field", SIGNIN_FIELD])
         if code != 0:
-            raise Failed(f"replace-signin returned {code}")
+            raise Failed(f"replace-signin returned {code}: {' '.join(text.split())[:300]}")
         return "replace-signin ended the uncertain sign-in in one administrator commit", {}
 
     # -- step 4 -----------------------------------------------------------------------------------
@@ -201,9 +202,10 @@ class Session:
             leftover = target.exists() and any(p.name != "file.txt" for p in target.iterdir())
             if code == 0 or leftover:
                 raise Failed(f"restore with {label} was not refused cleanly")
-        code, _ = self._cli(["restore", "--package", package, "--target", str(root / "cli")], ask=words_ask)
-        if code != 0 or not (root / "cli" / ".git").exists():
-            raise Failed(f"restore returned {code}")
+        code, said = self._cli(["restore", "--package", package, "--target", str(root / "cli")], ask=words_ask)
+        restored = root / "cli"  # the clone is the target itself or a folder the store names inside it
+        if code != 0 or not ((restored / ".git").exists() or any(restored.glob("*/.git"))):
+            raise Failed(f"restore returned {code}: {' '.join(said.split())[:300]}")
         store = SecretStore.restore_from_package(words, package, root / "python")
         if STATIC_ENTRY not in store.list_entries():
             raise Failed(f"the restored store does not list {STATIC_ENTRY}")
@@ -224,15 +226,15 @@ class Session:
         code, text = self._cli(["enrol-request", "--team", "--fingerprint", fingerprint])
         found = re.search(r"request ([0-9a-f]{16}) written", text)
         if code != 0 or not found:
-            raise Failed(f"enrol-request returned {code}")
+            raise Failed(f"enrol-request returned {code}: {' '.join(text.split())[:300]}")
         return "enrolment request written", {"request": found.group(1)}
 
     def enrol_prove(self, request: str) -> tuple[str, dict]:
         seen: dict[str, str] = {}
-        code, _ = self._cli(["enrol-request", "--team", "--request", request],
+        code, said = self._cli(["enrol-request", "--team", "--request", request],
                             display=lambda _t, words: seen.setdefault("hash", digest(" ".join(words))) is not None)
         if code != 0 or "hash" not in seen:
-            raise Failed(f"enrol-request --request returned {code}")
+            raise Failed(f"enrol-request --request returned {code}: {' '.join(said.split())[:300]}")
         return "challenge answered; words shown to the callback", {"words_hash": seen["hash"]}
 
     def enrol_approve(self, request: str, words_hash: str | None = None) -> tuple[str, dict]:
@@ -240,7 +242,7 @@ class Session:
         code, text = self._cli(["enrol-approve", "--team", "--request", request], display=display)
         state = "enrolled" if "The computer is enrolled." in text else "answered" if "Request answered" in text else ""
         if code != 0 or not state:
-            raise Failed(f"enrol-approve returned {code}")
+            raise Failed(f"enrol-approve returned {code}: {' '.join(text.split())[:300]}")
         return f"enrol-approve: {state}", {"state": state}
 
     def get_check(self, group: str) -> tuple[str, dict]:
@@ -271,7 +273,7 @@ class Session:
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
             code = migrate_to_store.main(argv)
         if code != 0:
-            raise Failed(f"migrate_to_store {' '.join(argv)} returned {code}")
+            raise Failed(f"migrate_to_store {' '.join(argv)} returned {code}: {' '.join(out.getvalue().split())[:400]}")
         return f"migrate_to_store {' '.join(argv) or 'migrate'} returned 0", {}
 
     def marker(self, path: str, present: bool) -> tuple[str, dict]:
