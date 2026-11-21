@@ -35,13 +35,17 @@ class StaleAgentError(CredentialError):
 
 
 def __getattr__(name: str) -> Any:
-    """ProviderNotCalled: the secrets-store journal's class, re-exported so a connector can raise
+    """ProviderNotCalled and ProviderRefused: the secrets-store journal's class, re-exported so a connector can raise
     it for a failure before any provider request (the begun refresh is then removed, not held as
     uncertain). Imported on first use, so this module stays light."""
     if name == "ProviderNotCalled":
         from secret_store.journal import ProviderNotCalled
 
         return ProviderNotCalled
+    if name == "ProviderRefused":  # a well-formed OAuth error answer: removed like ProviderNotCalled
+        from secret_store.journal import ProviderRefused
+
+        return ProviderRefused
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 

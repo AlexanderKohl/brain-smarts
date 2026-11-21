@@ -385,7 +385,8 @@ class StoreBackend:
 
     def abort_refresh(self, entry: str, field: str, operation: str) -> dict[str, bool]:
         """The provider was certainly not called (the token was already fresh, or the connector
-        raised ProviderNotCalled): remove the calling record and release the lock."""
+        raised ProviderNotCalled, or ProviderRefused for a well-formed OAuth error answer): remove the
+        calling record and release the lock."""
         with self._lock:
             held = self._take(f"{entry}#{field}", operation)
             if held is None:

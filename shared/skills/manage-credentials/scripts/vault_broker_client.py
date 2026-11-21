@@ -168,11 +168,12 @@ def store_refresh(store: Any, local_lock: Any, *, refresh: bool = False, leeway_
     exchange, also a first sign-in) or a token expiring within leeway_seconds. Otherwise the block
     runs under the lock and nothing is written; a token change saved there is refused. On the
     refresher, begin_refresh opens the journal record and the save inside carries its operation
-    id. Only ProviderNotCalled removes the record; any other exception, and a normal exit without
+    id. Only ProviderNotCalled and ProviderRefused remove the record; any other exception, and a normal exit without
     a save, leave it in calling (uncertain) and release the lock (the latter with a plain
     message). A new authorisation writes no calling record, so it leaves nothing uncertain. A
-    connector raises portable_vault.ProviderNotCalled for any failure before its provider request. Elsewhere a refresh runs once the refresher has published a newer access token."""
-    from secret_store.journal import ProviderNotCalled
+    connector raises portable_vault.ProviderNotCalled for any failure before its provider request
+    (token_endpoint.post_token raises it and ProviderRefused for its token-endpoint call). Elsewhere a refresh runs once the refresher has published a newer access token."""
+    from secret_store.journal import ProviderNotCalled, ProviderRefused
 
     with local_lock():
         before = _load_or_empty(store) if (refresh or leeway_seconds is not None) and not new_authorisation else {}
@@ -199,7 +200,7 @@ def store_refresh(store: Any, local_lock: Any, *, refresh: bool = False, leeway_
                 store._broker_request(how, entry=store.entry, field=store.field, operation=operation)
         try:
             yield
-        except ProviderNotCalled:
+        except (ProviderNotCalled, ProviderRefused):  # no token can have been issued
             end("abort_refresh")
             raise
         except BaseException:
