@@ -8,7 +8,7 @@ rehearsal plan RUN-20261121-131053).
 Each step prints one line: the step, ok or FAILED, and what was checked; never a value. A guard
 item that fails refuses the start and names the item. A failed step stops the run. The clean-up
 always runs, says what it removed and names anything left. Exit codes: 0 all held, 1 a step
-failed, 2 the guard refused, 3 something was left after the clean-up."""
+failed, 2 the guard refused, 3 something was left after the clean-up, 4 steps were left out with --skip."""
 
 from __future__ import annotations
 
@@ -129,8 +129,9 @@ class SessionClient:
 
 
 class Rehearsal:
-    def __init__(self, check: bool, commit: str, environ: dict | None = None, logs: str | None = None) -> None:
-        self.check, self.commit, self.logs = check, commit, logs
+    def __init__(self, check: bool, commit: str, environ: dict | None = None, logs: str | None = None,
+                 skip: Iterable[str] = ()) -> None:
+        self.check, self.commit, self.logs, self.skip = check, commit, logs, tuple(skip)
         self.base = dict(environ if environ is not None else os.environ)
         self.n = names.new_names(cloud_root=names.cloud_root_from(self.base))
         self.seed = secrets.token_bytes(32)
@@ -378,8 +379,8 @@ class Rehearsal:
             guarded("step 7 store on", "pc1", store_switched_on),
             guarded("step 7 stale-agent refusals", "pc1", lambda: self.once("pc1", "stale_refusal")["checked"]),
             guarded("step 7 dry run", "pc1", lambda: self.once("pc1", "migrate", argv=["--dry-run"])["checked"]),
-            guarded("step 7 migrate", "pc1", lambda: self.once(
-                "pc1", "migrate", argv=["--backup-dir", str(self.n.temp / "pc1" / "backups")])["checked"]),
+            # no --backup-dir: the agent verifies a backup only inside the vault's own folder
+            guarded("step 7 migrate", "pc1", lambda: self.once("pc1", "migrate", argv=[])["checked"]),
             guarded("step 7 marker written", "pc1", lambda: self.once("pc1", "marker", path=vault, present=True)["checked"]),
             guarded("step 7 agent on the store", "pc1", agent_on_store),
             guarded("step 7 store-on refusal", "pc1", lambda: self.once("pc1", "store_on_refusal")["checked"]),
@@ -398,7 +399,8 @@ class Rehearsal:
         first = [Step("guard item 7: owner baseline", self.baseline_step), Step("prepare", self.prepare_step),
                  Step("certificate", self.certificate_step),
                  Step("guard pc1", lambda: self.guard_step("pc1")), Step("guard pc2", lambda: self.guard_step("pc2"))]
-        return first if self.check else first + self.full_steps()
+        steps = first if self.check else first + self.full_steps()
+        return [step for step in steps if not step.name.startswith(self.skip)] if self.skip else steps
 
     def clean(self) -> cleanup.Report:
         for client in self.sessions.values():
@@ -424,14 +426,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--check", action="store_true", help="the guard and the steps that touch no keychain, "
                                                              "process or cloud folder")
     parser.add_argument("--commit", default="HEAD", help="the commit under test (default HEAD)")
+    parser.add_argument("--skip", action="append", default=[], metavar="PREFIX",
+                        help="leave out every step whose name starts with PREFIX (for finding a later fault "
+                             "while an earlier one is fixed); the run then exits 4 at best")
     parser.add_argument("--logs", help="a folder that receives a copy of the child processes' logs before the "
                                        "clean-up (they may hold the run's invented values)")
     args = parser.parse_args(argv)
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # the en dash in every line
-    rehearsal = Rehearsal(args.check, args.commit, logs=args.logs)
+    rehearsal = Rehearsal(args.check, args.commit, logs=args.logs, skip=args.skip)
     print(f"rehearsal {rehearsal.n.run_id}: {'check' if args.check else 'full run'} in {rehearsal.n.temp}", flush=True)
-    return run(rehearsal.steps(), rehearsal.clean)
+    code = run(rehearsal.steps(), rehearsal.clean)
+    if args.skip:  # a run with steps left out never counts as a full rehearsal
+        print("incomplete: steps left out: " + ", ".join(args.skip), flush=True)
+        return code or 4
+    return code
 
 
 if __name__ == "__main__":
