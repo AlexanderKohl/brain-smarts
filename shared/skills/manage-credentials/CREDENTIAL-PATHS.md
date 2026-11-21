@@ -157,7 +157,7 @@ e start or configure the agent. `mc/` is this skill's `scripts/`, `lib/` the ski
 | 49 | `repository-preflight` host wiring | none | – | – | not a credential path |
 | 50 | `mc/token_endpoint.py` `post_token` | c | not sent, refused and uncertain decided by fact; https only; never retried | – | OK |
 | 51 | `mc/migration_lock.py` | b (lock file) | exclusive; an absent, dead, old or malformed lock refuses | – | OK |
-| 52 | `brain_secrets.py replace-signin` | b, d | refresher and administrator only; settings kept in an encrypted hand-over file; one commit retires both ids; a failed push changes nothing | – | OK |
+| 52 | `brain_secrets.py replace-signin` | b, d | the refresher that is an administrator, or an administrator with `--for` naming the refresher; a refresher that is not an administrator changes nothing and gets the step (exit 3); settings kept in an encrypted hand-over file; one commit retires both ids; a failed push changes nothing; the old refresher discards its record of the retired grant | – | OK |
 
 Tests: rows 1 to 11 and 29 to 31 in `tests/test_secret_store_*.py`; rows 13 to 28 in `test_secret_store_round8.py`
 and `test_secret_store_round9.py`, and row 15 also in `test_secret_store_rollback_static.py`; rows 4, 8 and 52 in `test_secret_store_restore_cli.py`,

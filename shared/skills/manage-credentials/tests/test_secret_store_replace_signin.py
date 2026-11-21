@@ -54,6 +54,7 @@ class ReplaceSignin(StoreFixture):
         self.assertIn('brain_secrets.py replace-signin "xero-demo"', text)
         self.assertNotIn("stays blocked", text)
         self.assertIn("sign in again in the browser", text)
+        self.assertIn("--group G --for PERSON/COMPUTER", text)  # the team step (follow-up plan K.1)
 
     def test_uncertain_replace_new_authorisation_refresh_and_tenant_survive(self):
         self.make_uncertain()
@@ -98,15 +99,17 @@ class ReplaceSignin(StoreFixture):
         self.assertEqual(self.b.open().policy.hash, before)
         self.assertEqual(self.handover_files(), [])
 
-    def test_a_non_administrator_is_refused(self):
+    def test_a_non_administrator_refresher_is_given_the_administrator_step(self):
         self.make_uncertain()
         before = self.a.open().policy.hash
         with mock.patch("secret_store.policy.Policy.is_admin_key", return_value=False):
             code, text = self.cli(["replace-signin", ENTRY], self.a)
-        self.assertEqual(code, 1)
-        self.assertIn("only an administrator", text)
+        self.assertEqual(code, 3, text)  # follow-up plan K.1: the step, not a refusal; nothing changed
+        self.assertIn("an administrator", text)
+        self.assertIn(f"--for {self.a.config['person']}/{self.a.config['computer']}", text)
         self.assertEqual(self.a.open().policy.hash, before)
         self.assertEqual(self.journal.read(self.old.journal_key)["state"], "calling")
+        self.assertEqual(self.handover_files(), [])
 
     def test_a_working_signin_needs_even_if_working(self):
         code, text = self.cli(["replace-signin", ENTRY], self.a)
