@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-11-20T19:22:05+10:00
-updated: 2026-11-20T19:22:05+10:00
+updated: 2026-11-21T14:31:20+10:00
 owner: brain-owner
 ---
 
@@ -40,6 +40,16 @@ the team secrets of their groups; no server can read any of them.
    over, and an uncertain refresh leaves it blocked.
 5. The policy names one refresher computer per rotating sign-in; only that computer calls the
    provider, and its refresh token is encrypted to it and the recovery key only.
+6. While the store is on, the old credential store is closed: no path reads or writes a credential
+   in it. The rule is enforced where the data is opened (the agent and the passphrase open), never
+   caller by caller, and only the migration and rollback, under their lock, are let through.
+7. A credential is never served from two places: moving to the store is one run that checks every
+   copy, and a copy that fails its check is removed from the new place, never left live in both.
+8. A refresh token is sent to the provider at most once. A failed refresh is sorted by fact into not
+   sent, refused or uncertain; only the first two free the sign-in, and an uncertain one is ended by
+   replacing the sign-in, never by a second try.
+9. Every path that may reach a credential is on a reviewed list (`../../CREDENTIAL-PATHS.md`); a new
+   caller fails the skill's tests until it is reviewed.
 
 ## Modules
 
@@ -118,6 +128,7 @@ python brain_secrets.py handover-release --entry E --to PERSON/COMPUTER [--group
 python brain_secrets.py handover-accept --entry E [--group ops]   an administrator's computer
 python brain_secrets.py replace-signin E [--field F] [--group ops] [--even-if-working]   refresher, administrator
 python migrate_to_store.py --dry-run               names only; then without it, [--replace]
+python migrate_to_store.py rollback [--dry-run]    static secrets back to the old vault
 ```
 
 Enrolment: the new computer runs `enrol-request --fingerprint`, the approver runs `enrol-approve`,
@@ -137,7 +148,63 @@ or the target are wrong. Replacing a sign-in: `replace-signin` ends an uncertain
 one with `--even-if-working`) on its refresher, run by an administrator: the shared settings are kept
 in a hand-over file beside the journal, one commit deletes the sign-in and retires both ids, and the
 next browser sign-in under the same name gets the kept settings. `status` reports a hand-over file
-whose sign-in was never completed.
+whose sign-in was never completed. Only the sign-in's refresher may run it, and only if that
+computer's key is an administrator's: a team member who became refresher through a handover is
+refused, and nothing changes. `recovery-package --team` writes the team package; an unwritable
+folder warns, writes the upkeep-error file and exits 1, as for the personal package.
+
+## The cut-over
+
+One run moves everything, in this order:
+
+1. The Vault Agent is started and unlocked on the old vault while the store is off.
+2. The store is switched on, and the agent is not restarted.
+3. `migrate_to_store.py --dry-run` runs, then `migrate_to_store.py`.
+4. The agent is restarted, so that it serves the store.
+
+The rehearsal (`../../rehearsal/README.md`) runs this order with throwaway secrets.
+
+`migrate_to_store.py` holds the migration lock beside the vault (`<vault>.migration.lock`, created
+exclusively, naming its process and start time) for the whole run. It makes a verified backup, copies every entry and reads each back. A
+verified sign-in loses its tokens in the old vault and is named in the migration marker
+(`<vault>.migrated.json`); a sign-in that fails its read-back has its store copy removed in the same
+run, the vault entry is left as it was, and the run names it and exits non-zero. The person signs
+in again in the browser once the store is on.
+
+What fails closed:
+
+- With the store on, a Vault Agent whose backend is the old vault refuses every credential request
+  with the restart message; the agent and the login tray are built by one function, which serves
+  the store when it is on.
+- With the store on, the passphrase open of the vault is refused; only the Vault Agent opens it,
+  for the migration and rollback operations, while a live migration lock is held.
+- The agent's scrub, restore-static and marker operations need a live lock; an absent, unreadable
+  or stale lock (its process gone, or older than six hours) refuses, and a second migration cannot
+  take a held lock.
+- A connector's plain token file is refused while the store is on.
+- Every legacy path refuses a sign-in named in the marker, store on or off. The marker, the
+  migration record and the lock are ignored by the memory skeleton's `.gitignore`.
+
+Rollback goes the same way round. The agent is unlocked on the old vault with the store off, and the
+store is switched on without restarting the agent. `migrate_to_store.py rollback --dry-run` runs, then
+`rollback`, and then the store is switched off. The rollback runs under the same lock and restores static secrets only from
+the store's current value and clears the marker. It never writes a token out of the store, so every
+migrated sign-in needs a browser sign-in afterwards.
+
+## A failed refresh
+
+Every token-endpoint call goes through `token_endpoint.post_token`: a new connection each time, https
+only, never retried.
+
+- **Not sent** (`ProviderNotCalled`): the connection, a proxy tunnel or the TLS handshake failed
+  before any byte of the request was written. The journal record is removed; the next attempt
+  refreshes normally.
+- **Refused** (`ProviderRefused`): the token endpoint answered HTTP 400 or 401 with an OAuth error
+  body. The record is removed. `invalid_grant` raises the connector's sign-in-needed error and a
+  browser sign-in is allowed.
+- **Uncertain**: anything else once the request was written (a time-out, a reset, HTTP 5xx, any
+  other 4xx including 429, an unreadable answer). The record stays `calling`, the sign-in is
+  blocked and is never retried with the old token; `replace-signin` ends it.
 
 ## Switching it on and off
 

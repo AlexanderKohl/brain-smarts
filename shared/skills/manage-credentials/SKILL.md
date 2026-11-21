@@ -11,7 +11,7 @@ metadata:
   scope: shared
   project_ref: /memory/projects/credential-management
   created: 2026-08-04T16:11:53+10:00
-  updated: 2026-11-17T11:49:30+10:00
+  updated: 2026-11-21T14:31:20+10:00
 ---
 
 # Credential Management
@@ -418,13 +418,21 @@ each computer's keys in the operating system's keychain and no passphrase. Its c
 and `scripts/secret_store/README.md` describes the rules, files, roles, commands and recovery. The
 *Credential policy* vault rules above apply until the owner accepts `PROPOSAL-synced-secrets-store`
 and switches the store on (`config/secret-store.json` in the owner's memory folder for this skill,
-`enabled` true).
+`enabled` true). `CREDENTIAL-PATHS.md` in this folder lists every path that reads, writes, spends or
+copies a credential, and `tests/test_credential_paths.py` fails when a script gains a caller of the
+agent or the vault that the list does not name.
 
-With the store on:
+With the store on the old vault is closed: no path reads or writes a credential in it.
 
-- A Vault Agent that was started before the store was switched on still serves only the old vault.
-  `vaultctl.py` (except `unlock` and `lock`), the broker client and the vault stores refuse it with
+- `vault_agent.py serve` and the login tray build their agent through one function: with the store on
+  it serves the store and shows no unlock window. A Vault Agent that was started before the store was
+  switched on still has the old vault as its backend; it refuses every credential request, and
+  `vaultctl.py` (except `unlock` and `lock`), the broker client and the vault stores refuse it, with
   "the Vault Agent was started before the secrets store was switched on; restart it". Restart the agent.
+- Opening the vault with the passphrase is refused ("the secrets store is on; start the Vault Agent"),
+  for every `vault_credentials.py` command and every connector's passphrase fallback. Only the Vault
+  Agent opens it, for the migration and rollback operations, while the migration lock is held.
+- A connector's plain token file is refused.
 - A store configuration that cannot be read, has unknown keys, or is enabled without a person stops
   the Vault Agent at start (exit code 2, with the reason on stderr). It never falls back to the old vault.
 - The token relay is ignored: no relay is built, whatever `token-relay.json` lists, and the store's
@@ -435,6 +443,62 @@ With the store on:
   the policy. If a check fails, `vaultctl.py status` shows "Package timer: ..." and the failure is
   written to a `.upkeep-error` file beside the checkpoint on this computer. The daily due check reads
   that file and reports it; the next timer run retries, and a success clears the file.
+
+### The cut-over
+
+Rehearse the store with throwaway secrets before the cut-over: rehearsal/README.md
+
+The move to the store is one run, not entry by entry, in this order:
+
+1. With the store off, start the Vault Agent and unlock it on the old vault.
+2. Switch the store on. Do not restart the agent: it still serves the old vault, for the migration
+   only.
+3. `python migrate_to_store.py --dry-run` lists the entry and field names.
+4. `python migrate_to_store.py` takes the migration lock beside the vault (`<vault>.migration.lock`,
+   naming its process and start time), makes a verified backup, copies every entry and reads each back.
+   A verified sign-in has its tokens removed from the old vault and is named in the migration marker
+   (`<vault>.migrated.json`). A sign-in that fails its read-back has its store copy removed in the same
+   run; the vault entry stays as it was, the run names it and exits non-zero. Nothing is served from two
+   places.
+5. Restart the Vault Agent so it serves the store. A sign-in the run reported as not moved is then
+   signed in again in the browser; the sign-ins it moved need nothing.
+
+What fails closed: the agent's scrub, restore-static and marker operations, and its opening of the old
+vault with the store on, need a live migration lock; an absent, unreadable or stale lock (its process
+gone, or older than six hours) refuses, and a second migration cannot take a held lock. The legacy
+paths refuse every sign-in named in the marker, store on or off.
+
+Rollback goes the same way round. With the store off, start the Vault Agent on the old vault and unlock
+it. Switch the store on without restarting the agent. Run `python migrate_to_store.py rollback --dry-run`,
+then `python migrate_to_store.py rollback`, then switch the store off; the agent then serves the old
+vault. The rollback also runs under the lock. It restores static secrets only, from the store's current
+value, and clears the marker. It never writes a token out of the store, so every migrated sign-in needs a
+browser sign-in after a rollback.
+
+### Recovery and replacing a sign-in
+
+- `brain_secrets.py recovery-package [--team]` writes the personal or the team recovery package now. If
+  the folder cannot be written it warns, records the upkeep error and exits 1.
+- `brain_secrets.py restore [--team] --package FILE --target FOLDER` recovers a store into a new or empty
+  folder. The recovery words are typed only into the masked window; the package's age is reported. Wrong
+  words, a damaged package, a non-empty target or a cancelled window write nothing.
+- `brain_secrets.py replace-signin ENTRY [--field F] [--group G] [--even-if-working]` ends an uncertain
+  sign-in. It runs only on the sign-in's refresher, by an administrator of the repository, and only when
+  the last refresh is uncertain unless `--even-if-working` is given. The shared settings are kept in an
+  encrypted hand-over file beside the journal, one commit deletes the sign-in and retires both ids, and
+  the next browser sign-in under the same name gets the kept settings. A failed commit or push leaves
+  the sign-in as it was; `status` reports a hand-over file whose sign-in was never completed.
+
+### A failed refresh
+
+Every token-endpoint call goes through `token_endpoint.post_token`, a new connection each time, never
+retried. A failure is one of three sorts:
+
+| Sort | When | What happens |
+|---|---|---|
+| Not sent | the connection, proxy tunnel or TLS handshake failed before any byte of the request | the journal record is removed; the next attempt refreshes normally |
+| Refused | the provider answered HTTP 400 or 401 with an OAuth error body | the record is removed; `invalid_grant` raises the connector's sign-in-needed error, and a browser sign-in is allowed |
+| Uncertain | anything else after the request was written: a time-out, a reset, HTTP 5xx, any other 4xx including 429, an unreadable answer | the record stays `calling` and the sign-in is blocked, never retried with the old token; end it with `replace-signin` |
 
 ## Change the recovery passphrase
 
