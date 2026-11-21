@@ -308,14 +308,20 @@ class Rehearsal:
             s["team_package" if team else "package"] = reply["data"]["package"]
             return reply["checked"]
 
-        def enrol() -> str:
-            rid = self.session("pc2").call("enrol_request", fingerprint=s["team_fingerprint"])["data"]["request"]
-            if pc1("enrol_approve", request=rid)["data"]["state"] != "answered":
-                raise StepFailed("the first enrol-approve did not answer the request")
-            words = self.session("pc2").call("enrol_prove", request=rid)["data"]["words_hash"]
-            if pc1("enrol_approve", request=rid, words_hash=words)["data"]["state"] != "enrolled":
-                raise StepFailed("the second computer was not enrolled")
-            return "pc2 enrolled in the team store; the words matched on both sides"
+        def enrol(team: bool) -> str:
+            """pc2 is enrolled in the personal store first, then the team store: the design's two
+            enrolments (section 6). Its agent always serves the personal store, so a team
+            enrolment alone leaves a computer the agent cannot serve (plan section I)."""
+            store = "team" if team else "personal"
+            pc2 = self.session("pc2")
+            rid = pc2.call("enrol_request", fingerprint=s["team_fingerprint" if team else "fingerprint"],
+                           team=team)["data"]["request"]
+            if pc1("enrol_approve", request=rid, team=team)["data"]["state"] != "answered":
+                raise StepFailed(f"the first {store} enrol-approve did not answer the request")
+            words = pc2.call("enrol_prove", request=rid, team=team)["data"]["words_hash"]
+            if pc1("enrol_approve", request=rid, words_hash=words, team=team)["data"]["state"] != "enrolled":
+                raise StepFailed(f"the second computer was not enrolled in the {store} store")
+            return f"pc2 enrolled in the {store} store; the words matched on both sides"
 
         def team_init() -> str:
             reply = pc1("team_init")
@@ -365,7 +371,8 @@ class Rehearsal:
             guarded("step 5 restore", "pc1",
                     lambda: pc1("restore", package=s["package"], target_root=str(self.n.restore_dir))["checked"]),
             guarded("step 6 team store", "pc1", team_init),
-            guarded("step 6 enrol pc2", "pc2", enrol),
+            guarded("step 6 enrol pc2 personal", "pc2", lambda: enrol(False)),
+            guarded("step 6 enrol pc2", "pc2", lambda: enrol(True)),
             guarded("step 6 team put", "pc1", lambda: pc1("put_static", group="rehearsal")["checked"]),
             guarded("step 4 team recovery package", "pc1", lambda: package(True)),
             guarded("step 6 agent pc2", "pc2", lambda: self.start_agent("pc2")),

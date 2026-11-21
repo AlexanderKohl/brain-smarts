@@ -306,10 +306,30 @@ def write_marker(marker: Path, package: Path, policy_hash: str, signer: Ed25519P
     marker.write_bytes(canonical.dumps(signing.sign(_marker_doc(package, policy_hash), signer)))
 
 
+def not_enrolled_message(store: Any) -> str:
+    """Plan section I: the store's repository has commits but this computer holds no pin and no
+    checkpoint for it. Each store needs its own enrolment (design section 6): a team enrolment
+    never covers the personal store, and the agent always serves the personal store."""
+    if store.team:
+        return ("this computer is not enrolled in the team store: its repository has commits but this "
+                "computer holds no pin or checkpoint for it. Run enrol-request --team --fingerprint F here "
+                "and enrol-approve --team on an administrator's computer; nothing was changed")
+    return ("this computer is not enrolled in the personal store: its repository has commits but this "
+            "computer holds no pin or checkpoint for it. Run enrol-request --fingerprint F here and "
+            "enrol-approve on one of your computers already in it (a team enrolment does not cover the "
+            "personal store; a new person runs init); nothing was changed")
+
+
 def store_status(self: Any) -> str:
     """SecretStore.status: one line on the clone and one on the recovery package."""
     if not self.config["enabled"] or not self.config["person"]:
         return "The secrets store is off on this computer."
+    held = [getattr(self, name, None) for name in ("checkpoint_path", "pin_path")]
+    if all(path is not None and not path.exists() for path in held):
+        enrol = "enrol-request --team" if self.team else "enrol-request"
+        return (f"The {'team' if self.team else 'personal'} secrets store is on but not set up here: run "
+                f"{'team-init' if self.team else 'init'} (first computer) or enrol this computer with {enrol} "
+                "(a team enrolment does not set up the personal store).")
     if not (self.clone / ".git").is_dir():
         return "The secrets store is on but not set up here: run init (first computer) or open."
     from .repo import SecretRepo

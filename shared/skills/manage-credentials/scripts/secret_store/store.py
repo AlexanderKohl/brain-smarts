@@ -22,6 +22,7 @@ from .policy import (INDEX_PREFIX, Policy, check_endorsement, create_trust_root,
                      object_hash, public_entry)
 from .repo import Conflict, MovedHead, SecretRepo
 from .store_ops import (EMPTY_JSON, GROUP, INDEX_ID, build_put, checkpoint_commit, load_config,
+                        not_enrolled_message,
                         marker_current, store_status, write_marker)
 
 RETRIES = 3
@@ -268,6 +269,10 @@ class SecretStore:
             self._sync_locked(pinned, saved)
 
     def _sync_locked(self, pinned: Any, saved: checkpoint.Checkpoint | None) -> None:
+        if self.policy is None and saved is None and pinned is None and self.repo._fetch() is not None:
+            # Plan section I: a computer never enrolled here meets a trust root it cannot pin. Said
+            # plainly before any commit is judged, and nothing is marked refused in the clone.
+            raise SecretStoreError(not_enrolled_message(self))
         state = {"policy": self.policy, "cp": self.checkpoint, "caught": saved is None or self.checkpoint is not None}
 
         def verify(_commit: str, files: dict) -> bool:

@@ -30,12 +30,22 @@ _ANY = object()
 _HELD: dict[tuple[str, int], int] = {}  # (clone, thread) -> nesting depth of the lock
 
 
-class RefusedCommit(SecretStoreError):
-    """A remote commit failed verification. Names the commit, never the content."""
+SHAPE_RULE = "the commit has more than one parent or a subject outside the allowed set"
+_REASON_LIMIT = 300
 
-    def __init__(self, commit: str) -> None:
-        super().__init__(f"remote commit {commit} was refused by verification")
-        self.commit = commit
+
+class RefusedCommit(SecretStoreError):
+    """A remote commit failed verification. Names the commit and the rule that refused it (the
+    verifier's message: ids, groups, people and field names, never a value), never the content."""
+
+    def __init__(self, commit: str, reason: str | None = None) -> None:
+        self.commit, self.reason = commit, refusal_reason(reason)
+        super().__init__(f"remote commit {commit} was refused by verification: {self.reason}")
+
+
+def refusal_reason(reason: Any) -> str:
+    text = " ".join(str(reason or "").split())[:_REASON_LIMIT]
+    return text or "the verifier gave no reason"
 
 
 class MovedHead(SecretStoreError):
@@ -225,13 +235,14 @@ class SecretRepo:
         commits = self._out("rev-list", "--reverse", "--topo-order", span).split()
         for commit in commits:
             if not self._shape_ok(commit):
-                self._refuse(commit)
+                self._refuse(commit, SHAPE_RULE)
+            reason = None
             try:
                 accepted = verify(commit, self._changed_files(commit))
-            except SecretStoreError:
-                accepted = False
+            except SecretStoreError as error:
+                accepted, reason = False, str(error)
             if accepted is not True:
-                self._refuse(commit)
+                self._refuse(commit, reason)
             self._advance(commit)
             if advanced is not None:
                 advanced(commit)
@@ -256,12 +267,12 @@ class SecretRepo:
         commits = self._out("rev-list", "--reverse", "--topo-order", f"{start}..{head}").split()
         for commit in commits:
             if not self._shape_ok(commit):
-                raise RefusedCommit(commit)
+                raise RefusedCommit(commit, SHAPE_RULE)
         return commits
 
-    def _refuse(self, commit: str) -> None:
-        self._set_state(refused=commit)
-        raise RefusedCommit(commit)
+    def _refuse(self, commit: str, reason: str | None = None) -> None:
+        self._set_state(refused=commit, reason=refusal_reason(reason))
+        raise RefusedCommit(commit, reason)
 
     def _changed_files(self, commit: str) -> dict[str, Any]:
         raw = self._git("diff-tree", "--root", "--no-commit-id", "-r", "-z", "--name-status",
@@ -392,9 +403,11 @@ class SecretRepo:
 
     def status(self) -> str:
         """Plain-words summary, never a raw Git error."""
-        refused = self._state().get("refused")
+        state = self._state()
+        refused = state.get("refused")
         if refused:
-            return f"Refused at commit {refused}: a remote change failed verification; nothing after it is used."
+            return (f"Refused at commit {refused}: a remote change failed verification "
+                    f"({refusal_reason(state.get('reason'))}); nothing after it is used.")
         try:
             with self.lock():  # never races a write or pull on refs/remotes/origin/main
                 remote = self._fetch()
