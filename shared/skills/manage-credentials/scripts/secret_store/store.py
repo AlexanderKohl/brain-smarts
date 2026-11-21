@@ -58,6 +58,7 @@ class SecretStore:
     _head: str | None = None  # the clone commit the held policy and checkpoint describe
     _pinned: str | None = None  # the trust-root pin this instance verified at open
     _syncing = False  # a pull is saving checkpoints ahead of the held one: nothing to follow
+    not_created = False  # the last open found the repository with no commit and no checkpoint here
 
     def __init__(self, use_config_file: bool = True, brain_root: Any = None, **overrides: Any) -> None:
         self.config = load_config(use_config_file, brain_root, **overrides)
@@ -298,14 +299,18 @@ class SecretStore:
         finally:
             self.policy, self.checkpoint = state["policy"], state["cp"]
             self._head, self._syncing = self.repo.head(), False
-        if self.policy is None:
-            raise SecretStoreError("the personal repository is empty; run init first")
+        if self.policy is None:  # the remote has no commit; with no checkpoint here it was never set up
+            self.not_created = saved is None
+            raise SecretStoreError("the team repository is empty; run team-init first" if self.team
+                                   else "the personal repository is empty; run init first")
+        self.not_created = False
         if not state["caught"]:
             raise SecretStoreError("the repository is older than this computer's checkpoint; refusing to use it")
 
     def open(self, fingerprint_to_pin: str | None = None) -> "SecretStore":
         """Pull and verify; a first open here needs the trust root fingerprint."""
         self._require_enabled()
+        self.not_created = False
         self._identity()
         self.repo = SecretRepo(self.clone, self._remote_url()).clone_or_open()
         saved = self._load_checkpoint()

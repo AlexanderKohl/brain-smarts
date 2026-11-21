@@ -7,7 +7,8 @@ access token and shared settings and may change shared settings only. An entry i
 the personal store or the team store by which index holds its name (personal first; a name held
 twice is refused as ambiguous; a new name goes to the personal store). The team store is built
 and opened when the configuration names one (team_repo_url, or a team_clone that holds a
-clone). Grant fields are never stored in or served from a static object. A token field of a
+clone); while its repository has no commit the personal store is served, status shows the team
+store as not created yet, and the next operation after team-init opens it. Grant fields are never stored in or served from a static object. A token field of a
 sign-in changes only inside a begun refresh (begin_refresh, then set_json with its operation
 id); a first sign-in begins with new_authorisation. Also the vault-only operations the
 migration uses. Messages never carry values."""
@@ -113,7 +114,12 @@ class StoreBackend:
                     st.open()
                     self._sync_errors.pop(number, None)
                 except SecretStoreError as error:  # a team store not reachable yet leaves the personal one
-                    if not tolerate or st is self.store:
+                    if st is self.store:
+                        raise
+                    if getattr(st, "not_created", False):  # retried at every operation until team-init ran
+                        self._sync_errors.pop(number, None)
+                        continue
+                    if not tolerate:
                         raise
                     self._sync_errors[number] = str(error)
                 continue
@@ -144,6 +150,9 @@ class StoreBackend:
             out["package_timer"] = f"the last recovery-package check failed: {self.timer_error}"
         out["recovery_packages"] = {label: package_state(st) for label, st
                                     in (("personal", self.store), ("team", self.team)) if st is not None}
+        if self.team is not None and self.team.policy is None and getattr(self.team, "not_created", False):
+            out["team_store"] = ("not created yet: the team repository has no commit; after team-init this "
+                                 "agent opens it at its next operation, without a restart")
         if self.sync_error:
             out["store_sync"] = f"the last pull failed, so reads use this computer's copy: {self.sync_error}"
         return out
@@ -452,6 +461,8 @@ def package_state(st: Any) -> str:
     if getattr(st, "package_error", None):
         return f"failed: {st.package_error}; the timer retries, or run recovery-package"
     if st.policy is None:
+        if getattr(st, "not_created", False):
+            return "not created yet: no package until the store exists"
         return "not checked yet: the store is not open"
     try:
         fresh = st.package_fresh()
@@ -504,7 +515,9 @@ def vault_request(vault: Any, passphrase: str, operation: str, request: dict) ->
         path = Path(str(request.get("path") or "")).resolve()
         if Path(vault.path).resolve().parent not in path.parents:
             raise SecretStoreError("a vault copy to check must be inside the vault's folder")
-        return sorted(type(vault)(path).load(passphrase).get("entries") or {})
+        # the copy has the migration permission of the vault it was given: under a live lock only
+        copy = type(vault)(path, migration=bool(getattr(vault, "_migration", False)))
+        return sorted(copy.load(passphrase).get("entries") or {})
     if operation == "vault_get_fields":
         fields = request.get("fields")
         if not isinstance(fields, list) or not all(isinstance(f, str) for f in fields):

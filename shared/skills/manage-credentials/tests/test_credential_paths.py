@@ -51,6 +51,8 @@ REVIEWED: dict[tuple[str, str, str], tuple[int, str]] = {
         1, "the passphrase fallback's vault; its open refuses while the store is on"),
     ("secret_store/broker_backend.py", "agent_operation", "migration="): (
         1, "opens the old vault in store mode only while migrate_to_store.py holds a live migration lock"),
+    ("secret_store/broker_backend.py", "vault_request", "migration="): (
+        1, "the verify-copy backup inherits the given vault's permission: under a live migration lock only"),
     ("token_relay.py", "_check_vault", "PortableVault("): (
         1, "path only: compares --vault with the vault the running agent serves"),
     ("token_relay.py", "_store_key", "broker_request"): (

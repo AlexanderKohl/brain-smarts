@@ -52,6 +52,7 @@ keyword in `scripts/`, by file and function, with the number of calls `tests/tes
 | `portable_vault.py` `BrokerOAuthStore.sync_store` | broker_request | 1 | the agent pulls the store; no credential is returned |
 | `portable_vault.py` `PortableVaultJsonStore.__init__` | PortableVault( | 1 | the passphrase fallback's vault; its open refuses while the store is on |
 | `secret_store/broker_backend.py` `agent_operation` | migration= | 1 | opens the old vault in store mode only while a live migration lock is held |
+| `secret_store/broker_backend.py` `vault_request` | migration= | 1 | the verify-copy backup inherits the given vault's permission: under a live migration lock only |
 | `token_relay.py` `_check_vault` | PortableVault( | 1 | path only: compares `--vault` with the vault the agent serves |
 | `token_relay.py` `_store_key` | broker_request | 1 | key-import through the agent; every key command is refused in store mode first |
 | `token_relay.py` `config_candidates` | PortableVault( | 1 | path only: where `token-relay.json` may sit |

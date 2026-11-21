@@ -5,7 +5,12 @@ commit judged by accept.py; messages name people, computers, groups and entries,
 
 from __future__ import annotations
 
+import os
+import shutil
+import stat
 import subprocess
+import sys
+from pathlib import Path
 from typing import Any, Callable
 
 from . import keys, recovery
@@ -21,6 +26,40 @@ _PIN = "team-trust-root.json"
 
 def _gh(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run(["gh", *args], capture_output=True)
+
+
+def _clone_git(clone: Path, *args: str) -> subprocess.CompletedProcess:
+    # --git-dir: a damaged clone fails here instead of git finding a repository above it
+    return subprocess.run(["git", "--git-dir", str(clone / ".git"), *args], capture_output=True)
+
+
+def clone_has_history(clone: Path) -> bool:
+    """True when the team clone holds a commit or any ref (a fetched remote branch included), or
+    git cannot read it: fail closed. A clone left by opening a repository with no commit yet (the
+    agent's backend, plan section H) holds neither, so it does not count as a team store."""
+    if not (clone / ".git").exists():
+        return False
+    if not (clone / ".git").is_dir() or _clone_git(clone, "rev-parse", "--verify", "--quiet", "HEAD").returncode == 0:
+        return True
+    refs = _clone_git(clone, "for-each-ref", "--count=1")
+    return refs.returncode != 0 or bool(refs.stdout.strip())
+
+
+def _writable_then_retry(func: Callable[..., Any], path: str, _error: Any) -> None:
+    os.chmod(path, stat.S_IWRITE)  # git marks some files read-only on Windows
+    func(path)
+
+
+def replace_empty_clone(clone: Path, remote_url: str) -> None:
+    """An empty clone of another remote is removed so team-init can clone the configured one;
+    refused when the folder holds anything but the empty clone."""
+    origin = _clone_git(clone, "remote", "get-url", "origin")
+    if origin.returncode == 0 and origin.stdout.decode().strip() == remote_url:
+        return  # the same repository: team-init reuses the empty clone
+    if clone_has_history(clone) or {p.name for p in clone.iterdir()} != {".git"}:
+        raise SecretStoreError("the team store is already set up on this computer")
+    handler = {"onexc": _writable_then_retry} if sys.version_info >= (3, 12) else {"onerror": _writable_then_retry}
+    shutil.rmtree(clone, **handler)
 
 
 def create_team_repository(owner: str, gh: Callable[..., Any] | None = None) -> str:
@@ -59,10 +98,11 @@ class TeamStore(SecretStore):
                   words_callback: Callable[[list[str]], bool] | None = None,
                   gh: Callable[..., Any] | None = None) -> str:
         """Create the team repository: this computer's person is the first administrator; the
-        team recovery words are shown once in the local window and endorse the trust root."""
+        team recovery words are shown once in the local window and endorse the trust root. A
+        team clone with no commit and no ref, and no team checkpoint, is not a team store: the
+        agent leaves one when the configured repository is still empty (plan section H)."""
         self._require_enabled()
-        if self.checkpoint_path.exists() or (self.clone / ".git").exists():
-            raise SecretStoreError("the team store is already set up on this computer")
+        self._require_not_set_up()
         person, computer = self.config["person"], self.config["computer"]
         try:
             ident = self._identity()
@@ -81,7 +121,14 @@ class TeamStore(SecretStore):
         root = create_trust_root(people, public_entry(rx.public_key(), re_.public_key()), {}, [person],
                                  ident.ed25519, recovery_signer=re_)
         del rx, re_
+        self._require_not_set_up()  # again: the words window may have stayed open a while
+        if (self.clone / ".git").exists():
+            replace_empty_clone(self.clone, remote_url)
         return self._publish(root, remote_url, "team_repo_url")
+
+    def _require_not_set_up(self) -> None:
+        if self.checkpoint_path.exists() or clone_has_history(self.clone):
+            raise SecretStoreError("the team store is already set up on this computer")
 
 
 # -- administrator transactions -------------------------------------------------------------------
