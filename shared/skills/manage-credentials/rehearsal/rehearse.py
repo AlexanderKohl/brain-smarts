@@ -129,8 +129,8 @@ class SessionClient:
 
 
 class Rehearsal:
-    def __init__(self, check: bool, commit: str, environ: dict | None = None) -> None:
-        self.check, self.commit = check, commit
+    def __init__(self, check: bool, commit: str, environ: dict | None = None, logs: str | None = None) -> None:
+        self.check, self.commit, self.logs = check, commit, logs
         self.base = dict(environ if environ is not None else os.environ)
         self.n = names.new_names(cloud_root=names.cloud_root_from(self.base))
         self.seed = secrets.token_bytes(32)
@@ -231,6 +231,9 @@ class Rehearsal:
                 tar.extractall(self.n.brain(pc), filter="data")
             for folder in (self.n.local_app_data(pc), self.n.temp / pc / "logs"):
                 folder.mkdir(parents=True, exist_ok=True)
+            # The store asks git for a global user name; the run's home is its own, so it gets its own.
+            (self.n.home(pc) / ".gitconfig").write_text(
+                "[user]\n\tname = rehearsal\n\temail = rehearsal@example.com\n", "utf-8")
             self.write_config(pc)
         self.n.gh_empty.mkdir(parents=True, exist_ok=True)
         for kind in ("personal", "team"):
@@ -402,6 +405,11 @@ class Rehearsal:
             client.close()
         if self.server is not None:
             self.server.stop()
+        if self.logs:  # the children's logs, kept for reading after the run folder is gone
+            for log in sorted(self.n.temp.glob("*/logs/*.log")):
+                target = Path(self.logs) / f"{self.n.run_id}-{log.parent.parent.name}-{log.name}"
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(log.read_bytes())
         report = cleanup.clean_up(self.n, check_mode=self.check, processes=self.processes)
         if self.baseline is not None:
             report.left += guard.compare_baseline(self.baseline, guard.record_baseline(self.base))
@@ -416,10 +424,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--check", action="store_true", help="the guard and the steps that touch no keychain, "
                                                              "process or cloud folder")
     parser.add_argument("--commit", default="HEAD", help="the commit under test (default HEAD)")
+    parser.add_argument("--logs", help="a folder that receives a copy of the child processes' logs before the "
+                                       "clean-up (they may hold the run's invented values)")
     args = parser.parse_args(argv)
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # the en dash in every line
-    rehearsal = Rehearsal(args.check, args.commit)
+    rehearsal = Rehearsal(args.check, args.commit, logs=args.logs)
     print(f"rehearsal {rehearsal.n.run_id}: {'check' if args.check else 'full run'} in {rehearsal.n.temp}", flush=True)
     return run(rehearsal.steps(), rehearsal.clean)
 
