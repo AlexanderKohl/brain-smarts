@@ -37,6 +37,17 @@ class ProviderNotCalled(Exception):
     exception from the call leaves the record in calling: the call may have reached the provider."""
 
 
+class ProviderRefused(Exception):
+    """Raised by a token-endpoint call the provider answered with a well-formed OAuth error (HTTP 400
+    or 401 with a JSON error, RFC 6749 section 5.2): no token was issued, so the journal treats it
+    as ProviderNotCalled (record removed, lock released). error is the OAuth error code, for example
+    invalid_grant; body is at most 1,000 characters of the answer and is never logged."""
+
+    def __init__(self, status: int, error: str, body: str = "") -> None:
+        super().__init__(f"the token endpoint refused the request (HTTP {status}, {error[:100]})")
+        self.status, self.error, self.body = status, error, body
+
+
 def uncertain_message(entry: str, provider: str | None) -> str:
     return (f"The last refresh of {label(entry)} is uncertain: the provider was called but its answer was never "
             "recorded, so the old refresh token must not be used again and the entry is not refreshed. "
@@ -126,7 +137,7 @@ class Journal:
             self.write(entry, {**base, "state": "calling"})
             try:
                 answer = call()
-            except ProviderNotCalled:
+            except (ProviderNotCalled, ProviderRefused):  # no token can have been issued
                 self.path(entry).unlink(missing_ok=True)
                 raise
             record = {**base, "state": "answered", "answer": plain_numbers(dict(answer))}
