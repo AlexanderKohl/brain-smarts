@@ -157,7 +157,7 @@ class Migration(StoreFixture):
         before = self.vault.path.read_bytes()
         code, _text = self.migrate()
         self.assertEqual(code, 0)
-        self.assertEqual(self.vault.path.read_bytes(), before)
+        self.assertNotEqual(self.vault.path.read_bytes(), before)  # its sign-in tokens are scrubbed (round 8)
         backups = self.vault.path.parent / "migration-backups"
         (copy,) = backups.glob("*.vault")
         self.assertEqual(copy.read_bytes(), before)

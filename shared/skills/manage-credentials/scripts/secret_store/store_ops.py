@@ -258,17 +258,30 @@ def write_upkeep_error(config: dict[str, Any], package: Path, text: str | None) 
         pass
 
 
+TEAM_PACKAGE_PREFIX = "brain-team-secrets"  # team.REPOSITORY_NAME (team imports this module)
+
+
 def package_health(config: dict[str, Any]) -> str | None:
-    """The daily due check's read-only look at the personal recovery package: None when the store
-    is off or the package is fresh (under seven days old, its marker naming the clone's current
-    policy and the package), else a plain problem. Files only: no Git, keychain or network, so the
-    marker's signature is left to the store, which checks it at its next use."""
+    """The daily due check's read-only look at every configured store's recovery package (round-8
+    review: the personal one, and the team one when team_repo_url or a team clone is configured):
+    None when the store is off or every package is fresh (under seven days old, its marker naming
+    the clone's current policy and the package), else the plain problems. Files only: no Git,
+    keychain or network, so the marker's signature is left to the store, which checks it at its
+    next use."""
     if not config.get("enabled") or not config.get("person"):
         return None
-    clone = Path(config["personal_clone"])
-    if not (clone / ".git").is_dir():
+    folder, person = Path(config["recovery_package_dir"]), config["person"]
+    problems = [_one_package_health(config, Path(config["personal_clone"]), folder / f"brain-secrets-{person}.package")]
+    team_clone = Path(config["team_clone"]) if config.get("team_clone") else None
+    if config.get("team_repo_url") or (team_clone is not None and (team_clone / ".git").is_dir()):
+        team = _one_package_health(config, team_clone, folder / f"{TEAM_PACKAGE_PREFIX}-{person}.package")
+        problems.append(f"team store: {team}" if team else None)
+    return "; ".join(p for p in problems if p) or None
+
+
+def _one_package_health(config: dict[str, Any], clone: Any, path: Path) -> str | None:
+    if clone is None or not (Path(clone) / ".git").is_dir():
         return "the secrets store is on but not set up on this computer, so there is no recovery package"
-    path = Path(config["recovery_package_dir"]) / f"brain-secrets-{config['person']}.package"
     try:
         failed = _upkeep_file(config, path).read_text("utf-8").strip()
     except OSError:

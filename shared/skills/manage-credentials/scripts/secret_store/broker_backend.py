@@ -29,7 +29,9 @@ from .store_ops import load_config
 
 SYNC_SECONDS = 30.0
 REFRESH_TIMEOUT = 600.0  # a begun refresh without its save by then stays uncertain
-VAULT_OPS = frozenset({"vault_get_fields", "vault_get_json", "vault_list_entries", "vault_verify_copy"})
+VAULT_OPS = frozenset({"vault_clear_migration_marker", "vault_get_fields", "vault_get_json", "vault_list_entries",
+                       "vault_restore_static", "vault_scrub_signin", "vault_verify_copy"})
+TOKEN_KEYS = frozenset({"access_token", "accessToken", "refresh_token", "refreshToken"})
 STORE_OPS = frozenset({"abort_refresh", "begin_refresh", "clear_signin", "poll_refresh", "release_refresh",
                        "sync_store"})
 AGENT_OPS = VAULT_OPS | STORE_OPS
@@ -138,6 +140,8 @@ class StoreBackend:
         out = {"backend": "store", "store": text}
         if getattr(self, "timer_error", None):
             out["package_timer"] = f"the last recovery-package check failed: {self.timer_error}"
+        out["recovery_packages"] = {label: package_state(st) for label, st
+                                    in (("personal", self.store), ("team", self.team)) if st is not None}
         if self.sync_error:
             out["store_sync"] = f"the last pull failed, so reads use this computer's copy: {self.sync_error}"
         return out
@@ -440,6 +444,25 @@ class PackageTimer:
             wait(min(poll, self.interval))
 
 
+def package_state(st: Any) -> str:
+    """One store's recovery package for status (round-8 review: every configured store)."""
+    if getattr(st, "package_error", None):
+        return f"failed: {st.package_error}; the timer retries, or run recovery-package"
+    if st.policy is None:
+        return "not checked yet: the store is not open"
+    try:
+        fresh = st.package_fresh()
+    except (OSError, SecretStoreError):
+        fresh = False
+    return "fresh" if fresh else "stale or missing; the timer rebuilds it"
+
+
+def scrubbed(value: dict) -> dict:
+    """A migrated sign-in without its tokens: access, refresh and every grant or token field."""
+    drop = TOKEN_KEYS | provider_profiles.token_fields() | provider_profiles.grant_fields()
+    return {k: v for k, v in value.items() if k not in drop}
+
+
 def agent_operation(agent: Any, operation: str, request: dict) -> Any:
     """The Vault Agent operations answered here: vault-only ones and the store's refresh ones."""
     if operation in VAULT_OPS:
@@ -478,6 +501,32 @@ def vault_request(vault: Any, passphrase: str, operation: str, request: dict) ->
         if not isinstance(fields, list) or not all(isinstance(f, str) for f in fields):
             raise SecretStoreError("fields must be a list of strings")
         return vault.get_fields(entry, fields, passphrase)
+    if operation in ("vault_scrub_signin", "vault_restore_static", "vault_clear_migration_marker"):
+        from portable_vault import migrated_signins, write_migration_marker
+        marked = migrated_signins(vault.path)
+        if operation == "vault_clear_migration_marker":  # the rollback, after its static secrets
+            write_migration_marker(vault.path, {})
+            return {"cleared": True}
+        if operation == "vault_restore_static":  # never a sign-in: no token leaves the store
+            values = request.get("values")
+            if not isinstance(values, dict) or not values:
+                raise SecretStoreError("values must be a non-empty object")
+            fields = {}
+            for field, item in values.items():
+                value, kind = (item or {}).get("value"), (item or {}).get("kind")
+                if (field in marked.get(entry, []) or kind not in ("text", "json")
+                        or (kind == "json" and (not isinstance(value, dict) or oauth_ops.looks_like_signin(value)))
+                        or (kind == "text" and not isinstance(value, str))):
+                    raise SecretStoreError(f"{entry}#{field} is not a static secret; nothing was restored")
+                fields[field] = (value, kind)
+            vault.set_fields(entry, fields, passphrase)
+            return {"restored": sorted(fields)}
+        field = str(request.get("field") or "")  # the marker first: a stop before the scrub still refuses the copy
+        write_migration_marker(vault.path, {**marked, entry: marked.get(entry, []) + [field]})
+        value = vault.get(entry, field, passphrase)
+        if isinstance(value, dict):
+            vault.set(entry, field, scrubbed(value), "json", passphrase)
+        return {"scrubbed": True}
     if operation == "vault_get_json":
         value = vault.get(entry, str(request.get("field") or ""), passphrase)
         if not isinstance(value, dict):

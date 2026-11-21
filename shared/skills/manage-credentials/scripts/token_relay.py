@@ -9,7 +9,8 @@ refresh (refuse_unrelayed_refresh), so a stale refresh token never reaches the p
 token_relay_store syncs with the remote record, takes a lease before a refresh and pushes saves
 as new versions; token_relay_backend holds the record format and the backends.
 
-Command line: status, key-new, key-export, key-import, seed --entry NAME [--replace]. seed --replace
+Command line: status, key-new, key-export, key-import, seed --entry NAME [--replace]. With the
+secrets store on every command but status is refused, and status reports the relay retired. seed --replace
 overwrites an existing shared record, readable or not, at a version above both this computer's and
 the old record's; it is the next step after a new authorisation the relay kept local-only. The
 relay names this computer by token_relay_store.holder_name: the hostname plus a random id kept in
@@ -61,6 +62,7 @@ CONFIG_NAME = "token-relay.json"
 KEY_ENTRY = "token-relay"
 KEY_FIELD = "relay_key"
 RELAYED_FIELD = "oauth_token_json"
+RETIRED = "the token relay is retired while the secrets store is on; the store shares sign-ins now"
 
 __all__ = [
     "Conflict",
@@ -436,6 +438,26 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    # Round-8 review: with the store on no relay key or seed command runs (a seed would publish the
+    # store's refresh token to the relay, outside the store's journal); status only says retired.
+    if portable_vault.secret_store_enabled():
+        if args.command == "status":
+            print(json.dumps({"relay": "retired", "reason": RETIRED}))
+            return 0
+        print(f"Token relay refused: {RETIRED}.", file=sys.stderr)
+        return 2
+    # Round-8 review: a migrated sign-in (named in the vault's migration marker) is never seeded,
+    # store on or off, and no key command runs while the marker names any entry.
+    if args.command != "status":
+        try:
+            marked = portable_vault.migrated_signins(PortableVault(args.vault).path)
+        except CredentialError as exc:
+            print(f"Token relay refused: {exc}.", file=sys.stderr)
+            return 2
+        if (args.command == "seed" and args.entry in marked) or (args.command != "seed" and marked):
+            print("Token relay refused: the migration marker names " + ", ".join(sorted(marked))
+                  + "; a migrated sign-in moved to the secrets store and is never relayed.", file=sys.stderr)
+            return 2
     if args.vault:
         os.environ["PORTABLE_VAULT_PATH"] = args.vault
     try:

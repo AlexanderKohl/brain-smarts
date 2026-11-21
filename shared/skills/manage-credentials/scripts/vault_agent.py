@@ -15,7 +15,7 @@ from multiprocessing.connection import Listener
 from pathlib import Path
 from typing import Any
 
-from portable_vault import CredentialError, PortableVault, default_vault_path
+from portable_vault import CredentialError, PortableVault, default_vault_path, refuse_migrated
 from vault_agent_runtime import (
     AGENT_PROTOCOL_VERSION,
     clear_state,
@@ -133,6 +133,7 @@ class VaultAgent:
         if self._store is not None:
             return self._store.get_json(entry, field)
         passphrase = self._require_passphrase()
+        refuse_migrated(self.vault.path, entry, field)
         value = self.vault.get(entry, field, passphrase)
         if not isinstance(value, dict):
             raise CredentialError(f"Vault field must contain a JSON object: {entry}#{field}")
@@ -145,6 +146,7 @@ class VaultAgent:
             if self._store is not None:
                 self._store.set_json(entry, field, value, operation if isinstance(operation, str) else None)
             else:
+                refuse_migrated(self.vault.path, entry, field)
                 self.vault.set(entry, field, value, "json", self._require_passphrase())
         return {"saved": True, "entry": entry, "field": field}
 

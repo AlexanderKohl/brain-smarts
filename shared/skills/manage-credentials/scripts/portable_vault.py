@@ -80,6 +80,49 @@ def refuse_when_store_on() -> None:
         raise CredentialError(STORE_ON_MESSAGE)
 
 
+MIGRATED_MESSAGE = ("{entry}#{field} was moved to the secrets store and the old vault's copy is retired; switch "
+                    "the store on, or run migrate_to_store.py rollback")
+
+
+def migration_marker_path(vault_path: Path | str) -> Path:
+    """The persistent migration marker beside the vault: the sign-ins migrate_to_store.py moved."""
+    path = Path(vault_path)
+    return path.with_name(path.name + ".migrated.json")
+
+
+def migrated_signins(vault_path: Path | str) -> dict[str, list[str]]:
+    """Entry -> sign-in fields the marker names; {} without a marker. An unreadable marker fails
+    closed: it raises, so no legacy path uses the old vault's sign-ins."""
+    path = migration_marker_path(vault_path)
+    if not path.exists():
+        return {}
+    try:
+        entries = json.loads(path.read_text("utf-8"))["entries"]
+        return {str(e): [str(f) for f in fields] for e, fields in entries.items() if isinstance(fields, list)}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        raise CredentialError(f"the migration marker {path} cannot be read; the old vault's sign-ins are refused") \
+            from None
+
+
+def write_migration_marker(vault_path: Path | str, entries: dict[str, list[str]]) -> None:
+    """Replace the marker atomically; with no entries left it is removed."""
+    path = migration_marker_path(vault_path)
+    entries = {e: sorted(set(f)) for e, f in entries.items() if f}
+    if not entries:
+        path.unlink(missing_ok=True)
+        return
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(json.dumps({"entries": entries}, indent=2, sort_keys=True) + "\n", "utf-8")
+    os.replace(temporary, path)
+
+
+def refuse_migrated(vault_path: Path | str, entry: str, field: str) -> None:
+    """Round-8 review: a legacy OAuth load, save or refresh of a migrated sign-in is refused,
+    whether or not the store is switched on."""
+    if field in migrated_signins(vault_path).get(entry, []):
+        raise CredentialError(MIGRATED_MESSAGE.format(entry=entry, field=field))
+
+
 def require_store_agent(status: Any) -> bool:
     """Fail closed (round-7 review): with the store on, the running agent's status must report
     backend "store"; a vault-only agent started earlier is refused, never read. Returns whether
@@ -552,6 +595,10 @@ class PortableVaultJsonStore:
                 / "portable-ai-brain-credential-locks"
                 / f"{digest}.lock"
             )
+        # A migrated sign-in is served only by the store's agent; any other path is refused.
+        if self.field in migrated_signins(self.vault.path).get(self.entry, []) and not (
+                self._broker is not None and self._broker.store_mode()):
+            raise CredentialError(MIGRATED_MESSAGE.format(entry=self.entry, field=self.field))
         # Token relay hook: a relayed store for an entry listed in token-relay.json beside the
         # vault, else None and the behaviour below is unchanged. The logic lives in token_relay.py.
         # With the secrets store on no relay is built, whatever token-relay.json lists.

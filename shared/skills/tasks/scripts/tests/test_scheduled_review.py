@@ -1,6 +1,7 @@
 """The scheduled review writes only the ignored /temp/due.md, changes nothing Git tracks, and says
 what needs the owner's attention."""
 import importlib.util
+import json
 import subprocess
 import sys
 import tempfile
@@ -127,6 +128,26 @@ class ScheduledReviewTest(unittest.TestCase):
             (Path(session) / "memory" / "OWNER.md").write_text(f"---\nbrain_root: {shared}\n---\n", encoding="utf-8")
             self.assertEqual(scheduled_review.owner_brain_root(Path(session)), Path(shared))
             self.assertEqual(scheduled_review.owner_brain_root(Path(shared)), Path(shared))
+
+
+    def test_secrets_package_checks_the_team_package_too(self):
+        with tempfile.TemporaryDirectory() as brain, tempfile.TemporaryDirectory() as outside:
+            root, other = Path(brain), Path(outside)
+            config = root / "memory/skills/manage-credentials/config/secret-store.json"
+            config.parent.mkdir(parents=True)
+            config.write_text(json.dumps({
+                "enabled": True, "person": "alec", "computer": "pc", "personal_clone": str(other / "p"),
+                "team_clone": str(other / "t"), "checkpoint_dir": str(other / "state"),
+                "recovery_package_dir": str(other / "packages")}), encoding="utf-8")
+            (other / "t" / ".git").mkdir(parents=True)
+            (other / "state").mkdir()
+            # the Vault Agent's timer found the team package folder unwritable
+            (other / "state" / "brain-team-secrets-alec.package.upkeep-error").write_text(
+                "the recovery package could not be written (PermissionError)", encoding="utf-8")
+            problem = scheduled_review.secrets_package(root)
+            self.assertIn("team store", problem)
+            self.assertIn("upkeep failed", problem)
+            self.assertIn("PermissionError", problem)
 
 
 if __name__ == "__main__":
