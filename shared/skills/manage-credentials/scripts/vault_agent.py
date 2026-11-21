@@ -80,7 +80,28 @@ class VaultAgent:
             }
             if self._store is not None:
                 result.update(self._store.status(), unlocked=True, vault_unlocked=self._passphrase is not None)
+                relay = self._ignored_relay()
+                if relay:
+                    result["token_relay"] = relay
             return result
+
+    def _ignored_relay(self) -> str | None:
+        """A token-relay.json still found while the store is on: reported, never used."""
+        try:
+            from token_relay import resolve_config
+
+            found, _looked = resolve_config(self.vault.path, use_agent=False)  # never ask itself
+        except (CredentialError, OSError):
+            return None
+        return f"ignored while the secrets store is on ({found})" if found is not None else None
+
+    def _package_timer(self) -> Any:
+        """The recovery-package timer when this agent serves the secrets store, else None."""
+        if self._store is None or not hasattr(self._store, "package_tick"):
+            return None
+        from secret_store.broker_backend import PackageTimer
+
+        return PackageTimer(self._store)
 
     def unlock(self, passphrase: str) -> dict[str, Any]:
         if not passphrase:
@@ -306,6 +327,10 @@ class VaultAgent:
         write_state(self._state_payload)
         atexit.register(self.shutdown)
         threading.Thread(target=self._keep_state, name="vault-agent-state", daemon=True).start()
+        timer = self._package_timer()
+        if timer is not None:  # keeps the recovery package fresh without a credential request
+            threading.Thread(target=timer.run, args=(lambda: self._listener is None,),
+                             name="vault-agent-package", daemon=True).start()
         print(
             "Vault Agent listening. Unlock once with: "
             "python shared/skills/manage-credentials/scripts/vaultctl.py unlock",
@@ -419,7 +444,12 @@ def main() -> int:
     args = parser.parse_args()
     from secret_store.broker_backend import backend_if_enabled
 
-    agent = VaultAgent(args.vault or default_vault_path(), store=backend_if_enabled())
+    try:
+        store = backend_if_enabled()
+    except SecretStoreError as exc:  # malformed enabled configuration: fatal, never the old vault
+        print(f"Vault Agent failed: the secrets-store configuration is not usable: {exc}", file=sys.stderr)
+        return 2
+    agent = VaultAgent(args.vault or default_vault_path(), store=store)
     try:
         if args.operation == "serve":
             agent.serve_forever()

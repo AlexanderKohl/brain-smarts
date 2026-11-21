@@ -294,6 +294,16 @@ class SecretStore:
                                   "the change itself was saved")
         finally:
             self._package_busy = False
+            self.record_upkeep()
+
+    def record_upkeep(self, pull_error: str | None = None) -> None:
+        """Keep the last upkeep failure (or clear it) where the daily due check reads it."""
+        from .store_ops import write_upkeep_error
+
+        problems = [self.package_error] if getattr(self, "package_error", None) else []
+        if pull_error:
+            problems.append(f"the last pull failed: {pull_error}")
+        write_upkeep_error(self.config, self._package_path(), "; ".join(problems) or None)
 
     @classmethod
     def restore_from_package(cls, words: str, package_path: Any, folder: Any,

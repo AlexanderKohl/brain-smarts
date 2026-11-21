@@ -260,7 +260,14 @@ def read_relay_key(store: Any = None) -> bytes:
 def relay_for(store: Any) -> RelayedStore | None:
     """The relayed behaviour for a PortableVaultJsonStore, or None when the relay is off. The
     config used (or None) and the places looked are left on the store as relay_config_path and
-    relay_config_looked, for refuse_unrelayed_refresh and for callers that report them."""
+    relay_config_looked, for refuse_unrelayed_refresh and for callers that report them. With the
+    secrets store on no relay is built or used (round-7 review): the store's journal governs every
+    refresh, and the store is marked relay_ignored."""
+    import portable_vault
+
+    if portable_vault.secret_store_enabled():
+        store.relay_config_path, store.relay_config_looked, store.relay_ignored = None, [], True
+        return None
     found, looked = resolve_config(
         store.vault.path, use_agent=getattr(store, "_broker", None) is not None
     )

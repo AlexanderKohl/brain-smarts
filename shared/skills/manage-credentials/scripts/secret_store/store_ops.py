@@ -240,6 +240,24 @@ def marker_current(marker: Path, package: Path, policy_hash: str, public_key: An
         return False
 
 
+def _upkeep_file(config: dict[str, Any], package: Path) -> Path:
+    return Path(config["checkpoint_dir"]) / (Path(package).name + ".upkeep-error")
+
+
+def write_upkeep_error(config: dict[str, Any], package: Path, text: str | None) -> None:
+    """The last recovery-package upkeep failure, beside the checkpoint on this computer (never in the
+    package folder, which may be the offline drive that failed); None clears it. Best effort."""
+    path = _upkeep_file(config, package)
+    try:
+        if text:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, "utf-8")
+        elif path.exists():
+            path.unlink()
+    except OSError:
+        pass
+
+
 def package_health(config: dict[str, Any]) -> str | None:
     """The daily due check's read-only look at the personal recovery package: None when the store
     is off or the package is fresh (under seven days old, its marker naming the clone's current
@@ -251,6 +269,12 @@ def package_health(config: dict[str, Any]) -> str | None:
     if not (clone / ".git").is_dir():
         return "the secrets store is on but not set up on this computer, so there is no recovery package"
     path = Path(config["recovery_package_dir"]) / f"brain-secrets-{config['person']}.package"
+    try:
+        failed = _upkeep_file(config, path).read_text("utf-8").strip()
+    except OSError:
+        failed = ""
+    if failed:
+        return f"the Vault Agent's recovery-package upkeep failed: {failed}; it retries, or run recovery-package"
     if not path.is_file():
         return f"no recovery package at {path}; run recovery-package"
     days = (time.time() - path.stat().st_mtime) / 86400

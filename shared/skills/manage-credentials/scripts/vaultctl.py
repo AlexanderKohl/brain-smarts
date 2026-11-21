@@ -10,6 +10,7 @@ import subprocess
 import sys
 import warnings
 
+import portable_vault
 from portable_vault import CredentialError
 from vault_broker_client import (
     BrokerLocked,
@@ -97,11 +98,18 @@ def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
     try:
+        if args.operation not in ("unlock", "lock") and portable_vault.secret_store_enabled():
+            # With the store on, a vault-only agent started earlier is refused (round-7 review).
+            portable_vault.require_store_agent(broker_status())
         if args.operation == "status":
             status = broker_status()
             state = "unlocked" if status.get("unlocked") else "locked"
             print(f"Vault Agent {state} (pid {status.get('pid')})")
             print(f"Vault: {status.get('vault_path')}")
+            print(f"Backend: {status.get('backend', 'vault')}")
+            for key in ("store", "store_sync", "package_timer", "token_relay"):
+                if status.get(key):
+                    print(f"{key.replace('_', ' ').capitalize()}: {status[key]}")
             return 0
         if args.operation == "unlock":
             if broker_unlocked():

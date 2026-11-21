@@ -35,14 +35,18 @@ STORE_OPS = frozenset({"abort_refresh", "begin_refresh", "clear_signin", "poll_r
 AGENT_OPS = VAULT_OPS | STORE_OPS
 
 
+PACKAGE_TIMER_SECONDS = 6 * 3600.0  # the recovery-package timer runs at least this often
+PACKAGE_TIMER_POLL = 60.0
+
+
 def store_enabled(brain_root: Any = None) -> bool:
-    """True when the store configuration is present, enabled and names a person. An unreadable
-    configuration leaves the agent on the vault, as today."""
-    try:
-        config = load_config(True, brain_root)
-    except SecretStoreError:
-        return False
-    return bool(config["enabled"] and config["person"])
+    """True when the store configuration is present, enabled and names a person. A configuration
+    that cannot be read, has unknown keys, or is enabled without a person raises SecretStoreError
+    (round-7 review): it is fatal, never the old vault in the store's place."""
+    config = load_config(True, brain_root)
+    if config["enabled"] and not config["person"]:
+        raise SecretStoreError("the secrets-store configuration is enabled but names no person")
+    return bool(config["enabled"])
 
 
 def backend_if_enabled(brain_root: Any = None) -> "StoreBackend | None":
@@ -132,9 +136,22 @@ class StoreBackend:
         except SecretStoreError as error:
             text = str(error)
         out = {"backend": "store", "store": text}
+        if getattr(self, "timer_error", None):
+            out["package_timer"] = f"the last recovery-package check failed: {self.timer_error}"
         if self.sync_error:
             out["store_sync"] = f"the last pull failed, so reads use this computer's copy: {self.sync_error}"
         return out
+
+    def package_tick(self) -> None:
+        """The agent's timer (PackageTimer): pull every store, then rebuild a recovery package that is
+        stale or does not match the current policy, with no credential request. A failure is kept on
+        the store (status) and in its upkeep file (the daily due check) and retried at the next tick."""
+        with self._lock:
+            self._pull_all(tolerate=True)
+            for number, st in enumerate(self._stores()):
+                if st.policy is not None:
+                    st._refresh_stale_package()
+                    st.record_upkeep(self._sync_errors.get(number))
 
     def _groups(self, st: Any) -> list[str]:
         if st.group:
@@ -395,6 +412,32 @@ class StoreBackend:
             if signin is None:
                 raise SecretStoreError(f"there is no sign-in {entry}#{field}")
             return oauth_ops.read(st, signin)
+
+
+class PackageTimer:
+    """Runs StoreBackend.package_tick at least every PACKAGE_TIMER_SECONDS while the agent serves
+    the store; the clock and the wait are injectable for tests."""
+
+    def __init__(self, backend: Any, interval: float = PACKAGE_TIMER_SECONDS, clock: Any = time.monotonic) -> None:
+        self.backend, self.interval, self.clock = backend, interval, clock
+        self.last: float | None = None
+
+    def tick(self) -> bool:
+        """Run when due; an unexpected error is kept as the backend's timer_error, never raised."""
+        if self.last is not None and self.clock() - self.last < self.interval:
+            return False
+        self.last = self.clock()
+        try:
+            self.backend.package_tick()
+            self.backend.timer_error = None
+        except Exception as error:  # noqa: BLE001 - the timer thread must survive to retry
+            self.backend.timer_error = f"{type(error).__name__}: {error}"
+        return True
+
+    def run(self, stopped: Any, wait: Any = time.sleep, poll: float = PACKAGE_TIMER_POLL) -> None:
+        while not stopped():
+            self.tick()
+            wait(min(poll, self.interval))
 
 
 def agent_operation(agent: Any, operation: str, request: dict) -> Any:

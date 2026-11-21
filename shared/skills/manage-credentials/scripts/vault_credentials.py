@@ -101,6 +101,8 @@ def _try_broker_fields(entry: str, fields: list[str]) -> dict[str, object] | Non
     try:
         if not broker_unlocked():
             return None
+        if portable_vault.secret_store_enabled():  # a vault-only agent is refused (round-7 review)
+            portable_vault.require_store_agent(broker_request("status"))
         values = broker_request("get_fields", entry=entry, fields=fields)
     except (BrokerLocked, BrokerUnavailable):
         return None

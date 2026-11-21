@@ -30,6 +30,10 @@ class CredentialError(RuntimeError):
     """Raised when a credential operation cannot complete safely."""
 
 
+class StaleAgentError(CredentialError):
+    """The secrets store is on but the running Vault Agent serves only the old vault."""
+
+
 def __getattr__(name: str) -> Any:
     """ProviderNotCalled: the secrets-store journal's class, re-exported so a connector can raise
     it for a failure before any provider request (the begun refresh is then removed, not held as
@@ -53,6 +57,7 @@ def find_brain_root(start: Path | None = None) -> Path:
 
 SECRET_STORE_CONFIG = Path("memory") / "skills" / "manage-credentials" / "config" / "secret-store.json"
 STORE_ON_MESSAGE = "the secrets store is on; start the Vault Agent"
+STALE_AGENT_MESSAGE = "the Vault Agent was started before the secrets store was switched on; restart it"
 
 
 def secret_store_enabled(brain_root: Path | None = None) -> bool:
@@ -73,6 +78,16 @@ def refuse_when_store_on() -> None:
     PORTABLE_VAULT_PASSPHRASE are never a fallback for an unavailable Vault Agent."""
     if secret_store_enabled():
         raise CredentialError(STORE_ON_MESSAGE)
+
+
+def require_store_agent(status: Any) -> bool:
+    """Fail closed (round-7 review): with the store on, the running agent's status must report
+    backend "store"; a vault-only agent started earlier is refused, never read. Returns whether
+    the agent serves the store."""
+    serves = isinstance(status, dict) and status.get("backend") == "store"
+    if not serves and secret_store_enabled():
+        raise StaleAgentError(STALE_AGENT_MESSAGE)
+    return serves
 
 
 def default_vault_path() -> Path:
@@ -444,6 +459,8 @@ class BrokerOAuthStore:
         self._operation: str | None = None  # an open store refresh (vault_broker_client.store_refresh)
         self._saved = False
         self._store_mode: bool | None = None
+        if secret_store_enabled():
+            self._store_mode = require_store_agent(broker_request("status"))
 
     def load(self) -> dict[str, Any]:
         value = self._broker_request("get_json", entry=self.entry, field=self.field)
@@ -515,6 +532,8 @@ class PortableVaultJsonStore:
             self._broker = BrokerOAuthStore(self.entry, self.field, path=path)
             self.path = self._broker.path
             self.rotation_lock_path = self._broker.rotation_lock_path
+        except StaleAgentError:
+            raise
         except CredentialError:
             self._broker = None
         if self._broker is None:
@@ -535,6 +554,7 @@ class PortableVaultJsonStore:
             )
         # Token relay hook: a relayed store for an entry listed in token-relay.json beside the
         # vault, else None and the behaviour below is unchanged. The logic lives in token_relay.py.
+        # With the secrets store on no relay is built, whatever token-relay.json lists.
         from token_relay import relay_for
 
         self._relay = relay_for(self)
@@ -596,12 +616,14 @@ class PortableVaultJsonStore:
             return self._relay.rotation_lock(
                 refresh=refresh, leeway_seconds=leeway_seconds, new_authorisation=new_authorisation
             )
-        # Fail closed: a relay-marked token with no relay config found is refused a refresh.
+        # Fail closed: a relay-marked token with no relay config found is refused a refresh. With the
+        # store on the relay is ignored and the store's journal decides instead.
         from token_relay import refuse_unrelayed_refresh
 
-        refuse_unrelayed_refresh(
-            self, refresh=refresh, leeway_seconds=leeway_seconds, new_authorisation=new_authorisation
-        )
+        if not getattr(self, "relay_ignored", False):
+            refuse_unrelayed_refresh(
+                self, refresh=refresh, leeway_seconds=leeway_seconds, new_authorisation=new_authorisation
+            )
         # Secrets store: every lock on a sign-in, a plain one too, goes through the agent's journal on
         # the refresher; elsewhere a refresh waits for the refresher.
         if self._broker is not None and self._broker.store_mode():
