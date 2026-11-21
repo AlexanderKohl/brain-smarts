@@ -20,7 +20,7 @@ from typing import Any, Callable, Iterator
 from . import envelope, fileio, provider_profiles
 from .errors import SecretStoreError
 from .keys import key_id
-from .oauth_ops import plain_numbers
+from .oauth_ops import DEFAULT_FIELD, plain_numbers
 
 STATES = ("calling", "answered", "published", "superseded")
 LOCK_SECONDS = 30.0  # how long a second process waits for the per-entry lock
@@ -38,12 +38,16 @@ class ProviderNotCalled(Exception):
 
 
 def uncertain_message(entry: str, provider: str | None) -> str:
+    name, _sep, field = label(entry).rpartition("#")
+    name = name or field
+    command = f'brain_secrets.py replace-signin "{name}"' + (f" --field {field}" if _sep and field != DEFAULT_FIELD else "")
+    procedure = ("" if provider_profiles.recovery_refusal(provider)
+                 else "Run the uncertain-refresh procedure for this provider, or replace the sign-in. ")
     return (f"The last refresh of {label(entry)} is uncertain: the provider was called but its answer was never "
             "recorded, so the old refresh token must not be used again and the entry is not refreshed. "
-            "Next step: revoke the old sign-in at the provider, then sign in again in the browser on the "
-            "computer that refreshes it. " + (
-                provider_profiles.recovery_refusal(provider)
-                or "Run the uncertain-refresh procedure for this provider first."))
+            + procedure + "Next step: on the computer that refreshes it, an administrator runs "
+            f"{command} (add --group G for a team sign-in), then disconnect the app at the provider where it "
+            "offers that and sign in again in the browser on that computer.")
 
 
 class Journal:

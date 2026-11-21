@@ -323,6 +323,10 @@ def store_status(self: Any) -> str:
         lines.append("Recovery package: none yet; run recovery-package.")
     if getattr(self, "package_error", None):
         lines.append("Recovery package: the automatic weekly refresh failed; run recovery-package.")
+    from .replace_ops import pending
+    for signin in pending(self):
+        lines.append(f"Replaced sign-in {signin} is not signed in again yet: its kept settings wait on this "
+                     "computer; sign in again in the browser to complete it.")
     if not self.config.get("recovery_package_cloud", True):
         lines.append("Warning: no OneDrive or iCloud Drive folder was found, so the recovery package is only on "
                      "this computer; set recovery_package_dir to a folder that is backed up elsewhere.")

@@ -104,7 +104,8 @@ python brain_secrets.py list [--group ops]
 python brain_secrets.py put --entry "Example API" --secret api_key [--empty-json settings] [--group ops]
 python brain_secrets.py get-check --entry "Example API"       field names only
 python brain_secrets.py delete --entry "Example API"          type the name to confirm
-python brain_secrets.py recovery-package
+python brain_secrets.py recovery-package [--team]
+python brain_secrets.py restore [--team] --package FILE --target EMPTY_FOLDER   words in the masked window
 python brain_secrets.py enrol-request [--team] --fingerprint F     new computer
 python brain_secrets.py enrol-approve [--team] --request ID        approving computer
 python brain_secrets.py enrol-request [--team] --request ID        new computer, after the answer
@@ -115,6 +116,7 @@ python brain_secrets.py team-groups --create G | --login L --group G
 python brain_secrets.py team-remove --login L [--computer C]
 python brain_secrets.py handover-release --entry E --to PERSON/COMPUTER [--group ops]   old refresher
 python brain_secrets.py handover-accept --entry E [--group ops]   an administrator's computer
+python brain_secrets.py replace-signin E [--field F] [--group ops] [--even-if-working]   refresher, administrator
 python migrate_to_store.py --dry-run               names only; then without it, [--replace]
 ```
 
@@ -128,6 +130,14 @@ grant field such as the client secret to the entry's grant, never to a static ob
 Handover: the old refresher runs `handover-release`, which switches refreshing off there for good,
 prepares the grant for the new computer and signs a release; an administrator's computer then runs
 `handover-accept`, which commits the policy change, the release and the grant revision together.
+
+Restore: `restore` takes the recovery words in the masked window, the package by path and a new or
+empty target folder, reports how old the package is, and writes nothing when the words, the package
+or the target are wrong. Replacing a sign-in: `replace-signin` ends an uncertain sign-in (or a working
+one with `--even-if-working`) on its refresher, run by an administrator: the shared settings are kept
+in a hand-over file beside the journal, one commit deletes the sign-in and retires both ids, and the
+next browser sign-in under the same name gets the kept settings. `status` reports a hand-over file
+whose sign-in was never completed.
 
 ## Switching it on and off
 
@@ -156,5 +166,5 @@ with a message naming the refresher computer.
 `provider_profiles.json` holds profiles for Xero, Google, HighLevel and Meta. None is verified: each
 needs the provider's documentation plus a live test that revoking a refresh token retires the whole
 grant and that a new browser sign-in makes a separate grant. Until a profile is verified, moving the
-refresher away from an unreachable computer and recovery from an uncertain refresh are refused and
-the entry stays blocked. The cooperative handover needs no profile.
+refresher away from an unreachable computer and recovery from an uncertain refresh are refused; an
+uncertain sign-in is then replaced with `replace-signin`. The cooperative handover needs no profile.

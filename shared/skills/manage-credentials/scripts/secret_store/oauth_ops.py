@@ -261,12 +261,16 @@ def put_signin(store: Any, entry: str, field: str, record: dict, grant_fields: d
         raise SecretStoreError("grant fields must be non-empty text")
 
     def build() -> tuple[dict, str]:
+        created.clear()  # set again by the attempt that builds a new sign-in
         plan = _static_plan(store, entry, group, {field})
         moved = {**(plan[2] if plan else {}), **extra}
         signin = find(store, entry, field, group)
-        if signin is None:
+        if signin is None:  # a replaced sign-in's kept settings go beneath the new record's own fields
+            from .replace_ops import kept_settings
+            created.append(True)
             grant = {"token": token, "fields": moved}
-            result, files = _new_signin_files(store, entry, field, shared, grant, group, provider)
+            first = {**kept_settings(store, entry, field, group), **shared}
+            result, files = _new_signin_files(store, entry, field, first, grant, group, provider)
             return {**files, **_static_files(store, result, plan)}, "policy"
         if not replace:
             raise SecretStoreError(f"the store already holds {entry}#{field}; use replace to overwrite it")
@@ -276,7 +280,11 @@ def put_signin(store: Any, entry: str, field: str, record: dict, grant_fields: d
         grant = {"token": token, "fields": {**kept, **moved}}
         files = _revision_files(store, signin, shared, grant, new_operation())
         return {**files, **_static_files(store, store.policy, plan)}, "update"
+    created: list = []
     store._write(build)
+    if created:  # published: the hand-over file of a replaced sign-in has done its work
+        from .replace_ops import finish
+        finish(store, entry, field, group)
 
 
 def put_fields(store: Any, entry: str, plain: dict, grant_fields: dict, group: str | None = None) -> None:
