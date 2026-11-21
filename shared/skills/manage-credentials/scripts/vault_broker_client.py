@@ -54,7 +54,15 @@ def _connect() -> Any:
     return connection, token
 
 
-def broker_request(operation: str, **payload: Any) -> Any:
+RESERVED_REQUEST_KEYS = frozenset({"v", "id", "token", "op"})
+
+
+def broker_request(operation: str, /, **payload: Any) -> Any:
+    """One request to the Vault Agent. operation is positional only: a refresh passes the journal's
+    operation id as the payload key "operation". A payload may not name the request's own fields."""
+    clash = sorted(RESERVED_REQUEST_KEYS & payload.keys())
+    if clash:
+        raise TypeError(f"a Vault Agent request cannot carry the payload key {clash[0]!r}")
     connection, token = _connect()
     request = {
         "v": AGENT_PROTOCOL_VERSION,
