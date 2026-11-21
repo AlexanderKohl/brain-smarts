@@ -472,8 +472,10 @@ Rollback goes the same way round. With the store off, start the Vault Agent on t
 it. Switch the store on without restarting the agent. Run `python migrate_to_store.py rollback --dry-run`,
 then `python migrate_to_store.py rollback`, then switch the store off; the agent then serves the old
 vault. The rollback also runs under the lock. It restores static secrets only, from the store's current
-value, and clears the marker. It never writes a token out of the store, so every migrated sign-in needs a
-browser sign-in after a rollback.
+value, and clears the marker. It walks every static entry of the store, so an entry or field created
+after the migration comes back too, as text or JSON, and it names each entry it restored and each it
+could not; one it could not ends with exit code 5 and the marker kept, so it can be run again. It never
+writes a token out of the store, so every migrated sign-in needs a browser sign-in after a rollback.
 
 ### Recovery and replacing a sign-in
 

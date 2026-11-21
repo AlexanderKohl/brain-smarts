@@ -13,6 +13,9 @@ removed (access, refresh and every grant or token field) and a migration marker 
 on or off, and a later migration leaves marked entries alone. The rollback restores static
 secrets only (they never rotate), from the store's current value; it never writes a token out of
 the store. Every migrated sign-in keeps no token in the old vault and needs a browser sign-in.
+The rollback walks every static object of the store, so an entry or field created after the
+migration comes back too, text or JSON; it names each entry it restored and each it could not, and
+one it could not makes the exit code 5 and keeps the migration marker.
 
   python migrate_to_store.py --dry-run            list entry and field names only
   python migrate_to_store.py [--replace]          copy; --replace overwrites entries the store holds
@@ -205,37 +208,91 @@ def rollback(request: Callable, open_store: Callable[[], Any], *, dry_run: bool 
         return _rollback(request, open_store, status, dry_run, out)
 
 
+def _kind(text: str, vault_kind: str | None) -> tuple[str, Any]:
+    """(kind, value) of one static store field for the old vault. The store keeps text only: a JSON
+    field is held as its canonical text (json.dumps with sorted keys, as the migration and set_json
+    write it). The old vault's own kind wins for a field it holds; any other field is JSON exactly
+    when its text is that canonical form of an object."""
+    if vault_kind == "text":
+        return "text", text
+    try:
+        value = json.loads(text)
+    except ValueError:
+        value = None
+    if isinstance(value, dict) and (vault_kind == "json" or json.dumps(value, sort_keys=True) == text):
+        return "json", value
+    if vault_kind == "json":
+        raise ValueError("not a JSON object")
+    return "text", text
+
+
+def _static_plans(store: Any, listing: dict, marked: dict) -> tuple[list, list]:
+    """Every static object of the store, not the old vault's listing (Sol round 9): ([(entry,
+    {field: {value, kind}})], [(entry, fields or None, reason)] that cannot be restored)."""
+    plans, failed = [], []
+    for entry, oid in sorted(store._index(None).items()):
+        if store.policy.assignment(oid)[1] != "static":
+            continue
+        try:
+            record = store.get_record(entry)
+        except (CredentialError, SecretStoreError) as error:
+            failed.append((entry, None, str(error)))
+            continue
+        kinds, values, bad = listing.get(entry) or {}, {}, []
+        for field, text in sorted((record or {}).items()):
+            if field in marked.get(entry, []):
+                continue  # a migrated sign-in's field: it needs a browser sign-in
+            try:
+                kind, value = _kind(text, kinds.get(field)) if isinstance(text, str) else (None, None)
+            except ValueError:
+                kind = None
+            if kind is None or (kind == "json" and oauth_ops.looks_like_signin(value)):
+                bad.append(field)  # never a token out of the store, never a guessed kind
+            else:
+                values[field] = {"value": value, "kind": kind}
+        if bad:
+            failed.append((entry, bad, "a field is not a static secret the old vault can hold"))
+        elif values:
+            plans.append((entry, values))
+    return plans, failed
+
+
+def _names(items: list) -> str:
+    return ", ".join(f"{e} ({', '.join(sorted(f))})" for e, f in items) or "none"
+
+
 def _rollback(request: Callable, open_store: Callable[[], Any], status: Any, dry_run: bool,
               out: Callable[[str], None]) -> int:
     marked = migrated_signins(status["vault_path"])
     listing = request("vault_list_entries")
     store = open_store()
-    statics = []
-    for entry, kinds in sorted(listing.items()):
-        try:
-            record = store.get_record(entry)
-        except (CredentialError, SecretStoreError, KeyError):
-            continue
-        fields = {f: v for f, v in (record or {}).items()
-                  if isinstance(v, str) and f not in marked.get(entry, []) and f in kinds}
-        if fields:
-            statics.append((entry, fields, kinds))
-    restored = ", ".join(f"{e} ({', '.join(sorted(f))})" for e, f, _k in statics) or "none"
+    plans, failed = _static_plans(store, listing, marked)
     signins = [f"{e}#{f}" for e, fields in sorted(marked.items()) for f in sorted(fields)]
     if dry_run:
-        out(f"Dry run: the rollback would restore these static secrets from the store: {restored}. "
+        out(f"Dry run: the rollback would restore these static secrets from the store: {_names(plans)}. "
             "Nothing was changed.")
-    for entry, fields, kinds in ([] if dry_run else statics):
-        request("vault_restore_static", entry=entry, values={
-            f: {"value": json.loads(v) if kinds[f] == "json" else v, "kind": kinds[f]} for f, v in fields.items()})
+    restored = []
+    for entry, values in ([] if dry_run else plans):
+        try:
+            request("vault_restore_static", entry=entry, values=values)
+            restored.append((entry, values))
+        except (CredentialError, SecretStoreError) as error:
+            failed.append((entry, sorted(values), str(error)))
     for name in signins:
         out(f"{name}: sign in again in the browser; no token is brought back from the store.")
+    if failed:
+        out(("Dry run: these entries could not be restored: " if dry_run else "These entries could not be restored: ")
+            + "; ".join(f"{e}" + (f" ({', '.join(f)})" if f else "") + f": {why}" for e, f, why in failed) + ".")
     if dry_run:
-        return 0
+        return 0 if not failed else 5
+    if failed:
+        out(f"Restored static secrets from the store: {_names(restored)}. The rollback is not complete: the "
+            "migration marker stays. Settle the entries above, then run the rollback again.")
+        return 5
     if marked:
         request("vault_clear_migration_marker")
-    out(f"Restored static secrets from the store: {restored}. Switch the secrets store off (enabled false in "
-        "secret-store.json) and restart the Vault Agent before using the old vault.")
+    out(f"Restored static secrets from the store: {_names(restored)}. Switch the secrets store off (enabled false "
+        "in secret-store.json) and restart the Vault Agent before using the old vault.")
     return 0
 
 
