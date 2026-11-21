@@ -7,6 +7,7 @@ import importlib.util
 import re
 import sys
 import unittest
+import tempfile
 from pathlib import Path
 from unittest import mock
 
@@ -176,7 +177,10 @@ class MigrationDryRunTests(CliCase):
 
     def test_dry_run_lists_entries_and_fields_only(self):
         listing = {"Example API": {"api_key": "text", "oauth_token_json": "json"}, "Other": {"password": "text"}}
-        text = self.run_migrate({"status": {"vault_unlocked": True, "vault_path": "unused"},
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        vault_path = str(Path(folder.name) / "credentials.vault")  # the migration lock goes beside it
+        text = self.run_migrate({"status": {"vault_unlocked": True, "vault_path": vault_path},
                                  "vault_list_entries": listing}, 0)
         self.assertIn("Dry run: 2 entries would be copied", text)
         self.assertIn("Example API: api_key (text), oauth_token_json (json)", text)

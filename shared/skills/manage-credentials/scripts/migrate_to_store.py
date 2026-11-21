@@ -23,6 +23,7 @@ the store. Every migrated sign-in keeps no token in the old vault and needs a br
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import shutil
 import sys
@@ -35,6 +36,7 @@ SCRIPTS = Path(__file__).resolve().parent
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
+from migration_lock import MigrationLock  # noqa: E402
 from portable_vault import CredentialError, migrated_signins  # noqa: E402
 from secret_store import oauth_ops, provider_profiles  # noqa: E402
 from secret_store.broker_backend import TOKEN_KEYS, StoreBackend, put_grant_fields  # noqa: E402
@@ -109,11 +111,37 @@ def _verified(backend: StoreBackend, entry: str, field: str, record: dict) -> bo
     return all(held.get(k) == record[k] for k in keys)
 
 
+def _held(status: Any, command: str) -> Any:
+    """The migration lock beside the agent's vault for the whole command (round-9 plan, M5)."""
+    path = status.get("vault_path") if isinstance(status, dict) else None
+    return MigrationLock(path, command) if path else contextlib.nullcontext()
+
+
+def _remove_unverified(store: Any, unverified: list[tuple[str, str]]) -> list[str]:
+    """Round-9 plan, M4: a sign-in whose read-back failed loses its store copy in this run, so it
+    never lives in two places; returns the store names that could not be removed."""
+    held, stuck = set(store.list_entries()), []
+    for entry, field in unverified:
+        for name in oauth_ops.signin_names(entry, field):
+            if name in held:
+                try:
+                    store.delete_entry(name)
+                except (CredentialError, SecretStoreError):
+                    stuck.append(name)
+    return stuck
+
+
 def migrate(request: Callable, open_store: Callable[[], Any], *, dry_run: bool = False, replace: bool = False,
             backup_dir: Any = None, out: Callable[[str], None] = print) -> int:
     status = _unlocked_status(request, out)
     if status is None:
         return 2
+    with _held(status, "migrate"):
+        return _migrate(request, open_store, status, dry_run, replace, backup_dir, out)
+
+
+def _migrate(request: Callable, open_store: Callable[[], Any], status: Any, dry_run: bool, replace: bool,
+             backup_dir: Any, out: Callable[[str], None]) -> int:
     listing = request("vault_list_entries")
     marked = migrated_signins(status["vault_path"]) if status.get("vault_path") else {}
     done = sorted(e for e in listing if e in marked)
@@ -144,17 +172,23 @@ def migrate(request: Callable, open_store: Callable[[], Any], *, dry_run: bool =
                 request("vault_scrub_signin", entry=plan["entry"], field=field)
                 retired.append(name)
             else:
-                unverified.append(name)
+                unverified.append((plan["entry"], field))
+    stuck = _remove_unverified(store, unverified) if unverified else []
     record = backup.with_name(backup.stem + ".migration.json")
     record.write_text(json.dumps({"entries": names, "time": datetime.now().astimezone().isoformat(timespec="seconds"),
-                                  "backup": str(backup), "replace": replace, "retired_signins": retired},
+                                  "backup": str(backup), "replace": replace, "retired_signins": retired,
+                                  "unverified_signins": [f"{e}#{f}" for e, f in unverified]},
                                  indent=2) + "\n", "utf-8")
     out(f"Copied {len(plans)} entries into the store. Sign-ins whose old vault copy is retired (tokens removed, "
         f"migration marker written): {', '.join(retired) or 'none'}. Verified backup: {backup}. "
         f"Migration record: {record}.")
     if unverified:
-        out("The store could not be read back for " + ", ".join(unverified)
-            + "; their old vault copy is unchanged. Run the migration again with --replace.")
+        out("The store could not be read back for " + ", ".join(f"{e}#{f}" for e, f in unverified)
+            + "; their store copy was removed in this run and their old vault copy is unchanged and unmarked. "
+            "Run the migration again with --replace, or sign them in again in the browser once the store is on.")
+        if stuck:
+            out("These store copies could not be removed; remove them before switching the store on: "
+                + ", ".join(stuck) + ".")
         return 4
     return 0
 
@@ -167,6 +201,12 @@ def rollback(request: Callable, open_store: Callable[[], Any], *, dry_run: bool 
     status = _unlocked_status(request, out)
     if status is None:
         return 2
+    with _held(status, "rollback"):
+        return _rollback(request, open_store, status, dry_run, out)
+
+
+def _rollback(request: Callable, open_store: Callable[[], Any], status: Any, dry_run: bool,
+              out: Callable[[str], None]) -> int:
     marked = migrated_signins(status["vault_path"])
     listing = request("vault_list_entries")
     store = open_store()

@@ -35,6 +35,8 @@ TOKEN_KEYS = frozenset({"access_token", "accessToken", "refresh_token", "refresh
 STORE_OPS = frozenset({"abort_refresh", "begin_refresh", "clear_signin", "poll_refresh", "release_refresh",
                        "sync_store"})
 AGENT_OPS = VAULT_OPS | STORE_OPS
+# Run only while migrate_to_store.py holds the migration lock (round-9 plan, row M5).
+LOCKED_VAULT_OPS = frozenset({"vault_clear_migration_marker", "vault_restore_static", "vault_scrub_signin"})
 
 
 PACKAGE_TIMER_SECONDS = 6 * 3600.0  # the recovery-package timer runs at least this often
@@ -466,7 +468,13 @@ def scrubbed(value: dict) -> dict:
 def agent_operation(agent: Any, operation: str, request: dict) -> Any:
     """The Vault Agent operations answered here: vault-only ones and the store's refresh ones."""
     if operation in VAULT_OPS:
-        return vault_request(agent.vault, agent._require_passphrase(), operation, request)
+        import migration_lock  # round-9 plan, row M5
+
+        locked = migration_lock.holder(agent.vault.path) is not None
+        if operation in LOCKED_VAULT_OPS and not locked:
+            migration_lock.require(agent.vault.path, operation)
+        vault = type(agent.vault)(agent.vault.path, migration=True) if locked else agent.vault
+        return vault_request(vault, agent._require_passphrase(), operation, request)
     if agent._store is None:
         raise SecretStoreError("the secrets store is off on this computer")
     if operation == "sync_store":

@@ -10,7 +10,8 @@ from ctypes import wintypes
 from typing import Any
 
 from portable_vault import CredentialError, default_vault_path
-from vault_agent import AgentAlreadyRunning, VaultAgent
+from secret_store.errors import SecretStoreError
+from vault_agent import AgentAlreadyRunning, VaultAgent, build_agent
 from vault_agent_runtime import log_tray, prepare_runtime_dir
 from vault_broker_client import broker_available
 
@@ -386,7 +387,7 @@ def _win_password_dialog(title: str) -> str | None:
 class VaultTrayApp:
     def __init__(self, vault_path: str | None = None) -> None:
         self.pystray, self.Image, self.ImageDraw = _require_tray_deps()
-        self.agent = VaultAgent(vault_path or default_vault_path())
+        self.agent = build_agent(vault_path or default_vault_path())  # raises for a malformed configuration
         self._serve_thread: threading.Thread | None = None
         self._icon: Any = None
         self._stop = threading.Event()
@@ -451,6 +452,9 @@ class VaultTrayApp:
         )
 
     def _do_unlock(self, _icon: Any = None, _item: Any = None) -> None:
+        if self.agent._store is not None:  # store mode: no unlock window (round-9 plan, M2)
+            self._refresh_icon()
+            return
         if self._unlocked():
             _show_info("Vault is already unlocked.")
             self._refresh_icon()
@@ -522,7 +526,7 @@ class VaultTrayApp:
             )
             return 2
 
-        if prompt_on_start and not self._unlocked():
+        if prompt_on_start and self.agent._store is None and not self._unlocked():
             if _ask_unlock_now():
                 self._do_unlock()
 
@@ -555,7 +559,12 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
-    app = VaultTrayApp(args.vault)
+    try:
+        app = VaultTrayApp(args.vault)
+    except SecretStoreError as exc:  # a malformed configuration: the tray does not start
+        log_tray(f"start refused: {exc}")
+        _show_error(f"The Vault Agent cannot start: the secrets-store configuration is not usable: {exc}")
+        return 2
     return app.run(prompt_on_start=not args.no_prompt)
 
 

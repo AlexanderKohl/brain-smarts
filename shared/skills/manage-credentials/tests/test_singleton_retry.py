@@ -102,7 +102,7 @@ class TrayStartTest(unittest.TestCase):
                 raise vault_agent.AgentAlreadyRunning("Another Vault Agent instance is already running")
 
         with mock.patch.object(vault_tray, "_require_tray_deps", return_value=(None, None, None)), \
-                mock.patch.object(vault_tray, "VaultAgent", lambda path: FakeAgent()), \
+                mock.patch.object(vault_tray, "build_agent", lambda path=None: FakeAgent()), \
                 mock.patch.object(vault_tray, "default_vault_path", lambda: "x"):
             app = vault_tray.VaultTrayApp()
         return app

@@ -211,7 +211,10 @@ def _file_lock(path: Path) -> Iterator[None]:
 class PortableVault:
     """An authenticated encrypted JSON vault stored in one portable file."""
 
-    def __init__(self, path: Path | str | None = None):
+    def __init__(self, path: Path | str | None = None, *, migration: bool = False):
+        # Round-9 plan, row M3: only the migration and rollback path (the Vault Agent under the
+        # migration lock, and its unlock in store mode) passes migration=True.
+        self._migration = migration
         configured = path or os.getenv("PORTABLE_VAULT_PATH")
         self.path = Path(configured) if configured else default_vault_path()
         self.lock_path = self.path.with_name(self.path.name + ".lock")
@@ -333,6 +336,9 @@ class PortableVault:
             self._write_unlocked(payload, passphrase)
 
     def _load_unlocked(self, passphrase: str) -> dict[str, Any]:
+        """The one passphrase open: refused while the secrets store is on (round-9 plan, row M3)."""
+        if not self._migration and secret_store_enabled():
+            raise CredentialError(STORE_ON_MESSAGE)
         if not self.path.exists():
             raise CredentialError(f"Credential vault does not exist: {self.path}")
         try:

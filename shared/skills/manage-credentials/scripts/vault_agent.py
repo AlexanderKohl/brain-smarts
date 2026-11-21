@@ -15,6 +15,7 @@ from multiprocessing.connection import Listener
 from pathlib import Path
 from typing import Any
 
+import portable_vault
 from portable_vault import CredentialError, PortableVault, default_vault_path, refuse_migrated
 from vault_agent_runtime import (
     AGENT_PROTOCOL_VERSION,
@@ -32,7 +33,33 @@ from secret_store.errors import SecretStoreError
 # The errors a locked file gives on Windows (EACCES, EDEADLOCK) and on POSIX (EACCES, EAGAIN).
 LOCK_BUSY_ERRNOS = {errno.EACCES, errno.EAGAIN, errno.EDEADLK}
 # Operations answered in secret_store/broker_backend.py: vault-only ones and the store's refresh ones.
-from secret_store.broker_backend import AGENT_OPS, agent_operation  # noqa: E402
+from secret_store.broker_backend import AGENT_OPS, VAULT_OPS, agent_operation  # noqa: E402
+
+# Requests a vault-backed agent still answers once the store is on: none reads a credential.
+ALWAYS_ANSWERED = frozenset({"status", "ping", "lock"})
+
+
+def build_agent(vault_path: Path | str | None = None, brain_root: Any = None) -> "VaultAgent":
+    """The one way vault_agent.py serve and the login tray build their agent (round-9 plan, M2).
+    Store on: a store-backed agent. Store off: the vault agent. A malformed configuration raises
+    SecretStoreError, so neither starts."""
+    from secret_store import broker_backend
+
+    store = broker_backend.backend_if_enabled(brain_root)
+    return VaultAgent(vault_path or default_vault_path(), store=store)
+
+
+def migration_backup_age(vault_path: Path | str) -> str | None:
+    """The age of the newest backup in migration-backups beside the vault, or None (row M8)."""
+    path = Path(vault_path)
+    try:
+        times = [p.stat().st_mtime for p in (path.parent / "migration-backups").glob("*" + (path.suffix or ".vault"))
+                 if p.is_file()]
+    except OSError:
+        return None
+    if not times:
+        return None
+    return f"{max(0.0, time.time() - max(times)) / 86400:.1f} days"
 
 
 class AgentAlreadyRunning(CredentialError):
@@ -78,6 +105,9 @@ class VaultAgent:
                 "started_at": self._started_at,
                 "protocol": AGENT_PROTOCOL_VERSION,
             }
+            age = migration_backup_age(self.vault.path)
+            if age:
+                result["migration_backup_age"] = age
             if self._store is not None:
                 result.update(self._store.status(), unlocked=True, vault_unlocked=self._passphrase is not None)
                 relay = self._ignored_relay()
@@ -106,8 +136,9 @@ class VaultAgent:
     def unlock(self, passphrase: str) -> dict[str, Any]:
         if not passphrase:
             raise CredentialError("The vault passphrase is required.")
-        # Authenticate without retaining a wrong passphrase.
-        self.vault.load(passphrase)
+        # Authenticate without retaining a wrong passphrase. In store mode the passphrase is held only
+        # for the migration and rollback operations, which open the vault under the migration lock.
+        (PortableVault(self.vault.path, migration=True) if self._store is not None else self.vault).load(passphrase)
         with self._lock:
             self._passphrase = passphrase
         return {"unlocked": True}
@@ -182,6 +213,7 @@ class VaultAgent:
         operation = request.get("op")
         request_id = request.get("id")
         try:
+            self._refuse_when_stale(operation)
             if operation == "status":
                 result = self.status()
             elif operation == "unlock":
@@ -232,6 +264,18 @@ class VaultAgent:
             return {"ok": False, "id": request_id, "error": message, "code": code}
         except SecretStoreError as exc:
             return {"ok": False, "id": request_id, "error": str(exc), "code": "error"}
+
+    def _refuse_when_stale(self, operation: Any) -> None:
+        """Round-9 plan, row M2: a vault-backed agent checks the store switch on every credential
+        request and refuses once it is on; only the migration's own operations pass, under its lock."""
+        if self._store is not None or operation in ALWAYS_ANSWERED or not portable_vault.secret_store_enabled():
+            return
+        if operation in VAULT_OPS:
+            import migration_lock
+
+            if migration_lock.holder(self.vault.path) is not None:
+                return
+        raise CredentialError(portable_vault.STALE_AGENT_MESSAGE)
 
     @staticmethod
     def _try_lock(handle: Any) -> None:
@@ -444,14 +488,11 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
-    from secret_store.broker_backend import backend_if_enabled
-
     try:
-        store = backend_if_enabled()
+        agent = build_agent(args.vault)
     except SecretStoreError as exc:  # malformed enabled configuration: fatal, never the old vault
         print(f"Vault Agent failed: the secrets-store configuration is not usable: {exc}", file=sys.stderr)
         return 2
-    agent = VaultAgent(args.vault or default_vault_path(), store=store)
     try:
         if args.operation == "serve":
             agent.serve_forever()

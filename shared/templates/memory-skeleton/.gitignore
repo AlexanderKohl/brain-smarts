@@ -4,6 +4,9 @@
 !.env.example
 *.vault
 *.vault.lock
+*.vault.migrated.json
+*.vault.migration.lock
+*.migration.json
 *.pem
 *.key
 *.pfx

@@ -107,7 +107,7 @@ def main() -> int:
             print(f"Vault Agent {state} (pid {status.get('pid')})")
             print(f"Vault: {status.get('vault_path')}")
             print(f"Backend: {status.get('backend', 'vault')}")
-            for key in ("store", "store_sync", "package_timer", "token_relay"):
+            for key in ("store", "store_sync", "package_timer", "token_relay", "migration_backup_age"):
                 if status.get(key):
                     print(f"{key.replace('_', ' ').capitalize()}: {status[key]}")
             return 0

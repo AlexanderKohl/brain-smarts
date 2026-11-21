@@ -15,6 +15,7 @@ SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import migrate_to_store  # noqa: E402
+import migration_lock  # noqa: E402
 import portable_vault  # noqa: E402
 import token_relay  # noqa: E402
 from portable_vault import CredentialError, PortableVault, PortableVaultJsonStore  # noqa: E402
@@ -161,7 +162,7 @@ class MigrationRetiresTheOldGrant(StoreFixture):
         self.assertEqual(self.run_it(migrate_to_store.migrate)[0], 0)
         for values in ({FIELD: {"value": self.token(), "kind": "json"}},
                        {"other": {"value": {"refresh_token": RT2}, "kind": "json"}}):
-            with self.assertRaisesRegex(CredentialError, "not a static secret"):
+            with self.assertRaisesRegex(CredentialError, "not a static secret"),                     migration_lock.MigrationLock(self.vault.path, "rollback"):  # round 9: only under the lock
                 self.request("vault_restore_static", entry="xero-demo", values=values)
         self.assertNotIn("refresh_token", self.held())
 
