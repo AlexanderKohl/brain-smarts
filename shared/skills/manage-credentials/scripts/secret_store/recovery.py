@@ -24,7 +24,8 @@ ED25519_INFO = b"brain-secrets recovery ed25519 v1"
 
 @lru_cache(maxsize=1)
 def wordlist() -> tuple[str, ...]:
-    data = WORDLIST_PATH.read_bytes()
+    # Git on Windows may check the file out with CRLF line endings; the hash is of the LF form.
+    data = WORDLIST_PATH.read_bytes().replace(b"\r\n", b"\n")
     if hashlib.sha256(data).hexdigest() != WORDLIST_SHA256:
         raise SecretStoreError("BIP-39 word list does not match its expected SHA-256")
     words = tuple(data.decode("ascii").split())
