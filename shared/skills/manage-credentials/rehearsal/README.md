@@ -67,7 +67,7 @@ Rehearsal plan order: set-up of a throwaway person and store; a static secret pu
 the agent from a second process; a first sign-in and the four sorts of refresh against the fake
 endpoint (answered, nothing sent, refused, time-out) and `replace-signin`; personal and team
 recovery packages; restore with its three refusals; a team store and a second computer enrolled
-with its own agent; migration from a throwaway old vault, the store-on refusal and the rollback;
+in the personal store and then the team store (two enrolments), with its own agent; migration from a throwaway old vault, the store-on refusal and the rollback;
 the clean-up and its proof. The guard is checked again before each step.
 
 ## Files

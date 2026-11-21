@@ -222,24 +222,30 @@ class Session:
                 raise Failed(" ".join(argv[:2]) + f" returned {code}")
         return "team store made; group created and the person set in it", {"fingerprint": fingerprint}
 
-    def enrol_request(self, fingerprint: str) -> tuple[str, dict]:
-        code, text = self._cli(["enrol-request", "--team", "--fingerprint", fingerprint])
+    # Each store needs its own enrolment (design section 6): the second computer's agent always
+    # serves the personal store, so it is enrolled there (team=False) before the team enrolment.
+    @staticmethod
+    def _team_flag(team: bool) -> list[str]:
+        return ["--team"] if team else []
+
+    def enrol_request(self, fingerprint: str, team: bool = True) -> tuple[str, dict]:
+        code, text = self._cli(["enrol-request", *self._team_flag(team), "--fingerprint", fingerprint])
         found = re.search(r"request ([0-9a-f]{16}) written", text)
         if code != 0 or not found:
             raise Failed(f"enrol-request returned {code}: {' '.join(text.split())[:300]}")
         return "enrolment request written", {"request": found.group(1)}
 
-    def enrol_prove(self, request: str) -> tuple[str, dict]:
+    def enrol_prove(self, request: str, team: bool = True) -> tuple[str, dict]:
         seen: dict[str, str] = {}
-        code, said = self._cli(["enrol-request", "--team", "--request", request],
+        code, said = self._cli(["enrol-request", *self._team_flag(team), "--request", request],
                             display=lambda _t, words: seen.setdefault("hash", digest(" ".join(words))) is not None)
         if code != 0 or "hash" not in seen:
             raise Failed(f"enrol-request --request returned {code}: {' '.join(said.split())[:300]}")
         return "challenge answered; words shown to the callback", {"words_hash": seen["hash"]}
 
-    def enrol_approve(self, request: str, words_hash: str | None = None) -> tuple[str, dict]:
+    def enrol_approve(self, request: str, words_hash: str | None = None, team: bool = True) -> tuple[str, dict]:
         display = (lambda _t, words: digest(" ".join(words)) == words_hash) if words_hash else (lambda _t, _w: True)
-        code, text = self._cli(["enrol-approve", "--team", "--request", request], display=display)
+        code, text = self._cli(["enrol-approve", *self._team_flag(team), "--request", request], display=display)
         state = "enrolled" if "The computer is enrolled." in text else "answered" if "Request answered" in text else ""
         if code != 0 or not state:
             raise Failed(f"enrol-approve returned {code}: {' '.join(text.split())[:300]}")

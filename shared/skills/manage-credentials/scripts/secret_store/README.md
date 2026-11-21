@@ -133,7 +133,11 @@ python migrate_to_store.py rollback [--dry-run]    static secrets back to the ol
 
 Enrolment: the new computer runs `enrol-request --fingerprint`, the approver runs `enrol-approve`,
 the new computer runs `enrol-request --request`, both screens show six words, and the approver
-runs `enrol-approve` again once the words match. `migrate_to_store.py` needs the Vault Agent
+runs `enrol-approve` again once the words match. Each store has its own enrolment: a team
+enrolment (`--team`) never covers the personal store, and the agent always serves the personal
+store, so a new computer of a person is enrolled in the personal store as well; a computer that
+opens a store it was never enrolled in is told so plainly, and a refused remote commit names the
+rule that refused it. `migrate_to_store.py` needs the Vault Agent
 unlocked on the old vault, makes a verified backup first, never changes the old vault and prints
 no value; a clash with an existing entry stops it unless `--replace` is given. `put` sends a
 grant field such as the client secret to the entry's grant, never to a static object.
