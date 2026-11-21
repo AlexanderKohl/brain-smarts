@@ -55,6 +55,9 @@ def _default_words_window(words: list[str]) -> bool:
 
 class SecretStore:
     team = False
+    _head: str | None = None  # the clone commit the held policy and checkpoint describe
+    _pinned: str | None = None  # the trust-root pin this instance verified at open
+    _syncing = False  # a pull is saving checkpoints ahead of the held one: nothing to follow
 
     def __init__(self, use_config_file: bool = True, brain_root: Any = None, **overrides: Any) -> None:
         self.config = load_config(use_config_file, brain_root, **overrides)
@@ -140,6 +143,7 @@ class SecretStore:
         self._save_pin(pinned)
         self.checkpoint = checkpoint.initial(self.policy)
         self._save_checkpoint(self.checkpoint)
+        self._head, self._pinned = self.repo.head(), pinned
         self.refresh_recovery_package(force=True)
         return pinned
 
@@ -166,21 +170,71 @@ class SecretStore:
         return checkpoint.load(self.checkpoint_path, self._identity().ed25519.public_key())
 
     # -- verified sync ------------------------------------------------------------------------
-    def _tree_object(self, oid: str, cp: checkpoint.Checkpoint) -> dict:
-        """The clone's file for oid, refused unless its hash is the checkpoint's."""
-        obj = self.repo.read(f"objects/{oid}.json")
-        if oid not in cp.objects or object_hash(obj) != cp.objects[oid]["hash"]:
-            raise SecretStoreError(f"object {oid} in the local copy does not match the checkpoint")
-        return obj
+    def _tree_object(self, oid: str, cp: checkpoint.Checkpoint, at: str | None = None) -> dict:
+        """The clone's file for oid (or its version at commit at), refused unless its hash is the
+        checkpoint's. A mismatch against the held checkpoint first follows a newer checkpoint that
+        another process on this computer wrote meanwhile (_follow), then checks again."""
+        path = f"objects/{oid}.json"
+        obj = self.repo.read(path) if at is None else self.repo.read_at(at, path)
+        if oid in cp.objects and obj is not None and object_hash(obj) == cp.objects[oid]["hash"]:
+            return obj
+        if at is None and cp is self.checkpoint and not self._syncing:
+            self._follow(clone=True)
+            if self.checkpoint is not cp:
+                return self._tree_object(oid, self.checkpoint)
+        raise SecretStoreError(f"object {oid} in the local copy does not match the checkpoint")
 
-    def _baseline(self, cp: checkpoint.Checkpoint, files: dict) -> dict:
+    def _follow(self, clone: bool = False) -> None:
+        """Plan section G: another process on this computer (brain_secrets.py beside the Vault
+        Agent) may have written through the same clone and checkpoint folder. Under the
+        repository lock, a checkpoint on disk that is not the held one is verified as at open
+        (signature, pin) and taken only when it follows from the held one; the commits between
+        the held state and the clone are verified one by one (accept_commit, the policy chain)
+        and the local copy is checked against the result. A refusal writes nothing and leaves the
+        held state as it was. With clone, a clone moved past the held commit is followed the same
+        way while the checkpoint on disk is still the held one (the other process stopped between
+        its push and its checkpoint); that git call is made only there, not on every read."""
+        if self.policy is None or self.checkpoint is None or self.repo is None or self._syncing:
+            return
+        with self.repo.lock():
+            disk = self._load_checkpoint() if self.checkpoint_path.exists() else None
+            if disk is None or disk == self.checkpoint:
+                if not clone or self.repo.head() == self._head:
+                    return
+                disk = self.checkpoint
+            checkpoint.advance(self.checkpoint, disk)  # older, forked or another repository: refused
+            if self._load_pin() != self._pinned:
+                raise SecretStoreError("this computer's trust-root pin changed while the store was open; open it again")
+            policy, cp, previous, accepted_all = self.policy, self.checkpoint, self._head, []
+            for commit in self.repo.local_commits(self._head):
+                files = self.repo._changed_files(commit)
+                accepted = accept_commit(policy, cp, files, self._identity().my_keys(),
+                                         self._baseline(cp, files, at=previous))
+                policy, cp, previous = accepted.policy, accepted.checkpoint, commit
+                accepted_all.append(accepted)
+            try:
+                checkpoint.advance(disk, cp)
+            except SecretStoreError:
+                raise SecretStoreError("this computer's checkpoint is ahead of its local copy; "
+                                       "refusing to use the copy") from None
+            if object_hash(self.repo.read("policy.json")) != cp.policy_hash:
+                raise SecretStoreError("the local copy does not match this computer's checkpoint")
+            for oid in cp.objects:
+                self._tree_object(oid, cp)  # the tamper check, against the reloaded checkpoint
+            if cp != disk:  # the other process stopped between its push and its checkpoint
+                self._save_checkpoint(cp)
+            self.policy, self.checkpoint, self._head = policy, cp, previous
+            for accepted in accepted_all:
+                self._note_usable(accepted)
+
+    def _baseline(self, cp: checkpoint.Checkpoint, files: dict, at: str | None = None) -> dict:
         """Latest verified payloads of oauth objects a commit changes (the field-rule baseline)."""
         out = {}
         for path, value in files.items():
             oid = path[len("objects/"):-len(".json")] if path.startswith("objects/") else None
             if (oid and isinstance(value, dict) and value.get("kind") == "oauth" and oid in cp.objects
                     and oid not in self.unusable):
-                previous = self._tree_object(oid, cp)
+                previous = self._tree_object(oid, cp, at)
                 if any(r["key"] in self._identity().my_keys() for r in previous["readers"]):
                     out[oid] = self._open_object(previous)  # else opaque: structural checks only
         return out
@@ -206,7 +260,13 @@ class SecretStore:
 
     def _sync(self, pinned: Any, saved: checkpoint.Checkpoint | None) -> None:
         """Pull, verifying every new commit with accept_commit; save the checkpoint after each
-        accepted commit once it has caught up with the saved one. Refusal stops the store."""
+        accepted commit once it has caught up with the saved one. Refusal stops the store. One
+        repository lock covers following another process's checkpoint and the pull."""
+        with self.repo.lock():
+            self._follow(clone=True)
+            self._sync_locked(pinned, saved)
+
+    def _sync_locked(self, pinned: Any, saved: checkpoint.Checkpoint | None) -> None:
         state = {"policy": self.policy, "cp": self.checkpoint, "caught": saved is None or self.checkpoint is not None}
 
         def verify(_commit: str, files: dict) -> bool:
@@ -232,10 +292,12 @@ class SecretStore:
                     return
             self._save_checkpoint(state["cp"])
 
+        self._syncing = True
         try:
             self.repo.pull(verify, advanced)
         finally:
             self.policy, self.checkpoint = state["policy"], state["cp"]
+            self._head, self._syncing = self.repo.head(), False
         if self.policy is None:
             raise SecretStoreError("the personal repository is empty; run init first")
         if not state["caught"]:
@@ -254,6 +316,7 @@ class SecretStore:
         with self.repo.lock():
             if self.repo.head() is not None:
                 self.policy, self.checkpoint = self._from_tree(saved), saved
+            self._head, self._pinned = self.repo.head(), pinned
             self._sync(pinned, saved)
         if not self.pin_path.exists() and pinned:
             self._save_pin(pinned)
@@ -343,6 +406,7 @@ class SecretStore:
     def _ready(self) -> None:
         if self.policy is None or self.checkpoint is None:
             raise SecretStoreError("the secrets store is not open")
+        self._follow()  # another process on this computer may have written since (plan section G)
         checked = getattr(self, "_package_checked", None)
         if checked is None or _in_transaction() or getattr(self, "_package_busy", False):
             return
@@ -416,7 +480,7 @@ class SecretStore:
                 if isinstance(written, Conflict):
                     continue
                 self._save_checkpoint(accepted.checkpoint)
-                self.policy, self.checkpoint = accepted.policy, accepted.checkpoint
+                self.policy, self.checkpoint, self._head = accepted.policy, accepted.checkpoint, written
                 self._note_usable(accepted)
                 if "policy.json" in files:  # the change is saved: package upkeep only ever warns
                     self._package_upkeep()
