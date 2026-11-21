@@ -56,9 +56,12 @@ def uncertain_message(entry: str, provider: str | None) -> str:
                  else "Run the uncertain-refresh procedure for this provider, or replace the sign-in. ")
     return (f"The last refresh of {label(entry)} is uncertain: the provider was called but its answer was never "
             "recorded, so the old refresh token must not be used again and the entry is not refreshed. "
-            + procedure + "Next step: on the computer that refreshes it, an administrator runs "
+            + procedure + "Next step: on the computer that refreshes it, run "
             f"{command} (add --group G for a team sign-in), then disconnect the app at the provider where it "
-            "offers that and sign in again in the browser on that computer.")
+            "offers that and sign in again in the browser on that computer. For a team sign-in whose refreshing "
+            f"computer is not an administrator's, an administrator instead runs {command} --group G --for "
+            "PERSON/COMPUTER on their own computer, signs in again in the browser there and hands the sign-in "
+            "back with handover-release and handover-accept.")
 
 
 class Journal:

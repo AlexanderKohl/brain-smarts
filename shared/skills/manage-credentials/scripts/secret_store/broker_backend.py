@@ -138,6 +138,10 @@ class StoreBackend:
             self._pull_all(tolerate=True)
         if self._journal is None:
             self._journal = Journal(self.store.config["checkpoint_dir"], self.store._identity().x25519)
+        from .replace_ops import discard_retired
+        for st in self._stores():  # a replaced sign-in's old record is never held as uncertain (plan K.1)
+            if st.policy is not None:
+                discard_retired(st, self._journal)
         return self.store
 
     def status(self) -> dict[str, Any]:

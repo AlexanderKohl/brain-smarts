@@ -490,6 +490,13 @@ writes a token out of the store, so every migrated sign-in needs a browser sign-
   encrypted hand-over file beside the journal, one commit deletes the sign-in and retires both ids, and
   the next browser sign-in under the same name gets the kept settings. A failed commit or push leaves
   the sign-in as it was; `status` reports a hand-over file whose sign-in was never completed.
+  A team sign-in whose refresher is not an administrator is replaced the way it was first made. On the
+  refresher the command changes nothing, names the step and exits 3. An administrator then runs
+  `replace-signin ENTRY --group G --for PERSON/COMPUTER` on their own computer: refused unless that names
+  the sign-in's refresher; the settings it can read are kept in its own hand-over file (otherwise it says
+  to choose them again) and the one deletion commit follows. The administrator signs in again in the
+  browser there and hands the sign-in back with `handover-release` and `handover-accept`. The old
+  refresher's next operation on the entry discards its record of the retired grant.
 
 ### A failed refresh
 

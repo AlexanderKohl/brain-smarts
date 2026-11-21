@@ -126,7 +126,8 @@ python brain_secrets.py team-groups --create G | --login L --group G
 python brain_secrets.py team-remove --login L [--computer C]
 python brain_secrets.py handover-release --entry E --to PERSON/COMPUTER [--group ops]   old refresher
 python brain_secrets.py handover-accept --entry E [--group ops]   an administrator's computer
-python brain_secrets.py replace-signin E [--field F] [--group ops] [--even-if-working]   refresher, administrator
+python brain_secrets.py replace-signin E [--field F] [--group ops] [--even-if-working]   refresher
+python brain_secrets.py replace-signin E [--field F] --group ops --for PERSON/COMPUTER   administrator, for the refresher
 python migrate_to_store.py --dry-run               names only; then without it, [--replace]
 python migrate_to_store.py rollback [--dry-run]    static secrets back to the old vault
 ```
@@ -148,9 +149,15 @@ or the target are wrong. Replacing a sign-in: `replace-signin` ends an uncertain
 one with `--even-if-working`) on its refresher, run by an administrator: the shared settings are kept
 in a hand-over file beside the journal, one commit deletes the sign-in and retires both ids, and the
 next browser sign-in under the same name gets the kept settings. `status` reports a hand-over file
-whose sign-in was never completed. Only the sign-in's refresher may run it, and only if that
-computer's key is an administrator's: a team member who became refresher through a handover is
-refused, and nothing changes. `recovery-package --team` writes the team package; an unwritable
+whose sign-in was never completed. On a refresher whose key is not an administrator's (a team member
+who became refresher through a handover) it changes nothing, names the administrator's step and exits
+3. The administrator runs it with `--for PERSON/COMPUTER` on their own computer: refused unless that
+is the sign-in's refresher in the policy and this computer is an administrator's; the settings it can
+read go into its own hand-over file, the deletion commit follows (a failed commit or push leaves no
+new file), and no journal is touched. The administrator signs in again in the browser and hands the
+sign-in back with `handover-release` and `handover-accept`. The old refresher's next operation
+(`replace_ops.discard_retired`, called by the agent) removes its journal record of the retired grant.
+`recovery-package --team` writes the team package; an unwritable
 folder warns, writes the upkeep-error file and exits 1, as for the personal package.
 
 ## The cut-over
