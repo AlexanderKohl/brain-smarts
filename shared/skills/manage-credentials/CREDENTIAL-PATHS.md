@@ -77,6 +77,26 @@ keyword in `scripts/`, by file and function, with the number of calls `tests/tes
 A new caller: review it against the rule above, add it to `REVIEWED` in the test with its reason, and add a
 row here.
 
+### Library connectors
+
+When the brain holds `/library/skills`, the same test scans every `/library/skills/<skill>/scripts` folder for
+the same names against `LIBRARY_REVIEWED`; test files there (a `tests` folder or a `test_*.py` file) are left
+out. Without a library the check is skipped with a message.
+
+| Caller | What | Calls | Why it may call |
+|---|---|---|---|
+| `abr-access/scripts/abr_import_guid_from_gmail.py` `_store_guid` | PortableVault( | 1 | the passphrase fallback writes the GUID text field; its open refuses while the store is on |
+| `abr-access/scripts/abr_import_guid_from_gmail.py` `_store_guid` | broker_request | 1 | set_text of the GUID through the unlocked agent |
+| `gohighlevel-access/scripts/ghl_oauth/vault_store.py` `_credential_modules` | PortableVault passed | 1 | returns the class to `_vault_static_fields`; no vault is opened |
+| `gohighlevel-access/scripts/ghl_oauth/vault_store.py` `_vault_static_fields` | PortableVault( | 1 | the passphrase fallback for static fields; its open refuses while the store is on |
+| `gohighlevel-access/scripts/ghl_oauth/vault_store.py` `_vault_static_fields` | broker_request | 1 | get_fields of static fields; off the refresher a client secret is refused |
+| `google-workspace-access/scripts/google_oauth/client.py` `client_from_vault` | broker_request | 2 | get_fields of the client ID and secret, then the client ID alone when the secret lives on the refresher |
+| `google-workspace-access/scripts/google_tray_token.py` `_broker` | broker_request passed | 1 | hands the agent client to the two tray functions |
+| `google-workspace-access/scripts/google_tray_token.py` `_refresh_under_lock` | broker_request | 1 | client ID and secret inside the store's rotation lock, on the refresher |
+| `google-workspace-access/scripts/google_tray_token.py` `load_tray_access_token` | broker_request | 1 | get_json of the account's sign-in: answered by role, a migrated field refused |
+| `google-workspace-access/scripts/google_tray_token.py` `refresh_tray_access_token` | broker_request passed | 1 | passes the agent client on; no call of its own |
+| `linkedin-access/scripts/linkedin_client.py` `vault_static_fields` | broker_request | 1 | get_fields of static fields through the unlocked agent; no passphrase fallback |
+
 ## All paths
 
 States: **S1** store off, nothing migrated; **S2** store on, the agent serves the store; **S3** store on, no
@@ -100,7 +120,7 @@ e start or configure the agent. `mc/` is this skill's `scripts/`, `lib/` the ski
 | 12 | `secret_store/journal.py` `resolve_uncertain` | b | no production caller; refused while no profile is verified; an uncertain sign-in is ended by `replace-signin` (row 52) | same | OK |
 | 13 | `mc/migrate_to_store.py` migrate | a, b, d | one run under the migration lock; an unverified sign-in has its store copy removed in the same run and the run exits non-zero | marked entries skipped | OK |
 | 14 | `migrate_to_store.py` backup | d | encrypted byte copy; status shows the newest backup's age; no retention limit | same | OK, noted |
-| 15 | `migrate_to_store.py rollback` | b, d | under the lock; static secrets only, sign-ins need a browser sign-in | same | OK |
+| 15 | `migrate_to_store.py rollback` | b, d | under the lock; every static object of the store, text and JSON, entries created after the migration included; each entry not restored is named and exits 5; sign-ins need a browser sign-in | same | OK |
 | 16 | `mc/portable_vault.py` `PortableVaultJsonStore` | a, b, e | store agent required; passphrase open refused; relay ignored | marked field refused | OK |
 | 17 | `portable_vault.py` `BrokerOAuthStore` | a, b | store agent required | agent refuses marked field | OK |
 | 18 | `mc/vault_credentials.py` run, session | a | store agent required | text only | OK |
@@ -140,7 +160,7 @@ e start or configure the agent. `mc/` is this skill's `scripts/`, `lib/` the ski
 | 52 | `brain_secrets.py replace-signin` | b, d | refresher and administrator only; settings kept in an encrypted hand-over file; one commit retires both ids; a failed push changes nothing | – | OK |
 
 Tests: rows 1 to 11 and 29 to 31 in `tests/test_secret_store_*.py`; rows 13 to 28 in `test_secret_store_round8.py`
-and `test_secret_store_round9.py`; rows 4, 8 and 52 in `test_secret_store_restore_cli.py`,
+and `test_secret_store_round9.py`, and row 15 also in `test_secret_store_rollback_static.py`; rows 4, 8 and 52 in `test_secret_store_restore_cli.py`,
 `test_secret_store_replace_signin.py` and `test_secret_store_replace_team.py`; rows 30 and 50 in
 `test_token_endpoint.py`; rows 35 to 47 in `test_secret_store_connectors.py` and each library skill's own tests.
 

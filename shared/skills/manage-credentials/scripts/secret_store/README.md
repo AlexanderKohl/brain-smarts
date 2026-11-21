@@ -188,7 +188,12 @@ What fails closed:
 Rollback goes the same way round. The agent is unlocked on the old vault with the store off, and the
 store is switched on without restarting the agent. `migrate_to_store.py rollback --dry-run` runs, then
 `rollback`, and then the store is switched off. The rollback runs under the same lock and restores static secrets only from
-the store's current value and clears the marker. It never writes a token out of the store, so every
+the store's current value and clears the marker. It walks every static object of the store, not the old
+vault's listing, so an entry or field created after the migration is restored too. The store holds text
+only: a field the old vault holds keeps its kind there, and any other field is JSON exactly when its text
+is the canonical form (sorted keys) of a JSON object, as `set_json` writes it. Each entry restored and
+each that could not be (unreadable, a token-shaped value, or refused by the agent) is named; one that
+could not ends with exit code 5 and the marker kept. It never writes a token out of the store, so every
 migrated sign-in needs a browser sign-in afterwards.
 
 ## A failed refresh

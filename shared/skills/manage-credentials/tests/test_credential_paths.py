@@ -10,7 +10,13 @@ What is found, by reading the source (ast), never by running it:
 - "PortableVault passed": the class named without being called, outside imports and annotations
 - "migration=": a migration keyword whose value is not the literal False (the store-on passphrase open)
 - "name in a string": a string that is exactly one of the watched names (getattr and the like)
-Any other file type under scripts/ may not hold the names at all."""
+Any other file type under scripts/ may not hold the names at all.
+
+Follow-up plan K.3: when the brain holds a library (/library/skills/*/scripts, found from the brain
+root above this skill), every connector's scripts are scanned for the same names against
+LIBRARY_REVIEWED, keyed "<skill>/scripts/<file>". Test files there (a tests folder or a test_*.py
+file) are left out: they hold fakes and refusal checks, not credential paths. Without a library the
+library test is skipped with a message."""
 import ast
 import re
 import shutil
@@ -22,6 +28,7 @@ from pathlib import Path
 SKILL = Path(__file__).resolve().parent.parent
 SCRIPTS = SKILL / "scripts"
 PATHS_FILE = SKILL / "CREDENTIAL-PATHS.md"
+LIBRARY = SKILL.parent.parent.parent / "library" / "skills"  # the brain root's library
 BROKER = {"broker_request", "_broker_request"}
 WATCHED = BROKER | {"PortableVault"}
 TEXT = re.compile(r"broker_request|PortableVault|migration\s*=\s*True")
@@ -94,6 +101,33 @@ REVIEWED: dict[tuple[str, str, str], tuple[int, str]] = {
         1, "run: static fields, after main required the store agent"),
     ("vaultctl.py", "main", "broker_request"): (
         4, "unlock, lock, access-token and secret-put; the store agent is required except for unlock and lock"),
+}
+
+# ("<skill>/scripts/<file>", enclosing function, what) -> (how many, why it may call)
+LIBRARY_REVIEWED: dict[tuple[str, str, str], tuple[int, str]] = {
+    ("abr-access/scripts/abr_import_guid_from_gmail.py", "_store_guid", "PortableVault("): (
+        1, "the passphrase fallback writes the GUID text field; its open refuses while the store is on"),
+    ("abr-access/scripts/abr_import_guid_from_gmail.py", "_store_guid", "broker_request"): (
+        1, "set_text of the GUID through the unlocked agent, which routes it to the store when on"),
+    ("gohighlevel-access/scripts/ghl_oauth/vault_store.py", "_credential_modules", "PortableVault passed"): (
+        1, "returns the class to _vault_static_fields below; no vault is opened here"),
+    ("gohighlevel-access/scripts/ghl_oauth/vault_store.py", "_vault_static_fields", "PortableVault("): (
+        1, "the passphrase fallback for static fields; its open refuses while the store is on"),
+    ("gohighlevel-access/scripts/ghl_oauth/vault_store.py", "_vault_static_fields", "broker_request"): (
+        1, "get_fields of static fields; off the refresher a client secret is refused by the agent"),
+    ("google-workspace-access/scripts/google_oauth/client.py", "client_from_vault", "broker_request"): (
+        2, "get_fields of the client ID and secret, then the client ID alone when the agent says the "
+           "secret lives on the refresher"),
+    ("google-workspace-access/scripts/google_tray_token.py", "_broker", "broker_request passed"): (
+        1, "imports the agent client and hands it to the two tray functions below"),
+    ("google-workspace-access/scripts/google_tray_token.py", "_refresh_under_lock", "broker_request"): (
+        1, "get_fields of the client ID and secret inside the store's rotation lock, on the refresher"),
+    ("google-workspace-access/scripts/google_tray_token.py", "load_tray_access_token", "broker_request"): (
+        1, "get_json of the account's sign-in: the agent answers by role and refuses a migrated field"),
+    ("google-workspace-access/scripts/google_tray_token.py", "refresh_tray_access_token", "broker_request passed"): (
+        1, "passes the agent client to _refresh_under_lock; no call of its own"),
+    ("linkedin-access/scripts/linkedin_client.py", "vault_static_fields", "broker_request"): (
+        1, "get_fields of static fields through the unlocked agent; no passphrase fallback"),
 }
 
 
@@ -188,6 +222,22 @@ def scan(root: Path) -> Counter:
     return found
 
 
+def _test_file(rel: str) -> bool:
+    parts = rel.split("/")
+    return "tests" in parts[:-1] or parts[-1].startswith("test_")
+
+
+def scan_library(library: Path) -> Counter:
+    """scan() of every /library/skills/<skill>/scripts folder, test files left out, keyed
+    ("<skill>/scripts/<file>", function, what)."""
+    found = Counter()
+    for scripts in sorted(p for p in library.glob("*/scripts") if p.is_dir()):
+        for (rel, function, kind), count in scan(scripts).items():
+            if not _test_file(rel):
+                found[(f"{scripts.parent.name}/scripts/{rel}", function, kind)] += count
+    return found
+
+
 def differences(found: Counter, reviewed=None) -> list[str]:
     reviewed = REVIEWED if reviewed is None else reviewed
     problems = []
@@ -210,6 +260,40 @@ class CredentialCallers(unittest.TestCase):
             self.assertGreater(count, 0, (rel, function, kind))
             self.assertGreater(len(why.split()), 3, f"{rel} {function}: give the reason in a line")
             self.assertIn(f"`{rel}` `{function}`", text, f"{rel} {function} is missing from CREDENTIAL-PATHS.md")
+
+
+class LibraryCallers(unittest.TestCase):
+    def test_every_library_caller_is_on_the_reviewed_list(self):
+        if not LIBRARY.is_dir():
+            self.skipTest(f"no library at {LIBRARY}: the connectors' credential paths are checked where the "
+                          "brain holds /library/skills")
+        problems = differences(scan_library(LIBRARY), LIBRARY_REVIEWED)
+        self.assertEqual(problems, [], "\nA library credential caller is not on the reviewed list. Review it, then "
+                                       "add it to LIBRARY_REVIEWED with its reason and to CREDENTIAL-PATHS.md:\n"
+                                       + "\n".join(problems))
+
+    def test_every_reviewed_library_caller_has_a_reason_and_is_in_the_paths_file(self):
+        text = PATHS_FILE.read_text("utf-8")
+        for (rel, function, kind), (count, why) in LIBRARY_REVIEWED.items():
+            self.assertGreater(count, 0, (rel, function, kind))
+            self.assertGreater(len(why.split()), 3, f"{rel} {function}: give the reason in a line")
+            self.assertIn(f"`{rel}` `{function}`", text, f"{rel} {function} is missing from CREDENTIAL-PATHS.md")
+
+    def test_a_new_caller_in_a_copied_library_is_reported_and_test_files_are_not(self):
+        if not LIBRARY.is_dir():
+            self.skipTest(f"no library at {LIBRARY}")
+        root = Path(tempfile.mkdtemp(prefix="credential-paths-library-"))
+        self.addCleanup(shutil.rmtree, root, True)
+        for scripts in LIBRARY.glob("*/scripts"):
+            shutil.copytree(scripts, root / scripts.parent.name / "scripts",
+                            ignore=shutil.ignore_patterns("__pycache__"))
+        self.assertEqual(differences(scan_library(root), LIBRARY_REVIEWED), [])
+        target = root / "linkedin-access" / "scripts"
+        (target / "tests").mkdir(exist_ok=True)
+        (target / "tests" / "test_extra.py").write_text("PortableVault(None)\n", encoding="utf-8")
+        (target / "extra.py").write_text("def more():\n    return broker_request('get_fields')\n", encoding="utf-8")
+        self.assertEqual(differences(scan_library(root), LIBRARY_REVIEWED),
+                         ["linkedin-access/scripts/extra.py more broker_request: found 1, reviewed 0"])
 
 
 class TheCheckCatchesANewCaller(unittest.TestCase):
