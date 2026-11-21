@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 status: draft
 owner: brain-owner
 created: 2026-11-20T18:15:52+10:00
-updated: 2026-11-20T18:15:52+10:00
+updated: 2026-11-21T13:15:36+10:00
 rule_id: null
 accepted_by: null
 accepted_at: null
@@ -25,7 +25,8 @@ target_files:
 The *Credential policy* of the credential skill allows one store, the passphrase vault, unlocked by
 hand after every sign-in, and lets shared client secrets reach another person only through a
 password manager. Owners find this slow, and every computer and every team member repeats it. A
-store has been designed and independently reviewed (six rounds, verdict SOUND) that keeps each
+store has been designed and independently reviewed (six rounds, verdict SOUND; a later amendment
+on failed refreshes, verdict SOUND in its third version) that keeps each
 computer's keys in the operating system's keychain and syncs encrypted, signed objects through
 private Git repositories; it is built behind an opt-in in `scripts/secret_store/`. Several policy
 bullets forbid exactly what it does, so it cannot be switched on without this change.
@@ -79,7 +80,8 @@ And a new sub-section at the end of *Credential policy*:
 ### Synced secrets store
 
 - No secret value, private key or recovery word is ever written to Git, the chat, a log or a
-  command argument. Recovery words are shown only in the masked window, once.
+  command argument. Recovery words are shown once, and typed for a restore, only in the masked
+  window.
 - Who can read an object changes only through a policy change signed by an administrator of that
   repository, judged against the current trusted policy; a commit that does not verify in full is
   refused whole.
@@ -87,14 +89,16 @@ And a new sub-section at the end of *Credential policy*:
   the agent lists the provider secrets to change, because what was read cannot be recalled.
 - A rotating sign-in is handed to another refresher only through a signed release, or after a
   revocation the provider's profile proves complete; without such a profile it is never handed
-  over, and an uncertain refresh leaves it blocked.
-- The design is `/memory/projects/brain-development/designs/synced-secrets-repository.md` in the
-  owner's memory where it was made; its rules above apply to every brain that switches the store on.
+  over.
+- A refresh whose answer is lost is never repeated with the old refresh token. The sign-in is
+  blocked until it is replaced: deleted by an administrator, its identifiers retired, and signed
+  in again in the browser.
+- While the store is switched on, the old vault is closed: no path reads or writes a credential
+  in it, and the token relay is not used. Moving to the store is one cut-over, which removes the
+  old vault's sign-in tokens once the store's copy of each is verified.
+- The store's rules in full are in `scripts/secret_store/README.md`; they apply to every brain
+  that switches the store on.
 ```
-
-(The last bullet names a memory path, which another owner's brain does not have; on acceptance it
-is replaced by a reference to the store's own `README.md` in `scripts/secret_store/`, which carries
-the design's rules in generic form.)
 
 ## Reason
 
@@ -104,29 +108,41 @@ secret encrypted to the computers allowed to read it and no server able to read 
 ## Scope and behavioural consequences
 
 Only brains whose owner switches the store on. For them: secrets are readable whenever the person
-is signed in to the computer (today: only after the tray is unlocked); shared rotating sign-ins
-refresh on one named computer; other computers use their access tokens only.
+is signed in to the computer (today: only after the tray is unlocked), and the tray shows no
+unlock window; shared rotating sign-ins refresh on one named computer, and other computers use
+their access tokens only; the token relay is retired; the old vault cannot be used beside the
+store.
 
 ## Risks and conflicts
 
 - A computer stolen while signed in reads what its person can, as an unlocked vault can today.
 - Malware running as the person can read the keychain keys, as it can read the unlocked tray today.
 - Lost computers, recovery words and recovery package together lose the personal secrets.
+- A refresh whose answer is lost costs a new browser sign-in. A token the provider issued in the
+  lost answer may stay valid until it expires or is revoked, held by no one.
+- Going back to the old vault after the cut-over means signing in again, in the browser, to every
+  rotating sign-in.
 
 ## Migration
 
-The store's migration command copies each vault entry into the store after a verified encrypted
-backup of the vault; the vault stays readable until the owner retires it.
+One cut-over. The migration command makes a verified encrypted backup of the vault, copies every
+entry into the store and reads each back. Once the store's copy of a sign-in is verified, the old
+vault's tokens for it are removed and a marker beside the vault names it. The store is then
+switched on and the old vault is closed. A sign-in whose copy cannot be verified is not moved: it
+is signed in again in the browser after the cut-over.
 
 ## Rollback
 
-Switch the store off; the vault and its passphrase work as before. Revert the added sentences and
+The migration command's `rollback` puts the static secrets back into the old vault and clears the
+marker; the store is then switched off and the Vault Agent restarted. No sign-in token is brought
+back: each rotating sign-in is signed in again in the browser. Revert the added sentences and
 sub-section.
 
 ## Validation
 
-The store's test suites; repository preflight; a live run on the owner's computers before any
-other person is invited.
+The store's test suites; repository preflight; a rehearsal on the owner's computer with throwaway
+secrets (the real keychain, a real agent process, a Git remote and a cloud folder); a live run on
+the owner's computers before any other person is invited.
 
 ## Acceptance
 
