@@ -68,14 +68,14 @@ def unbegun_message(entry: str, field: str) -> str:
             "refresh=True, leeway_seconds, or new_authorisation=True for a first sign-in); nothing was saved")
 
 
-def put_grant_fields(st: Any, group: str, entry: str, fields: dict) -> None:
+def put_grant_fields(st: Any, group: str, entry: str, fields: dict, typed: Any = None) -> None:
     """Grant fields (provider_profiles.grant_fields) go to the entry's grant, created with an
-    empty sign-in when none exists yet; never to a static object."""
+    empty sign-in when none exists yet; never to a static object. typed: only typed_write hands one."""
     names = oauth_ops.signin_fields(st, entry, group)
     if names:
-        oauth_ops.set_grant_fields(st, oauth_ops.find(st, entry, names[0], group), fields)
+        oauth_ops.set_grant_fields(st, oauth_ops.find(st, entry, names[0], group), fields, typed=typed)
     else:
-        oauth_ops.put_signin(st, entry, oauth_ops.DEFAULT_FIELD, {}, fields, group=group)
+        oauth_ops.put_signin(st, entry, oauth_ops.DEFAULT_FIELD, {}, fields, group=group, typed=typed)
 
 
 class StoreBackend:

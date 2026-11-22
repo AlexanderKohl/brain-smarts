@@ -512,8 +512,9 @@ writes a token out of the store, so every migrated sign-in needs a browser sign-
   confirmed. A crash or a failed push keeps it, and the next operation writes it again when every object it
   was built on is unchanged, removes it when the store already holds that very write, and otherwise marks it
   held: `--apply ID` writes the kept values over the present ones, `--discard ID` removes them (type the id
-  to confirm). A browser sign-in, the migration and a settings save make no record, and no record holds a
-  token. A refused commit is named by a fixed rule code and the commit id, never by text from the commit.
+  to confirm). A typed value is recorded whatever its field is called; a browser sign-in, the migration, a
+  refresh and a settings save make no record, so a provider's token answer never enters one. A refused
+  commit is named by a fixed rule code and the commit id, never by text from the commit.
 
 ### A failed refresh
 

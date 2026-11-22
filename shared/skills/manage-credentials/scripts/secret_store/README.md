@@ -249,8 +249,10 @@ from the clone. What a person typed survives through a pending-write record (`pe
 - one function, `typed_write.write_typed`, makes the record and writes. `brain_secrets.py put` and
   the agent's `set_text` and `set_json` of a static or grant field call it, always; the replay and
   `unfinished --apply` call it under the record that exists. The writers beneath it (`put_entry`,
-  `oauth_ops.put_fields`, `set_grant_fields`, `put_signin`) make none, so a browser authorisation,
-  the migration, `save_settings` and a refresh never make a record, and no record holds a token;
+  `oauth_ops.put_fields`, `set_grant_fields`, `put_signin`, `put_grant_fields`) make none: they take
+  a keyword `typed=None` for their one `_write`, and only `typed_write` hands one down. A typed value is
+  recorded whatever its field is called; a browser authorisation, the migration, `save_settings` and a
+  refresh never make a record, so a provider's token answer never enters one;
 - the record holds the plain fields with their kinds, the typed grant fields (a client id or secret),
   the base and the projected identities. The base names each object the write was built on by its id
   and checkpoint hash; an entry or sign-in that did not exist is bound to the group's index object,

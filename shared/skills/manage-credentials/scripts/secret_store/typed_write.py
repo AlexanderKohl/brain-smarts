@@ -2,21 +2,24 @@
 
 write_typed is the one function that makes a record and writes: brain_secrets.py put and the
 agent's set_text and set_json of a static or grant field call it, always; the replay and
-unfinished --apply call it under the record that exists. The writers beneath it (put_entry,
-oauth_ops.put_fields, set_grant_fields, put_signin) make no record, so a migration, a browser
-authorisation or a refresh never makes one.
+unfinished --apply call it under the record that exists. A typed value is recorded whatever its
+field is called. The writers beneath it (put_entry, oauth_ops.put_fields, set_grant_fields,
+put_signin, put_grant_fields) make no record: they take a keyword typed=None, passed to their one
+_write, and only this module hands one down. A provider's token answer (a browser authorisation, a
+migrated sign-in, a refresh) goes through put_signin with a token record or through publish, never
+through here, so it never enters a record.
 
-The store's _write runs the Attempt it is handed (SecretStore._typed_next) at three points: after
-the write's own sync (check: a replay is replayed, saved or held, decided in the verified state the
-write is built on, under the repository lock), after the change is built and verified (record:
-the first write's record is written, a later attempt rewrites only the projected identities;
-before repo.write touches the clone) and at the commit (committed)."""
+_write runs the Attempt it is handed at its phases: after the write's own sync (check: a replay is
+replayed, saved or held, decided in the verified state the write is built on, under the repository
+lock), after the change is built and verified (record: the first write's record is written, a later
+attempt rewrites only the projected identities; before repo.write touches the clone), at the commit
+(committed) and before the checkpoint is saved (a failure there is never isolated)."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from .errors import SecretStoreError
+from .errors import IntegrityError, SecretStoreError
 from .pending import PendingWrites
 from .policy import INDEX_PREFIX, object_hash
 
@@ -27,18 +30,6 @@ class Saved(SecretStoreError):
 
 class Held(SecretStoreError):
     """A target changed since the record was built: nothing is written."""
-
-
-class IntegrityError(SecretStoreError):
-    """A check of the store itself failed (the local copy against the checkpoint): never swallowed."""
-
-
-def token_names() -> frozenset:
-    """Field names that hold a token: every profile's token fields and every grant spelling but the
-    client secret's (a client id or secret is what a person types)."""
-    from . import provider_profiles
-    return frozenset((provider_profiles.token_fields() | provider_profiles.grant_fields())
-                     - {"client_secret", "clientSecret", "client_id", "clientId"})
 
 
 def records(store: Any) -> PendingWrites:
@@ -111,7 +102,8 @@ class Attempt:
         self.store, self.entry, self.group = store, entry, group
         self.plain, self.kinds, self.grant = dict(plain), dict(kinds), dict(grant)
         self.record, self.mode = record, mode
-        self.phase, self.committed = "sync", False  # phases: sync, check, prepare, build, verify, record, commit
+        # phases: sync, check, prepare, build, verify, record, commit, checkpoint
+        self.phase, self.committed, self.recorded = "sync", False, False
 
     def check(self, store: Any) -> None:
         if self.mode != "replay":
@@ -125,6 +117,7 @@ class Attempt:
 
     def before_commit(self, store: Any, files: dict) -> None:
         projected = projected_of(files)
+        self.recorded = True
         if self.record is None:
             self.record = records(store).new(store.policy.repository, self.group, self.entry, self.plain,
                                              self.kinds, self.grant, base_of(store, self.entry, self.group,
@@ -135,15 +128,15 @@ class Attempt:
             records(store).write(self.record)
 
 
-def _writer(store: Any, entry: str, group: str, plain: dict, kinds: dict, grant: dict) -> None:
+def _writer(store: Any, entry: str, group: str, plain: dict, kinds: dict, grant: dict, typed: Attempt) -> None:
     from . import oauth_ops
     if plain and grant:
-        oauth_ops.put_fields(store, entry, plain, grant, group, plain_kinds=kinds)
+        oauth_ops.put_fields(store, entry, plain, grant, group, plain_kinds=kinds, typed=typed)
     elif plain:
-        store.put_entry(entry, plain, group=group, field_kinds=kinds)
+        store.put_entry(entry, plain, group=group, field_kinds=kinds, typed=typed)
     else:
         from .broker_backend import put_grant_fields
-        put_grant_fields(store, group, entry, grant)
+        put_grant_fields(store, group, entry, grant, typed=typed)
 
 
 def _run(attempt: Attempt) -> None:
@@ -154,11 +147,10 @@ def _run(attempt: Attempt) -> None:
             attempt.phase = "check"
             attempt.check(store)
     attempt.phase = "prepare"  # the writer's own reads before its _write (finding the sign-in)
-    store._typed_next = attempt  # taken by the writer's _write at its start
-    try:
-        _writer(store, attempt.entry, attempt.group, attempt.plain, attempt.kinds, attempt.grant)
-    finally:
-        store._typed_next = None
+    _writer(store, attempt.entry, attempt.group, attempt.plain, attempt.kinds, attempt.grant, attempt)
+    if not attempt.recorded:  # the writer returned without the record phase: never a silent success
+        raise SecretStoreError(f"the write of {attempt.entry} ended without its pending-write record; check the "
+                               "entry and store it again")
 
 
 def _committed(attempt: Attempt) -> bool:
@@ -170,10 +162,6 @@ def write_typed(store: Any, entry: str, plain: dict | None = None, kinds: dict |
     """A first write of typed values: plain fields at their kinds and grant fields of one entry."""
     plain, grant = dict(plain or {}), dict(grant or {})
     kinds = dict(kinds) if kinds is not None else {f: "text" for f in plain}
-    tokens = sorted((set(plain) | set(grant)) & token_names())
-    if tokens:  # a pending record never holds a token (plan L4 rule 3)
-        raise SecretStoreError(f"{', '.join(tokens)} is a token and is never typed; sign in again in the browser "
-                               "instead")
     attempt = Attempt(store, entry, store._group(group), plain, kinds, grant, None, "first")
     try:
         _run(attempt)
@@ -226,8 +214,8 @@ def replay(store: Any) -> None:
             except Saved:
                 pending.remove(write_id)
                 continue
-            except Held:
-                pending.write({**record, "held": True})
+            except Held:  # the mark only, on the record as this attempt last wrote it (correction 5)
+                pending.write({**attempt.record, "held": True})
                 continue
             except Exception as error:  # noqa: BLE001 - classified below; the rest is raised
                 if not _isolated(attempt, error):

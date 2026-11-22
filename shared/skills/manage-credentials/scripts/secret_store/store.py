@@ -18,7 +18,7 @@ from . import canonical, checkpoint, keys, provider_profiles, recovery, recovery
 from .accept import accept_commit
 from .accept_rules import RuleRefusal, coded
 from .delete_ops import build_delete
-from .errors import SecretStoreError
+from .errors import IntegrityError, SecretStoreError
 from .policy import (INDEX_PREFIX, Policy, check_endorsement, create_trust_root, fingerprint, load_trust_root,
                      object_hash, public_entry)
 from .repo import Conflict, MovedHead, RefusedCommit, SecretRepo
@@ -186,7 +186,6 @@ class SecretStore:
         if follow and at is None and cp is self.checkpoint and not self._syncing:
             self._follow(clone=True)
             return self._tree_object(oid, self.checkpoint, follow=False)
-        from .typed_write import IntegrityError
         raise IntegrityError(f"object {oid} in the local copy does not match the checkpoint")
 
     def _follow(self, clone: bool = False) -> None:
@@ -205,48 +204,61 @@ class SecretStore:
         it is an unfinished write (a crash before the push: under the lock no writer is mid-write)
         and is settled by the store's own path for a failed write, settle_failed_write, which drops
         it from the clone, offline too. It is never followed or checkpointed; a refresh answer it
-        held stays in the journal as answered, and the next write publishes it."""
+        held stays in the journal as answered, and the next write publishes it.
+
+        Every failure raised here of its own (a checkpoint on disk older, forked, another
+        repository's or not verifying; the pin changed or not verifying; the checkpoint ahead of the
+        local copy; the local copy not matching; an unfinished write not settled) is an
+        IntegrityError with its message; RefusedCommit and MovedHead stay what they are."""
         if self.policy is None or self.checkpoint is None or self.repo is None or self._syncing:
             return
         with self.repo.lock():
-            disk = self._load_checkpoint() if self.checkpoint_path.exists() else None
-            if disk is None or disk == self.checkpoint:
-                if not clone or self.repo.head() == self._head:
-                    return
-                disk = self.checkpoint
-            checkpoint.advance(self.checkpoint, disk)  # older, forked or another repository: refused
-            if self._load_pin() != self._pinned:
-                raise SecretStoreError("this computer's trust-root pin changed while the store was open; open it again")
-            policy, cp, previous, accepted_all = self.policy, self.checkpoint, self._head, []
-            confirmed = False  # the commits past the checkpoint on disk are on the remote
-            for commit in self.repo.local_commits(self._head):
-                if cp == disk and not confirmed:
-                    if not self._settle_unfinished(previous):
-                        break  # dropped back to previous: nothing past the checkpoint is followed
-                    confirmed = True
-                try:
-                    files = self.repo._changed_files(commit)
-                    accepted = accept_commit(policy, cp, files, self._identity().my_keys(),
-                                             self._baseline(cp, files, at=previous))
-                except Exception as error:  # noqa: BLE001 - plan section L: a fixed code, never the text
-                    raise RefusedCommit(commit, getattr(error, "code", None),
-                                        self._safe_oid(error, policy, cp)) from None
-                policy, cp, previous = accepted.policy, accepted.checkpoint, commit
-                accepted_all.append(accepted)
             try:
-                checkpoint.advance(disk, cp)
-            except SecretStoreError:
-                raise SecretStoreError("this computer's checkpoint is ahead of its local copy; "
-                                       "refusing to use the copy") from None
-            if object_hash(self.repo.read("policy.json")) != cp.policy_hash:
-                raise SecretStoreError("the local copy does not match this computer's checkpoint")
-            for oid in cp.objects:
-                self._tree_object(oid, cp)  # the tamper check, against the reloaded checkpoint
-            if cp != disk:  # the other process stopped between its push and its checkpoint
-                self._save_checkpoint(cp)
-            self.policy, self.checkpoint, self._head = policy, cp, previous
-            for accepted in accepted_all:
-                self._note_usable(accepted)
+                self._follow_locked(clone)
+            except (IntegrityError, RefusedCommit, MovedHead):
+                raise
+            except SecretStoreError as error:
+                raise IntegrityError(str(error)) from None
+
+    def _follow_locked(self, clone: bool) -> None:
+        disk = self._load_checkpoint() if self.checkpoint_path.exists() else None
+        if disk is None or disk == self.checkpoint:
+            if not clone or self.repo.head() == self._head:
+                return
+            disk = self.checkpoint
+        checkpoint.advance(self.checkpoint, disk)  # older, forked or another repository: refused
+        if self._load_pin() != self._pinned:
+            raise SecretStoreError("this computer's trust-root pin changed while the store was open; open it again")
+        policy, cp, previous, accepted_all = self.policy, self.checkpoint, self._head, []
+        confirmed = False  # the commits past the checkpoint on disk are on the remote
+        for commit in self.repo.local_commits(self._head):
+            if cp == disk and not confirmed:
+                if not self._settle_unfinished(previous):
+                    break  # dropped back to previous: nothing past the checkpoint is followed
+                confirmed = True
+            try:
+                files = self.repo._changed_files(commit)
+                accepted = accept_commit(policy, cp, files, self._identity().my_keys(),
+                                         self._baseline(cp, files, at=previous))
+            except Exception as error:  # noqa: BLE001 - plan section L: a fixed code, never the text
+                raise RefusedCommit(commit, getattr(error, "code", None),
+                                    self._safe_oid(error, policy, cp)) from None
+            policy, cp, previous = accepted.policy, accepted.checkpoint, commit
+            accepted_all.append(accepted)
+        try:
+            checkpoint.advance(disk, cp)
+        except SecretStoreError:
+            raise SecretStoreError("this computer's checkpoint is ahead of its local copy; "
+                                   "refusing to use the copy") from None
+        if object_hash(self.repo.read("policy.json")) != cp.policy_hash:
+            raise SecretStoreError("the local copy does not match this computer's checkpoint")
+        for oid in cp.objects:
+            self._tree_object(oid, cp)  # the tamper check, against the reloaded checkpoint
+        if cp != disk:  # the other process stopped between its push and its checkpoint
+            self._save_checkpoint(cp)
+        self.policy, self.checkpoint, self._head = policy, cp, previous
+        for accepted in accepted_all:
+            self._note_usable(accepted)
 
     def _settle_unfinished(self, confirmed: str) -> bool:
         """The clone has commits past confirmed (the commit of the checkpoint on disk). True when
@@ -538,13 +550,11 @@ class SecretStore:
         return {f: record[f] for f in fields}
 
     # -- writing ------------------------------------------------------------------------------
-    def _write(self, build: Callable[[], tuple[dict, str]]) -> None:
+    def _write(self, build: Callable[[], tuple[dict, str]], typed: Any = None) -> None:
         """One change through sync, build, verify, commit, push and checkpoint, under one repository
-        lock. A typed write (typed_write.write_typed) hands its Attempt in _typed_next: it is checked
+        lock. A typed write (typed_write.write_typed) hands its Attempt down as typed: it is checked
         after the sync, its record written after the verification and before repo.write touches the
         clone, and told whether a local commit was made (plan section L4)."""
-        typed, self._typed_next = getattr(self, "_typed_next", None), None
-
         def phase(name: str) -> None:
             if typed is not None:
                 typed.phase = name
@@ -581,6 +591,7 @@ class SecretStore:
                                              self._identity().my_keys(), baseline)
                 if isinstance(written, Conflict):
                     continue
+                phase("checkpoint")  # a failure here is the store's: never isolated (plan L4, correction 4)
                 self._save_checkpoint(accepted.checkpoint)
                 self.policy, self.checkpoint, self._head = accepted.policy, accepted.checkpoint, written
                 self._note_usable(accepted)
@@ -590,7 +601,7 @@ class SecretStore:
         raise SecretStoreError("the personal repository kept changing; the change was not saved, try again")
 
     def put_entry(self, entry_name: str, fields: dict[str, str], kind: str = "static",
-                  group: str | None = None, field_kinds: dict[str, str] | None = None) -> None:
+                  group: str | None = None, field_kinds: dict[str, str] | None = None, typed: Any = None) -> None:
         """Store fields in entry_name: a new entry, or the next revision with these fields changed.
         A static entry records each written field's kind (plan N2): field_kinds, else text."""
         if not isinstance(entry_name, str) or not entry_name.strip():
@@ -613,7 +624,7 @@ class SecretStore:
                 payload.update(fields)
             return build_put(self.policy, self.checkpoint.objects, index, entry_name, payload, kind,
                              self._identity().ed25519, self._group(group))
-        self._write(build)
+        self._write(build, typed=typed)
 
     def delete_entry(self, entry_name: str, group: str | None = None) -> None:
         self._write(lambda: build_delete(self.policy, self.checkpoint.objects, self._index(group), entry_name,

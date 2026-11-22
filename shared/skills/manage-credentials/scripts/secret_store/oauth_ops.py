@@ -249,7 +249,7 @@ def _new_signin_files(store: Any, entry: str, field: str, shared: dict, grant: d
 
 
 def put_signin(store: Any, entry: str, field: str, record: dict, grant_fields: dict | None = None,
-               replace: bool = False, group: str | None = None) -> None:
+               replace: bool = False, group: str | None = None, typed: Any = None) -> None:
     """Store a rotating sign-in with this computer as its refresher (one commit). A static field
     of the same name (a placeholder) and every grant field of the entry's static object leave the
     static object in that commit; the grant fields move into the grant."""
@@ -282,14 +282,14 @@ def put_signin(store: Any, entry: str, field: str, record: dict, grant_fields: d
         files = _revision_files(store, signin, shared, grant, new_operation())
         return {**files, **_static_files(store, store.policy, plan)}, "update"
     created: list = []
-    store._write(build)
+    store._write(build, typed=typed)  # typed: only typed_write hands one down (plan L4)
     if created:  # published: the hand-over file of a replaced sign-in has done its work
         from .replace_ops import finish
         finish(store, entry, field, group)
 
 
 def put_fields(store: Any, entry: str, plain: dict, grant_fields: dict, group: str | None = None,
-               plain_kinds: dict | None = None) -> None:
+               plain_kinds: dict | None = None, typed: Any = None) -> None:
     """Plain and grant fields of one entry in one commit (brain_secrets.py put): the static object
     (plain fields, less any grant field it held), the grant (those grant fields and the new ones;
     a new sign-in with this computer as its refresher when none exists), and the policy and index
@@ -335,7 +335,7 @@ def put_fields(store: Any, entry: str, plain: dict, grant_fields: dict, group: s
         files[_path(signin.grant_id)] = seal_revision(result, signin.grant_id, "grant", grant, signer,
                                                       cp.get(signin.grant_id))
         return files, message
-    store._write(build)
+    store._write(build, typed=typed)
 
 
 def publish(store: Any, signin: SignIn, answer: dict, operation: str) -> None:
@@ -396,7 +396,7 @@ def save_settings(store: Any, signin: SignIn, value: dict) -> bool:
     return True
 
 
-def set_grant_fields(store: Any, signin: SignIn, fields: dict) -> None:
+def set_grant_fields(store: Any, signin: SignIn, fields: dict, typed: Any = None) -> None:
     """Grant text fields such as the client secret: the refresher only. The same fields and any
     grant field left in the entry's static object leave it in the same commit."""
     if not signin.mine:
@@ -408,7 +408,7 @@ def set_grant_fields(store: Any, signin: SignIn, fields: dict) -> None:
         grant["fields"] = {**grant.get("fields", {}), **(plan[2] if plan else {}), **fields}
         files = _revision_files(store, signin, None, grant, None)
         return {**files, **_static_files(store, store.policy, plan)}, "update"
-    store._write(build)
+    store._write(build, typed=typed)
 
 
 def clear_tokens(store: Any, signin: SignIn, operation: str) -> None:

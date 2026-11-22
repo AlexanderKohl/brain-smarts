@@ -293,6 +293,9 @@ class Typed(unittest.TestCase):
                              {"client_secret": SECRET})  # the migration's writes, beneath write_typed
         put_grant_fields(self.a, "personal", "migrated-grant", {"client_secret": SECRET})
         self.a.put_entry("migrated-static", {"api_key": VALUE}, field_kinds={"api_key": "text"})
+        signin = oauth_ops.find(self.a, "xero-demo", FIELD)  # a refresh answer
+        oauth_ops.publish(self.a, signin, {"access_token": "fictional-access-2", "refresh_token": "fictional-r2"},
+                          oauth_ops.new_operation())
         self.assertEqual(self.pending().all(), {})
         self.crash_typed(entry="typed", plain={"api_key": TYPED}, grant={"client_secret": SECRET})
         self.assert_no_token_in_records()
@@ -416,11 +419,110 @@ class Typed(unittest.TestCase):
         (record,) = self.pending(held).all().values()
         self.assertTrue(record.get("held"))
 
-    def test_a_token_is_never_typed_into_a_record(self):
-        for plain, grant in (({}, {"refresh_token": "fictional-refresh"}), ({"access_token": "fictional-a"}, {})):
-            with self.assertRaisesRegex(SecretStoreError, "never typed"):
-                typed(self.a, "typed", plain, None, grant)
+    # -- corrections after the conductor's review of 4acda25 ------------------------------------------
+    def test_a_value_under_any_field_name_is_stored_and_survives_a_crash(self):
+        self.crash_typed(entry="api", plain={"access_token": TYPED})
+        self.a._sync(None, self.a.checkpoint)
+        self.assertEqual(self.a.get_record("api"), {"access_token": TYPED})
+        oauth_ops.put_signin(self.a, "xero-demo", FIELD, {}, {"client_id": "fictional-id"})
+        self.crash_typed(entry="xero-demo", grant={"refresh_token": "fictional-typed-grant"})
+        self.a._sync(None, self.a.checkpoint)
+        self.assertEqual(self.grant_fields(self.a)["refresh_token"], "fictional-typed-grant")
         self.assertEqual(self.pending().all(), {})
+
+    def test_follow_raises_an_integrity_error_for_a_changed_pin_and_an_older_checkpoint(self):
+        from secret_store import errors
+        older = self.a.checkpoint_path.read_bytes()
+        self.make_store().open().put_entry("newer", {"api_key": VALUE})
+        self.a._save_pin("0" * 64)
+        with self.assertRaises(errors.IntegrityError):
+            self.a._follow(clone=True)
+        self.a._save_pin(self.a._pinned)
+        self.a._follow(clone=True)
+        self.a.checkpoint_path.write_bytes(older)
+        with self.assertRaises(errors.IntegrityError):
+            self.a._follow(clone=True)
+
+    def test_a_replay_meeting_an_integrity_error_while_built_raises_and_leaves_the_record(self):
+        from secret_store import errors
+        write_id = self.crash_typed(entry="typed", plain={"api_key": TYPED})
+        before = self.pending().path(write_id).read_bytes()
+        real = SecretStore.static_payload
+
+        def broken(store, *args, **kwargs):
+            if getattr(store, "_replaying", False):
+                raise errors.IntegrityError("object x in the local copy does not match the checkpoint")
+            return real(store, *args, **kwargs)
+        with mock.patch.object(SecretStore, "static_payload", broken), self.assertRaises(errors.IntegrityError):
+            self.a._sync(None, self.a.checkpoint)
+        self.assertEqual(self.pending().path(write_id).read_bytes(), before)
+        self.assertFalse(self.pending().all()[write_id]["held"])
+
+    def test_a_checkpoint_that_cannot_be_saved_during_a_replay_stops_it_then_the_record_is_saved(self):
+        write_id = self.crash_typed(entry="typed", plain={"api_key": TYPED})
+        first = self.pending().all()[write_id]
+        real, failed = SecretStore._save_checkpoint, []
+
+        def save(store, cp):
+            if getattr(store, "_replaying", False) and not failed:
+                failed.append(True)
+                raise OSError("fictional disk failure")
+            return real(store, cp)
+        with mock.patch.object(SecretStore, "_save_checkpoint", save), self.assertRaises(OSError):
+            self.a._sync(None, self.a.checkpoint)
+        kept = self.pending().all()[write_id]
+        self.assertFalse(kept["held"])
+        self.assertEqual({k: v for k, v in kept.items() if k != "projected"},
+                         {k: v for k, v in first.items() if k != "projected"})
+        head = self.remote_head()
+        self.make_store().open()  # the next sync: saved by its projected identities
+        self.assertEqual(self.pending().all(), {})
+        self.assertEqual(self.remote_head(), head)
+
+    def test_a_first_write_that_loses_a_conflict_keeps_its_first_record_with_the_second_projection(self):
+        real, pushes, writes = SecretRepo._git, [], []
+        real_write = PendingWrites.write
+
+        def git(repo, *args, **kwargs):
+            if args and args[0] == "push":
+                pushes.append(True)
+                if len(pushes) == 1:
+                    return subprocess.CompletedProcess(args, 1, b"", b"! [rejected] main -> main (fetch first)")
+                raise Crash()
+            return real(repo, *args, **kwargs)
+
+        def write(pending, record):
+            writes.append(dict(record))
+            return real_write(pending, record)
+        with mock.patch.object(SecretRepo, "_git", git), mock.patch.object(PendingWrites, "write", write), \
+                self.assertRaises(Crash):
+            typed(self.make_store().open(), "typed", {"api_key": TYPED})
+        self.assertEqual(len(writes), 2)
+        (record,) = self.pending().all().values()
+        self.assertEqual({k: v for k, v in record.items() if k != "projected"},
+                         {k: v for k, v in writes[0].items() if k != "projected"})
+        self.assertEqual(record["projected"], writes[1]["projected"])
+        self.assertNotEqual(writes[0]["projected"], writes[1]["projected"])
+
+    def test_a_first_write_whose_sync_replays_another_record_keeps_its_own(self):
+        other = self.crash_typed(entry="other", plain={"api_key": VALUE})
+        real, pushes = SecretRepo._git, []
+
+        def git(repo, *args, **kwargs):
+            if args and args[0] == "push":
+                pushes.append(True)
+                if len(pushes) == 2:  # the replay's push lands, the write's own dies
+                    raise Crash()
+            return real(repo, *args, **kwargs)
+        with mock.patch.object(SecretRepo, "_git", git), self.assertRaises(Crash):
+            typed(self.make_store().open(), "typed", {"api_key": TYPED})
+        found = self.pending().all()
+        self.assertNotIn(other, found)
+        self.assertEqual(len(found), 1)
+        self.a._sync(None, self.a.checkpoint)
+        self.assertEqual(self.pending().all(), {})
+        self.assertEqual(self.a.get_record("typed"), {"api_key": TYPED})
+        self.assertEqual(self.a.get_record("other"), {"api_key": VALUE})
 
     def test_a_push_that_fails_after_the_commit_keeps_the_record_until_the_next_operation(self):
         with self.push_fails(), self.assertRaisesRegex(SecretStoreError, "kept on this computer") as caught:

@@ -8,9 +8,9 @@ base (each target the write was built on, by object id and checkpoint hash; an a
 group's index object, or by "no index" and the policy hash), the projected identities (id and hash
 of every object revision the commit writes, an index excepted), the time and the held mark. Each
 further attempt rewrites only the projected identities, and marking a record held changes only
-that mark. A damaged record, or one made by the first build (no kinds), is never applied. A pending
-record never holds a token: only typed_write.write_typed makes one. Messages name the write id,
-entry and time, never a value."""
+that mark. A damaged record, or one made by the first build (no kinds), is never applied. Only
+typed_write.write_typed makes one, so a provider's token answer never enters a record. Messages name
+the write id, entry and time, never a value."""
 
 from __future__ import annotations
 
