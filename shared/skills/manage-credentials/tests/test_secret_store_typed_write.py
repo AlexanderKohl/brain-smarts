@@ -585,6 +585,24 @@ class Typed(unittest.TestCase):
         self.assertNotIn(other, self.pending().all())
         self.assertNotIn("typed", self.make_store().open().list_entries())
 
+    def test_an_interrupt_as_the_phase_becomes_commit_after_a_replay_leaves_no_record(self):
+        """Round 12, low 1: the replay in the write's own sync left the commit mark set; the write is
+        interrupted by the very assignment of its commit phase, after it took effect."""
+        from secret_store import typed_write
+        self.crash_typed(entry="other", plain={"api_key": VALUE})
+        real = object.__setattr__
+
+        def setattr_(attempt, name, value):
+            real(attempt, name, value)
+            if name == "phase" and value == "commit" and attempt.mode == "first":
+                raise KeyboardInterrupt()
+        with mock.patch.object(typed_write.Attempt, "__setattr__", setattr_), self.assertRaises(KeyboardInterrupt):
+            typed(self.make_store().open(), "typed", {"api_key": TYPED})
+        self.assertEqual(self.pending().all(), {}, "no record of the interrupted write's own")
+        self.a._sync(None, self.a.checkpoint)
+        self.assertNotIn("typed", self.a.list_entries())
+        self.assertEqual(self.a.get_record("other"), {"api_key": VALUE})
+
     def test_a_record_that_cannot_be_rewritten_during_a_replay_stops_the_sync(self):
         write_id = self.crash_typed(entry="typed", plain={"api_key": TYPED})
         before = self.pending().path(write_id).read_bytes()

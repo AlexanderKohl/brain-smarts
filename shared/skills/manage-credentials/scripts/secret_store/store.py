@@ -574,9 +574,9 @@ class SecretStore:
                 phase("record")
                 if typed is not None:
                     typed.before_commit(self, files)
+                if typed is not None:  # before the phase: a replay's commit during the sync never counts here
+                    self.repo.commit_started = False
                 phase("commit")
-                if typed is not None:
-                    self.repo.commit_started = False  # a replay's commit during the sync never counts here
                 try:
                     try:
                         written = self.repo.write(files, message, expected_parent=before)
