@@ -200,9 +200,17 @@ ENDPOINTS: dict[str, tuple[str, str, str, str]] = {
     "session-passphrase": ("portable_vault.py", "PortableVaultJsonStore", "P", "PORTABLE_VAULT_PASSPHRASE from the "
                            "environment (its __init__)"),
     "agent-client": ("vault_broker_client.py", "broker_request", "PS", "sends a request (a value, the unlock "
-                     "passphrase) and receives the agent's answer (values, records, access tokens)"),
-    "agent-pipe": ("vault_agent.py", "VaultAgent._serve_connection", "PS", "receives a request from the pipe and sends "
-                   "the reply"),
+                     "passphrase, and the authentication token in every request) and receives the agent's answer "
+                     "(values, records, access tokens)"),
+    "agent-pipe": ("vault_agent.py", "VaultAgent._serve_connection", "PS", "receives a request from the pipe (handle "
+                   "compares its token) and sends the reply"),
+    "agent-auth-make": ("vault_agent.py", "VaultAgent", "P", "the agent's authentication token and pipe key, made "
+                        "fresh at each start (its __init__); serve_forever gives the key to the Listener"),
+    "agent-state-write": ("vault_agent_runtime.py", "write_state", "S", "the token and key in the clear into the state "
+                          "file restricted to the user"),
+    "agent-state-read": ("vault_agent_runtime.py", "read_state", "P", "the token and key first in the client process"),
+    "agent-connect": ("vault_broker_client.py", "_connect", "PS", "spends the key in the pipe's handshake and returns "
+                      "the token to broker_request"),
     "keygen": ("secret_store/keys.py", "generate_key_pairs", "P", "new private keys"),
     "words": ("secret_store/recovery.py", "generate_mnemonic", "P", "new recovery words"),
     "recovery-keys": ("secret_store/recovery.py", "derive_recovery_keys", "P", "the recovery keys from typed words"),
@@ -255,6 +263,7 @@ LIBRARY_SYMBOLS: dict[str, frozenset[tuple[str, str]]] = {
     "GetWindowTextW": frozenset({("vault_tray.py", "_win_password_dialog.wndproc")}),
     "recv": frozenset({("vault_agent.py", "VaultAgent._serve_connection"), ("vault_broker_client.py", "broker_request")}),
     "send": frozenset({("vault_agent.py", "VaultAgent._serve_connection"), ("vault_broker_client.py", "broker_request")}),
+    "token_bytes": frozenset({("vault_agent.py", "VaultAgent.__init__")}),  # the pipe key (token_hex also names ids)
 }
 # The reviewed direct callers of each endpoint: every function that calls it or names it (passes,
 # stores, aliases). endpoint id -> {(module, scope): why}.
@@ -297,6 +306,15 @@ DIRECT_CALLERS: dict[str, dict[tuple[str, str], str]] = {
         "status and get_fields", ("vault_credentials.py", "main"): "set_text (put)", ("vaultctl.py", "_mapped_environment"):
         "get_fields", ("vaultctl.py", "main"): "unlock, lock, get_access_token, set_text"},
     "agent-pipe": {("vault_agent.py", "VaultAgent.serve_forever"): "one thread per connection"},
+    "agent-auth-make": {("vault_agent.py", "build_agent"): "the one way serve and the tray build the agent",
+                        ("vault_tray.py", "VaultTrayApp._start_broker"): "reads LOCK_WAIT_SECONDS only"},
+    "agent-state-write": {("vault_agent.py", "VaultAgent.serve_forever"): "once the listener is up",
+                          ("vault_agent.py", "VaultAgent._keep_state"): "again when the file went missing"},
+    "agent-state-read": {("vault_broker_client.py", "_connect"): "the client's one read",
+                         ("vault_agent.py", "VaultAgent._keep_state"): "compares the file with its own payload",
+                         ("vault_agent_runtime.py", "clear_state"): "the pid only, to remove its own file",
+                         ("vault_tray.py", "VaultTrayApp._start_broker"): "the pid only, to see its agent started"},
+    "agent-connect": {("vault_broker_client.py", "broker_request"): "every request"},
     "keygen": {("secret_store/enrol.py", "request"): "a new computer", ("secret_store/store.py", "SecretStore.init_personal"):
                "the first computer", ("secret_store/team.py", "TeamStore.init_team"): "the first administrator"},
     "words": {("secret_store/store.py", "SecretStore.init_personal"): "shown once in the window",
@@ -327,6 +345,7 @@ STRING_EXEMPT: dict[tuple[str, str, str], str] = {
     ("secret_store/repo.py", "<module>", "main"): "the branch name",
     ("secret_store/store.py", "SecretStore._write", "build"): "a phase name of a typed write",
     ("secret_store/typed_write.py", "_isolated", "build"): "a phase name of a typed write",
+    ("vault_agent.py", "build_agent", "VaultAgent"): "its return annotation",
 }
 
 # -- (d) every module in exactly one table ---------------------------------------------------------
@@ -408,7 +427,10 @@ _STORE_READ = ("keychain-read", "open", "hpke-open")
 _STORE_WRITE = _STORE_READ + ("seal", "hpke-seal")
 _POLICY_WRITE = _STORE_WRITE + ("package",)
 _NONE: tuple[str, ...] = ()
-_AGENT = ("agent-client", "agent-pipe")  # the agent client, and the in-process agent's pipe handler behind it
+# the agent client: it reads the state file (agent-state-read) and spends the key (agent-connect) before every
+# request; the scenarios' stand-in answers in-process without a state file, so those two pairs are excused
+# there (the scenario "agent-state" records them on their own); agent-pipe is the in-process agent's handler
+_AGENT = ("agent-client", "agent-state-read", "agent-connect", "agent-pipe")
 OPERATIONS: dict[str, dict[str, tuple[tuple[str, ...], tuple[str, ...], str | None, str]]] = {
     "brain_secrets.py": {
         "init": (("words", "recovery-keys", "keygen", "keychain-write", "package", "hpke-seal"), _NONE, "cli-init",
@@ -449,9 +471,9 @@ OPERATIONS: dict[str, dict[str, tuple[tuple[str, ...], tuple[str, ...], str | No
     # agent-pipe below the command lines: the scenarios' stand-in for the agent client answers through
     # the in-process agent's pipe handler, so the agent's own pairs are recorded under the command too
     "migrate_to_store.py": {
-        "migrate": (("agent-client", "agent-pipe", "vault-load", "vault-write") + _POLICY_WRITE, _NONE, "migrate",
+        "migrate": (_AGENT + ("vault-load", "vault-write") + _POLICY_WRITE, _NONE, "migrate",
                     "the old vault through the agent; every entry into the store; the scrub"),
-        "rollback": (("agent-client", "agent-pipe", "vault-load", "vault-write") + _STORE_READ, _NONE, "rollback",
+        "rollback": (_AGENT + ("vault-load", "vault-write") + _STORE_READ, _NONE, "rollback",
                      "static values read from the store and restored through the agent"),
     },
     "vaultctl.py": {
@@ -460,7 +482,7 @@ OPERATIONS: dict[str, dict[str, tuple[tuple[str, ...], tuple[str, ...], str | No
                    "function; a hand-over file or pending-write record is opened to name it"),
         "unlock": (("vaultctl-prompt",) + _AGENT + ("vaultctl-main", "vault-load"), _NONE, "vaultctl",
                    "the passphrase, checked by the agent against the vault"),
-        "lock": (_AGENT + ("vaultctl-main",), _NONE, "vaultctl", "no credential"),
+        "lock": (_AGENT + ("vaultctl-main",), _NONE, "vaultctl", "no credential: the agent drops its held passphrase"),
         "access-token": (_AGENT + ("vaultctl-main", "open", "hpke-open"), ("keychain-read",), "vaultctl",
                          "the sign-in record opened; the access token printed, for piping"),
         "secret-put": (("vaultctl-prompt",) + _AGENT + ("vaultctl-main", "open", "hpke-open", "seal", "hpke-seal"),
@@ -505,12 +527,16 @@ OPERATIONS: dict[str, dict[str, tuple[tuple[str, ...], tuple[str, ...], str | No
                  "unlocked, else the session passphrase"),
     },
     "vault_agent.py": {
-        "serve": (("agent-pipe",), _NONE, None, "serve starts the real listener on this user's pipe; its one caller of "
-                  "the pipe primitive, _serve_connection, is run with a fake connection in every agent scenario"),
+        "serve": (("agent-auth-make", "agent-state-write", "agent-state-read", "agent-pipe"), _NONE, None,
+                  "serve starts the real listener on this user's pipe with the key the agent made, writes the token and "
+                  "key to the state file and reads it back to keep it there; its one caller of the pipe primitive, "
+                  "_serve_connection, is run with a fake connection in every agent scenario, and the state file is "
+                  "written and read in a temporary folder by the scenario agent-state"),
     },
     "vault_tray.py": {
-        "(the tray)": (("tray-dialog",), _NONE, None, "pystray and the Win32 dialog need a desktop; the tray builds the "
-                       "same agent as serve and hands the typed passphrase to agent.unlock"),
+        "(the tray)": (("tray-dialog", "agent-auth-make", "agent-state-read"), _NONE, None, "pystray and the Win32 dialog "
+                       "need a desktop; the tray builds the same agent as serve (its token and key), reads the state "
+                       "file for its pid and hands the typed passphrase to agent.unlock"),
     },
     "agent": {
         "status": (("agent-pipe", "keychain-read"), _PULL, "agent-store, agent-vault", "state only; with the store, a "
@@ -557,4 +583,7 @@ EXTRA_OPERATIONS: dict[str, tuple[tuple[str, ...], tuple[str, ...], str | None, 
                      "a connector's PortableVaultJsonStore (the session passphrase read, unused with the agent), its "
                      "token call under the store's refresh: token_endpoint.post_token, the agent's begin_refresh and "
                      "the publication"),
+    "the agent's state file": (("agent-auth-make", "agent-state-write", "agent-state-read"), _NONE, "agent-state",
+                               "an agent made in-process, its token and key written to and read from a state file in a "
+                               "temporary folder, then removed; agent-connect needs the real pipe and is never run"),
 }

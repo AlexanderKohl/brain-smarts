@@ -9,6 +9,7 @@ fictional. What this does not do is written in CREDENTIAL-PATHS.md: it follows n
 scenario runs."""
 import contextlib
 import io
+import os
 from types import SimpleNamespace
 import json
 import shutil
@@ -18,7 +19,7 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from credential_recorder import PASS, SCRIPTS, Recorder, World, pipe_request  # noqa: E402
+from credential_recorder import AGENT_PROTOCOL_VERSION, PASS, SCRIPTS, Recorder, World, pipe_request  # noqa: E402
 import credential_inventory as inventory  # noqa: E402
 from test_secret_store_broker import setUpModule as _git_up, tearDownModule as _git_down  # noqa: E402
 from test_token_endpoint import TOKEN, FakeNetwork, answer, post  # noqa: E402
@@ -29,6 +30,7 @@ import migration_lock  # noqa: E402
 import portable_vault  # noqa: E402
 import token_relay  # noqa: E402
 import token_relay_backend  # noqa: E402
+import vault_agent_runtime  # noqa: E402
 import vault_broker_client  # noqa: E402
 import vault_credentials  # noqa: E402
 import vaultctl  # noqa: E402
@@ -42,7 +44,10 @@ FIELD = "oauth_token_json"
 KEY = "fictional-api-key-not-real"
 SECRET = "fictional-client-secret-not-real"
 RELAY_KEY_TEXT = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="  # bytes 0..31, fictional
-UNDRIVEN = {"window", "words-window", "tray-dialog"}  # need a display: their callers run with injected values
+UNDRIVEN = {"window", "words-window", "tray-dialog",  # need a display: their callers run with injected values
+            "agent-connect"}  # needs the real pipe of this user's agent, which no test touches
+# excused for an operation whose agent client is the scenarios' stand-in (no state file is read there)
+STAND_IN_EXCUSED = {"agent-state-read", "agent-connect"}
 FIXTURE = "(fixture)"  # a recorder operation name for the scenarios' own set-up calls
 # vaultctl.py access-token prints the access token and token_relay.py key-export the relay key, by design (the two
 # terminal sinks); everything else stays off the terminal
@@ -180,6 +185,7 @@ class Scenarios:
         self.vault_credentials()
         self.token_relay()
         self.refresh_path()
+        self.agent_state()
         with self.rec.named("cli-supersede"):  # last of all: the real, unverified profiles refuse the supersession
             self.world.sign_in(self.world.backend("B"), "xero-b", self.world.token())  # commit on every other computer
             with mock.patch.object(provider_profiles, "recovery_refusal", return_value=None):  # no profile is verified
@@ -365,9 +371,9 @@ class Scenarios:
     # -- a connector's refresh through the store: the token endpoint and the journal -------------------
     def refresh_path(self) -> None:
         self.world.sign_in(self.world.backend("A"), "xero-refresh", self.world.token())  # a fixture, not the operation
+        path = self.world.root / "A.vault"
+        standin = self.rec.stand_in("agent-client", pipe_request(VaultAgent(path, store=self.world.backend("A"))))
         with self.rec.named("refresh-path"), self.rec.operation("refresh path"):
-            path = self.world.root / "A.vault"
-            standin = self.rec.stand_in("agent-client", pipe_request(VaultAgent(path, store=self.world.backend("A"))))
             with mock.patch.object(vault_broker_client, "broker_unlocked", return_value=True), \
                     mock.patch.object(vault_broker_client, "broker_request", standin):
                 client = PortableVaultJsonStore("xero-refresh", FIELD, path=path)  # xero-agent is held uncertain above
@@ -375,6 +381,21 @@ class Scenarios:
                     fresh = json.loads(post()[1])
                     client.save({**client.load(), "access_token": fresh["access_token"],
                                  "refresh_token": fresh["refresh_token"]})
+
+    # -- the agent's state file, in a temporary folder: the token and key written and read back ----------
+    def agent_state(self) -> None:
+        folder = self.world.root / "runtime"
+        with self.rec.named("agent-state"), mock.patch.object(vault_agent_runtime, "runtime_base", lambda: folder), \
+                mock.patch.object(vault_agent_runtime, "restrict_to_current_user", lambda _path: None), \
+                self.rec.operation("the agent's state file"):
+            agent = VaultAgent(self.world.root / "A.vault")  # makes the token and the pipe key
+            payload = {"pid": os.getpid(), "address": "fictional-address", "authkey": agent._authkey.hex(),
+                       "token": agent._auth_token, "vault_path": str(agent.vault.path), "protocol": AGENT_PROTOCOL_VERSION}
+            vault_agent_runtime.write_state(payload)
+            assert vault_agent_runtime.read_state() == payload
+            vault_agent_runtime.clear_state(only_pid=os.getpid())
+            assert vault_agent_runtime.read_state() is None
+            assert not (folder / "agent-state.json").exists()
 
 
 # -- the checks --------------------------------------------------------------------------------------
@@ -415,6 +436,8 @@ def pair_problems(recorded: dict[str, set[str]], listed: dict[str, tuple[set[str
             problems.append(f"{operation}: recorded {sorted(extra)}, not in the list")
     for operation, (uses, _may) in sorted(listed.items()):
         missing = uses - recorded.get(operation, set()) - undriven
+        if "agent-client" in uses:  # the stand-in answers in-process: no state file is read, no key spent
+            missing -= STAND_IN_EXCUSED
         if missing and operation in recorded:
             problems.append(f"{operation}: the list names {sorted(missing)}, no scenario produced it")
     return problems

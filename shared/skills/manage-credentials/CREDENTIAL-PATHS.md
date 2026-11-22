@@ -270,8 +270,11 @@ name), without being one of its reviewed direct callers.
 | relay-prompt | `token_relay.py` `_hidden_input` | the relay key from the hidden prompt | `token_relay.py` `main` (key-import) |
 | tray-dialog | `vault_tray.py` `_win_password_dialog` | the passphrase from the Win32 dialog | `vault_tray.py` `_prompt_passphrase.ui` (its own thread, with a time limit) |
 | session-passphrase | `portable_vault.py` `PortableVaultJsonStore` (its `__init__`) | PORTABLE_VAULT_PASSPHRASE from the environment | `token_relay.py` `_status`, `_seed` |
-| agent-client | `vault_broker_client.py` `broker_request` (also stored as `_broker_request`) | the agent's answer: values, records, access tokens (also a sink: the request carries a value or the unlock passphrase) | the rows of "Reviewed callers" above with broker_request: `migrate_to_store.py` `main`; `portable_vault.py` `BrokerOAuthStore.__init__`, `clear`, `load`, `save`, `store_mode`, `sync_store`; `token_relay.py` `_store_key`, `read_relay_key`; `vault_broker_client.py` `_wait_for_refresher`, `broker_status`, `store_refresh`, `store_refresh.end`; `vault_credentials.py` `_put_entry_window`, `_try_broker_fields`, `main`; `vaultctl.py` `_mapped_environment`, `main` |
-| agent-pipe | `vault_agent.py` `VaultAgent._serve_connection` | the request from the pipe: a passphrase, a value (also a sink: the reply) | `vault_agent.py` `VaultAgent.serve_forever` (one thread per connection) |
+| agent-client | `vault_broker_client.py` `broker_request` (also stored as `_broker_request`) | the agent's answer: values, records, access tokens (also a sink: the request carries a value or the unlock passphrase, and the authentication token in every request) | the rows of "Reviewed callers" above with broker_request: `migrate_to_store.py` `main`; `portable_vault.py` `BrokerOAuthStore.__init__`, `clear`, `load`, `save`, `store_mode`, `sync_store`; `token_relay.py` `_store_key`, `read_relay_key`; `vault_broker_client.py` `_wait_for_refresher`, `broker_status`, `store_refresh`, `store_refresh.end`; `vault_credentials.py` `_put_entry_window`, `_try_broker_fields`, `main`; `vaultctl.py` `_mapped_environment`, `main` |
+| agent-pipe | `vault_agent.py` `VaultAgent._serve_connection` | the request from the pipe: a passphrase, a value (`handle` compares its token; also a sink: the reply) | `vault_agent.py` `VaultAgent.serve_forever` (one thread per connection) |
+| agent-auth-make | `vault_agent.py` `VaultAgent` (its `__init__`) | the agent's authentication token and pipe key, made fresh at each start (`secrets.token_hex`, `secrets.token_bytes`); `serve_forever` gives the key to the `Listener` | `vault_agent.py` `build_agent` (the one way serve and the tray build the agent); `vault_tray.py` `VaultTrayApp._start_broker` (reads `LOCK_WAIT_SECONDS` only) |
+| agent-state-read | `vault_agent_runtime.py` `read_state` | the token and key first in the client process, from the state file | `vault_broker_client.py` `_connect` (the client's one read); `vault_agent.py` `VaultAgent._keep_state` (compares the file with its own payload); `vault_agent_runtime.py` `clear_state` (the pid only); `vault_tray.py` `VaultTrayApp._start_broker` (the pid only) |
+| agent-connect | `vault_broker_client.py` `_connect` | spends the key in the pipe's handshake (`Client(..., authkey=...)`) and returns the token to `broker_request` (also a sink: the key goes into the handshake) | `vault_broker_client.py` `broker_request` (every request) |
 | keygen | `secret_store/keys.py` `generate_key_pairs` | new private keys | `secret_store/store.py` `SecretStore.init_personal`; `secret_store/enrol.py` `request`; `secret_store/team.py` `TeamStore.init_team` |
 | words | `secret_store/recovery.py` `generate_mnemonic` | new recovery words | `secret_store/store.py` `SecretStore.init_personal`; `secret_store/team.py` `TeamStore.init_team` |
 | recovery-keys | `secret_store/recovery.py` `derive_recovery_keys` | the recovery keys from typed words | `secret_store/store.py` `SecretStore.init_personal`, `SecretStore.restore_from_package`; `secret_store/team.py` `TeamStore.init_team` |
@@ -293,6 +296,8 @@ reviewed callers; the ciphertext then goes to disk through `fileio.write_durable
 | vault-write | `portable_vault.py` `PortableVault._write_unlocked` | the old vault file (migration, rollback, and every write while the store is off) | `PortableVault.initialize`, `save`, `change_passphrase`, `set_fields`, `delete_entry`, `delete_field` |
 | relay-encrypt | `token_relay_backend.py` `encrypt_token` | the relay record | `token_relay_backend.py` `build_record` |
 | agent-pipe | `vault_agent.py` `VaultAgent._serve_connection` | the agent's reply to its caller | as above |
+| agent-state-write | `vault_agent_runtime.py` `write_state` | the agent's token and key in the clear into the state file, restricted to the user before it takes its published name | `vault_agent.py` `VaultAgent.serve_forever` (once the listener is up), `VaultAgent._keep_state` (again when the file went missing) |
+| agent-connect | `vault_broker_client.py` `_connect` | the key into the pipe's handshake | as above |
 | token-endpoint | `token_endpoint.py` `post_token` | the request to the token endpoint | as above |
 | agent-client | `vault_broker_client.py` `broker_request` | the request to the agent | as above |
 | vaultctl-main | `vaultctl.py` `main` | the terminal: `access-token` prints the token, for piping; a child's environment: `run` | the command line (`<module>`) |
@@ -323,10 +328,13 @@ each uses is a person's reading of the code, corroborated by the runtime recorde
 every pair of "Uses"; "May also use" names pairs another branch adds (a pull with new commits, a computer's first
 open, a hand-over file present), each explained in the note, which the recorder accepts but no scenario is held
 to; `window`, `words-window` and `tray-dialog` need a display, and their callers run with the typed values
-injected. `open` always brings `hpke-open` (the object's data key) and `package` brings `hpke-seal`. Behind every
-command line that talks to the agent, the scenario's stand-in for the agent client answers through the in-process
-agent's pipe handler, so `agent-pipe` and the agent's own pairs are recorded under the command too. The ids are
-those of the two tables above.
+injected. `open` always brings `hpke-open` (the object's data key) and `package` brings `hpke-seal`. Every operation
+that goes through the agent client reads the state file (`agent-state-read`) and spends the key (`agent-connect`)
+before its request; the scenarios' stand-in for the agent client answers in-process without a state file, so those
+two pairs are excused for such an operation and are produced instead by the scenario agent-state (the row "the
+agent's state file"), while `agent-connect` needs the real pipe and is never run by a test. Behind every command
+line that talks to the agent, the stand-in answers through the in-process agent's pipe handler, so `agent-pipe` and
+the agent's own pairs are recorded under the command too. The ids are those of the two tables above.
 
 | Parser | Operation | Uses | May also use | Scenario | Note |
 |---|---|---|---|---|---|
@@ -349,28 +357,28 @@ those of the two tables above.
 | | `supersede` | keychain-read, open, hpke-open, package, hpke-seal | | cli-supersede | no object is re-keyed (a disabled refresher changes no readers); needs a verified provider profile, none is, so the scenario patches the refusal away, and every other computer then refuses that commit |
 | | `grant-scan` | keychain-read, open, hpke-open | | cli-grant-scan | static payloads opened; names printed |
 | | `unfinished` | keychain-read, open, hpke-open, seal, hpke-seal | package | cli-unfinished | list and `--discard` read records; `--apply` writes through the normal path, and a record that adds an entry changes the policy |
-| `migrate_to_store.py` | `migrate` | agent-client, agent-pipe, vault-load, vault-write, keychain-read, open, hpke-open, seal, hpke-seal, package | | migrate | the old vault through the agent; every entry into the store; the scrub |
-| | `rollback` | agent-client, agent-pipe, vault-load, vault-write, keychain-read, open, hpke-open | | rollback | static values read from the store and restored through the agent: `vault_restore_static`, then `vault_restore_marked_static` for fields under a migrated sign-in's name, then the marker cleared only when every restore succeeded |
-| `vaultctl.py` | `status` | agent-client, agent-pipe, vaultctl-main, keychain-read | open, hpke-open | vaultctl | status only; `main` is the sink function for every command; the agent loads its keys at its first operation and opens a hand-over file or pending record to name it |
-| | `unlock` | vaultctl-prompt, agent-client, agent-pipe, vaultctl-main, vault-load | | vaultctl | the passphrase, checked by the agent against the vault |
-| | `lock` | agent-client, agent-pipe, vaultctl-main | | vaultctl | no credential |
-| | `access-token` | agent-client, agent-pipe, vaultctl-main, open, hpke-open | keychain-read | vaultctl | the sign-in record opened; the access token printed, for piping |
-| | `secret-put` | vaultctl-prompt, agent-client, agent-pipe, vaultctl-main, open, hpke-open, seal, hpke-seal | keychain-read, package | vaultctl | a typed value to the agent: its record and object; the package when the entry is new |
-| | `run` | agent-client, agent-pipe, vaultctl-main, open, hpke-open | keychain-read | vaultctl | mapped fields read and put into the child's environment |
+| `migrate_to_store.py` | `migrate` | agent-client, agent-state-read, agent-connect, agent-pipe, vault-load, vault-write, keychain-read, open, hpke-open, seal, hpke-seal, package | | migrate | the old vault through the agent; every entry into the store; the scrub |
+| | `rollback` | agent-client, agent-state-read, agent-connect, agent-pipe, vault-load, vault-write, keychain-read, open, hpke-open | | rollback | static values read from the store and restored through the agent: `vault_restore_static`, then `vault_restore_marked_static` for fields under a migrated sign-in's name, then the marker cleared only when every restore succeeded |
+| `vaultctl.py` | `status` | agent-client, agent-state-read, agent-connect, agent-pipe, vaultctl-main, keychain-read | open, hpke-open | vaultctl | status only; `main` is the sink function for every command; the agent loads its keys at its first operation and opens a hand-over file or pending record to name it |
+| | `unlock` | vaultctl-prompt, agent-client, agent-state-read, agent-connect, agent-pipe, vaultctl-main, vault-load | | vaultctl | the passphrase, checked by the agent against the vault |
+| | `lock` | agent-client, agent-state-read, agent-connect, agent-pipe, vaultctl-main | | vaultctl | no credential |
+| | `access-token` | agent-client, agent-state-read, agent-connect, agent-pipe, vaultctl-main, open, hpke-open | keychain-read | vaultctl | the sign-in record opened; the access token printed, for piping |
+| | `secret-put` | vaultctl-prompt, agent-client, agent-state-read, agent-connect, agent-pipe, vaultctl-main, open, hpke-open, seal, hpke-seal | keychain-read, package | vaultctl | a typed value to the agent: its record and object; the package when the entry is new |
+| | `run` | agent-client, agent-state-read, agent-connect, agent-pipe, vaultctl-main, open, hpke-open | keychain-read | vaultctl | mapped fields read and put into the child's environment |
 | `vault_credentials.py` | `init` | prompt-passphrase, vault-write, credentials-main | window | vault-credentials | `--window` asks in the masked window, which needs a display |
 | | `check`, `list` | prompt-passphrase, vault-load, credentials-main | | vault-credentials | |
 | | `change-passphrase`, `delete-entry`, `delete-field`, `init-json` | prompt-passphrase, vault-load, vault-write, credentials-main | | vault-credentials | the typed name is a confirmation |
-| | `put` | agent-client, agent-pipe, prompt-passphrase, prompt-value, vault-load, vault-write, credentials-main | | vault-credentials | through the unlocked agent, else the vault |
-| | `put-entry` | prompt-passphrase, prompt-value, vault-load, vault-write, credentials-main | window, agent-client, agent-pipe | vault-credentials | `--window` asks in the masked window, which needs a display, and with the agent unlocked writes through it |
-| | `run` | agent-client, agent-pipe, prompt-passphrase, vault-load, credentials-main | | vault-credentials | mapped fields into the child's environment |
-| | `session` | prompt-passphrase, vault-load, credentials-main | agent-client, agent-pipe | vault-credentials | mapped fields into the shell's environment; through the unlocked agent when it answers |
+| | `put` | agent-client, agent-state-read, agent-connect, agent-pipe, prompt-passphrase, prompt-value, vault-load, vault-write, credentials-main | | vault-credentials | through the unlocked agent, else the vault |
+| | `put-entry` | prompt-passphrase, prompt-value, vault-load, vault-write, credentials-main | window, agent-client, agent-state-read, agent-connect, agent-pipe | vault-credentials | `--window` asks in the masked window, which needs a display, and with the agent unlocked writes through it |
+| | `run` | agent-client, agent-state-read, agent-connect, agent-pipe, prompt-passphrase, vault-load, credentials-main | | vault-credentials | mapped fields into the child's environment |
+| | `session` | prompt-passphrase, vault-load, credentials-main | agent-client, agent-state-read, agent-connect, agent-pipe | vault-credentials | mapped fields into the shell's environment; through the unlocked agent when it answers |
 | `token_relay.py` | `status` | session-passphrase, vault-load, relay-main | | token-relay | versions and holders printed |
-| | `key-new` | relay-key, agent-client, agent-pipe, vault-load, vault-write, relay-main | | token-relay | a new key, checked for an old one and stored through the agent (vault-backed, the store off) |
-| | `key-import` | relay-prompt, agent-client, agent-pipe, vault-load, vault-write, relay-main | | token-relay | a typed key stored through the agent |
-| | `key-export` | agent-client, agent-pipe, vault-load, relay-main | | token-relay | the key read through the agent and printed, to a terminal only |
-| | `seed` | session-passphrase, vault-load, vault-write, relay-encrypt, relay-main | agent-client, agent-pipe | token-relay | the local token pushed as the shared record and saved with its version; through the agent when it is unlocked |
-| `vault_agent.py` | `serve` | agent-pipe | | none | starts the real listener on this user's pipe; its one caller of the pipe primitive, `_serve_connection`, runs with a fake connection in every agent scenario |
-| `vault_tray.py` | `(the tray)` | tray-dialog | | none | pystray and the Win32 dialog need a desktop; the tray builds the same agent as `serve` and hands the typed passphrase to `agent.unlock` |
+| | `key-new` | relay-key, agent-client, agent-state-read, agent-connect, agent-pipe, vault-load, vault-write, relay-main | | token-relay | a new key, checked for an old one and stored through the agent (vault-backed, the store off) |
+| | `key-import` | relay-prompt, agent-client, agent-state-read, agent-connect, agent-pipe, vault-load, vault-write, relay-main | | token-relay | a typed key stored through the agent |
+| | `key-export` | agent-client, agent-state-read, agent-connect, agent-pipe, vault-load, relay-main | | token-relay | the key read through the agent and printed, to a terminal only |
+| | `seed` | session-passphrase, vault-load, vault-write, relay-encrypt, relay-main | agent-client, agent-state-read, agent-connect, agent-pipe | token-relay | the local token pushed as the shared record and saved with its version; through the agent when it is unlocked |
+| `vault_agent.py` | `serve` | agent-auth-make, agent-state-write, agent-state-read, agent-pipe | | none | starts the real listener on this user's pipe with the key the agent made, writes the token and key to the state file and reads it back to keep it there; its one caller of the pipe primitive, `_serve_connection`, runs with a fake connection in every agent scenario, and the state file is written and read in a temporary folder by the scenario agent-state |
+| `vault_tray.py` | `(the tray)` | tray-dialog, agent-auth-make, agent-state-read | | none | pystray and the Win32 dialog need a desktop; the tray builds the same agent as `serve` (its token and key), reads the state file for its pid and hands the typed passphrase to `agent.unlock` |
 | agent | `status` | agent-pipe, keychain-read | open, hpke-open | agent-store, agent-vault | state only; with the store, a hand-over file or pending-write record, when one exists, is opened to name it |
 | | `ping`, `lock`, `release_refresh`, `shutdown` | agent-pipe | | agent-store | no credential: a lock released, the held passphrase dropped, a refused unknown operation |
 | | `unlock` | agent-pipe, vault-load | | agent-store, agent-vault | the passphrase checked against the vault, then held |
@@ -384,7 +392,8 @@ those of the two tables above.
 | | `vault_list_entries`, `vault_get_fields`, `vault_get_json`, `vault_verify_copy` | agent-pipe, vault-load | | agent-vault | names and kinds; values and a sign-in for the migration; the backup copy's names |
 | | `vault_scrub_signin`, `vault_restore_static`, `vault_restore_marked_static` | agent-pipe, vault-load, vault-write | | agent-vault | the tokens removed; static values restored under names the marker does not hold, or (marked) only under names it holds, the marker left as it is; each request is checked whole (`static_restore`) before one write |
 | | `vault_clear_migration_marker` | agent-pipe | | agent-vault | the marker file only |
-| (a connector) | the refresh path | token-endpoint, session-passphrase, agent-client, agent-pipe, keychain-read, open, hpke-open, seal, hpke-seal | | refresh-path | a connector's `PortableVaultJsonStore` (the session passphrase read, unused with the agent), its token call under the store's refresh: `post_token`, the agent's `begin_refresh`, the publication |
+| (the agent) | the agent's state file | agent-auth-make, agent-state-write, agent-state-read | | agent-state | an agent made in-process, its token and key written to and read from a state file in a temporary folder, then removed; `agent-connect` needs the real pipe and is never run |
+| (a connector) | the refresh path | token-endpoint, session-passphrase, agent-client, agent-state-read, agent-connect, agent-pipe, keychain-read, open, hpke-open, seal, hpke-seal | | refresh-path | a connector's `PortableVaultJsonStore` (the session passphrase read, unused with the agent), its token call under the store's refresh: `post_token`, the agent's `begin_refresh`, the publication |
 
 ### Modules
 
