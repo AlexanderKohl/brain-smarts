@@ -1,6 +1,6 @@
 ---
-name: worker-opus-medium
-description: Implementation worker for a delegation packet that leaves no judgement. Runs the current Opus-class model at medium effort regardless of the conductor's setting.
+name: worker-bounded-judgement
+description: Worker for a delegation packet that leaves bounded judgement, or whose result a person sees. The second rung of the delegate-work ladder (bounded judgement): the current Opus-class model at medium effort regardless of the conductor's setting.
 model: claude-opus-5-5
 effort: medium
 tools: Read, Write, Edit, Bash, Glob, Grep

@@ -38,11 +38,11 @@ and `.codex/agents/` (and the same folders under `~`); on a name clash `.cursor/
 file beats a user file (C2). C2 shows only Markdown files and does not say whether the TOML files
 in `.codex/agents/` are read, nor how `.claude/` and `.codex/` rank against each other.
 
-The brain ships Cursor worker types in `/.cursor/agents/` under the same names as the Codex ones
-(`worker-no-judgement`, `worker-open-judgement`), so where Cursor reads both, its own file wins.
-They do **not** share a name with the three Claude Code types in `/.claude/agents/`
-(`worker-sonnet-medium`, `worker-opus-medium`, `worker-fable-medium`): a name means one thing
-(`SMART-RULE-0033`), and those names name Claude models. Cursor therefore still lists the Claude
+The brain ships Cursor worker types in `/.cursor/agents/` under the same names as the Codex and
+Claude Code ones (`worker-no-judgement`, `worker-open-judgement`; Claude Code also has
+`worker-bounded-judgement`): a work packet names the same worker type on every host (owner,
+23 Nov 2026), and a name means one rung of the ladder, not a model (`SMART-RULE-0033`). Where Cursor
+reads both its own folder and a Claude Code one, its own file wins. Cursor still lists the Claude
 Code types, with Claude model ids it does not document; what it does with them is not verified.
 `host_wiring.py apply --host cursor` copies the Cursor types to `~/.cursor/agents/` (SETUP.md step
 E); a file there without the brain's marker line, or one defining an agent of the same name, is the

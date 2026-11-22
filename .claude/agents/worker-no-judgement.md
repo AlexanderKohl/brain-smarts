@@ -1,6 +1,6 @@
 ---
-name: worker-sonnet-medium
-description: Implementation worker for a delegation packet that leaves no judgement – the files, the change and the acceptance are spelled out (fixes, data dumps, test updates, wide read-only reading). Runs Claude Sonnet at medium effort regardless of the conductor's setting; the cheapest rung of the delegate-work ladder.
+name: worker-no-judgement
+description: Implementation worker for a delegation packet that leaves no judgement – the files, the change and the acceptance are spelled out (fixes, data dumps, test updates, wide read-only reading). The first rung of the delegate-work ladder (no judgement, rework only): Claude Sonnet at medium effort regardless of the conductor's setting; the cheapest rung.
 model: sonnet
 effort: medium
 tools: Read, Write, Edit, Bash, Glob, Grep

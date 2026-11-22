@@ -1288,7 +1288,10 @@ Two kinds of file, two owners:
    writes, and re-reads what it wrote. A second run reports `unchanged`. The worker definitions
    load from the next session; after an update that changes a file under
    `<brain_root>/.claude/agents/`, `<brain_root>/.codex/agents/` or `<brain_root>/.cursor/agents/`,
-   run `apply` again.
+   run `apply` again. A copy under an old, model-named Claude Code worker type (renamed on 23 November 2026 to
+   `worker-no-judgement`, `worker-bounded-judgement`, `worker-open-judgement`) in `~/.claude/agents/`
+   shows as `remove` in the plan; only `apply` deletes it, after a dated backup. On the fallback path,
+   delete those three old files by hand (the plan names them).
 4. Record the result under `## Setup`.
 
 **Fallback** (section 1.6), when the host refuses to run `host_wiring.py` at all: give the person

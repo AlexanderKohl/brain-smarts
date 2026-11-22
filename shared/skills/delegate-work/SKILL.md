@@ -187,6 +187,10 @@ The ladder, lowest first; the host note maps it to model names:
 | open judgement, or data, money, security or production | the Opus-class model at high effort, or the conductor's own model and effort (`inherit`) |
 | open judgement where a specialised model is known to do better, and its allowance is healthy | that model; the reason names why |
 
+A worker type is named for its rung, not for a model: `worker-no-judgement`,
+`worker-bounded-judgement` and `worker-open-judgement`, the same on every host (owner, 23 Nov 2026), so a
+packet never has to change when it moves to another host. The host note maps each name to a model.
+
 **Effort rises before the model does:** the next step up for a packet is the same model at a
 higher effort, then the next model. A worker that comes back weak is resumed or re-run one step up
 the ladder, and the run's log says so. Repeated step-ups for one kind of packet are a learning

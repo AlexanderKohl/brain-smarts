@@ -1,6 +1,6 @@
 ---
-name: worker-fable-medium
-description: Judgement worker for a delegation packet that needs more judgement than the implementation worker should carry but less than the conductor. Runs Claude Fable 5.1 at medium effort regardless of the conductor's setting.
+name: worker-open-judgement
+description: Worker for a delegation packet that needs open judgement: more than the lower rungs should carry but less than the conductor. The third rung of the delegate-work ladder (open judgement): Claude Fable 5.1 at medium effort regardless of the conductor's setting; use it only with its allowance healthy.
 model: claude-fable-5-1
 effort: medium
 tools: Read, Write, Edit, Bash, Glob, Grep

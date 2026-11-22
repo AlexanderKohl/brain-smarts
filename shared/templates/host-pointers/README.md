@@ -91,7 +91,9 @@ Worker types are not templates: `host_wiring.py` copies `<BRAIN_ROOT>/.claude/ag
 `<BRAIN_ROOT>/.codex/agents/` and `<BRAIN_ROOT>/.cursor/agents/` unchanged to the host's user
 folder (`--host claude-code`, `codex`, `cursor`). A Codex or Cursor file carries a
 `# From the brain's ...` comment line; a file in the user folder without it is the person's own and is
-kept, as is any file of theirs that defines an agent of the same name.
+kept, as is any file of theirs that defines an agent of the same name. The plan also lists, as `remove`,
+a copy of the Claude Code worker types under their old, model-named names in `~/.claude/agents/`; only
+`apply` deletes it, after a dated backup.
 
 Pattern rules match command prefixes. They are guard rails against mistakes, not a sandbox: a
 shell command can still reach a file that a `Read(...)` rule denies to the reading tool.
