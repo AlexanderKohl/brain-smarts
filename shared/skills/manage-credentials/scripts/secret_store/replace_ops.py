@@ -11,11 +11,13 @@ once the new sign-in is published. A failed commit or push leaves the old sign-i
 the hand-over file in place; status reports a hand-over file whose sign-in was never completed.
 Nothing is ever retried with the old refresh token. Messages name entries and fields only.
 
-A team sign-in whose refresher is not an administrator (follow-up plan K.1) is replaced the way it
-was first made: the refresher's command changes nothing and names the step (AdministratorStep); an
-administrator runs replace-signin --for PERSON/COMPUTER on their own computer, signs in again there
-and hands the sign-in back with the existing handover; the old refresher's next operation discards
-its journal record of the retired grant (discard_retired)."""
+A team sign-in whose refresher is not an administrator (follow-up plan M2) is ended by the design's
+own deletion: the refresher's command changes nothing and names the step (AdministratorStep), its
+calling journal record keeping the sign-in blocked there (it refuses every refresh and survives
+restarts); an administrator deletes the entry with the ordinary delete command (section 7: one
+commit retiring both ids), signs in again and hands the new sign-in back with the existing
+handover; the old refresher's next operation discards its journal record of the exact retired
+grant (discard_retired)."""
 
 from __future__ import annotations
 
@@ -28,7 +30,7 @@ from .delete_ops import build_delete
 from .errors import SecretStoreError
 from .journal import KEY_SEPARATOR, Journal
 from .keys import key_id
-from .oauth_ops import DEFAULT_FIELD, PROVIDER_KEY, SignIn, find, read_shared, signin_fields, signin_names
+from .oauth_ops import PROVIDER_KEY, SignIn, find, read_shared, signin_fields, signin_names
 from .store_ops import GROUP
 
 SUFFIX = ".handover"
@@ -140,12 +142,6 @@ def _require_admin(store: Any) -> None:
         raise SecretStoreError("only an administrator of the repository may replace a sign-in; nothing was changed")
 
 
-def _command(signin: SignIn) -> str:
-    field = f" --field {signin.field}" if signin.field != DEFAULT_FIELD else ""
-    group = f" --group {signin.group}" if signin.group != GROUP else ""
-    return f'brain_secrets.py replace-signin "{signin.entry}"{field}{group}'
-
-
 def _settings(store: Any, signin: SignIn) -> dict | None:
     """The oauth object's shared settings, or None when this computer cannot read it."""
     dropped = (provider_profiles.token_fields(signin.provider) | provider_profiles.grant_fields(signin.provider)
@@ -177,30 +173,42 @@ def _delete(store: Any, signin: SignIn, group: str | None) -> None:
     store._write(build)
 
 
+def delete_command(signin: SignIn) -> str:
+    """The store's ordinary deletion of the entry (design section 7), run by an administrator."""
+    group = f" --group {signin.group}" if signin.group != GROUP else ""
+    return f'brain_secrets.py delete --entry "{signin.entry}"{group}'
+
+
 def replace(store: Any, entry: str, field: str | None = None, group: str | None = None,
-            even_if_working: bool = False, journal: Journal | None = None, for_computer: str | None = None) -> SignIn:
-    """Three cases (follow-up plan K.1). On the refresher that is an administrator, as before: the
-    journal record must be calling (uncertain) or even_if_working; the shared settings go into the
-    hand-over file, one administrator commit deletes the sign-in, and the retired grant's journal
-    record is discarded. On the refresher that is not an administrator: AdministratorStep, nothing
-    changed. On an administrator's computer that is not the refresher, with for_computer naming the
-    refresher in the policy: the settings it can read go into this computer's hand-over file and the
-    deletion commit follows; no journal is touched, and a failed commit leaves no new file behind.
-    Returns the replaced sign-in."""
+            even_if_working: bool = False, journal: Journal | None = None) -> SignIn:
+    """Follow-up plan M2. On the refresher that is an administrator, as before: the journal record
+    must be calling (uncertain) or even_if_working; the shared settings go into the hand-over file,
+    one administrator commit deletes the sign-in, and the retired grant's journal record is
+    discarded. On the refresher that is not an administrator: with an uncertain record
+    AdministratorStep (nothing changed; the calling record keeps the sign-in blocked here), with
+    even_if_working refused (a working sign-in moves by the cooperative handover). On any other
+    computer refused: an administrator ends it with the ordinary deletion. Returns the replaced
+    sign-in."""
     if store.policy is None:
         store.open()
     discard_retired(store)
     signin = _choose(store, entry, field, group)
     holder = f"{signin.refresher[0]}/{signin.refresher[1]}"
-    if for_computer is not None:
-        _require_admin(store)
-        if str(for_computer).strip() != holder:
-            raise SecretStoreError(f"this sign-in refreshes on {holder}, not {for_computer}; nothing was changed")
-        if not signin.mine:
-            return _replace_for(store, signin, group)
+    admin = _is_admin(store)
     if not signin.mine:
-        raise SecretStoreError(f"this sign-in refreshes on {holder}; replace it there, or an administrator runs "
-                               f"{_command(signin)} --for {holder} on their own computer; nothing was changed")
+        if admin:
+            raise SecretStoreError(
+                f"this sign-in refreshes on {holder}, not here, so nothing was changed: replace it there, or as an "
+                f"administrator end it by deleting it: {delete_command(signin)}, then sign in again in the browser and "
+                "hand the new "
+                f"sign-in to {holder} with handover-release and handover-accept")
+        raise SecretStoreError(f"this sign-in refreshes on {holder}; replace it there; nothing was changed")
+    if even_if_working and not admin:
+        group_flag = f" --group {signin.group}" if signin.group != GROUP else ""
+        raise SecretStoreError(
+            f"this computer is not an administrator's, so it does not replace a sign-in; nothing was changed. A "
+            "working sign-in moves to an administrator by the cooperative handover: run handover-release "
+            f'--entry "{entry}" --to PERSON/COMPUTER{group_flag} here, then an administrator runs handover-accept')
     journal = journal or _journal(store)
     key = signin.journal_key
     with journal.lock(key):  # no refresh of the old grant starts while it is replaced
@@ -208,32 +216,17 @@ def replace(store: Any, entry: str, field: str | None = None, group: str | None 
         if not even_if_working and (record is None or record["state"] != "calling"):
             raise SecretStoreError(f"the last refresh of {entry} {signin.field} is not uncertain, so the sign-in "
                                    "is working; nothing was changed. Pass --even-if-working to replace it anyway")
-        if not _is_admin(store):
+        if not admin:
             raise AdministratorStep(
-                f"This computer refreshes {entry} {signin.field} but is not an administrator's, so nothing was "
-                f"changed. Next step: an administrator runs {_command(signin)} --for {holder} on their own "
-                "computer, signs in again in the browser there, and then they hand the sign-in back to this "
-                "computer with handover-release and handover-accept. The old refresh token is never used again.")
+                f"The last refresh of {entry} {signin.field} is uncertain and this computer is not an "
+                "administrator's, so nothing was changed: the sign-in stays blocked on this computer and its old "
+                "refresh token is never used again. Next step: an administrator ends it by deleting the sign-in "
+                f"on their own computer with {delete_command(signin)}, signs in again in the browser there, and "
+                "hands the new sign-in back to this computer with handover-release and handover-accept. This "
+                "computer drops its record of the deleted sign-in at its next operation.")
         _keep(store, journal, signin, _settings(store, signin) or {})
         _delete(store, signin, group)
         fileio.remove_durable(journal.path(key))  # the retired grant's record: never used again
-    return signin
-
-
-def _replace_for(store: Any, signin: SignIn, group: str | None) -> SignIn:
-    journal = _journal(store)  # for the hand-over file only: no journal record is read or written
-    settings = _settings(store, signin)
-    path = _path(journal, handover_key(store.policy.repository, signin.group, signin.entry, signin.field))
-    existed = path.exists()
-    if settings is not None:
-        _keep(store, journal, signin, settings)
-    try:
-        _delete(store, signin, group)
-    except BaseException:
-        if settings is not None and not existed:
-            fileio.remove_durable(path)  # a failed commit or push changes nothing
-        raise
-    object.__setattr__(signin, "settings_kept", settings is not None)  # read by next_step
     return signin
 
 
@@ -269,17 +262,6 @@ def discard_retired(store: Any, journal: Journal | None = None) -> list[str]:
 
 
 def next_step(signin: SignIn) -> str:
-    if signin.mine:
-        return (f"The sign-in {signin.entry} {signin.field} is deleted and its old ids are retired; its shared "
-                "settings are kept on this computer. Next step: disconnect the app at the provider where it offers "
-                "that, then sign in again in the browser on this computer. The new sign-in gets the kept settings.")
-    holder = f"{signin.refresher[0]}/{signin.refresher[1]}"
-    kept = ("its shared settings are kept on this computer and the new sign-in gets them"
-            if getattr(signin, "settings_kept", False) else
-            "its shared settings could not be read on this computer, so choose them again when signing in")
-    group = f" --group {signin.group}" if signin.group != GROUP else ""
-    return (f"The sign-in {signin.entry} {signin.field} is deleted and its old ids are retired; {kept}. Next step: "
-            "disconnect the app at the provider where it offers that, sign in again in the browser on this "
-            f"computer, then hand the sign-in to {holder}: run handover-release --entry \"{signin.entry}\" --to "
-            f"{holder}{group} here, then handover-accept --entry \"{signin.entry}\"{group}. {holder} discards its "
-            "old refresh record at its next operation on the entry.")
+    return (f"The sign-in {signin.entry} {signin.field} is deleted and its old ids are retired; its shared "
+            "settings are kept on this computer. Next step: disconnect the app at the provider where it offers "
+            "that, then sign in again in the browser on this computer. The new sign-in gets the kept settings.")

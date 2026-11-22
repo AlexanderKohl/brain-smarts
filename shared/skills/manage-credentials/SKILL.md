@@ -490,13 +490,17 @@ writes a token out of the store, so every migrated sign-in needs a browser sign-
   encrypted hand-over file beside the journal, one commit deletes the sign-in and retires both ids, and
   the next browser sign-in under the same name gets the kept settings. A failed commit or push leaves
   the sign-in as it was; `status` reports a hand-over file whose sign-in was never completed.
-  A team sign-in whose refresher is not an administrator is replaced the way it was first made. On the
-  refresher the command changes nothing, names the step and exits 3. An administrator then runs
-  `replace-signin ENTRY --group G --for PERSON/COMPUTER` on their own computer: refused unless that names
-  the sign-in's refresher; the settings it can read are kept in its own hand-over file (otherwise it says
-  to choose them again) and the one deletion commit follows. The administrator signs in again in the
-  browser there and hands the sign-in back with `handover-release` and `handover-accept`. The old
-  refresher's next operation on the entry discards its record of the retired grant.
+  A team sign-in whose refresher is not an administrator is ended by the store's ordinary deletion. On
+  the refresher, with the last refresh uncertain, the command changes nothing and exits 3: the sign-in
+  stays blocked there, because its uncertain journal record refuses every refresh, offline, from a stale
+  copy and across restarts. The message names the administrator's step: delete the entry on their own
+  computer with `brain_secrets.py delete --entry E --group G` (one commit retiring both ids), sign in
+  again in the browser there and hand the new sign-in back with `handover-release` and
+  `handover-accept`. No settings are carried over that way; choose them again when signing in. On that
+  refresher `--even-if-working` is refused: a working sign-in moves to an administrator by the
+  cooperative handover. An administrator who is not the refresher is refused, and the message names the
+  delete command. The old refresher's next operation discards its record of the exact retired grant; a
+  refresh answer that arrives after the deletion is never published and never retried.
 
 ### A failed refresh
 
