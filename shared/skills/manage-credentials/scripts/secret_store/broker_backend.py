@@ -138,11 +138,16 @@ class StoreBackend:
             self._pull_all(tolerate=True)
         if self._journal is None:
             self._journal = Journal(self.store.config["checkpoint_dir"], self.store._identity().x25519)
+        self._discard_retired()
+        return self.store
+
+    def _discard_retired(self) -> None:
+        """A deleted sign-in's old record is never held as uncertain (plan M2): the record of each
+        exact retired grant is removed, at every operation and right after a pull."""
         from .replace_ops import discard_retired
-        for st in self._stores():  # a replaced sign-in's old record is never held as uncertain (plan K.1)
+        for st in self._stores():
             if st.policy is not None:
                 discard_retired(st, self._journal)
-        return self.store
 
     def status(self) -> dict[str, Any]:
         try:
@@ -319,6 +324,7 @@ class StoreBackend:
         with self._lock:
             self._ready()
             self._pull_all(tolerate=False)
+            self._discard_retired()
             return {"synced": True}
 
     # -- the refresh through the agent (section 9, refresh steps 1 to 7) --------------------

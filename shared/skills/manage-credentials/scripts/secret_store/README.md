@@ -127,7 +127,6 @@ python brain_secrets.py team-remove --login L [--computer C]
 python brain_secrets.py handover-release --entry E --to PERSON/COMPUTER [--group ops]   old refresher
 python brain_secrets.py handover-accept --entry E [--group ops]   an administrator's computer
 python brain_secrets.py replace-signin E [--field F] [--group ops] [--even-if-working]   refresher
-python brain_secrets.py replace-signin E [--field F] --group ops --for PERSON/COMPUTER   administrator, for the refresher
 python migrate_to_store.py --dry-run               names only; then without it, [--replace]
 python migrate_to_store.py rollback [--dry-run]    static secrets back to the old vault
 ```
@@ -154,13 +153,17 @@ one with `--even-if-working`) on its refresher, run by an administrator: the sha
 in a hand-over file beside the journal, one commit deletes the sign-in and retires both ids, and the
 next browser sign-in under the same name gets the kept settings. `status` reports a hand-over file
 whose sign-in was never completed. On a refresher whose key is not an administrator's (a team member
-who became refresher through a handover) it changes nothing, names the administrator's step and exits
-3. The administrator runs it with `--for PERSON/COMPUTER` on their own computer: refused unless that
-is the sign-in's refresher in the policy and this computer is an administrator's; the settings it can
-read go into its own hand-over file, the deletion commit follows (a failed commit or push leaves no
-new file), and no journal is touched. The administrator signs in again in the browser and hands the
-sign-in back with `handover-release` and `handover-accept`. The old refresher's next operation
-(`replace_ops.discard_retired`, called by the agent) removes its journal record of the retired grant.
+who became refresher through a handover) an uncertain sign-in is not replaced there: the command
+changes nothing, names the administrator's step and exits 3, and the `calling` journal record keeps
+refusing every refresh of it, offline, from a stale copy and across restarts. The step is the ordinary
+deletion of design section 7: an administrator runs `delete --entry E --group G` on their own computer
+(one commit retiring the oauth and grant ids), signs in again in the browser and hands the new sign-in
+back with `handover-release` and `handover-accept`. `--even-if-working` on such a refresher is refused
+(a working sign-in moves by the cooperative handover), and `replace-signin` on an administrator's
+computer that is not the refresher is refused, naming the delete command; neither writes a hand-over
+file. The old refresher's next operation (`replace_ops.discard_retired`, called by the agent) removes
+its journal record of the exact retired grant; a record held by a refresh still in flight is left until
+that refresh ends, and its late answer is refused at publication, never retried.
 `recovery-package --team` writes the team package; an unwritable
 folder warns, writes the upkeep-error file and exits 1, as for the personal package.
 

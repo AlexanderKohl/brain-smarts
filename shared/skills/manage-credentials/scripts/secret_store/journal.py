@@ -59,9 +59,9 @@ def uncertain_message(entry: str, provider: str | None) -> str:
             + procedure + "Next step: on the computer that refreshes it, run "
             f"{command} (add --group G for a team sign-in), then disconnect the app at the provider where it "
             "offers that and sign in again in the browser on that computer. For a team sign-in whose refreshing "
-            f"computer is not an administrator's, an administrator instead runs {command} --group G --for "
-            "PERSON/COMPUTER on their own computer, signs in again in the browser there and hands the sign-in "
-            "back with handover-release and handover-accept.")
+            "computer is not an administrator's, an administrator instead deletes it on their own computer with "
+            f'brain_secrets.py delete --entry "{name}" --group G, signs in again in the browser there and hands '
+            "the new sign-in back with handover-release and handover-accept.")
 
 
 class Journal:

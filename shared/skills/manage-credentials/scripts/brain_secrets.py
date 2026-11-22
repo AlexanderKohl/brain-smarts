@@ -6,9 +6,7 @@
                                                   recovery words typed in the masked window
   brain_secrets.py replace-signin ENTRY [--field F] [--group G] [--even-if-working]
                                                   refresher: end an uncertain sign-in (an administrator), or
-                                                  name the administrator's step (exit code 3)
-  brain_secrets.py replace-signin ENTRY [--field F] --group G --for PERSON/COMPUTER
-                                                  administrator, for a refresher that is not one
+                                                  name the administrator's step, the delete command (exit 3)
   brain_secrets.py put --entry E --secret FIELD [--secret FIELD ...] [--empty-json FIELD ...] [--group G]
   brain_secrets.py get-check --entry E [--group G]
   brain_secrets.py delete --entry E [--group G]
@@ -54,13 +52,11 @@ def _parser() -> argparse.ArgumentParser:
     restore.add_argument("--package", required=True, help="the recovery package file")
     restore.add_argument("--target", required=True, help="an empty or new folder")
     restore.add_argument("--fingerprint", help="the trust root fingerprint, when the words alone cannot pin it")
-    replace = sub.add_parser("replace-signin", help="end an uncertain sign-in; --for: an administrator, for its refresher")
+    replace = sub.add_parser("replace-signin", help="end an uncertain sign-in on its refresher")
     replace.add_argument("entry")
     replace.add_argument("--field")
     replace.add_argument("--group")
     replace.add_argument("--even-if-working", action="store_true", help="replace a sign-in that is not uncertain")
-    replace.add_argument("--for", dest="for_computer", metavar="PERSON/COMPUTER",
-                         help="administrator: delete the sign-in for its refresher, which is not an administrator")
     put = sub.add_parser("put", help="store fields typed into the masked window")
     put.add_argument("--entry", required=True)
     put.add_argument("--secret", action="append", default=[], metavar="FIELD")
@@ -252,8 +248,7 @@ def main(argv=None, store_factory=None, team_factory=None, ask=None, confirm=Non
         elif args.command == "replace-signin":
             from secret_store import replace_ops
             try:
-                signin = replace_ops.replace(store, args.entry, args.field, group, args.even_if_working,
-                                             for_computer=args.for_computer)
+                signin = replace_ops.replace(store, args.entry, args.field, group, args.even_if_working)
             except replace_ops.AdministratorStep as step:  # nothing changed: the administrator's step
                 print(step)
                 return 3
