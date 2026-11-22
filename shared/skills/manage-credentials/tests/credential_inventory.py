@@ -534,9 +534,11 @@ OPERATIONS: dict[str, dict[str, tuple[tuple[str, ...], tuple[str, ...], str | No
                   "written and read in a temporary folder by the scenario agent-state"),
     },
     "vault_tray.py": {
-        "(the tray)": (("tray-dialog", "agent-auth-make", "agent-state-read"), _NONE, None, "pystray and the Win32 dialog "
-                       "need a desktop; the tray builds the same agent as serve (its token and key), reads the state "
-                       "file for its pid and hands the typed passphrase to agent.unlock"),
+        "(the tray)": (("tray-dialog", "agent-auth-make", "agent-state-write", "agent-state-read", "agent-pipe"), _NONE,
+                       None, "pystray and the Win32 dialog need a desktop; the tray builds the same agent as serve (its "
+                       "token and key) and runs serve_forever in its own process (_start_broker), which writes the token "
+                       "and key to the state file and accepts connections; the tray reads the state file for its pid and "
+                       "hands the typed passphrase to agent.unlock"),
     },
     "agent": {
         "status": (("agent-pipe", "keychain-read"), _PULL, "agent-store, agent-vault", "state only; with the store, a "
