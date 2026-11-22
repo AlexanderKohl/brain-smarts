@@ -82,11 +82,13 @@ class PendingWrites:
 
     def new(self, repository: str, group: str, entry: str, plain: dict, kinds: dict, grant: dict,
             base: dict, projected: dict) -> dict:
-        """The first write's record, written once after the build and before the local commit."""
+        """The first write's record, built only: nothing touches the disk here. The caller binds it to
+        its attempt and enters its id among the writes in flight, then writes it (plan R13, fix 1)."""
         record = {"id": secrets.token_hex(8), "repository": repository, "group": group, "entry": entry,
                   "plain": dict(plain), "kinds": dict(kinds), "grant": dict(grant), "base": base,
                   "projected": dict(projected), "time": int(time.time()), "held": False}
-        self.write(record)
+        if not valid(record):
+            raise SecretStoreError("a pending-write record is malformed; nothing was written")
         return record
 
     def write(self, record: dict) -> None:

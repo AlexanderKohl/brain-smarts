@@ -118,11 +118,12 @@ class Attempt:
     def before_commit(self, store: Any, files: dict) -> None:
         projected = projected_of(files)
         self.recorded = True
-        if self.record is None:
+        if self.record is None:  # built, bound and in flight first; only then written (plan R13, fix 1)
             self.record = records(store).new(store.policy.repository, self.group, self.entry, self.plain,
                                              self.kinds, self.grant, base_of(store, self.entry, self.group,
                                                                              self.grant), projected)
             _in_flight(store).add(self.record["id"])
+            records(store).write(self.record)
         else:  # each further attempt: the projected identities and nothing else
             self.record = {**self.record, "projected": projected}
             records(store).write(self.record)
