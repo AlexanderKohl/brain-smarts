@@ -346,8 +346,19 @@ class Rehearsal:
             self.write_config("pc1", enabled=True)
             return self.start_agent("pc1")
 
+        def late_put() -> str:
+            reply = self.once("pc1", "put_late")
+            s["late_hash"] = reply["data"]["late_hash"]
+            return reply["checked"]
+
+        def late_back() -> str:
+            reply = self.once("pc1", "late_field_back")
+            if reply["data"]["late_hash"] != s.get("late_hash"):
+                raise StepFailed("the old vault's late field does not match the hash the store held before the rollback")
+            return reply["checked"] + "; equal to the store's value by hash"
+
         vault = str(self.n.vault("pc1"))
-        closed = f"https://{tls.LOOPBACK}:{tls.free_closed_port()}/token"
+        closed = lambda: f"https://{tls.LOOPBACK}:{tls.free_closed_port()}/token"  # noqa: E731 - only when run
         return [
             Step("fake token endpoint", server),
             guarded("step 1 set-up", "pc1", init),
@@ -357,7 +368,7 @@ class Rehearsal:
                     lambda: self.once("pc1", "agent_read", entry="rehearsal-static", label="static")["checked"]),
             guarded("step 3 first sign-in", "pc1", lambda: expect_token(pc1("signin", url=self.server.url), "first grant")),
             guarded("step 3a answered", "pc1", lambda: refresh("token", "answered")),
-            guarded("step 3b nothing sent", "pc1", lambda: refresh("token", "not_called", closed)),
+            guarded("step 3b nothing sent", "pc1", lambda: refresh("token", "not_called", closed())),
             guarded("step 3b next refresh calls", "pc1", lambda: refresh("token", "answered")),
             guarded("step 3c refused", "pc1", lambda: refresh("refuse", "refused")),
             guarded("step 3c next refresh calls", "pc1", lambda: refresh("token", "answered")),
@@ -391,15 +402,21 @@ class Rehearsal:
             guarded("step 7 marker written", "pc1", lambda: self.once("pc1", "marker", path=vault, present=True)["checked"]),
             guarded("step 7 agent on the store", "pc1", agent_on_store),
             guarded("step 7 store-on refusal", "pc1", lambda: self.once("pc1", "store_on_refusal")["checked"]),
+            # plan R11, rules 3 and 5 across processes: delete --field, then a late static field
+            guarded("step 7 delete --field", "pc1", lambda: self.once("pc1", "delete_signin")["checked"]),
+            guarded("step 7 late static field", "pc1", late_put),
             guarded("step 7 agent on the old vault again", "pc1", agent_on_old_vault),
             guarded("step 7 unlock again", "pc1", lambda: self.once("pc1", "unlock")["checked"]),
             guarded("step 7 store on again", "pc1", store_switched_on),
             guarded("step 7 rollback dry run", "pc1",
-                    lambda: self.once("pc1", "migrate", argv=["rollback", "--dry-run"])["checked"]),
+                    lambda: self.once("pc1", "migrate", argv=["rollback", "--dry-run"], names_late=True)["checked"]),
+            guarded("step 7 marker before the rollback", "pc1",
+                    lambda: self.once("pc1", "marker", path=vault, present=True)["checked"]),
             guarded("step 7 rollback", "pc1", lambda: self.once("pc1", "migrate", argv=["rollback"])["checked"]),
             guarded("step 7 marker cleared", "pc1", lambda: self.once("pc1", "marker", path=vault, present=False)["checked"]),
             guarded("step 7 store off", "pc1", store_switched_off),
             guarded("step 7 static back", "pc1", lambda: self.once("pc1", "old_static_back", path=vault)["checked"]),
+            guarded("step 7 late field back", "pc1", late_back),
         ]
 
     def steps(self) -> list[Step]:
@@ -444,6 +461,9 @@ def main(argv: list[str] | None = None) -> int:
     rehearsal = Rehearsal(args.check, args.commit, logs=args.logs, skip=args.skip)
     print(f"rehearsal {rehearsal.n.run_id}: {'check' if args.check else 'full run'} in {rehearsal.n.temp}", flush=True)
     code = run(rehearsal.steps(), rehearsal.clean)
+    if args.check:  # the full run's steps by name, in order; building the list runs none of them
+        for step in rehearsal.full_steps():
+            print(f"full run only, not run with --check: {step.name}", flush=True)
     if args.skip:  # a run with steps left out never counts as a full rehearsal
         print("incomplete: steps left out: " + ", ".join(args.skip), flush=True)
         return code or 4

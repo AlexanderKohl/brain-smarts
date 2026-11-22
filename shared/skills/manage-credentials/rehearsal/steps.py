@@ -43,7 +43,8 @@ class Session:
 
     def known_values(self) -> list[str]:
         import tls
-        values = [self.value(x) for x in ("static", "team", "old-static", "passphrase", "old-access", "old-refresh")]
+        values = [self.value(x) for x in ("static", "team", "old-static", "passphrase", "old-access", "old-refresh",
+                                          "old-signin-static", "late")]
         values += [tls._derive(kind, i, self.seed) for kind in ("access", "refresh") for i in range(0, 60)]
         return values + list(self.words.values())
 
@@ -264,23 +265,69 @@ class Session:
         vault = PortableVault(path)
         vault.initialize(passphrase)
         vault.set(OLD_STATIC, "value", self.value("old-static"), "text", passphrase)
-        vault.set(OLD_SIGNIN, SIGNIN_FIELD, {"access_token": self.value("old-access"),
-                                            "refresh_token": self.value("old-refresh")}, "json", passphrase)
-        return "throwaway old vault made with one static and one sign-in entry", {}
+        vault.set_fields(OLD_SIGNIN, {SIGNIN_FIELD: ({"access_token": self.value("old-access"),
+                                                     "refresh_token": self.value("old-refresh")}, "json"),
+                                      "value": (self.value("old-signin-static"), "text")}, passphrase)
+        return "throwaway old vault made with one static entry and one entry holding a sign-in and a static field", {}
 
     def unlock(self) -> tuple[str, dict]:
         from vault_broker_client import broker_request
         broker_request("unlock", passphrase=self.value("passphrase"))
         return "the agent on the old vault is unlocked", {}
 
-    def migrate(self, argv: list[str]) -> tuple[str, dict]:
+    def migrate(self, argv: list[str], names_late: bool = False) -> tuple[str, dict]:
+        """names_late: the output (names only) must name the static field under the migrated
+        sign-in's name, as the rollback's dry run does once put_late has stored it."""
         import migrate_to_store
         out = io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
             code = migrate_to_store.main(argv)
         if code != 0:
             raise Failed(f"migrate_to_store {' '.join(argv)} returned {code}: {' '.join(out.getvalue().split())[:400]}")
-        return f"migrate_to_store {' '.join(argv) or 'migrate'} returned 0", {}
+        late = f"{OLD_SIGNIN} ({SIGNIN_FIELD})"
+        if names_late and late not in out.getvalue():
+            raise Failed(f"migrate_to_store {' '.join(argv)} does not name {late}")
+        return f"migrate_to_store {' '.join(argv) or 'migrate'} returned 0" + (f" and names {late}" if names_late else ""), {}
+
+    @staticmethod
+    def _store_record(entry: str) -> tuple[set, dict]:
+        """The store's names and the entry's static fields, read in this process (never printed)."""
+        from secret_store.store import SecretStore
+        store = SecretStore().open()
+        names = set(store.list_entries())
+        return names, (store.get_record(entry) if entry in names else {})
+
+    def delete_signin(self) -> tuple[str, dict]:
+        """Plan R11, rule 3, as the command: delete --entry E --field F, the entry name typed again
+        through the confirm callback, deletes exactly the migrated sign-in; its static field stays."""
+        from secret_store.oauth_ops import signin_names
+        pair = set(signin_names(OLD_SIGNIN, SIGNIN_FIELD))
+        names, record = self._store_record(OLD_SIGNIN)
+        if not pair <= names or "value" not in record:
+            raise Failed(f"before the delete the store does not hold both the sign-in and the static field of {OLD_SIGNIN}")
+        before = digest(record["value"])
+        code, said = self._cli(["delete", "--entry", OLD_SIGNIN, "--field", SIGNIN_FIELD], confirm=lambda _prompt: OLD_SIGNIN)
+        if code != 0:
+            raise Failed(f"delete --field returned {code}: {' '.join(said.split())[:300]}")
+        names, record = self._store_record(OLD_SIGNIN)
+        if pair & names:
+            raise Failed(f"the sign-in {OLD_SIGNIN}#{SIGNIN_FIELD} is still in the store after delete --field")
+        if digest(str(record.get("value", ""))) != before or before != digest(self.value("old-signin-static")):
+            raise Failed(f"the static field of {OLD_SIGNIN} changed or went with delete --field")
+        return (f"delete --entry {OLD_SIGNIN} --field {SIGNIN_FIELD} removed the sign-in and its grant; the entry's "
+                "static field stays, hash unchanged"), {}
+
+    def put_late(self) -> tuple[str, dict]:
+        """A static field stored under the deleted sign-in's name in the same entry (a late field at rollback)."""
+        code, said = self._cli(["put", "--entry", OLD_SIGNIN, "--secret", SIGNIN_FIELD], ask=self._ask("late"))
+        if code != 0:
+            raise Failed(f"put {OLD_SIGNIN} --secret {SIGNIN_FIELD} returned {code}: {' '.join(said.split())[:300]}")
+        _names, record = self._store_record(OLD_SIGNIN)
+        held = digest(str(record.get(SIGNIN_FIELD, "")))
+        if held != digest(self.value("late")) or digest(str(record.get("value", ""))) != digest(self.value("old-signin-static")):
+            raise Failed(f"the store does not hold both static fields of {OLD_SIGNIN} with their hashes")
+        return f"{OLD_SIGNIN} {SIGNIN_FIELD} stored as a static field through brain_secrets put; hashes match", \
+            {"late_hash": held}
 
     def marker(self, path: str, present: bool) -> tuple[str, dict]:
         from portable_vault import migration_marker_path
@@ -320,10 +367,25 @@ class Session:
             raise Failed("the static entry is not back in the old vault")
         return "the static entry is back in the old vault; hashes match", {}
 
+    def late_field_back(self) -> tuple[str, dict]:
+        """After the rollback: the old vault holds the late field (restored by vault_restore_marked_static)
+        and the entry's other static field, read through the vault-backed agent; hashes only."""
+        from vault_broker_client import broker_request
+        result = broker_request("get_fields", entry=OLD_SIGNIN, fields=[SIGNIN_FIELD, "value"])
+        fields = result.get("fields", result) if isinstance(result, dict) else {}
+        held = digest(str(fields.get(SIGNIN_FIELD, "")))
+        if held != digest(self.value("late")):
+            raise Failed(f"{OLD_SIGNIN} {SIGNIN_FIELD} in the old vault is not the store's value")
+        if digest(str(fields.get("value", ""))) != digest(self.value("old-signin-static")):
+            raise Failed(f"the other static field of {OLD_SIGNIN} is not back in the old vault")
+        return f"{OLD_SIGNIN} {SIGNIN_FIELD} and its static field are back in the old vault; hashes match", \
+            {"late_hash": held}
 
-COMMANDS = ("agent_read", "enrol_approve", "enrol_prove", "enrol_request", "get_check", "init", "marker", "migrate",
-            "old_static_back", "old_vault", "put_static", "recovery_package", "refresh", "replace_signin", "restore",
-            "signin", "stale_refusal", "store_on_refusal", "team_init", "unlock")
+
+COMMANDS = ("agent_read", "delete_signin", "enrol_approve", "enrol_prove", "enrol_request", "get_check", "init",
+            "late_field_back", "marker", "migrate", "old_static_back", "old_vault", "put_late", "put_static",
+            "recovery_package", "refresh", "replace_signin", "restore", "signin", "stale_refusal", "store_on_refusal",
+            "team_init", "unlock")
 
 
 def session(stdin: Any, stdout: Any) -> int:

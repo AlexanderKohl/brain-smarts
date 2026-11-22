@@ -338,6 +338,138 @@ class SessionProtocolTests(unittest.TestCase):
         self.assertNotEqual(steps.Session(b"a" * 32).value("static"), steps.Session(b"b" * 32).value("static"))
 
 
+class LateRestoreSteps(unittest.TestCase):
+    """Plan R11, rules 3 and 5 in the rehearsal: delete --field, a late static field, and the old
+    vault's copy after the rollback, with fake product modules (no store, agent or keychain)."""
+
+    def setUp(self):
+        import steps
+        self.steps = steps
+        self.state = steps.Session(bytes(range(32)))
+        self.pair = {f"{steps.OLD_SIGNIN}#{steps.SIGNIN_FIELD}", f"{steps.OLD_SIGNIN}#{steps.SIGNIN_FIELD}#grant"}
+        self.world = {"names": set(self.pair) | {steps.OLD_SIGNIN},
+                      "record": {"value": self.state.value("old-signin-static")}}
+        self.seen = []
+        self.delete_keeps_signin = self.delete_takes_static = False
+        self.vault_fields = {}
+        self.migrate_says = ""
+        self.fake_modules()
+
+    def fake_modules(self):
+        steps, world = self.steps, self.world
+
+        def main(argv, ask=None, confirm=None, **_callbacks):
+            self.seen.append((argv, confirm and confirm("prompt")))
+            if argv[0] == "delete" and confirm("prompt") == steps.OLD_SIGNIN:
+                world["names"] -= set() if self.delete_keeps_signin else self.pair
+                if self.delete_takes_static:
+                    world["record"].clear()
+            elif argv[0] == "put":
+                world["record"].update(ask("title", [argv[-1]])[0])
+            return 0
+
+        class SecretStore:
+            def open(self):
+                return self
+
+            def list_entries(self):
+                return sorted(world["names"])
+
+            def get_record(self, _entry):
+                return dict(world["record"])
+
+        def migrate_main(_argv):
+            print(self.migrate_says)
+            return 0
+        modules = {
+            "brain_secrets": types.SimpleNamespace(main=main),
+            "secret_store": types.SimpleNamespace(),
+            "secret_store.store": types.SimpleNamespace(SecretStore=SecretStore),
+            "secret_store.oauth_ops": types.SimpleNamespace(signin_names=lambda e, f: (f"{e}#{f}", f"{e}#{f}#grant")),
+            "vault_broker_client": types.SimpleNamespace(broker_request=lambda _op, **_p: {"fields": self.vault_fields}),
+            "migrate_to_store": types.SimpleNamespace(main=migrate_main),
+        }
+        saved = {k: sys.modules.get(k) for k in modules}
+        sys.modules.update(modules)
+        self.addCleanup(lambda: [sys.modules.pop(k, None) if v is None else sys.modules.__setitem__(k, v)
+                                 for k, v in saved.items()])
+
+    def assert_no_value(self, text):
+        for value in self.state.known_values():
+            self.assertNotIn(value, text)
+
+    def test_delete_field_removes_the_signin_and_keeps_the_static_field(self):
+        checked, _data = self.state.delete_signin()
+        self.assertEqual(self.seen, [(["delete", "--entry", self.steps.OLD_SIGNIN, "--field", self.steps.SIGNIN_FIELD],
+                                      self.steps.OLD_SIGNIN)])
+        self.assertFalse(self.pair & self.world["names"])
+        self.assertIn("hash unchanged", checked)
+        self.assert_no_value(checked)
+
+    def test_delete_field_fails_when_the_signin_stays_or_the_static_field_goes(self):
+        self.delete_keeps_signin = True
+        with self.assertRaisesRegex(self.steps.Failed, "still in the store"):
+            self.state.delete_signin()
+        self.delete_keeps_signin, self.delete_takes_static = False, True
+        self.world["names"] |= self.pair
+        with self.assertRaisesRegex(self.steps.Failed, "static field"):
+            self.state.delete_signin()
+
+    def test_delete_field_needs_the_signin_before_it_runs(self):
+        self.world["names"] -= self.pair
+        with self.assertRaisesRegex(self.steps.Failed, "before the delete"):
+            self.state.delete_signin()
+        self.assertEqual(self.seen, [])
+
+    def test_the_late_field_is_stored_and_its_hash_handed_to_the_parent(self):
+        self.world["names"] -= self.pair
+        checked, data = self.state.put_late()
+        self.assertEqual(data["late_hash"], self.steps.digest(self.state.value("late")))
+        self.assertEqual(self.seen[0][0], ["put", "--entry", self.steps.OLD_SIGNIN, "--secret", self.steps.SIGNIN_FIELD])
+        self.assert_no_value(checked + str(data))
+
+    def test_the_late_field_back_in_the_old_vault_is_compared_by_hash(self):
+        self.vault_fields.update({self.steps.SIGNIN_FIELD: self.state.value("late"),
+                                  "value": self.state.value("old-signin-static")})
+        checked, data = self.state.late_field_back()
+        self.assertEqual(data["late_hash"], self.steps.digest(self.state.value("late")))
+        self.assert_no_value(checked)
+        self.vault_fields[self.steps.SIGNIN_FIELD] = {}  # the scrubbed sign-in, not the store's value
+        with self.assertRaisesRegex(self.steps.Failed, "not the store's value"):
+            self.state.late_field_back()
+        self.vault_fields[self.steps.SIGNIN_FIELD] = self.state.value("late")
+        del self.vault_fields["value"]
+        with self.assertRaisesRegex(self.steps.Failed, "other static field"):
+            self.state.late_field_back()
+
+    def test_the_rollback_dry_run_must_name_the_late_field(self):
+        self.migrate_says = "Dry run: ... rehearsal-old-signin (value), rehearsal-old-static (value)"
+        with self.assertRaisesRegex(self.steps.Failed, "does not name"):
+            self.state.migrate(["rollback", "--dry-run"], names_late=True)
+        self.assertIn("returned 0", self.state.migrate(["rollback", "--dry-run"])[0])
+        self.migrate_says += f", {self.steps.OLD_SIGNIN} ({self.steps.SIGNIN_FIELD})"
+        self.assertIn("names", self.state.migrate(["rollback", "--dry-run"], names_late=True)[0])
+
+    def test_the_parent_compares_the_old_vault_hash_with_the_stores(self):
+        r = rehearse.Rehearsal(False, "HEAD", environ={})
+        r.recheck = lambda _pc: None
+        replies = {"put_late": {"checked": "stored", "data": {"late_hash": "a" * 64}},
+                   "late_field_back": {"checked": "back", "data": {"late_hash": "b" * 64}}}
+        r.once = lambda _pc, command, **_kw: replies[command]
+        by_name = {step.name: step for step in r.full_steps()}
+        by_name["step 7 late static field"].action()
+        with self.assertRaises(rehearse.StepFailed):
+            by_name["step 7 late field back"].action()
+        replies["late_field_back"]["data"]["late_hash"] = "a" * 64
+        self.assertIn("by hash", by_name["step 7 late field back"].action())
+
+
+STEP_7_TAIL = ["step 7 store-on refusal", "step 7 delete --field", "step 7 late static field",
+               "step 7 agent on the old vault again", "step 7 unlock again", "step 7 store on again",
+               "step 7 rollback dry run", "step 7 marker before the rollback", "step 7 rollback",
+               "step 7 marker cleared", "step 7 store off", "step 7 static back", "step 7 late field back"]
+
+
 class ModeTests(unittest.TestCase):
     def test_check_runs_no_step_that_touches_the_keychain_a_process_or_the_cloud_folder(self):
         check = [s.name for s in rehearse.Rehearsal(True, "HEAD", environ={}).steps()]
@@ -345,6 +477,26 @@ class ModeTests(unittest.TestCase):
         full = [s.name for s in rehearse.Rehearsal(False, "HEAD", environ={}).steps()]
         self.assertEqual(full[:5], check)
         self.assertTrue(any(name.startswith("step 7") for name in full))
+
+    def test_the_new_steps_close_step_7_in_order(self):
+        full = [s.name for s in rehearse.Rehearsal(False, "HEAD", environ={}).steps()]
+        self.assertEqual(full[-len(STEP_7_TAIL):], STEP_7_TAIL)
+        self.assertLess(full.index("step 7 migrate"), full.index("step 7 delete --field"))
+
+    def test_check_lists_the_full_run_steps_and_runs_none_of_them(self):
+        def forbidden(*_args, **_kwargs):
+            raise AssertionError("a full-run step was run or prepared in --check")
+        saved = (rehearse.run, rehearse.tls.free_closed_port, rehearse.subprocess.Popen)
+        rehearse.run = lambda steps, _clean: 0 if [s.name for s in steps][-1] == "guard pc2" else 9
+        rehearse.tls.free_closed_port = rehearse.subprocess.Popen = forbidden
+        self.addCleanup(lambda: setattr(rehearse, "run", saved[0]) or setattr(rehearse.tls, "free_closed_port", saved[1])
+                        or setattr(rehearse.subprocess, "Popen", saved[2]))
+        out = io.StringIO()
+        with redirect_stdout(out):
+            self.assertEqual(rehearse.main(["--check"]), 0)
+        listed = [line.split(": ", 1)[1] for line in out.getvalue().splitlines()
+                  if line.startswith("full run only, not run with --check: ")]
+        self.assertEqual(listed[-len(STEP_7_TAIL):], STEP_7_TAIL)
 
 
 class GuardStepTests(Case):

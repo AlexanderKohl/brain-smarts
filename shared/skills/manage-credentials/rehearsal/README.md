@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-11-21T14:39:16+10:00
-updated: 2026-11-21T14:39:16+10:00
+updated: 2026-11-22T16:08:17+10:00
 owner: brain-owner
 ---
 
@@ -30,7 +30,8 @@ python shared/skills/manage-credentials/rehearsal/rehearse.py
 no cloud folder: it records the owner's baseline, exports two throwaway brains, writes their
 configuration, makes two local bare repositories and the run certificate, and judges guard items
 1 to 6 from inside each rehearsal environment. It reads no keychain entry. The full run adds the
-store steps below. `--commit REF` names the commit under test (default `HEAD`).
+store steps below; `--check` lists them by name, in order, after its clean-up line, and runs none of
+them. `--commit REF` names the commit under test (default `HEAD`).
 
 Each step prints one line: the step, `ok` or `FAILED`, and what was checked. No line carries a
 value: invented values are derived from a random seed held in memory and compared by hash.
@@ -69,6 +70,15 @@ endpoint (answered, nothing sent, refused, time-out) and `replace-signin`; perso
 recovery packages; restore with its three refusals; a team store and a second computer enrolled
 in the personal store and then the team store (two enrolments), with its own agent; migration from a throwaway old vault, the store-on refusal and the rollback;
 the clean-up and its proof. The guard is checked again before each step.
+
+Step 7, after the migration and while the store is on (plan R11, rules 3 and 5): the migrated
+sign-in, whose entry also holds a static field, is deleted with `brain_secrets.py delete --entry E
+--field F` (the entry name typed again through the confirm callback), checked gone from the store
+with the static field's hash unchanged; a static field is then stored under that sign-in's name `F`
+with `brain_secrets.py put`. The rollback's dry run must name that late field; the marker is checked
+present just before the rollback and absent after it; after it the old vault holds the static
+entry, the entry's static field and field `F` with the store's value, compared by hash (the late
+field crosses the agent's pipe as `vault_restore_marked_static`).
 
 ## Files
 
