@@ -473,8 +473,12 @@ it. Switch the store on without restarting the agent. Run `python migrate_to_sto
 then `python migrate_to_store.py rollback`, then switch the store off; the agent then serves the old
 vault. The rollback also runs under the lock. It restores static secrets only, from the store's current
 value, and clears the marker. It walks every static entry of the store, so an entry or field created
-after the migration comes back too, as text or JSON, and it names each entry it restored and each it
-could not; one it could not ends with exit code 5 and the marker kept, so it can be run again. It never
+after the migration comes back too, a static field under a migrated sign-in's name included. The store
+keeps each static field's kind (text or JSON) beside its value, and the rollback restores each field
+at that kind and nothing else. It names each entry it restored and each it could not (a field with no
+recorded kind, a token, or a sign-in the store still holds under that name); one it could not ends
+with exit code 5 and the marker kept, so it can be run again. A field with no recorded kind occurs
+only in a store made before kinds were kept: store that entry again, then run the rollback again. It never
 writes a token out of the store, so every migrated sign-in needs a browser sign-in after a rollback.
 
 ### Recovery and replacing a sign-in

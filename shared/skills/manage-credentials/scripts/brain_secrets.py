@@ -306,11 +306,12 @@ def main(argv=None, store_factory=None, team_factory=None, ask=None, confirm=Non
             opened = store.open()
             grant = {k: v for k, v in fields.items() if k in provider_profiles.grant_fields()}
             plain = {k: v for k, v in fields.items() if k not in grant}
+            kinds = {k: "json" if k in args.empty_json else "text" for k in plain}  # plan N2
             if plain and grant:  # one commit: static object, grant, index and policy together
                 from secret_store.oauth_ops import put_fields
-                put_fields(opened, args.entry, plain, grant, group)
+                put_fields(opened, args.entry, plain, grant, group, plain_kinds=kinds)
             elif plain:
-                opened.put_entry(args.entry, plain, group=group)
+                opened.put_entry(args.entry, plain, group=group, field_kinds=kinds)
             else:  # the same path as the agent's set_text: never into a static object
                 put_grant_fields(opened, opened._group(group), args.entry, grant)
             print(f"Stored {args.entry}: " + ", ".join(sorted(fields)))

@@ -119,8 +119,8 @@ e start or configure the agent. `mc/` is this skill's `scripts/`, `lib/` the ski
 | 11 | `secret_store/keys.py` keychain keys | a, b | allowlisted backends only, fails closed | same | OK |
 | 12 | `secret_store/journal.py` `resolve_uncertain` | b | no production caller; refused while no profile is verified; an uncertain sign-in is ended by `replace-signin` (row 52) | same | OK |
 | 13 | `mc/migrate_to_store.py` migrate | a, b, d | one run under the migration lock; an unverified sign-in has its store copy removed in the same run and the run exits non-zero | marked entries skipped | OK |
-| 14 | `migrate_to_store.py` backup | d | encrypted byte copy; status shows the newest backup's age; no retention limit | same | OK, noted |
-| 15 | `migrate_to_store.py rollback` | b, d | under the lock; every static object of the store, text and JSON, entries created after the migration included; each entry not restored is named and exits 5; sign-ins need a browser sign-in | same | OK |
+| 14 | `migrate_to_store.py` backup | d | encrypted byte copy inside the vault's own folder (`--backup-dir` too); status shows the newest backup's age; no retention limit | same | OK, noted |
+| 15 | `migrate_to_store.py rollback` | b, d | under the lock; every static object of the store, entries created after the migration and static fields under a migrated sign-in's name included (restored last, marker put back if one fails); each field at the kind recorded in the store's payload and nothing else; no recorded kind (a store made before kinds were kept), malformed kind data, a token or a shadowing sign-in is named and exits 5; sign-ins need a browser sign-in | same | OK |
 | 16 | `mc/portable_vault.py` `PortableVaultJsonStore` | a, b, e | store agent required; passphrase open refused; relay ignored | marked field refused | OK |
 | 17 | `portable_vault.py` `BrokerOAuthStore` | a, b | store agent required | agent refuses marked field | OK |
 | 18 | `mc/vault_credentials.py` run, session | a | store agent required | text only | OK |
