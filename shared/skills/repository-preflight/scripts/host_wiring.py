@@ -3,8 +3,10 @@
   python shared/skills/repository-preflight/scripts/host_wiring.py plan  --host claude-code --host codex
   python shared/skills/repository-preflight/scripts/host_wiring.py apply --host codex --level edits
 
-`plan` prints one line per file (create | replace | merge | unchanged, the path, the backup it would make) and
-any kept-value conflicts, and writes nothing. `apply` backs up a differing file once per date
+Hosts: claude-code, codex, cursor (worker types in ~/.cursor/agents) and cursor-cli (~/.cursor/cli-config.json).
+`plan` prints one line per file (create | replace | merge | unchanged | keep | skip, the path, the backup it
+would make) and any kept-value conflicts, and writes nothing. `keep` is a file of the person's own (an agent
+of the same name) and `skip` a configuration file that cannot be parsed: both are reported and never written. `apply` backs up a differing file once per date
 (<file>.bak-YYYYMMDD), writes, re-reads to verify, and prints the same lines with `done`.
 Levels: routine (user and local settings), edits (user-level settings only), defaults (no settings;
 Codex still gets its trust entry). Exit 0 on success, 2 on refusal or error.
@@ -25,6 +27,9 @@ import host_wiring_files as files  # noqa: E402
 import setup_guard  # noqa: E402
 
 
+WRITES = ("create", "replace", "merge")                 # every other action leaves the file as it is
+
+
 def find_root(start: Path) -> Path | None:
     for folder in [start, *start.parents]:
         if (folder / "CONTRACT.md").is_file():
@@ -34,7 +39,7 @@ def find_root(start: Path) -> Path | None:
 
 def backup_path(item: files.Item, stamp: str) -> Path | None:
     """The backup this item needs: the file exists, will change, and none exists for the date."""
-    if item.action in ("create", "unchanged") or not item.path.exists():
+    if item.action not in WRITES or item.action == "create" or not item.path.exists():
         return None
     target = item.path.with_name(f"{item.path.name}.bak-{stamp}")
     return None if target.exists() else target
@@ -54,7 +59,7 @@ def run(command: str, items: list[files.Item]) -> None:
     stamp = date.today().strftime("%Y%m%d")
     for item in items:
         backup = backup_path(item, stamp)
-        if command == "apply" and item.action != "unchanged":
+        if command == "apply" and item.action in WRITES:
             if backup:
                 shutil.copy2(item.path, backup)
             item.path.parent.mkdir(parents=True, exist_ok=True)

@@ -18,7 +18,8 @@ sys.path.insert(0, str(SCRIPTS))
 
 import host_wiring  # noqa: E402
 
-REAL_TEMPLATES = SCRIPTS.parents[2] / "templates" / "host-pointers"
+REAL_ROOT = SCRIPTS.parents[3]
+REAL_TEMPLATES = REAL_ROOT / "shared" / "templates" / "host-pointers"
 STAMP = date.today().strftime("%Y%m%d")
 
 
@@ -180,6 +181,124 @@ class HostWiringTest(unittest.TestCase):
             code = host_wiring.main(["plan", "--host", "codex", "--home", str(self.home), "--root", str(self.root)])
         self.assertEqual(code, 2)
         self.assertIn("session copy", err.getvalue())
+
+    def add_worker_types(self) -> None:
+        """The brain's real Codex and Cursor worker definitions, copied into the temporary root."""
+        for host in (".codex", ".cursor"):
+            shutil.copytree(REAL_ROOT / host / "agents", self.root / host / "agents")
+
+    def test_codex_plan_lists_agents_hooks_and_thread_cap_and_writes_nothing(self) -> None:
+        self.add_worker_types()
+        code, out = self.cli("plan", "--host", "codex")
+        self.assertEqual(code, 0, out)
+        for agent in sorted((REAL_ROOT / ".codex" / "agents").glob("*.toml")):
+            self.assertIn(str(self.home / ".codex" / "agents" / agent.name), out)
+        self.assertIn(str(self.home / ".codex" / "config.toml"), out)
+        self.assertFalse((self.home / ".codex").exists())
+
+    def test_codex_apply_merges_hooks_keeps_keys_and_is_idempotent(self) -> None:
+        self.add_worker_types()
+        config = self.home / ".codex" / "config.toml"
+        config.parent.mkdir(parents=True)
+        mine = ('model = "x"\n\n[agents]\nmax_concurrent_threads_per_session = 2\n\n'
+                '[[hooks.PreCompact]]\nmatcher = "manual|auto"\n[[hooks.PreCompact.hooks]]\ntype = "command"\n'
+                'command = "python shared/skills/repository-preflight/scripts/hooks.py pre-compact"\n\n'
+                '[[hooks.Stop]]\n[[hooks.Stop.hooks]]\ntype = "command"\ncommand = "my-own-stop"\n')
+        config.write_text(mine, encoding="utf-8")
+        code, out = self.cli("apply", "--host", "codex")
+        self.assertEqual(code, 0, out)
+        data = tomllib.loads(config.read_text(encoding="utf-8"))
+        self.assertEqual(data["model"], "x")
+        self.assertEqual(data["agents"]["max_concurrent_threads_per_session"], 2)      # kept, reported
+        self.assertIn("max_concurrent_threads_per_session", out)
+        self.assertEqual(data["hooks"]["Stop"][0]["hooks"][0]["command"], "my-own-stop")
+        self.assertEqual(len(data["hooks"]["PreCompact"]), 1)                          # the person's copy counts
+        starts = {e["matcher"]: e["hooks"][0]["command"] for e in data["hooks"]["SessionStart"]}
+        self.assertEqual(sorted(starts), ["compact", "resume", "startup"])
+        self.assertTrue(starts["compact"].endswith('hooks.py" post-compact'))
+        self.assertIn(self.root.as_posix(), starts["startup"])
+        self.assertIs(data["features"]["hooks"], True)
+        installed = sorted(p.name for p in (self.home / ".codex" / "agents").iterdir())
+        self.assertEqual(installed, sorted(p.name for p in (REAL_ROOT / ".codex" / "agents").glob("*.toml")))
+        text = config.read_text(encoding="utf-8")
+        code, out = self.cli("apply", "--host", "codex")
+        self.assertEqual(code, 0)
+        self.assertEqual(config.read_text(encoding="utf-8"), text)
+        self.assertTrue(all(" unchanged " in line for line in out.splitlines() if line.startswith("done")), out)
+
+    def test_codex_fresh_config_gets_cap_of_four(self) -> None:
+        self.assertEqual(self.cli("apply", "--host", "codex")[0], 0)
+        data = tomllib.loads((self.home / ".codex" / "config.toml").read_text(encoding="utf-8"))
+        self.assertEqual(data["agents"]["max_concurrent_threads_per_session"], 4)
+        self.assertEqual(len(data["hooks"]["PreCompact"]), 1)
+
+    def test_owner_agent_of_the_same_name_is_kept(self) -> None:
+        self.add_worker_types()
+        own = self.home / ".codex" / "agents" / "mine.toml"
+        own.parent.mkdir(parents=True)
+        own.write_text('name = "worker-no-judgement"\ndescription = "d"\ndeveloper_instructions = "x"\n', encoding="utf-8")
+        cursor_own = self.home / ".cursor" / "agents" / "worker-no-judgement.md"
+        cursor_own.parent.mkdir(parents=True)
+        cursor_own.write_text("---\nname: worker-no-judgement\n---\nmine\n", encoding="utf-8")
+        code, out = self.cli("apply", "--host", "codex", "--host", "cursor")
+        self.assertEqual(code, 0, out)
+        self.assertFalse((self.home / ".codex" / "agents" / "worker-no-judgement.toml").exists())
+        self.assertEqual(cursor_own.read_text(encoding="utf-8"), "---\nname: worker-no-judgement\n---\nmine\n")
+        self.assertEqual(out.count("your own agent, kept"), 2)
+        self.assertTrue((self.home / ".codex" / "agents" / "worker-open-judgement.toml").is_file())
+
+    def test_cursor_plan_lists_agents_and_writes_no_hooks(self) -> None:
+        self.add_worker_types()
+        code, out = self.cli("plan", "--host", "cursor")
+        self.assertEqual(code, 0, out)
+        for agent in sorted((REAL_ROOT / ".cursor" / "agents").glob("*.md")):
+            self.assertIn(str(self.home / ".cursor" / "agents" / agent.name), out)
+        self.assertNotIn("hooks.json", out)
+        self.assertEqual(self.cli("apply", "--host", "cursor")[0], 0)
+        self.assertFalse((self.home / ".cursor" / "hooks.json").exists())
+        code, out = self.cli("apply", "--host", "cursor")
+        self.assertNotIn("create", out)
+
+    def test_unparseable_configuration_is_left_untouched(self) -> None:
+        config = self.home / ".codex" / "config.toml"
+        config.parent.mkdir(parents=True)
+        config.write_text("this is = = not toml\n", encoding="utf-8")
+        cli_config = self.home / ".cursor" / "cli-config.json"
+        cli_config.parent.mkdir(parents=True)
+        cli_config.write_text("{not json", encoding="utf-8")
+        code, out = self.cli("apply", "--host", "codex", "--host", "cursor-cli")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(config.read_text(encoding="utf-8"), "this is = = not toml\n")
+        self.assertEqual(cli_config.read_text(encoding="utf-8"), "{not json")
+        self.assertEqual(out.count("cannot be parsed"), 2)
+        self.assertEqual([p.name for p in config.parent.iterdir() if ".bak-" in p.name], [])
+        self.assertTrue((self.home / ".codex" / "AGENTS.md").is_file())             # the rest still runs
+
+    def test_inline_hooks_value_is_reported_not_rewritten(self) -> None:
+        config = self.home / ".codex" / "config.toml"
+        config.parent.mkdir(parents=True)
+        config.write_text('hooks = "off"\n', encoding="utf-8")
+        code, out = self.cli("apply", "--host", "codex")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(tomllib.loads(config.read_text(encoding="utf-8"))["hooks"], "off")
+        self.assertIn("brain hook(s) not added", out)
+
+    def test_brain_worker_types_are_well_formed(self) -> None:
+        bodies = {p.read_text(encoding="utf-8").split("\n---\n", 1)[1].strip()
+                  for p in (REAL_ROOT / ".claude" / "agents").glob("worker-*.md")}
+        for path in sorted((REAL_ROOT / ".codex" / "agents").glob("*.toml")):
+            text = path.read_text(encoding="utf-8")
+            data = tomllib.loads(text)
+            self.assertTrue(text.startswith(host_wiring.files.BRAIN_COPY), path)
+            self.assertEqual(data["name"], path.stem)
+            self.assertTrue({"description", "model", "model_reasoning_effort"} <= set(data), path)
+            self.assertIn(data["developer_instructions"].strip(), bodies)
+            self.assertNotEqual(data["model_reasoning_effort"], "ultra")               # ultra delegates further
+        for path in sorted((REAL_ROOT / ".cursor" / "agents").glob("*.md")):
+            text = path.read_text(encoding="utf-8")
+            self.assertIn(host_wiring.files.BRAIN_COPY, text)
+            self.assertEqual(host_wiring.files._md_name(text), path.stem)
+            self.assertIn(text.split("\n---\n", 1)[1].strip(), bodies)
 
     def test_project_repos_root_falls_back_to_parent(self) -> None:
         (self.root / "memory" / "OWNER.md").unlink()
