@@ -195,7 +195,7 @@ What fails closed:
   the store when it is on.
 - With the store on, the passphrase open of the vault is refused; only the Vault Agent opens it,
   for the migration and rollback operations, while a live migration lock is held.
-- The agent's scrub, restore-static and marker operations need a live lock; an absent, unreadable
+- The agent's scrub, its two static restores and its marker operation need a live lock; an absent, unreadable
   or stale lock (its process gone, or older than six hours) refuses, and a second migration cannot
   take a held lock.
 - A connector's plain token file is refused while the store is on.
@@ -216,9 +216,13 @@ new field, a placeholder or grant field leaving the object) keeps the kinds of t
 data is refused before use. An object written before this change has no kinds: it reads as before, any
 write records kinds for the fields it writes, and the rollback refuses a field without one, naming the
 entry and the fix (store the entry again). This affects only stores made before this change. The
-payload is inside the envelope, so the acceptance rules are unchanged. A static field under a migrated sign-in's name is restored, not skipped: the agent refuses a
-field the marker names, so such fields come back last, after the marker is cleared, and if one fails
-the marker is put back as it was. If the store still holds that sign-in, the static field is shadowed
+payload is inside the envelope, so the acceptance rules are unchanged. A static field under a migrated sign-in's name is restored, not skipped: the agent's
+ordinary restore refuses a field the marker names, so such fields come back after the ordinary ones
+through `vault_restore_marked_static`, which takes only fields the marker names for that entry,
+checks the whole request before it writes anything and leaves the marker as it is. The marker is
+cleared last, only when every restore of both kinds succeeded; it is never cleared early and nothing
+is scrubbed, so every marked name stays refused to every other caller until then, a failure or a stop
+leaves the marker exactly as it was, and the rollback is run again. If the store still holds that sign-in, the static field is shadowed
 and is named instead. Each entry restored and each that could not be (unreadable, no recorded kind,
 malformed kind data, a token-shaped value, a shadowed field, or refused by the agent) is named; one that could not
 ends with exit code 5 and the marker kept. It never writes a token out of the store, so every migrated

@@ -179,9 +179,11 @@ class PassphraseOpenClosed(VaultCase):
 
 
 class TheMigrationLock(VaultCase):
-    """M5: scrub, restore-static and the marker operation run only under a live migration lock."""
+    """M5: scrub, both static restores and the marker operation run only under a live migration lock."""
     GUARDED = (("vault_scrub_signin", {"entry": "xero-demo", "field": FIELD}),
                ("vault_restore_static", {"entry": "plain", "values": {"api_key": {"value": "x", "kind": "text"}}}),
+               ("vault_restore_marked_static", {"entry": "xero-demo",
+                                                "values": {FIELD: {"value": {"note": "x"}, "kind": "json"}}}),
                ("vault_clear_migration_marker", {}))
 
     def assert_refused(self):

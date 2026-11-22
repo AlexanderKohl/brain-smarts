@@ -31,13 +31,15 @@ from .store_ops import load_config
 SYNC_SECONDS = 30.0
 REFRESH_TIMEOUT = 600.0  # a begun refresh without its save by then stays uncertain
 VAULT_OPS = frozenset({"vault_clear_migration_marker", "vault_get_fields", "vault_get_json", "vault_list_entries",
-                       "vault_restore_static", "vault_scrub_signin", "vault_verify_copy"})
+                       "vault_restore_marked_static", "vault_restore_static", "vault_scrub_signin",
+                       "vault_verify_copy"})
 TOKEN_KEYS = frozenset({"access_token", "accessToken", "refresh_token", "refreshToken"})
 STORE_OPS = frozenset({"abort_refresh", "begin_refresh", "clear_signin", "poll_refresh", "release_refresh",
                        "sync_store"})
 AGENT_OPS = VAULT_OPS | STORE_OPS
 # Run only while migrate_to_store.py holds the migration lock (round-9 plan, row M5).
-LOCKED_VAULT_OPS = frozenset({"vault_clear_migration_marker", "vault_restore_static", "vault_scrub_signin"})
+LOCKED_VAULT_OPS = frozenset({"vault_clear_migration_marker", "vault_restore_marked_static", "vault_restore_static",
+                              "vault_scrub_signin"})
 
 
 PACKAGE_TIMER_SECONDS = 6 * 3600.0  # the recovery-package timer runs at least this often
@@ -516,6 +518,27 @@ def agent_operation(agent: Any, operation: str, request: dict) -> Any:
     return agent._store.poll_refresh(entry, field)
 
 
+def static_restore(entry: str, values: Any, marked: list[str], late: bool) -> dict[str, tuple[Any, str]]:
+    """The fields of one rollback restore, checked whole before anything is written (plan R11, rule
+    5): each value is non-empty text or a JSON object that does not look like a sign-in, at its kind.
+    vault_restore_static (late False) refuses a field the marker names; vault_restore_marked_static
+    (late True) takes only fields the marker names for the entry, and neither touches the marker.
+    One bad item refuses the request: SecretStoreError, and the caller writes nothing."""
+    if not isinstance(values, dict) or not values:
+        raise SecretStoreError(f"{entry}: values must be a non-empty object; nothing was restored")
+    fields = {}
+    for field, item in values.items():
+        value, kind = (item.get("value"), item.get("kind")) if isinstance(item, dict) else (None, None)
+        if ((field in marked) != late or kind not in ("text", "json")
+                or (kind == "json" and (not isinstance(value, dict) or oauth_ops.looks_like_signin(value)))
+                or (kind == "text" and (not isinstance(value, str) or not value))):
+            raise SecretStoreError(f"{entry}#{field} is not a static secret "
+                                   + ("under a name the migration marker holds" if late else "outside the marker")
+                                   + "; nothing was restored")
+        fields[str(field)] = (value, kind)
+    return fields
+
+
 def vault_request(vault: Any, passphrase: str, operation: str, request: dict) -> Any:
     """Vault-only operations for the migration, answered from the unlocked portable vault."""
     entry = str(request.get("entry") or "")
@@ -535,25 +558,17 @@ def vault_request(vault: Any, passphrase: str, operation: str, request: dict) ->
         if not isinstance(fields, list) or not all(isinstance(f, str) for f in fields):
             raise SecretStoreError("fields must be a list of strings")
         return vault.get_fields(entry, fields, passphrase)
-    if operation in ("vault_scrub_signin", "vault_restore_static", "vault_clear_migration_marker"):
+    if operation in ("vault_scrub_signin", "vault_restore_static", "vault_restore_marked_static",
+                     "vault_clear_migration_marker"):
         from portable_vault import migrated_signins, write_migration_marker
         marked = migrated_signins(vault.path)
-        if operation == "vault_clear_migration_marker":  # the rollback, after its static secrets
+        if operation == "vault_clear_migration_marker":  # the rollback's last change, after every restore
             write_migration_marker(vault.path, {})
             return {"cleared": True}
-        if operation == "vault_restore_static":  # never a sign-in: no token leaves the store
-            values = request.get("values")
-            if not isinstance(values, dict) or not values:
-                raise SecretStoreError("values must be a non-empty object")
-            fields = {}
-            for field, item in values.items():
-                value, kind = (item or {}).get("value"), (item or {}).get("kind")
-                if (field in marked.get(entry, []) or kind not in ("text", "json")
-                        or (kind == "json" and (not isinstance(value, dict) or oauth_ops.looks_like_signin(value)))
-                        or (kind == "text" and not isinstance(value, str))):
-                    raise SecretStoreError(f"{entry}#{field} is not a static secret; nothing was restored")
-                fields[field] = (value, kind)
-            vault.set_fields(entry, fields, passphrase)
+        if operation in ("vault_restore_static", "vault_restore_marked_static"):  # never a sign-in
+            fields = static_restore(entry, request.get("values"), marked.get(entry, []),
+                                    operation == "vault_restore_marked_static")
+            vault.set_fields(entry, fields, passphrase)  # one write, after the whole request is checked
             return {"restored": sorted(fields)}
         field = str(request.get("field") or "")  # the marker first: a stop before the scrub still refuses the copy
         write_migration_marker(vault.path, {**marked, entry: marked.get(entry, []) + [field]})
