@@ -273,30 +273,22 @@ def _names(items: list) -> str:
     return ", ".join(f"{e} ({', '.join(sorted(f))})" for e, f in items) or "none"
 
 
-def _restore(request: Callable, plans: list, restored: list, failed: list) -> None:
+def _restore(request: Callable, plans: list, restored: list, failed: list,
+             operation: str = "vault_restore_static") -> None:
     for entry, values in plans:
         try:
-            request("vault_restore_static", entry=entry, values=values)
+            request(operation, entry=entry, values=values)
             restored.append((entry, values))
         except (CredentialError, SecretStoreError) as error:
             failed.append((entry, sorted(values), str(error)))
 
 
-def _restore_late(request: Callable, late: list, marked: dict, restored: list, failed: list) -> str:
-    """The agent refuses a field the marker names, so fields under a migrated sign-in's name come
-    back only after everything else did and the marker is cleared; if one fails, the marker is put
-    back as it was (the scrub names each sign-in again; the old vault holds no token to remove)."""
-    request("vault_clear_migration_marker")
-    _restore(request, late, restored, failed)
-    if not failed:
-        return ""
-    try:
-        for entry, fields in sorted(marked.items()):
-            for field in sorted(fields):
-                request("vault_scrub_signin", entry=entry, field=field)
-    except (CredentialError, SecretStoreError) as error:
-        return f" The migration marker could not be put back ({error}): run the rollback again at once."
-    return ""
+def _restore_late(request: Callable, late: list, restored: list, failed: list) -> None:
+    """Plan R11, rule 5: fields under a migrated sign-in's name come back through the agent's
+    vault_restore_marked_static, which takes only names the marker holds and leaves the marker as it
+    is. The marker is never cleared before the last step and nothing is scrubbed, so every marked
+    name stays refused to every other caller until the clear, and a stop at any point keeps it."""
+    _restore(request, late, restored, failed, "vault_restore_marked_static")
 
 
 def _rollback(request: Callable, open_store: Callable[[], Any], status: Any, dry_run: bool,
@@ -308,14 +300,10 @@ def _rollback(request: Callable, open_store: Callable[[], Any], status: Any, dry
     if dry_run:
         out(f"Dry run: the rollback would restore these static secrets from the store: {_names(plans + late)}. "
             "Nothing was changed.")
-    restored, warning = [], ""
-    if not dry_run:
+    restored = []
+    if not dry_run:  # ordinary fields, then late fields; the marker is cleared below, only when all succeeded
         _restore(request, plans, restored, failed)
-        if late and not failed:
-            warning = _restore_late(request, late, marked, restored, failed)
-        elif late:
-            failed.extend((e, sorted(v), "under a migrated sign-in's name, restored only once every other entry is")
-                          for e, v in late)
+        _restore_late(request, late, restored, failed)
     for name in signins:
         out(f"{name}: sign in again in the browser; no token is brought back from the store.")
     if failed:
@@ -325,9 +313,9 @@ def _rollback(request: Callable, open_store: Callable[[], Any], status: Any, dry
         return 0 if not failed else 5
     if failed:
         out(f"Restored static secrets from the store: {_names(restored)}. The rollback is not complete: the "
-            "migration marker stays. Settle the entries above, then run the rollback again." + warning)
+            "migration marker stays. Settle the entries above, then run the rollback again.")
         return 5
-    if marked and not late:
+    if marked:  # the last change to the old vault: every restore of both kinds succeeded
         request("vault_clear_migration_marker")
     out(f"Restored static secrets from the store: {_names(restored)}. Switch the secrets store off (enabled false "
         "in secret-store.json) and restart the Vault Agent before using the old vault.")

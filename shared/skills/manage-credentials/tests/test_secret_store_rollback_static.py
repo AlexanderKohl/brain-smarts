@@ -122,8 +122,9 @@ class RollbackWalksTheStore(MigratedStore):
         self.ba.set_json("xero-demo", FIELD, {"note": "plain settings"})
         before = portable_vault.migrated_signins(self.vault.path)
 
-        def refusing(operation, **request):
-            if operation == "vault_restore_static" and request.get("entry") == "xero-demo":
+        def refusing(operation, **request):  # a late field comes back through vault_restore_marked_static
+            if operation in ("vault_restore_static", "vault_restore_marked_static") \
+                    and request.get("entry") == "xero-demo":
                 raise CredentialError("fictional refusal")
             return self.request(operation, **request)
         code, text = self.run_it(refusing)

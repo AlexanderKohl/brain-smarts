@@ -463,7 +463,7 @@ The move to the store is one run, not entry by entry, in this order:
 5. Restart the Vault Agent so it serves the store. A sign-in the run reported as not moved is then
    signed in again in the browser; the sign-ins it moved need nothing.
 
-What fails closed: the agent's scrub, restore-static and marker operations, and its opening of the old
+What fails closed: the agent's scrub, its two static restores and its marker operation, and its opening of the old
 vault with the store on, need a live migration lock; an absent, unreadable or stale lock (its process
 gone, or older than six hours) refuses, and a second migration cannot take a held lock. The legacy
 paths refuse every sign-in named in the marker, store on or off.
@@ -473,7 +473,11 @@ it. Switch the store on without restarting the agent. Run `python migrate_to_sto
 then `python migrate_to_store.py rollback`, then switch the store off; the agent then serves the old
 vault. The rollback also runs under the lock. It restores static secrets only, from the store's current
 value, and clears the marker. It walks every static entry of the store, so an entry or field created
-after the migration comes back too, a static field under a migrated sign-in's name included. The store
+after the migration comes back too, a static field under a migrated sign-in's name included. Its order:
+the ordinary static fields, then the fields under a migrated sign-in's name (an agent operation that
+takes only names the marker holds and leaves the marker as it is), then, only when every restore
+succeeded, the marker is cleared as its last step. It never clears the marker early and never scrubs a
+restored value, so a failure or a stop leaves the marker exactly as it was. The store
 keeps each static field's kind (text or JSON) beside its value, and the rollback restores each field
 at that kind and nothing else. It names each entry it restored and each it could not (a field with no
 recorded kind, a token, or a sign-in the store still holds under that name); one it could not ends
