@@ -102,6 +102,11 @@ def _parser() -> argparse.ArgumentParser:
     sup.add_argument("--confirmation", required=True, help="how the old grant was revoked at the provider")
     sup.add_argument("--group")
     sub.add_parser("grant-scan", help="plain entries holding a grant field").add_argument("--team", action="store_true")
+    unfinished = sub.add_parser("unfinished", help="pending writes kept on this computer (ids, entries, times)")
+    unfinished.add_argument("--team", action="store_true")
+    act = unfinished.add_mutually_exclusive_group()
+    act.add_argument("--apply", metavar="ID", help="write the kept values over the present ones")
+    act.add_argument("--discard", metavar="ID", help="remove the kept values for good (type the id to confirm)")
     return parser
 
 
@@ -215,6 +220,37 @@ def _recovery_package(store) -> int:
     opened.package_error = None
     opened.record_upkeep()
     print(f"Recovery package written: {path}")
+    return 0
+
+
+def _unfinished(store, apply_id, discard_id, confirm) -> int:
+    """Plan section L2: list this computer's pending writes (write id, entry and time, never a value);
+    --apply ID writes the kept values over the present ones through the normal path; --discard ID
+    removes the record after the write id is typed again."""
+    from secret_store.pending import PendingWrites, describe
+    pending = PendingWrites(store.config["checkpoint_dir"], store._identity().x25519)
+    if apply_id:
+        print(f"Stored {store.open().apply_pending(apply_id)} from pending write {apply_id}.")
+        return 0
+    if discard_id:
+        pending.path(discard_id)  # refuses a malformed id
+        if not pending.path(discard_id).exists():
+            print(f"There is no pending write {discard_id} on this computer.")
+            return 1
+        typed = (confirm or input)(f"Type the write id {discard_id} to remove its kept values for good: ")
+        if typed.strip() != discard_id:
+            print("The id did not match; nothing was removed.")
+            return 1
+        pending.remove(discard_id)
+        print(f"Removed pending write {discard_id}.")
+        return 0
+    opened = store.open()
+    records = {i: r for i, r in pending.all().items() if r is None or r["repository"] == opened.policy.repository}
+    if not records:
+        print("No pending writes on this computer.")
+        return 0
+    for write_id, record in records.items():
+        print(describe(write_id, record, None if record is None else opened.pending_state(record) == "held"))
     return 0
 
 
@@ -336,6 +372,8 @@ def main(argv=None, store_factory=None, team_factory=None, ask=None, confirm=Non
                                                   all_from=args.all_from)
             print(f"Every sign-in of the old computer now refreshes on {person}/{computer}; the old computer may "
                   "no longer refresh.")
+        elif args.command == "unfinished":
+            return _unfinished(store, args.apply, args.discard, confirm)
         elif args.command == "grant-scan":
             found = store.open().static_grant_exposures()
             print("No plain entry holds a grant field." if not found else

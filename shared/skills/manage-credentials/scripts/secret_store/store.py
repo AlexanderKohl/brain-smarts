@@ -16,11 +16,12 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 
 from . import canonical, checkpoint, keys, provider_profiles, recovery, recovery_package, signing
 from .accept import accept_commit
+from .accept_rules import RuleRefusal, coded
 from .delete_ops import build_delete
 from .errors import SecretStoreError
 from .policy import (INDEX_PREFIX, Policy, check_endorsement, create_trust_root, fingerprint, load_trust_root,
                      object_hash, public_entry)
-from .repo import Conflict, MovedHead, SecretRepo
+from .repo import Conflict, MovedHead, RefusedCommit, SecretRepo
 from .store_ops import (EMPTY_JSON, GROUP, INDEX_ID, build_put, checkpoint_commit, load_config,
                         not_enrolled_message,
                         marker_current, store_status, write_marker)
@@ -222,9 +223,13 @@ class SecretStore:
                     if not self._settle_unfinished(previous):
                         break  # dropped back to previous: nothing past the checkpoint is followed
                     confirmed = True
-                files = self.repo._changed_files(commit)
-                accepted = accept_commit(policy, cp, files, self._identity().my_keys(),
-                                         self._baseline(cp, files, at=previous))
+                try:
+                    files = self.repo._changed_files(commit)
+                    accepted = accept_commit(policy, cp, files, self._identity().my_keys(),
+                                             self._baseline(cp, files, at=previous))
+                except Exception as error:  # noqa: BLE001 - plan section L: a fixed code, never the text
+                    raise RefusedCommit(commit, getattr(error, "code", None),
+                                        self._safe_oid(error, policy, cp)) from None
                 policy, cp, previous = accepted.policy, accepted.checkpoint, commit
                 accepted_all.append(accepted)
             try:
@@ -251,6 +256,16 @@ class SecretStore:
         except SecretStoreError:
             raise SecretStoreError("an unfinished write is in this computer's local copy and could not be "
                                    "settled; nothing was followed from it, try again") from None
+
+    @staticmethod
+    def _safe_oid(error: BaseException, policy: Policy | None, cp: checkpoint.Checkpoint | None) -> str | None:
+        """The object id of a refusal, only when the store already holds it (an id in the verified
+        checkpoint or policy); an id a commit made up is never shown."""
+        oid = getattr(error, "oid", None)
+        known = set(cp.objects) if cp is not None else set()
+        if policy is not None:
+            known |= set(policy.doc.get("assignments", {})) | set(policy.doc.get("retired", {}))
+        return oid if isinstance(oid, str) and oid in known else None
 
     def _baseline(self, cp: checkpoint.Checkpoint, files: dict, at: str | None = None) -> dict:
         """Latest verified payloads of oauth objects a commit changes (the field-rule baseline)."""
@@ -290,6 +305,7 @@ class SecretStore:
         with self.repo.lock():
             self._follow(clone=True)
             self._sync_locked(pinned, saved)
+            self._replay_pending()
 
     def _sync_locked(self, pinned: Any, saved: checkpoint.Checkpoint | None) -> None:
         if self.policy is None and saved is None and pinned is None and self.repo._fetch() is not None:
@@ -299,11 +315,19 @@ class SecretStore:
         state = {"policy": self.policy, "cp": self.checkpoint, "caught": saved is None or self.checkpoint is not None}
 
         def verify(_commit: str, files: dict) -> bool:
+            try:
+                return check(files)
+            except SecretStoreError as error:  # plan section L: an object id only when it is the store's own
+                error.safe_oid = self._safe_oid(error, state["policy"], state["cp"])
+                raise
+
+        def check(files: dict) -> bool:
             if state["policy"] is None:
                 if set(files) != {"policy.json"} or pinned is None:
-                    raise SecretStoreError("the first commit is not a trust root this computer can pin")
+                    raise RuleRefusal("the first commit is not a trust root this computer can pin", "trust-root")
                 doc = files["policy.json"]
-                root = load_trust_root(doc, pinned(doc) if callable(pinned) else pinned)
+                with coded("trust-root"):
+                    root = load_trust_root(doc, pinned(doc) if callable(pinned) else pinned)
                 state["policy"], state["cp"] = root, checkpoint.initial(root)
             else:
                 accepted = accept_commit(state["policy"], state["cp"], files, self._identity().my_keys(),
@@ -493,6 +517,7 @@ class SecretStore:
 
     # -- writing ------------------------------------------------------------------------------
     def _write(self, build: Callable[[], tuple[dict, str]]) -> None:
+        self.committed = False  # a local commit was made by this write, pushed or not (plan section L2)
         self._ready()  # one repository lock spans sync, build, verify, commit, push and checkpoint
         with self.repo.lock():
             for _attempt in range(1 + RETRIES):
@@ -502,7 +527,9 @@ class SecretStore:
                 accepted = accept_commit(self.policy, self.checkpoint, files, self._identity().my_keys(), baseline)
                 try:
                     written = self.repo.write(files, message, expected_parent=before)
+                    self.committed = self.committed or isinstance(written, Conflict) and bool(self.repo.last_commit)
                 except SecretStoreError as error:
+                    self.committed = self.committed or bool(self.repo.last_commit)
                     if isinstance(error, MovedHead):  # else a lost acknowledgement: settle it with the remote
                         raise
                     written = self.repo.settle_failed_write(before)
@@ -532,13 +559,102 @@ class SecretStore:
             raise SecretStoreError(f"{', '.join(exposed)} is a grant field and never goes in a plain entry; "
                                    "store it as the sign-in's grant field instead")
 
+        record: dict[str, Any] = {}
+
         def build() -> tuple[dict, str]:
             index = self._index(group)
             payload = self.get_record(entry_name, group) if entry_name in index else {}
+            if kind == "static":  # plan section L2: saved and flushed before the first change to the store
+                base = self.checkpoint.objects[index[entry_name]]["revision"] if entry_name in index else None
+                record["id"] = self._pending().save(self.policy.repository, self._group(group), entry_name,
+                                                    fields, base, record.get("id"))
+                self._in_flight.add(record["id"])
+                self.repo.last_commit = None  # a replay during the sync above made its own commit
             payload.update(fields)
             return build_put(self.policy, self.checkpoint.objects, index, entry_name, payload, kind,
                              self._identity().ed25519, self._group(group))
-        self._write(build)
+        try:
+            self._write(build)
+        except BaseException as error:
+            committed = self.committed or bool(self.repo.last_commit)  # a crash skips _write's own note
+            if record and not committed:  # failed before any local commit: nothing to keep
+                self._pending().remove(record["id"])
+            elif record and isinstance(error, SecretStoreError):
+                raise SecretStoreError(f"{error} The typed values of {entry_name} are kept on this computer "
+                                       f"(pending write {record['id']}) and are saved at the next operation of "
+                                       "the store.") from None
+            raise
+        finally:
+            self._in_flight.discard(record.get("id"))
+        if record:
+            self._pending().remove(record["id"])  # confirmed: pushed and checkpointed
+
+    # -- pending-write records (plan section L2) ----------------------------------------------
+    @property
+    def _in_flight(self) -> set:
+        """Write ids this instance is writing now: never replayed as a dead process's record."""
+        if "_flight" not in self.__dict__:
+            self._flight: set = set()
+        return self._flight
+
+    def _pending(self) -> Any:
+        from .pending import PendingWrites
+        return PendingWrites(self.config["checkpoint_dir"], self._identity().x25519)
+
+    def _entry_state(self, entry: str, group: str) -> tuple[int | None, dict | None]:
+        """The revision and fields the entry holds in the held verified state (None, None: absent)."""
+        index = self._index(group)
+        if entry not in index:
+            return None, None
+        return self.checkpoint.objects[index[entry]]["revision"], self.get_record(entry, group)
+
+    def pending_state(self, record: dict) -> str:
+        """'saved' (the entry holds exactly those values), 'replay' (unchanged since the record was
+        built) or 'held' (changed since, or not this store's)."""
+        if record["repository"] != self.policy.repository:
+            return "held"
+        revision, held = self._entry_state(record["entry"], record["group"])
+        if held is not None and all(held.get(k) == v for k, v in record["fields"].items()):
+            return "saved"
+        return "replay" if revision == record["base"] else "held"
+
+    def _replay_pending(self) -> None:
+        """Under the repository lock, after the sync: a record of this repository that no write of
+        this instance holds was left by a process that died (or a push that failed). It is removed
+        when the entry already holds its values, written again through the normal path when the entry
+        is unchanged since, and kept (status names it) when the entry changed or the write is refused."""
+        if self.policy is None or getattr(self, "_replaying", False):
+            return
+        self._replaying, committed = True, getattr(self, "committed", False)
+        try:
+            pending = self._pending()
+            for write_id, record in pending.all().items():
+                if record is None or write_id in self._in_flight or record["repository"] != self.policy.repository:
+                    continue  # damaged: never applied; another repository's: never applied here
+                try:
+                    state = self.pending_state(record)
+                    if state == "replay":
+                        self.put_entry(record["entry"], record["fields"], group=record["group"])
+                        state = "saved"
+                except SecretStoreError:
+                    continue  # kept; status names it
+                if state == "saved":
+                    pending.remove(write_id)
+        finally:
+            self._replaying, self.committed = False, committed  # the enclosing write's own flag
+
+    def apply_pending(self, write_id: str) -> str:
+        """brain_secrets.py unfinished --apply ID: the kept values over the present ones, through
+        the normal write path; returns the entry name."""
+        pending = self._pending()
+        record = pending.read(write_id) if pending.path(write_id).exists() else None
+        if record is None:
+            raise SecretStoreError(f"pending write {write_id} is not on this computer or cannot be read")
+        if record["repository"] != self.policy.repository:
+            raise SecretStoreError(f"pending write {write_id} belongs to another store; run it with or without --team")
+        self.put_entry(record["entry"], record["fields"], group=record["group"])
+        pending.remove(write_id)
+        return record["entry"]
 
     def delete_entry(self, entry_name: str, group: str | None = None) -> None:
         self._write(lambda: build_delete(self.policy, self.checkpoint.objects, self._index(group), entry_name,

@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-11-21T14:31:20+10:00
-updated: 2026-11-21T14:31:20+10:00
+updated: 2026-11-22T09:58:58+10:00
 ---
 
 # Credential paths
@@ -158,11 +158,12 @@ e start or configure the agent. `mc/` is this skill's `scripts/`, `lib/` the ski
 | 50 | `mc/token_endpoint.py` `post_token` | c | not sent, refused and uncertain decided by fact; https only; never retried | – | OK |
 | 51 | `mc/migration_lock.py` | b (lock file) | exclusive; an absent, dead, old or malformed lock refuses | – | OK |
 | 52 | `brain_secrets.py replace-signin` | b, d | the refresher that is an administrator; a refresher that is not an administrator changes nothing and gets the step, the ordinary `delete` by an administrator (exit 3), and is refused with `--even-if-working`; an administrator that is not the refresher is refused, naming `delete`; settings kept in an encrypted hand-over file; one commit retires both ids; a failed push changes nothing; the old refresher discards its record of the retired grant | – | OK |
+| 53 | `brain_secrets.py unfinished [--team] [--apply ID \| --discard ID]`, `secret_store/pending.py` | a, b | pending-write records of typed static fields, encrypted to this computer's key beside the journal; listed by write id, entry and time, never a value; `--apply` writes through the normal store path; `--discard` removes a record after its id is typed; a damaged record or one of another repository is never applied; nothing is read from or sent to the vault | same | OK |
 
 Tests: rows 1 to 11 and 29 to 31 in `tests/test_secret_store_*.py`; rows 13 to 28 in `test_secret_store_round8.py`
 and `test_secret_store_round9.py`, and row 15 also in `test_secret_store_rollback_static.py`; rows 4, 8 and 52 in `test_secret_store_restore_cli.py`,
 `test_secret_store_replace_signin.py` and `test_secret_store_replace_team.py`; rows 30 and 50 in
-`test_token_endpoint.py`; rows 35 to 47 in `test_secret_store_connectors.py` and each library skill's own tests.
+`test_token_endpoint.py`; row 53 in `test_secret_store_two_processes.py`; rows 35 to 47 in `test_secret_store_connectors.py` and each library skill's own tests.
 
 ## Open
 

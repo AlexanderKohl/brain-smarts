@@ -10,6 +10,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import re
 import subprocess
 import threading
 import time
@@ -17,6 +18,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterator
 
 from . import canonical
+from .accept_rules import REFUSAL_CODES, RuleRefusal
 from .errors import SecretStoreError
 
 BRANCH = "main"
@@ -30,22 +32,34 @@ _ANY = object()
 _HELD: dict[tuple[str, int], int] = {}  # (clone, thread) -> nesting depth of the lock
 
 
-SHAPE_RULE = "the commit has more than one parent or a subject outside the allowed set"
-_REASON_LIMIT = 300
+_SAFE_ID = re.compile(r"[A-Za-z0-9_-]{1,140}")
+_COMMIT_ID = re.compile(r"[0-9a-f]{40,64}")
+
+
+def refusal_text(code: Any, oid: Any = None) -> str:
+    """The fixed text of a rule code from the closed list REFUSAL_CODES (plan section L), with an
+    object id only when the store checked it is one of its own; never text taken from a commit,
+    from Git's output or from an exception."""
+    code = code if code in REFUSAL_CODES else "unclassified"
+    where = f", object {oid}" if isinstance(oid, str) and _SAFE_ID.fullmatch(oid) else ""
+    return f"{REFUSAL_CODES[code]} (rule {code}{where})"
 
 
 class RefusedCommit(SecretStoreError):
-    """A remote commit failed verification. Names the commit and the rule that refused it (the
-    verifier's message: ids, groups, people and field names, never a value), never the content."""
+    """A commit failed verification. Names the commit, a fixed rule code and at most an object id
+    the store checked is its own (safe_oid), never a pathname, a value or other text."""
 
-    def __init__(self, commit: str, reason: str | None = None) -> None:
-        self.commit, self.reason = commit, refusal_reason(reason)
+    def __init__(self, commit: str, code: Any = None, oid: Any = None) -> None:
+        self.commit = commit
+        self.code = code if code in REFUSAL_CODES else "unclassified"
+        self.oid = oid if isinstance(oid, str) and _SAFE_ID.fullmatch(oid) else None
+        self.reason = refusal_text(self.code, self.oid)
         super().__init__(f"remote commit {commit} was refused by verification: {self.reason}")
 
 
-def refusal_reason(reason: Any) -> str:
-    text = " ".join(str(reason or "").split())[:_REASON_LIMIT]
-    return text or "the verifier gave no reason"
+def refusal_of(error: BaseException) -> tuple[str, str | None]:
+    """The code of a verifier's error and the object id the store marked safe on it (safe_oid)."""
+    return getattr(error, "code", "unclassified"), getattr(error, "safe_oid", None)
 
 
 class MovedHead(SecretStoreError):
@@ -235,14 +249,14 @@ class SecretRepo:
         commits = self._out("rev-list", "--reverse", "--topo-order", span).split()
         for commit in commits:
             if not self._shape_ok(commit):
-                self._refuse(commit, SHAPE_RULE)
-            reason = None
+                self._refuse(commit, "commit-shape")
+            code = oid = None
             try:
                 accepted = verify(commit, self._changed_files(commit))
-            except SecretStoreError as error:
-                accepted, reason = False, str(error)
+            except Exception as error:  # noqa: BLE001 - any failure refuses; only its fixed code is kept
+                accepted, (code, oid) = False, refusal_of(error)
             if accepted is not True:
-                self._refuse(commit, reason)
+                self._refuse(commit, code, oid)
             self._advance(commit)
             if advanced is not None:
                 advanced(commit)
@@ -269,12 +283,13 @@ class SecretRepo:
         commits = self._out("rev-list", "--reverse", "--topo-order", f"{start}..{head}").split()
         for commit in commits:
             if not self._shape_ok(commit):
-                raise RefusedCommit(commit, SHAPE_RULE)
+                raise RefusedCommit(commit, "commit-shape")
         return commits
 
-    def _refuse(self, commit: str, reason: str | None = None) -> None:
-        self._set_state(refused=commit, reason=refusal_reason(reason))
-        raise RefusedCommit(commit, reason)
+    def _refuse(self, commit: str, code: str | None = None, oid: str | None = None) -> None:
+        refused = RefusedCommit(commit, code, oid)
+        self._set_state(refused=commit, code=refused.code, **({"object": refused.oid} if refused.oid else {}))
+        raise refused
 
     def _changed_files(self, commit: str) -> dict[str, Any]:
         raw = self._git("diff-tree", "--root", "--no-commit-id", "-r", "-z", "--name-status",
@@ -285,7 +300,7 @@ class SecretRepo:
             blob = None if status == "D" else self._git("cat-file", "blob", f"{commit}:{name}").stdout
             if name == GITATTRIBUTES:
                 if blob != GITATTRIBUTES_BYTES:
-                    raise SecretStoreError(".gitattributes changed")
+                    raise RuleRefusal(".gitattributes changed", "commit-attributes")
                 continue
             files[name] = None if blob is None else canonical.loads(blob)
         return files
@@ -299,9 +314,13 @@ class SecretRepo:
             self._git("read-tree", "-u", "-m", old, commit)
         self._git("update-ref", f"refs/heads/{BRANCH}", commit, *(([old]) if old else []))
 
+    last_commit: str | None = None  # the local commit the last write made, pushed or not (plan section L2)
+
     def write(self, change: dict[str, Any], message: str, expected_parent: Any = _ANY) -> "str | Conflict":
         """One change, one commit on the verified remote head, pushed without force. With
-        expected_parent (the head the change was built and verified on), refuse when the head moved."""
+        expected_parent (the head the change was built and verified on), refuse when the head moved.
+        last_commit names the local commit once it exists, whatever happens to its push."""
+        self.last_commit = None
         if message not in ALLOWED_MESSAGES:
             raise SecretStoreError("commit message is not in the allowed set")
         if not change:
@@ -332,7 +351,7 @@ class SecretRepo:
             if commit_result.returncode != 0:
                 self._clean(local)
                 raise SecretStoreError("nothing to commit or commit failed")
-            new = self.head()
+            new = self.last_commit = self.head()
             push = self._git("push", "--quiet", "--porcelain", REMOTE,
                              f"refs/heads/{BRANCH}:refs/heads/{BRANCH}", check=False)
             if push.returncode != 0:
@@ -410,8 +429,9 @@ class SecretRepo:
         state = self._state()
         refused = state.get("refused")
         if refused:
-            return (f"Refused at commit {refused}: a remote change failed verification "
-                    f"({refusal_reason(state.get('reason'))}); nothing after it is used.")
+            commit = refused if isinstance(refused, str) and _COMMIT_ID.fullmatch(refused) else "(unknown)"
+            return (f"Refused at commit {commit}: a remote change failed verification "
+                    f"({refusal_text(state.get('code'), state.get('object'))}); nothing after it is used.")
         try:
             with self.lock():  # never races a write or pull on refs/remotes/origin/main
                 remote = self._fetch()

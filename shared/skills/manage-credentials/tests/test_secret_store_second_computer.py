@@ -170,5 +170,26 @@ class RefusalNamesTheRule(SecondComputerCase):
         with self.assertRaisesRegex(RefusedCommit, "must change at least one file"):
             self.store("b").open(pinned)
 
+    def test_a_hostile_pathname_appears_neither_in_the_message_nor_in_the_state_file(self):
+        """Sol round 10, low: a fixed rule code and the commit id only, never text from the commit."""
+        _personal, pinned = self.init()
+        hostile = "fictional-token-abcdefghij"
+        side = self.root / "side"
+        git("clone", "--quiet", str(self.bare), str(side), cwd=self.root)
+        (side / f"{hostile}.json").write_text("{}", "utf-8")
+        git("add", f"{hostile}.json", cwd=side)
+        git("commit", "--quiet", "-m", "update", cwd=side)
+        git("push", "--quiet", "origin", "main", cwd=side)
+        with self.assertRaises(RefusedCommit) as caught:
+            self.store("b").open(pinned)
+        self.assertEqual(caught.exception.code, "commit-path")
+        self.assertIn("rule commit-path", str(caught.exception))
+        self.assertNotIn(hostile, str(caught.exception))
+        clone = self.root / "b" / "clone"
+        self.assertNotIn(hostile, (clone / ".git" / "secret-store-state.json").read_text("utf-8"))
+        status = SecretRepo(clone, str(self.bare)).status()
+        self.assertIn("commit-path", status)
+        self.assertNotIn(hostile, status)
+
 if __name__ == "__main__":
     unittest.main()
