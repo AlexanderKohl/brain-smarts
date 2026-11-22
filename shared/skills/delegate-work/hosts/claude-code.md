@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-15T07:45:00+10:00
-updated: 2026-11-16T15:38:27+10:00
+updated: 2026-11-22T10:48:05+10:00
 owner: brain-owner
 ---
 
@@ -37,8 +37,22 @@ tokens in this session's context, the window size and the percentage at which au
 starts. Read it before every `new-run` and `new-packet` and pass the token figure as
 `--context-tokens`; state it in the dispatch line. In the terminal CLI the status line can show
 the same figure; when no reading is available, pass `--context-unknown "<reason>"`. After a
-compaction the app runs the brain's `SessionStart` hook for the `compact` matcher, which prints
-the session id and the `checkpoint-done` command; dispatching is refused until it has run.
+compaction the app runs the brain's `SessionStart` hook for the `compact` matcher, which tells the
+thread to open its next reply to the owner by saying it was compacted and when, and to end that
+reply with the handover prompt and the offer of a new thread; it also prints the session id and the
+`checkpoint-done` command, and dispatching is refused until that has run. Every compaction from
+25 October to 21 November 2026 (57 of 57) shows this hook's `hook_success` record; the host labels
+a command given by its absolute path `command hook` in that record, so count by `hookName`
+(`SessionStart:compact`), not by the command text.
+
+Before a compaction, the `UserPromptSubmit` hook `hooks.py context-check` reads the size of the
+thread's context from the last assistant record of its transcript (the last 256 kB only). Below
+the threshold it says nothing; at or above it, once per 50 000 further tokens, it tells the thread
+to finish the current step, write the checkpoint and end the reply with the handover prompt and
+the context size. The threshold is `context_warn_tokens` in
+`/memory/skills/repository-preflight/config/context-guard.json`, else 70 % of the largest
+context before an earlier compaction of the session, else 600 000. Every hook exits 0 whatever
+fails, because a failed hook can block a compaction and end the thread.
 
 ## Procedure
 

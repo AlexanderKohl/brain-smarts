@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-23T13:00:00+10:00
-updated: 2026-09-23T15:02:27+10:00
+updated: 2026-11-22T10:48:05+10:00
 owner: brain-owner
 ---
 
@@ -51,7 +51,8 @@ stale when rules are renumbered.
   project's `AGENTS.md` or `CLAUDE.md`): keep the front matter, remove the `template-` prefix
   from `id`, drop `install_to`, and set `created` and `updated` to the install time.
 - **Settings files:** merge into an existing file key by key; never overwrite a file the person
-  already has. `/SETUP.md` step F gives the merge command for JSON and the placement rule for
+  already has. `host_wiring.py` adds a template hook to an event only when the event does not run that
+  command yet, and keeps every hook the person has. `/SETUP.md` step F gives the merge command for JSON and the placement rule for
   TOML. JSON has no comments, so the reasons for each entry are in `/SETUP.md` step F. The allow
   list names `python -m unittest`, the runner every shared skill's tests use.
 
@@ -63,7 +64,7 @@ Alphabetical by file name.
 |---|---|---|
 | `claude-code-user.CLAUDE.template.md` | `~/.claude/CLAUDE.md` | Pointer |
 | `claude-code.settings.local.template.json` | `<BRAIN_ROOT>/.claude/settings.local.json`, and each project repository's `.claude/settings.local.json` | Settings – routine allow list |
-| `claude-code.user-settings.template.json` | merged into `~/.claude/settings.json` | Settings – deny and ask lists, default mode |
+| `claude-code.user-settings.template.json` | merged into `~/.claude/settings.json` | Settings – deny and ask lists, default mode, and the per-prompt context check (`hooks.UserPromptSubmit`, the brain's `hooks.py context-check` by its absolute path, so a session opened in a project repository is warned too) |
 | `codex-user.AGENTS.template.md` | `~/.codex/AGENTS.md` | Pointer |
 | `codex.config.template.toml` | merged into `~/.codex/config.toml` | Settings – approval and sandbox |
 | `cursor-cli.cli-config.template.json` | merged into `~/.cursor/cli-config.json` | Settings – Cursor CLI allow and deny lists |
