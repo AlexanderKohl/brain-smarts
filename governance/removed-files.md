@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-28T07:43:53+10:00
-updated: 2026-10-27T16:58:41+10:00
+updated: 2026-11-23T09:50:54+10:00
 owner: brain-owner
 ---
 
@@ -28,3 +28,6 @@ listed here, so every old link still leads somewhere. Rows are in removal order.
 | `/library/skills/release-notes/SKILL.md` | 2026-10-27 | Moved with its whole folder to `/shared/skills/release-notes/` when `SMART-RULE-0046` made it a core skill (proposal `PROPOSAL-promote-owner-rules`) |
 | `/library/skills/product-feedback/SKILL.md` | 2026-10-27 | Moved with its whole folder to `/shared/skills/product-feedback/` when `SMART-RULE-0048` made it a core skill (proposal `PROPOSAL-promote-owner-rules`) |
 | `/library/skills/release-notes/scripts/release_notes.py` | 2026-10-27 | Moved to `/shared/skills/release-notes/scripts/release_notes.py` with its skill (proposal `PROPOSAL-promote-owner-rules`) |
+| `/.claude/agents/worker-sonnet-medium.md` | 2026-11-23 | Renamed to `/.claude/agents/worker-no-judgement.md` with its content unchanged: a worker type is named after its rung of the delegate-work ladder on every host (the owner, 23 November 2026) |
+| `/.claude/agents/worker-opus-medium.md` | 2026-11-23 | Renamed to `/.claude/agents/worker-bounded-judgement.md` with its content unchanged: a worker type is named after its rung of the delegate-work ladder on every host (the owner, 23 November 2026) |
+| `/.claude/agents/worker-fable-medium.md` | 2026-11-23 | Renamed to `/.claude/agents/worker-open-judgement.md` with its content unchanged: a worker type is named after its rung of the delegate-work ladder on every host (the owner, 23 November 2026) |
