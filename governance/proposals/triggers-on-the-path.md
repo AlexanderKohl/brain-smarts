@@ -4,14 +4,14 @@ title: Rules that depend on being noticed get a trigger on the path
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: draft
+status: implemented
 owner: brain-owner
 created: 2026-11-22T10:33:17+10:00
-updated: 2026-11-22T10:33:17+10:00
-rule_id: null
-accepted_by: null
-accepted_at: null
-implemented_at: null
+updated: 2026-11-22T12:48:22+10:00
+rule_id: SMART-RULE-0007, SMART-RULE-0016, SMART-RULE-0018, SMART-RULE-0019
+accepted_by: brain-owner
+accepted_at: 2026-11-22T12:45:45+10:00
+implemented_at: 2026-11-22T12:48:22+10:00
 previous_contract_version: 3.2.0
 new_contract_version: 3.3.0
 target_files:
@@ -262,4 +262,8 @@ created remain ordinary tasks.
 
 ## Acceptance
 
-Not yet accepted.
+Accepted by the owner on 22 November 2026. The owner's record is kept in their memory.
+
+## Implementation record
+
+Implemented on 22 November 2026: parts A, B, C, D, F and G as worded above, the contract at 3.3.0, the two core files regenerated; part E with the preflight check that enforces it.
