@@ -88,6 +88,22 @@ class HostWiringTest(unittest.TestCase):
         self.assertIn("conflict", out)
         self.assertIn("defaultMode", out)
 
+    def test_user_settings_carry_the_context_check_with_an_absolute_script_path(self) -> None:
+        target = self.home / ".claude" / "settings.json"
+        target.parent.mkdir(parents=True)
+        mine = {"matcher": "Bash", "hooks": [{"type": "command", "command": "example-filter"}]}
+        target.write_text(json.dumps({"hooks": {"PostToolUse": [mine]}}), encoding="utf-8")
+        self.assertEqual(self.cli("apply", "--host", "claude-code")[0], 0)
+        hooks = self.settings()["hooks"]
+        self.assertEqual(hooks["PostToolUse"], [mine])                       # the person's hook is kept
+        command = f'python "{self.root.as_posix()}/shared/skills/repository-preflight/scripts/hooks.py" context-check'
+        self.assertEqual(hooks["UserPromptSubmit"], [{"hooks": [{"type": "command", "command": command}]}])
+        self.assertTrue(Path(command.split('"')[1]).is_absolute())
+        code, out = self.cli("apply", "--host", "claude-code")
+        self.assertEqual(code, 0)
+        self.assertEqual(len(self.settings()["hooks"]["UserPromptSubmit"]), 1)   # never added twice
+        self.assertNotIn("settings.json", " ".join(l for l in out.splitlines() if "merge" in l))
+
     def test_second_apply_unchanged_and_backup_once(self) -> None:
         pointer = self.home / ".claude" / "CLAUDE.md"
         pointer.parent.mkdir(parents=True)

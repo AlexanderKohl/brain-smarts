@@ -63,13 +63,38 @@ def _plain(path: Path, kind: str, content: str) -> Item:
     return Item(path, kind, content, "create" if old is None else "unchanged" if old == _norm(content) else "replace")
 
 
+def _commands(entries: list) -> set[str]:
+    return {h.get("command") for e in entries if isinstance(e, dict)
+            for h in e.get("hooks", []) if isinstance(h, dict)}
+
+
+def merge_hooks(merged: dict, template_hooks: dict | None) -> list[str]:
+    """Add each template hook entry whose command the event does not run yet; keep every hook the
+    person has. Returns a conflict line when the person's `hooks` cannot take the entries."""
+    if not template_hooks:
+        return []
+    hooks = merged.setdefault("hooks", {})
+    if not isinstance(hooks, dict):
+        return [f"hooks: kept {json.dumps(hooks)}, template adds {', '.join(sorted(template_hooks))}"]
+    conflicts = []
+    for event, entries in template_hooks.items():
+        current = hooks.setdefault(event, [])
+        if not isinstance(current, list):
+            conflicts.append(f"hooks.{event}: kept {json.dumps(current)}, template has {json.dumps(entries)}")
+            continue
+        current += [e for e in entries if not _commands([e]) <= _commands(current)]
+    return conflicts
+
+
 def _json_item(path: Path, template: Path, mapping: dict[str, str]) -> Item:
     data = merge.fill(json.loads(template.read_text(encoding="utf-8")), mapping)
+    template_hooks = data.pop("hooks", None)     # hooks merge per event and command, not as one value
     old = _read(path)
     existing = json.loads(old) if old is not None and old.strip() else None
     if existing is not None and not isinstance(existing, dict):
         raise ValueError(f"{path}: not a JSON object")
     merged, conflicts = merge.merge_json(existing, data)
+    conflicts += merge_hooks(merged, template_hooks)
     action = "create" if old is None else "unchanged" if merged == existing else "merge"
     return Item(path, "json", merge.dump_json(merged), action, conflicts)
 
