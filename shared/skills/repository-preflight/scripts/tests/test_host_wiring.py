@@ -247,6 +247,25 @@ class HostWiringTest(unittest.TestCase):
         self.assertEqual(out.count("your own agent, kept"), 2)
         self.assertTrue((self.home / ".codex" / "agents" / "worker-open-judgement.toml").is_file())
 
+    def test_old_named_claude_copies_are_listed_for_removal_and_removed_only_on_apply(self) -> None:
+        agents = self.home / ".claude" / "agents"
+        agents.mkdir(parents=True)
+        old = agents / "worker-sonnet-medium.md"
+        old.write_text("---\nname: worker-sonnet-medium\n---\nBody\n", encoding="utf-8")
+        mine = agents / "worker-opus-medium.md"
+        mine.write_text("---\nname: my-own-agent\n---\nMine\n", encoding="utf-8")
+        code, out = self.cli("plan", "--host", "claude-code")
+        self.assertEqual(code, 0, out)
+        self.assertIn(f"remove    {old}", out)
+        self.assertNotIn(str(mine), out)
+        self.assertTrue(old.is_file())
+        code, out = self.cli("apply", "--host", "claude-code")
+        self.assertEqual(code, 0, out)
+        self.assertFalse(old.exists())
+        self.assertTrue(list(agents.glob("worker-sonnet-medium.md.bak-*")))
+        self.assertTrue(mine.is_file())
+        self.assertNotIn("remove ", self.cli("plan", "--host", "claude-code")[1])
+
     def test_cursor_plan_lists_agents_and_writes_no_hooks(self) -> None:
         self.add_worker_types()
         code, out = self.cli("plan", "--host", "cursor")

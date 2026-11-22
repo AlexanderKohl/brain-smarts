@@ -20,7 +20,7 @@ class Item:
     path: Path
     kind: str                       # pointer | copy | json | toml
     content: str                    # the text to write
-    action: str                     # create | replace | merge | unchanged | keep | skip (never written)
+    action: str                     # create | replace | merge | remove | unchanged | keep | skip (remove deletes on apply only)
     conflicts: list[str] = field(default_factory=list)
 
 
@@ -162,6 +162,24 @@ def _agents(source: Path, pattern: str, dest: Path, name_of) -> list[Item]:
     return items
 
 
+# The first Claude Code worker types were named for their models; they now carry the rung names every
+# host uses. A copy under the old name in ~/.claude/agents is the brain's own, left from an earlier apply.
+OLD_CLAUDE_AGENTS = ("worker-sonnet-medium", "worker-opus-medium", "worker-fable-medium")
+
+
+def _old_claude_agents(dest: Path) -> list[Item]:
+    """One `remove` item for each old-named brain copy in the person's agents folder. A file of that name
+    whose `name` field says otherwise is the person's own and is not listed. Nothing is deleted by plan."""
+    items = []
+    for old in OLD_CLAUDE_AGENTS:
+        path = dest / f"{old}.md"
+        text = _read(path)
+        if text is not None and _md_name(text) == old:
+            items.append(Item(path, "copy", "", "remove",
+                              [f"{path}: old name of a brain worker type, replaced by the rung names; apply removes it"]))
+    return items
+
+
 def codex_hooks(root: Path) -> list[tuple[str, str | None, str, str]]:
     """(event, matcher, command, subcommand) of the brain's PreCompact and SessionStart hooks, from the
     one event list hooks.py keeps (hooks/events.json). Codex uses the same event names, matchers and
@@ -189,6 +207,7 @@ def build(root: Path, home: Path, hosts: list[str], level: str) -> list[Item]:
         items.append(_plain(home / ".claude" / "CLAUDE.md", "pointer", merge.fill(body, md)))
         for agent in sorted((root / ".claude" / "agents").glob("worker-*.md")):
             items.append(_plain(home / ".claude" / "agents" / agent.name, "copy", agent.read_text(encoding="utf-8")))
+        items += _old_claude_agents(home / ".claude" / "agents")
         if settings:
             items.append(_json_item(home / ".claude" / "settings.json", tpl / "claude-code.user-settings.template.json", md))
         if level == "routine":

@@ -39,7 +39,7 @@ def find_root(start: Path) -> Path | None:
 
 def backup_path(item: files.Item, stamp: str) -> Path | None:
     """The backup this item needs: the file exists, will change, and none exists for the date."""
-    if item.action not in WRITES or item.action == "create" or not item.path.exists():
+    if item.action not in WRITES + ("remove",) or item.action == "create" or not item.path.exists():
         return None
     target = item.path.with_name(f"{item.path.name}.bak-{stamp}")
     return None if target.exists() else target
@@ -59,7 +59,11 @@ def run(command: str, items: list[files.Item]) -> None:
     stamp = date.today().strftime("%Y%m%d")
     for item in items:
         backup = backup_path(item, stamp)
-        if command == "apply" and item.action in WRITES:
+        if command == "apply" and item.action == "remove":
+            if backup:
+                shutil.copy2(item.path, backup)
+            item.path.unlink()
+        elif command == "apply" and item.action in WRITES:
             if backup:
                 shutil.copy2(item.path, backup)
             item.path.parent.mkdir(parents=True, exist_ok=True)
@@ -69,7 +73,7 @@ def run(command: str, items: list[files.Item]) -> None:
         note = f"backup {backup}" if backup else "no backup"
         print(f"{'done ' if command == 'apply' else ''}{item.action:<9} {item.path}  ({note})")
         for conflict in item.conflicts:
-            print(f"  conflict, kept yours: {conflict}")
+            print(f"  {'note' if item.action == 'remove' else 'conflict, kept yours'}: {conflict}")
 
 
 def main(argv: list[str]) -> int:
