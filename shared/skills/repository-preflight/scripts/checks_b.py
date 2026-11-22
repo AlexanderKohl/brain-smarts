@@ -74,3 +74,47 @@ def validate_knowledge_review_dates(root: Path, errors: list[str], today: date |
                         shown = str(path.relative_to(root)).replace("\\", "/")
                         errors.append(f"/{shown}:{number}: knowledge past its review date {when}; confirm, "
                                       f"re-date or supersede it (RULE-2026-0045)")
+
+
+LEARNING_VIEWS_SCRIPT = ("shared", "skills", "learning-maintenance", "scripts", "learning_views.py")
+LEARNING_VIEWS_COMMAND = "python shared/skills/learning-maintenance/scripts/learning_views.py build"
+
+
+def load_learning_views(root: Path):
+    """Import the learning-maintenance generator from the brain root; never copy its logic (SMART-RULE-0018)."""
+    import importlib.util
+    path = root.joinpath(*LEARNING_VIEWS_SCRIPT)
+    spec = importlib.util.spec_from_file_location("learning_views_for_preflight", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def validate_learning_views(root: Path, errors: list[str], loader=None) -> None:
+    """SMART-RULE-0028: the learning index and board equal a fresh build, apart from the derivation stamp."""
+    if not (root / "memory").is_dir():
+        return
+    try:
+        views_module = (loader or load_learning_views)(root)
+        folder = root / views_module.LEARNING_DIR
+        if not folder.is_dir():
+            return
+        views, problems = views_module.build_views(root)
+        for name, body in views.items():
+            path = folder / name
+            shown = "/" + path.relative_to(root).as_posix()
+            try:
+                committed = views_module.read_file(path)
+            except (OSError, UnicodeDecodeError) as exc:
+                errors.append(f"{shown}: the learning view cannot be read ({exc}); rebuild it with {LEARNING_VIEWS_COMMAND} (SMART-RULE-0028)")
+                continue
+            fresh = views_module.render(name, body, views_module.existing_created(path, "-"), "-")
+            diff = views_module.first_difference(committed, fresh)
+            if diff:
+                errors.append(f"{shown}: the learning view differs from a fresh build at line {diff[0]}; "
+                              f"rebuild it with {LEARNING_VIEWS_COMMAND} (SMART-RULE-0028)")
+        for problem in problems:
+            errors.append(f"/memory learning records: {problem}; the views cannot be built cleanly (SMART-RULE-0028)")
+    except Exception as exc:  # a generator that cannot be imported or raises is one error, never a traceback
+        errors.append(f"the learning views could not be checked: {type(exc).__name__}: {exc}; "
+                      f"run {LEARNING_VIEWS_COMMAND} to see why (SMART-RULE-0028)")
