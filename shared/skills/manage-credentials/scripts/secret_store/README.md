@@ -115,7 +115,8 @@ python brain_secrets.py status
 python brain_secrets.py list [--group ops]
 python brain_secrets.py put --entry "Example API" --secret api_key [--empty-json settings] [--group ops]
 python brain_secrets.py get-check --entry "Example API"       field names only
-python brain_secrets.py delete --entry "Example API"          type the name to confirm
+python brain_secrets.py delete --entry "Example API"          type the name to confirm; the whole entry
+python brain_secrets.py delete --entry "Example API" --field F   administrator: that one sign-in only
 python brain_secrets.py recovery-package [--team]
 python brain_secrets.py restore [--team] --package FILE --target EMPTY_FOLDER   words in the masked window
 python brain_secrets.py enrol-request [--team] --fingerprint F     new computer
@@ -158,14 +159,22 @@ next browser sign-in under the same name gets the kept settings. `status` report
 whose sign-in was never completed. On a refresher whose key is not an administrator's (a team member
 who became refresher through a handover) an uncertain sign-in is not replaced there: the command
 changes nothing, names the administrator's step and exits 3, and the `calling` journal record keeps
-refusing every refresh of it, offline, from a stale copy and across restarts. The step is the ordinary
-deletion of design section 7: an administrator runs `delete --entry E --group G` on their own computer
-(one commit retiring the oauth and grant ids), signs in again in the browser and hands the new sign-in
-back with `handover-release` and `handover-accept`. `--even-if-working` on such a refresher is refused
-(a working sign-in moves by the cooperative handover), and `replace-signin` on an administrator's
-computer that is not the refresher is refused, naming the delete command; neither writes a hand-over
-file. The old refresher's next operation (`replace_ops.discard_retired`, called by the agent) removes
-its journal record of the exact retired grant; a record held by a refresh still in flight is left until
+refusing every refresh of it, offline, from a stale copy and across restarts. The step is the deletion
+of that one sign-in (design section 7): an administrator runs `delete --entry E --field F --group G` on
+their own computer, signs in again in the browser and hands the new sign-in back with
+`handover-release` and `handover-accept`. `delete --field` makes the same one commit `replace-signin`
+makes (`delete_ops.build_signin_delete`, through `replace_ops._delete`): the tombstones of the sign-in's
+oauth and grant objects, the index without their two names, and the policy without its refresher
+mapping and with both ids retired. The pair is the one the store's lookup returns for `E` and `F`, never
+a scan of names, so the entry's plain fields, its other sign-ins and every other entry stay out of the
+commit. A field that names no sign-in, a computer that is not an administrator's and a typed name that
+does not match are refused with nothing written. `delete --entry E` without `--field` still deletes the
+whole entry, its static object and every sign-in under it. `--even-if-working` on such a refresher is
+refused (a working sign-in moves by the cooperative handover), and `replace-signin` on an
+administrator's computer that is not the refresher is refused, naming the `delete --field` command;
+neither writes a hand-over file. The old refresher's next operation (`replace_ops.discard_retired`,
+called by the agent) removes its journal record of the exact retired grant; a record held by a refresh
+still in flight is left until
 that refresh ends, and its late answer is refused at publication, never retried.
 `recovery-package --team` writes the team package; an unwritable
 folder warns, writes the upkeep-error file and exits 1, as for the personal package.
@@ -213,7 +222,11 @@ only authority at rollback. The migration records the old vault's kind; `put` re
 `--empty-json` field `json`); `set_text` records `text` and `set_json` `json`; every partial update (a
 new field, a placeholder or grant field leaving the object) keeps the kinds of the other fields. Only
 `text` and `json` are kinds, a `json` field's text must be a JSON object, and malformed or unknown kind
-data is refused before use. An object written before this change has no kinds: it reads as before, any
+data is refused before use. A payload is the wrapper only when its `schema` is an integer and not a
+boolean, and then it must be exactly that wrapper; any other integer `schema` is refused. Every other
+payload is an object written before this change, whose values are all text, a field named `schema`
+included (it becomes one more entry of `values` at the next write). Every reader goes through
+`static_fields.split`. An object written before this change has no kinds: it reads as before, any
 write records kinds for the fields it writes, and the rollback refuses a field without one, naming the
 entry and the fix (store the entry again). This affects only stores made before this change. The
 payload is inside the envelope, so the acceptance rules are unchanged. A static field under a migrated sign-in's name is restored, not skipped: the agent refuses a

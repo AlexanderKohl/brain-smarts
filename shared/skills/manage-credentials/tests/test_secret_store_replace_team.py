@@ -1,8 +1,8 @@
 """Ending a team sign-in whose refresher is a team member who is not an administrator (Sol round 10,
 high 2; follow-up plan M2). There is no replace-signin --for: the member's uncertain sign-in stays
 blocked by its own calling journal record, which refuses every refresh and survives restarts, and
-an administrator ends it with the store's ordinary deletion (brain_secrets.py delete, design
-section 7), signs in again and hands the new sign-in back. The member's agent discards the journal
+an administrator deletes exactly that sign-in (brain_secrets.py delete --field, design section 7,
+plan R11 rule 3), signs in again and hands the new sign-in back. The member's agent discards the journal
 record of the exact retired grant. Two real key sets, bare local repositories, a fake keyring and
 in-process stores only. Every value is fictional."""
 import contextlib
@@ -25,7 +25,7 @@ ENTRY, FIELD, GROUP = "Ops sign-in", oauth_ops.DEFAULT_FIELD, "ops"
 ACCESS, REFRESH = "fictional-team-access", "fictional-team-refresh"
 AT2, RT2, AT3 = "fictional-team-access-2", "fictional-team-refresh-2", "fictional-team-access-3"
 TENANT = "tenant-ops"
-DELETE = f'brain_secrets.py delete --entry "{ENTRY}" --group {GROUP}'
+DELETE = f'brain_secrets.py delete --entry "{ENTRY}" --field "{FIELD}" --group {GROUP}'
 
 
 class NonAdministratorRefresher(TeamCase):
@@ -68,7 +68,7 @@ class NonAdministratorRefresher(TeamCase):
         stack.close()
 
     def delete(self):
-        code, text = self.cli(["delete", "--entry", ENTRY, "--group", GROUP], self.admin)
+        code, text = self.cli(["delete", "--entry", ENTRY, "--field", FIELD, "--group", GROUP], self.admin)
         self.assertEqual(code, 0, text)
         policy = self.admin.policy.doc
         for oid in (self.signin.oauth_id, self.signin.grant_id):  # both ids in the one deletion commit

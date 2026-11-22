@@ -626,7 +626,13 @@ class SecretStore:
                              self._identity().ed25519, self._group(group))
         self._write(build, typed=typed)
 
-    def delete_entry(self, entry_name: str, group: str | None = None) -> None:
+    def delete_entry(self, entry_name: str, group: str | None = None, field: str | None = None) -> None:
+        """The whole entry (its static object and every sign-in under it), or with field exactly the
+        sign-in of entry_name under field, by an administrator (replace_ops.delete_signin, plan R11)."""
+        if field is not None:
+            from .replace_ops import delete_signin
+            delete_signin(self, entry_name, field, group)
+            return
         self._write(lambda: build_delete(self.policy, self.checkpoint.objects, self._index(group), entry_name,
                                          self._identity().ed25519))
 
