@@ -63,6 +63,7 @@ Alphabetical, in `/shared/skills/manage-credentials/scripts/secret_store/`:
 - `enrol.py`: the enrolment protocol.
 - `handover.py`: the cooperative handover of a sign-in's refresher.
 - `journal.py`: the refresh journal and the per-entry lock.
+- `pending.py`: pending-write records of typed static fields.
 - `keys.py`: key pairs and the keychain allowlist.
 - `oauth_ops.py`, `provider_profiles.py`, `provider_profiles.json`: rotating sign-ins and provider profiles.
 - `policy.py`: the signed policy and trust root.
@@ -128,6 +129,7 @@ python brain_secrets.py handover-release --entry E --to PERSON/COMPUTER [--group
 python brain_secrets.py handover-accept --entry E [--group ops]   an administrator's computer
 python brain_secrets.py replace-signin E [--field F] [--group ops] [--even-if-working]   refresher
 python brain_secrets.py replace-signin E [--field F] --group ops --for PERSON/COMPUTER   administrator, for the refresher
+python brain_secrets.py unfinished [--team] [--apply ID | --discard ID]   pending writes kept here
 python migrate_to_store.py --dry-run               names only; then without it, [--replace]
 python migrate_to_store.py rollback [--dry-run]    static secrets back to the old vault
 ```
@@ -221,6 +223,37 @@ only, never retried.
 - **Uncertain**: anything else once the request was written (a time-out, a reset, HTTP 5xx, any
   other 4xx including 429, an unreadable answer). The record stays `calling`, the sign-in is
   blocked and is never retried with the old token; `replace-signin` ends it.
+
+## An unfinished write
+
+A write is one local commit, then its push, then this computer's checkpoint. A commit left past the
+checkpoint (a crash before the push, a push that did not complete) is never followed: it is dropped
+from the clone. What a person typed survives through a pending-write record (`pending.py`):
+
+- before the first change to the store, `put_entry` writes the static fields it is about to store,
+  their values, the entry, the group, the repository, the time and the revision the write was built
+  on into `pending/<write id>.pending` beside the refresh journal: written atomically and flushed,
+  encrypted to this computer's key, with the repository and group in the authenticated header;
+- the record is removed only when the write is confirmed (pushed and checkpointed), when the entry
+  already holds exactly those values, or when the command failed before any local commit. A push that
+  fails after the commit keeps it, and the error says the values are kept and saved at the next
+  operation;
+- at every sync (the next operation, by any process on this computer, under the repository lock) a
+  record of that repository is written again through the normal write path when its entry is
+  unchanged since, and removed. When the entry changed since, or the write is refused, nothing is
+  overwritten: the record stays and `status` names its write id, entry and time, never a value.
+  `unfinished` lists the records, `unfinished --apply ID` writes the kept values over the present
+  ones, `unfinished --discard ID` removes the record (type the id to confirm);
+- a damaged or unreadable record, or one for another repository, is never applied; a damaged one is
+  named in status until it is discarded.
+
+A refresh answer is kept by the refresh journal instead; a browser sign-in cut off by a crash is
+done again.
+
+A refused commit is named by a fixed rule code from the closed list `REFUSAL_CODES` in
+`accept_rules.py`, the commit id and at most an object id the store already holds, in the message
+and in the clone's `.git/secret-store-state.json`; never a pathname, Git's output, an exception's
+text or other text from the commit.
 
 ## Switching it on and off
 

@@ -497,6 +497,14 @@ writes a token out of the store, so every migrated sign-in needs a browser sign-
   to choose them again) and the one deletion commit follows. The administrator signs in again in the
   browser there and hands the sign-in back with `handover-release` and `handover-accept`. The old
   refresher's next operation on the entry discards its record of the retired grant.
+- `brain_secrets.py unfinished [--team] [--apply ID | --discard ID]` lists the pending writes kept on this
+  computer by write id, entry and time, never a value. Before a static write changes the store, the typed
+  fields are kept in an encrypted pending-write record beside the refresh journal; it is removed once the
+  write is confirmed, or when the command failed before any local commit. A crash or a failed push keeps
+  it, and the next operation of the store writes it again when the entry is unchanged since. When the entry
+  changed meanwhile nothing is overwritten: `status` names the write, `--apply ID` writes the kept values
+  over the present ones and `--discard ID` removes them (type the id to confirm). A damaged record is never
+  applied. A refused commit is named by a fixed rule code and the commit id, never by text from the commit.
 
 ### A failed refresh
 

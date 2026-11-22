@@ -320,6 +320,28 @@ def not_enrolled_message(store: Any) -> str:
             "personal store; a new person runs init); nothing was changed")
 
 
+def pending_lines(store: Any) -> list[str]:
+    """Plan section L2: one line per pending-write record of this store on this computer (damaged
+    ones too), by write id, entry and time, never a value."""
+    from .pending import PendingWrites, describe
+    try:
+        records = PendingWrites(store.config["checkpoint_dir"], store._identity().x25519).all()
+    except (OSError, KeyError, AttributeError, SecretStoreError):  # no checkpoint folder or keys here
+        return []
+    lines = []
+    for write_id, record in records.items():
+        if record is not None and store.policy is not None and record["repository"] != store.policy.repository:
+            continue  # the other store's record: named by its own status
+        held = None
+        if record is not None and store.policy is not None:
+            try:
+                held = store.pending_state(record) == "held"
+            except SecretStoreError:
+                held = True
+        lines.append(describe(write_id, record, held))
+    return lines
+
+
 def store_status(self: Any) -> str:
     """SecretStore.status: one line on the clone and one on the recovery package."""
     if not self.config["enabled"] or not self.config["person"]:
@@ -335,6 +357,7 @@ def store_status(self: Any) -> str:
     from .repo import SecretRepo
     repo = self.repo or SecretRepo(self.clone, self._remote_url())
     lines = [repo.status()]
+    lines += pending_lines(self)
     path = self._package_path()
     if path.exists():
         days = int((time.time() - path.stat().st_mtime) // 86400)
