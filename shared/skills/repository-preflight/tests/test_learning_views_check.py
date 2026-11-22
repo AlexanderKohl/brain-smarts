@@ -78,6 +78,7 @@ class LearningViewsCheckTest(unittest.TestCase):
 
     def test_generator_that_raises_gives_one_error(self):
         make_brain(self.root)
+        build(self.root)   # a memory that has views; one without any is not checked at all
         (self.root / "shared/skills/learning-maintenance/scripts/learning_views.py").write_text(
             "raise RuntimeError('boom')\n", encoding="utf-8")
         errors = self.run_check()

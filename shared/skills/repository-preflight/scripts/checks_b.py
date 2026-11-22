@@ -94,6 +94,9 @@ def validate_learning_views(root: Path, errors: list[str], loader=None) -> None:
     """SMART-RULE-0028: the learning index and board equal a fresh build, apart from the derivation stamp."""
     if not (root / "memory").is_dir():
         return
+    # A memory with no learning view has nothing to check, and need not carry the generator.
+    if not any((root / "memory" / "projects").glob("*/data/learning/*.md")):
+        return
     try:
         views_module = (loader or load_learning_views)(root)
         folder = root / views_module.LEARNING_DIR
