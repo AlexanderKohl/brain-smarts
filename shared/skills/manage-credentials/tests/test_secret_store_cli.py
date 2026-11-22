@@ -54,8 +54,13 @@ class CliCase(TeamCase):
         for secret in secrets_seen:
             if secret:
                 self.assertNotIn(secret, text, f"{argv} printed a secret")
-        for word in self.words:  # no single recovery word as a standalone token either
-            self.assertNotRegex(text, rf"(?<![A-Za-z]){re.escape(word)}(?![A-Za-z])" if len(word) > 6 else r"\A\Z")
+        # No run of three recovery words in order either, whatever stands between them (spaces, line
+        # breaks, numbering). A single word is not checked: the words are drawn at random from a list of
+        # common English words, and one of them ("another") also stands in a fixed message, which failed
+        # this check at random.
+        for first, second, third in zip(self.words, self.words[1:], self.words[2:]):
+            run = "[^A-Za-z]+".join(re.escape(word) for word in (first, second, third))
+            self.assertNotRegex(text, rf"(?i)(?<![A-Za-z]){run}(?![A-Za-z])", f"{argv} printed recovery words")
         return text
 
     def personal_factory(self, name="a", computer="laptop"):
