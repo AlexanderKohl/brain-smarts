@@ -4,14 +4,14 @@ title: Run it with real processes first, and list the whole surface before the f
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: draft
+status: implemented
 owner: brain-owner
 created: 2026-11-22T10:27:31+10:00
-updated: 2026-11-22T10:27:31+10:00
+updated: 2026-11-22T11:10:29+10:00
 rule_id: null
-accepted_by: null
-accepted_at: null
-implemented_at: null
+accepted_by: brain-owner
+accepted_at: 2026-11-22T11:10:02+10:00
+implemented_at: 2026-11-22T11:10:29+10:00
 previous_contract_version: 3.2.0
 new_contract_version: 3.2.0
 target_files:
@@ -110,3 +110,5 @@ Requested on 2026-11-22. Ask one direct question that identifies this proposal. 
 approval or general agreement as acceptance.
 
 ## Implementation record
+
+Accepted by the owner at 2026-11-22T11:10:02+10:00 and applied at 2026-11-22T11:10:29+10:00: the two bullets added to `/RULES.md` as shown above, nothing else changed; no contract change (3.2.0). The owner's record of the acceptance is in their memory.
