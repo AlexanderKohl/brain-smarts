@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-15T07:45:00+10:00
-updated: 2026-10-01T22:59:04+10:00
+updated: 2026-11-22T10:47:07+10:00
 owner: brain-owner
 ---
 
@@ -14,16 +14,65 @@ owner: brain-owner
 
 Read `/CONTRACT.md` first and `/shared/skills/delegate-work/SKILL.md` for the protocol.
 
-Not yet verified on the owner's machine. Assume the Codex CLI session has no parallel subagent
-facility unless the running version demonstrably offers one.
+Codex spawns subagents in parallel in the Codex app, the CLI and the IDE extension when asked to
+("spawn one agent per packet"), or when `AGENTS.md` or a skill asks for it (S2). Each subagent runs
+in its own thread and returns a summary to the main thread. The CLI's `/subagents` switches between
+threads; the IDE extension's background-agent panel can stop one (S2). Read from the vendor's
+documentation on 22 November 2026; not yet run on the owner's machine, so the first run on Codex
+records what actually happened and corrects this note.
+
+## Mapping packet fields to Codex subagents
+
+| Packet field | Codex |
+|---|---|
+| `context_mode: isolated` | a spawned subagent; it starts its own thread (S2). Whether it sees any of the parent's conversation is not verified: give it only the dispatch prompt |
+| `context_mode: fork` | no fork option documented (S2): treat as isolated and say so in the result |
+| `writes: none` | sandbox and approval cannot be set per agent; subagents inherit the parent's (S2). Read-only rests on the packet's instructions |
+| `writes: worktree` | no worktree option documented for subagents (S2): the conductor creates the worktree with Git and names it in the packet, or the packet runs in sequence |
+| `model`, `effort` | a custom agent's `model` and `model_reasoning_effort`, or `agents.default_subagent_model` and `agents.default_subagent_reasoning_effort`; unset means the parent's model and effort (S2) |
+| parallel limit | `agents.max_concurrent_threads_per_session` (legacy `agents.max_threads`); unset lets Codex choose (S2). Set it to `4` to match `SMART-RULE-0024` |
+| depth one | effort `ultra` "uses subagents for parallel work" (S1). Never give a worker `ultra`: it would delegate further |
+
+## The ladder on Codex
+
+The ladder of SKILL.md (*Choosing a worker's model and effort*) in Codex model ids (S1). Effort
+values: `low`, `medium`, `high`, `xhigh`, `max`, `ultra` (S2); the app calls `low` "Light" (S1).
+
+| Ladder rung | Codex model and effort | Vendor's own description (S1) |
+|---|---|---|
+| no judgement, rework only | `gpt-6-luna`, `medium`; step up to `high` before changing model | "focused, high-volume tasks such as summarization, extraction, and focused coding" |
+| bounded judgement, or a person sees the result | `gpt-6.2-sol`, `medium` | "everyday coding, writing, and work across several sources"; 500 000-token default context |
+| open judgement, or data, money, security or production | `gpt-6.2-astra`, `high`, or `inherit` | "demanding work across code, apps, or research"; 272 000-token default context |
+| specialised, allowance healthy | `gpt-6.1-sol` for long repeated runs; `gpt-6.1-terra` for visual or computer-use work (CLI 0.159.0 or later) | "close to GPT-6 Astra at lower cost" (6.1 Sol) |
+
+Whether `gpt-6.2-sol` and `gpt-6.2-astra` are generally available in the CLI or still a preview is
+not verified. Model names change: check the picker or S1 before a run, and record the model that
+actually ran.
+
+A custom agent is one TOML file in `~/.codex/agents/` or `.codex/agents/` with `name`,
+`description`, `developer_instructions` and, optionally, `model` and `model_reasoning_effort` (S2).
+The brain does not yet install worker definitions for Codex; until it does, name the model and
+effort in the request that spawns the subagent.
+
+## Reading the allowance
+
+- CLI: `/status` in an active session; app: Settings > Usage (S3). There is a 5-hour and a weekly
+  window (S3).
+- The allowance is one pool shared by Codex and the vendor's other agent products, not one per
+  model; each model draws at its own rate (S3). So the ladder's "a model past 75 %" reads here as
+  "the pool past 75 %": step down a rung rather than across models.
+- No reading the model itself can take is documented. The conductor asks the owner for the figure
+  before a run, or records in the run that it could not read it.
 
 ## Reading the context size
 
-No reading the model can take is known on this host (`/status` in the terminal shows the
-figure to the owner, not to the model). Pass `--context-unknown "Codex reports no context size
-to the model"` to `new-run`, `new-packet` and `close-run`, and drain (SKILL.md, *When to stop
-dispatching*) at the first compaction or after the fourth run in the thread, whichever comes
-first.
+`/status` shows the remaining context to the person, and `/statusline` can add it to the footer
+(search summary of the CLI reference, not verified). No reading the model can take is known. Pass
+`--context-unknown "Codex reports no context size to the model"` to `new-run`, `new-packet` and
+`close-run`, and drain (SKILL.md, *When to stop dispatching*) at the first compaction or after the
+fourth run in the thread, whichever comes first. The default windows (272 000 and 500 000 tokens,
+S1) are below the brain's 750 000-token drain threshold, so on Codex the window ends a thread
+before the guard does.
 
 ## Compaction hooks
 
@@ -51,24 +100,33 @@ type = "command"
 command = "python shared/skills/repository-preflight/scripts/hooks.py post-compact"
 ```
 
-Not yet verified on the owner's machine: the Codex CLI is not installed there (only the Codex
-app's folder exists). Two differences to know: Codex's compaction summary is an opaque blob the
-model cannot steer, and `AGENTS.md` is re-read every turn, so the pointer file survives a
-compaction on its own; the `## Handover` reload still needs the hook.
+Not yet verified on the owner's machine. Two differences to know: Codex's compaction summary is an
+opaque blob the model cannot steer, and `AGENTS.md` is re-read every turn, so the pointer file
+survives a compaction on its own; the `## Handover` reload still needs the hook. The brain's setup
+does not write these hooks for Codex yet: they are copied by hand.
 
 ## Procedure
 
 1. Create the run and packets with `delegation.py` exactly as on other hosts, so the packets
    are portable and a later session on another host could pick them up.
-2. Run the packets in sequence in the same session. For each packet read only its file and its
-   context references, write its result file, then move to the next.
-3. Record `--parallel no` at `close-run`. Never describe the run as parallel.
+2. Spawn one subagent per packet with the dispatch prompt, naming the packet's model and effort.
+   When the running version offers no subagents, run the packets in sequence in the same session,
+   each time reading only the packet and its context references.
+3. Record at `close-run` whether the packets actually ran in parallel. Never describe a run as
+   parallel that ran in sequence.
 4. Validate, summarise, route, log and commit as the skill describes.
 
 ## Known limits
 
-- Sequential execution in one context forfeits the isolation benefit: later packets see earlier
+- Packets run in sequence in one context forfeit the isolation benefit: later packets see earlier
   results. Note this under Assumed or unverified in each result when it could have mattered.
 - Codex does not store transcripts per project; if a transcript logger is in use, it must
-  filter Codex sessions to this repository per file. Sequential packet work is ordinary session
-  traffic.
+  filter Codex sessions to this repository per file.
+
+## Sources
+
+Read on 22 November 2026 unless a line says otherwise.
+
+- S1: the vendor's Codex models page, `https://learn.chatgpt.com/docs/models`.
+- S2: the vendor's subagents page, `https://learn.chatgpt.com/docs/agent-configuration/subagents.md`.
+- S3: `https://help.openai.com/en/articles/11369540-using-codex-with-your-chatgpt-plan`.

@@ -5,7 +5,7 @@ type: skill
 schema_version: 0.2
 contract: /CONTRACT.md
 created: 2026-09-17T17:14:19+10:00
-updated: 2026-11-09T13:25:17+10:00
+updated: 2026-11-22T10:43:35+10:00
 status: active
 owner: brain-owner
 scope: shared
@@ -21,7 +21,7 @@ Capture, investigate, review and retire useful learning without reminders, with 
 
 ## Invocation and required inputs
 
-At task entry read only `/memory/projects/brain-development/data/learning/index.md`. It supplies pending-work pointers and digest due state. Then continue the owner's task. Read the remaining procedure only for capture, eligible background work, recovery or integration. Inputs: relevant subject, evidence or candidate record, session identity, and actual model (unknown if unavailable). No designation to look up: any session may integrate.
+At task entry read only `/memory/projects/brain-development/data/learning/index.md`. It supplies pending-work pointers; it does not hold the weekly review's due date, so run `python shared/skills/tasks/scripts/tasks.py review` for the due state rather than reading the index for it. Then continue the owner's task. Read the remaining procedure only for capture, eligible background work, recovery or integration. Inputs: relevant subject, evidence or candidate record, session identity, and actual model (unknown if unavailable). No designation to look up: any session may integrate.
 
 ## Data sources
 
@@ -82,17 +82,22 @@ Owner preferences govern usefulness within their scope; decisions remain protect
 
 ## Index, board and weekly delivery
 
-Whichever session integrates regenerates index.md and board.md from canonical record pointers and task state; they are derived, not a second knowledge store. Include stable IDs, canonical links, category, current status and next action, ordered by category then latest substantive change. Preserve withdrawn entries in the changed-since-last-delivery digest even when excluded from routine retrieval. Missing or stale views are repaired in background by whichever session notices; foreground work continues with targeted subject search.
+`index.md` and `board.md` are written only by `python shared/skills/learning-maintenance/scripts/learning_views.py build`, from the records' front matter (including each record's one-line `next_action:`); they are derived, not a second knowledge store, and nobody edits them by hand. Closing or changing a record means editing the record (its `next_action`, `review_status`, history) and running `build` in the same commit. `build` writes both views from one read, so they cannot disagree. A record whose front matter cannot be parsed is listed under `Not read:` in both views; a record without `next_action` shows `not set`; both make `check` fail. Views carry stable IDs, canonical links, category, evidence and review status and next action, ordered by category, newest record first, then title. Preserve withdrawn entries in the changed-since-last-delivery digest even when excluded from routine retrieval. Missing or stale views are repaired in background by whichever session notices; foreground work continues with targeted subject search.
 
 The first digest is due seven days after activation. **Any session may prepare and present it.** Presenting is a read of canonical records plus a message to the owner; it writes no learning. Rationale: restricting presentation to one designated session would make `SMART-RULE-0028`'s weekly review unreachable, because that session is usually not the one active when the digest falls due. A skill may implement a rule's duties and must not narrow one into something that cannot happen.
 
-When due in an active session, that session prepares a snapshot of all new learning and substantive changes since the last delivered snapshot, including retirements, uncertainty and owner questions. Record snapshot ID and status prepared, then presenting before showing it, and delivered only after actually displaying it. Record next due seven days after delivery, in `index.md` with exactly the phrase `next is due <timestamp>` (for example `the next is due 2026-11-14T13:47:56+10:00`): the daily scheduled review reads that phrase (`DIGEST_DUE_PHRASE` in `/shared/skills/tasks/scripts/scheduled_review.py`), and an index without it is reported as digest state unreadable. Every regeneration of the index keeps the phrase. If delivery is uncertain, retain the snapshot and label the next presentation a possible repeat. Two sessions reaching the due date together are safe: the states are at-least-once by design, and a repeat is labelled rather than hidden. A digest may be offered in the normal response without a separate interruption. No scheduler or real-time guarantee is implied. Presentation never accepts governance. Each learning shown carries its risk, impact and suggestion, as `SMART-RULE-0028` requires (**Show each learning with its risk, impact and suggestion**).
+When due in an active session, that session prepares a snapshot of all new learning and substantive changes since the last delivered snapshot, including retirements, uncertainty and owner questions. Record snapshot ID and status prepared, then presenting before showing it, and delivered only after actually displaying it. The weekly review's due date is held by one repeating reminder task in the brain-development task store and shown by `tasks.py review`; nothing else holds it: not `index.md`, not `STATE.md`, not a constant in a script. Delivering the review ends with `python shared/skills/tasks/scripts/tasks.py done <ID>` on that task, which re-arms it seven days on. The views carry no due date and no `next is due` phrase. If delivery is uncertain, retain the snapshot and label the next presentation a possible repeat. Two sessions reaching the due date together are safe: the states are at-least-once by design, and a repeat is labelled rather than hidden. A digest may be offered in the normal response without a separate interruption. No scheduler or real-time guarantee is implied. Presentation never accepts governance. Each learning shown carries its risk, impact and suggestion, as `SMART-RULE-0028` requires (**Show each learning with its risk, impact and suggestion**).
 
 A weekly review the owner sees twice costs little; one they never see costs the whole mechanism.
 
 ## Scripts or commands
 
-None required. This is an agent-executed portable procedure. Use repository preflight for structural validation.
+The procedure is agent-executed; two commands keep the views honest. Run both from the brain root:
+
+- `python shared/skills/learning-maintenance/scripts/learning_views.py build [--out DIR]` writes `index.md` and `board.md` from the records, rewriting a file only when its content, apart from the `Derived at` line and `updated`, would change.
+- `python shared/skills/learning-maintenance/scripts/learning_views.py check [--dir DIR]` builds in memory and exits 1, naming each view and its first differing line, when a committed view differs from a fresh build, when a record could not be read, or when a record has no `next_action`.
+
+Tests: `python -m unittest discover -s shared/skills/learning-maintenance/scripts/tests`. Use repository preflight for structural validation.
 
 ## Outputs
 
