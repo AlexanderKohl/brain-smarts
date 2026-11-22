@@ -172,8 +172,8 @@ and `test_secret_store_two_processes.py` (two processes on one clone); rows 35 t
 
 ## Inside the store
 
-The inventory of this skill's own code under `scripts/` and `scripts/secret_store/`, as the code stands at the
-round-11 build. Its tables are held, in the same words, in `tests/credential_inventory.py`;
+The inventory of this skill's own code under `scripts/` and `scripts/secret_store/`, as the code stands after the
+round-11 fixes (merge `43d1374`). Its tables are held, in the same words, in `tests/credential_inventory.py`;
 `tests/test_credential_paths.py` compares them with the source (never by running it) and
 `tests/test_credential_paths_runtime.py` with what the code does when its operations run in-process. A test
 fails when the code and a table disagree, in either direction: a path a table lacks, or a row the code no longer
@@ -239,8 +239,8 @@ longer uses the form.
 
 | Form | Allowed in |
 |---|---|
-| the terminal: `print`, or a reference to `sys.stdout` or `sys.stderr` (names, presence and fingerprints only, except the two sinks `vaultctl.py` `main` and `token_relay.py` `main` below) | `brain_secrets.py` `_recovery_package`, `_restore`, `_unfinished`, `main`; `migrate_to_store.py` `main`, `migrate`, `rollback`; `token_relay.py` `_seed`, `_status`, `main`; `token_relay_store.py` `RelayedStore._warn`; `vault_agent.py` `VaultAgent.serve_forever`, `main`; `vault_credentials.py` `_cancelled`, `_put_entry_window`, `main`; `vaultctl.py` `main` |
-| `input()`: a typed confirmation (an entry name, a write id), never a value | `brain_secrets.py` `_unfinished`, `main`; `vault_credentials.py` `main` |
+| the terminal: `print`, or a reference to `sys.stdout` or `sys.stderr` (names, presence and fingerprints only, except the two sinks `vaultctl.py` `main` and `token_relay.py` `main` below) | `brain_secrets.py` `_delete`, `_recovery_package`, `_restore`, `_unfinished`, `main`; `migrate_to_store.py` `main`, `migrate`, `rollback`; `token_relay.py` `_seed`, `_status`, `main`; `token_relay_store.py` `RelayedStore._warn`; `vault_agent.py` `VaultAgent.serve_forever`, `main`; `vault_credentials.py` `_cancelled`, `_put_entry_window`, `main`; `vaultctl.py` `main` |
+| `input()`: a typed confirmation (an entry name, a write id), never a value | `brain_secrets.py` `_delete`, `_unfinished`; `vault_credentials.py` `main` |
 | `sys.stdin.read`: a value piped in | `vault_credentials.py` `_secret_value` (put --stdin) |
 | an environment write: `os.environ[...] =`, `del`, `update`, `pop`, `setdefault`, `clear`, `os.putenv`, `os.unsetenv` | `token_relay.py` `main` (PORTABLE_VAULT_PATH, a path) |
 | a file write: `open` or `Path.open` in a writing mode, `os.fdopen`, `write_text`, `write_bytes`, `os.replace`, `os.rename`, `tempfile.mkstemp`, `NamedTemporaryFile`, `shutil.copyfile`, `copy`, `copy2`, `copytree`, `move` | `migrate_to_store.py` `_backup`, `_migrate`; `migration_lock.py` `MigrationLock._create`; `portable_vault.py` `PortableVault._write_unlocked`, `write_migration_marker`; `secret_store/checkpoint.py` `save`; `secret_store/enrol.py` `_save_pending`; `secret_store/fileio.py` `locked`, `write_durable`; `secret_store/recovery_package.py` `_write_atomic`, `restore`; `secret_store/repo.py` `SecretRepo._set_state`, `SecretRepo._stage`, `SecretRepo.clone_or_open`, `repo_lock`; `secret_store/store.py` `SecretStore._save_pin`; `secret_store/store_ops.py` `write_marker`, `write_upkeep_error`; `token_relay_store.py` `holder_name`; `vault_agent.py` `VaultAgent._acquire_singleton`; `vault_agent_runtime.py` `log_tray`, `write_state` |
@@ -335,7 +335,7 @@ those of the two tables above.
 | | `list` | keychain-read, open, hpke-open | | cli-list | the index: entry names |
 | | `put` | keychain-read, open, hpke-open, seal, hpke-seal, package, window | | cli-put | the typed values are injected; the record, the object, the index and the package follow |
 | | `get-check` | keychain-read, open, hpke-open | | cli-get-check | field names printed |
-| | `delete` | keychain-read, open, hpke-open, seal, hpke-seal, package | | cli-delete | tombstones and the index; the typed name is a confirmation |
+| | `delete` | keychain-read, open, hpke-open, seal, hpke-seal, package | | cli-delete | tombstones and the index, of the whole entry or with `--field` of exactly one sign-in's oauth and grant objects (`replace_ops.delete_signin`, `delete_ops.build_signin_delete`); the typed name is a confirmation |
 | | `recovery-package` | keychain-read, package, hpke-seal | open, hpke-open | cli-recovery-package | a pull with new commits opens every object this computer reads |
 | | `restore` | recovery-keys, package-open, hpke-open, open, window | | cli-restore | the words are injected; every commit of the bundle is verified again |
 | | `replace-signin` | keychain-read, open, hpke-open, seal, hpke-seal, package | | cli-replace-signin | the hand-over file, the tombstones and the index |
@@ -350,7 +350,7 @@ those of the two tables above.
 | | `grant-scan` | keychain-read, open, hpke-open | | cli-grant-scan | static payloads opened; names printed |
 | | `unfinished` | keychain-read, open, hpke-open, seal, hpke-seal | package | cli-unfinished | list and `--discard` read records; `--apply` writes through the normal path, and a record that adds an entry changes the policy |
 | `migrate_to_store.py` | `migrate` | agent-client, agent-pipe, vault-load, vault-write, keychain-read, open, hpke-open, seal, hpke-seal, package | | migrate | the old vault through the agent; every entry into the store; the scrub |
-| | `rollback` | agent-client, agent-pipe, vault-load, vault-write, keychain-read, open, hpke-open | | rollback | static values read from the store and restored through the agent |
+| | `rollback` | agent-client, agent-pipe, vault-load, vault-write, keychain-read, open, hpke-open | | rollback | static values read from the store and restored through the agent: `vault_restore_static`, then `vault_restore_marked_static` for fields under a migrated sign-in's name, then the marker cleared only when every restore succeeded |
 | `vaultctl.py` | `status` | agent-client, agent-pipe, vaultctl-main, keychain-read | open, hpke-open | vaultctl | status only; `main` is the sink function for every command; the agent loads its keys at its first operation and opens a hand-over file or pending record to name it |
 | | `unlock` | vaultctl-prompt, agent-client, agent-pipe, vaultctl-main, vault-load | | vaultctl | the passphrase, checked by the agent against the vault |
 | | `lock` | agent-client, agent-pipe, vaultctl-main | | vaultctl | no credential |
@@ -382,7 +382,7 @@ those of the two tables above.
 | | `sync_store` | agent-pipe, keychain-read | open, hpke-open | agent-store | a pull; new commits open every object this computer reads |
 | | `clear_signin` | agent-pipe, keychain-read, open, hpke-open, seal, hpke-seal | | agent-store | a revision without the tokens |
 | | `vault_list_entries`, `vault_get_fields`, `vault_get_json`, `vault_verify_copy` | agent-pipe, vault-load | | agent-vault | names and kinds; values and a sign-in for the migration; the backup copy's names |
-| | `vault_scrub_signin`, `vault_restore_static` | agent-pipe, vault-load, vault-write | | agent-vault | the tokens removed; static values restored |
+| | `vault_scrub_signin`, `vault_restore_static`, `vault_restore_marked_static` | agent-pipe, vault-load, vault-write | | agent-vault | the tokens removed; static values restored under names the marker does not hold, or (marked) only under names it holds, the marker left as it is; each request is checked whole (`static_restore`) before one write |
 | | `vault_clear_migration_marker` | agent-pipe | | agent-vault | the marker file only |
 | (a connector) | the refresh path | token-endpoint, session-passphrase, agent-client, agent-pipe, keychain-read, open, hpke-open, seal, hpke-seal | | refresh-path | a connector's `PortableVaultJsonStore` (the session passphrase read, unused with the agent), its token call under the store's refresh: `post_token`, the agent's `begin_refresh`, the publication |
 
@@ -416,7 +416,7 @@ Through these a credential passes in the clear:
 | `secret_store/accept_rules.py` | an oauth payload and its baseline, compared field by field |
 | `secret_store/broker_backend.py` | every value the agent serves or saves; the old vault's values for the migration |
 | `secret_store/canonical.py` | the canonical bytes of every payload before encryption and after decryption |
-| `secret_store/delete_ops.py` | no value: the tombstones it seals carry the empty payload `{}`; listed here because `build_delete` reaches `envelope.seal` through `seal_object` (the stricter class) |
+| `secret_store/delete_ops.py` | no value: the tombstones it seals carry the empty payload `{}`; listed here because `build_delete` and `build_signin_delete` reach `envelope.seal` through `_tombstone_commit` and `seal_object` (the stricter class) |
 | `secret_store/enrol.py` | new private keys; every object re-keyed at approval; the challenge |
 | `secret_store/envelope.py` | the payload sealed and opened |
 | `secret_store/handover.py` | the grant re-sealed to the new refresher; every object re-keyed |

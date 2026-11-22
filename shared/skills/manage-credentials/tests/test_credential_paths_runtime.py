@@ -149,6 +149,8 @@ class Scenarios:
                 records.write({**record, "held": True})  # a record that is not held is replayed at the next sync
                 self.cli(["unfinished", action, record["id"]], store_factory=a, confirm=lambda _p, i=record["id"]: i)
         with self.rec.named("cli-delete"):
+            self.world.sign_in(self.world.backend("A"), "xero-del", self.world.token())
+            self.cli(["delete", "--entry", "xero-del", "--field", FIELD], store_factory=a, confirm=lambda _p: "xero-del")
             self.cli(["delete", "--entry", "plain"], store_factory=a, confirm=lambda _p: "plain")
         with self.rec.named("cli-restore"):
             words = " ".join(self.world.words)
@@ -238,6 +240,8 @@ class Scenarios:
                 op(request, "vault_verify_copy", path=str(copy))
                 op(request, "vault_scrub_signin", entry="xero-demo", field=FIELD)
                 op(request, "vault_restore_static", entry="plain", values={"api_key": {"value": KEY, "kind": "text"}})
+                op(request, "vault_restore_marked_static", entry="xero-demo",
+                   values={FIELD: {"value": {"region": "au"}, "kind": "json"}})  # a name the scrub marked
                 op(request, "vault_clear_migration_marker")
             return vault.path
 
@@ -254,6 +258,9 @@ class Scenarios:
         with self.rec.named("migrate"), self.rec.operation("migrate_to_store.py migrate"):
             assert migrate_to_store.migrate(request, lambda: self.world.store("A").open(), dry_run=True, out=lines.append) == 0
             assert migrate_to_store.migrate(request, lambda: self.world.store("A").open(), out=lines.append) == 0
+        store = self.world.store("A").open()  # a static field under the migrated sign-in's name: the rollback's late field
+        store.delete_entry("vault-xero", field=FIELD)  # the store no longer serves that sign-in, so it is not shadowed
+        store.put_entry("vault-xero", {FIELD: "fictional-late-static-value"})
         with self.rec.named("rollback"), self.rec.operation("migrate_to_store.py rollback"):
             assert migrate_to_store.rollback(request, lambda: self.world.store("A").open(), dry_run=True, out=lines.append) == 0
             assert migrate_to_store.rollback(request, lambda: self.world.store("A").open(), out=lines.append) == 0

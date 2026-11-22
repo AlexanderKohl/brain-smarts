@@ -141,14 +141,15 @@ FORMS: dict[str, frozenset[tuple[str, str]]] = {
     # print, or a reference to sys.stdout or sys.stderr: names, presence and fingerprints, except the
     # two sinks below (vaultctl.py main prints an access token; token_relay.py main the relay key)
     "terminal": frozenset({
-        ("brain_secrets.py", "_recovery_package"), ("brain_secrets.py", "_restore"), ("brain_secrets.py", "_unfinished"),
-        ("brain_secrets.py", "main"), ("migrate_to_store.py", "main"), ("migrate_to_store.py", "migrate"),
+        ("brain_secrets.py", "_delete"), ("brain_secrets.py", "_recovery_package"), ("brain_secrets.py", "_restore"),
+        ("brain_secrets.py", "_unfinished"), ("brain_secrets.py", "main"), ("migrate_to_store.py", "main"),
+        ("migrate_to_store.py", "migrate"),
         ("migrate_to_store.py", "rollback"), ("token_relay.py", "_seed"), ("token_relay.py", "_status"),
         ("token_relay.py", "main"), ("token_relay_store.py", "RelayedStore._warn"),
         ("vault_agent.py", "VaultAgent.serve_forever"), ("vault_agent.py", "main"), ("vault_credentials.py", "_cancelled"),
         ("vault_credentials.py", "_put_entry_window"), ("vault_credentials.py", "main"), ("vaultctl.py", "main")}),
     # input(): a typed confirmation (an entry name, a write id), never a value
-    "input": frozenset({("brain_secrets.py", "_unfinished"), ("brain_secrets.py", "main"), ("vault_credentials.py", "main")}),
+    "input": frozenset({("brain_secrets.py", "_delete"), ("brain_secrets.py", "_unfinished"), ("vault_credentials.py", "main")}),
     # sys.stdin.read: a value piped in (vault_credentials.py put --stdin)
     "stdin-read": frozenset({("vault_credentials.py", "_secret_value")}),
     # os.environ[...] =, del, update, pop, setdefault, clear, os.putenv, os.unsetenv
@@ -351,7 +352,8 @@ CREDENTIAL: dict[str, str] = {  # module -> what passes through it in the clear
     "secret_store/broker_backend.py": "every value the agent serves or saves; the old vault's values for the migration",
     "secret_store/canonical.py": "the canonical bytes of every payload before encryption and after decryption",
     "secret_store/delete_ops.py": "no value: the tombstones it seals carry the empty payload {}; listed here because "
-                                  "build_delete reaches envelope.seal through seal_object (the stricter class)",
+                                  "build_delete and build_signin_delete reach envelope.seal through _tombstone_commit and "
+                                  "seal_object (the stricter class)",
     "secret_store/enrol.py": "new private keys; every object re-keyed at approval; the challenge",
     "secret_store/envelope.py": "the payload sealed and opened",
     "secret_store/handover.py": "the grant re-sealed to the new refresher; every object re-keyed",
@@ -417,7 +419,8 @@ OPERATIONS: dict[str, dict[str, tuple[tuple[str, ...], tuple[str, ...], str | No
         "put": (_POLICY_WRITE + ("window",), _NONE, "cli-put", "the window needs a display: the typed values are "
                 "injected; the record, the object, the index and the package follow"),
         "get-check": (_STORE_READ, _NONE, "cli-get-check", "field names printed"),
-        "delete": (_POLICY_WRITE, _NONE, "cli-delete", "tombstones and the index; the typed name is a confirmation"),
+        "delete": (_POLICY_WRITE, _NONE, "cli-delete", "tombstones and the index, of the whole entry or with --field of "
+                   "exactly one sign-in's oauth and grant objects; the typed name is a confirmation"),
         "recovery-package": (("keychain-read", "package", "hpke-seal"), _PULL, "cli-recovery-package",
                              "a pull with new commits opens every object this computer reads"),
         "restore": (("recovery-keys", "package-open", "hpke-open", "open", "window"), _NONE, "cli-restore",
@@ -540,7 +543,11 @@ OPERATIONS: dict[str, dict[str, tuple[tuple[str, ...], tuple[str, ...], str | No
         "vault_get_json": (("agent-pipe", "vault-load"), _NONE, "agent-vault", "a sign-in for the migration"),
         "vault_verify_copy": (("agent-pipe", "vault-load"), _NONE, "agent-vault", "the backup copy's entry names"),
         "vault_scrub_signin": (("agent-pipe", "vault-load", "vault-write"), _NONE, "agent-vault", "the tokens removed"),
-        "vault_restore_static": (("agent-pipe", "vault-load", "vault-write"), _NONE, "agent-vault", "static values restored"),
+        "vault_restore_static": (("agent-pipe", "vault-load", "vault-write"), _NONE, "agent-vault", "static values restored "
+                                 "under names the marker does not hold; the whole request checked before one write"),
+        "vault_restore_marked_static": (("agent-pipe", "vault-load", "vault-write"), _NONE, "agent-vault", "static values "
+                                        "restored under names the marker holds, the marker left as it is; the whole "
+                                        "request checked before one write (the rollback's late fields)"),
         "vault_clear_migration_marker": (("agent-pipe",), _NONE, "agent-vault", "the marker file only"),
     },
 }
