@@ -603,6 +603,21 @@ class Typed(unittest.TestCase):
         self.assertNotIn("typed", self.a.list_entries())
         self.assertEqual(self.a.get_record("other"), {"api_key": VALUE})
 
+    def test_an_interrupt_right_after_the_first_record_is_flushed_leaves_no_record(self):
+        """Round 13, low: the record is bound to its attempt before it is written, so an interrupt by
+        the record's own write, after the file is flushed, removes it."""
+        real = PendingWrites.write
+
+        def write(pending, record):
+            real(pending, record)
+            self.assertTrue(pending.path(record["id"]).exists())
+            raise KeyboardInterrupt()
+        with mock.patch.object(PendingWrites, "write", write), self.assertRaises(KeyboardInterrupt):
+            typed(self.make_store().open(), "typed", {"api_key": TYPED})
+        self.assertEqual(list(self.pending().folder.glob("*.pending")), [])
+        self.a._sync(None, self.a.checkpoint)
+        self.assertNotIn("typed", self.a.list_entries())
+
     def test_a_record_that_cannot_be_rewritten_during_a_replay_stops_the_sync(self):
         write_id = self.crash_typed(entry="typed", plain={"api_key": TYPED})
         before = self.pending().path(write_id).read_bytes()
