@@ -332,13 +332,7 @@ def pending_lines(store: Any) -> list[str]:
     for write_id, record in records.items():
         if record is not None and store.policy is not None and record["repository"] != store.policy.repository:
             continue  # the other store's record: named by its own status
-        held = None
-        if record is not None and store.policy is not None:
-            try:
-                held = store.pending_state(record) == "held"
-            except SecretStoreError:
-                held = True
-        lines.append(describe(write_id, record, held))
+        lines.append(describe(write_id, record))
     return lines
 
 

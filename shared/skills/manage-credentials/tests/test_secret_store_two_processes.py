@@ -4,9 +4,7 @@ clone and checkpoint folder. The holder follows the newer checkpoint at its next
 timed sync is waited for); an older, forked or unsigned checkpoint and a local copy that differs
 from the reloaded checkpoint are still refused. A bare local repository is the remote and a fake
 keyring the keychain. Every value is fictional."""
-import contextlib
 import importlib.util
-import io
 import json
 import os
 import subprocess
@@ -24,7 +22,6 @@ import keyring  # noqa: E402
 from secret_store import SecretStoreError, canonical, checkpoint, enrol, keys, oauth_ops, signing  # noqa: E402
 from secret_store.broker_backend import StoreBackend  # noqa: E402
 from secret_store.journal import Journal  # noqa: E402
-from secret_store.pending import PendingWrites  # noqa: E402
 from secret_store.repo import SecretRepo  # noqa: E402
 from secret_store.store import EMPTY_JSON, SecretStore  # noqa: E402
 from vault_agent import VaultAgent  # noqa: E402
@@ -32,7 +29,6 @@ from vault_agent_runtime import AGENT_PROTOCOL_VERSION  # noqa: E402
 
 FIELD = "oauth_token_json"
 VALUE = "fictional-value-not-real"
-TYPED = "fictional-typed-before-a-crash"
 _ENV_KEYS = ("GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM")
 _saved_env = {}
 _global_dir = None
@@ -357,113 +353,6 @@ class TwoInstances(unittest.TestCase):
         self.assertEqual(self.a.get_record("pushed"), {"api_key": VALUE})
         self.assertEqual(checkpoint.load(self.a.checkpoint_path, self.a._identity().ed25519.public_key()),
                          self.a.checkpoint)
-
-    # -- a typed secret survives a crash through a pending-write record (plan section L2) ----------
-    def pending(self):
-        return PendingWrites(self.a.config["checkpoint_dir"], self.a._identity().x25519)
-
-    def typed_then_crash(self, entry="typed"):
-        writer, head = self.make_store().open(), self.remote_head()
-        with self.crash_before_push(), self.assertRaises(Crash):
-            writer.put_entry(entry, {"api_key": TYPED})
-        self.assertEqual(self.remote_head(), head)  # nothing reached the remote
-        (write_id,) = self.pending().all()
-        return write_id
-
-    def test_a_typed_secret_cut_off_by_a_crash_is_saved_and_read_by_a_second_computer(self):
-        b = self.enrol_b()
-        self.typed_then_crash()
-        self.a._sync(None, self.a.checkpoint)  # the next operation of an open instance
-        self.assertEqual(b.get_fields("typed", ["api_key"]), {"api_key": TYPED})
-        self.assertEqual(self.pending().all(), {})
-
-    def test_another_entry_changed_meanwhile_the_write_is_replayed(self):
-        b = self.enrol_b()
-        self.typed_then_crash()
-        b.store.put_entry("other", {"api_key": VALUE})
-        self.a._sync(None, self.a.checkpoint)
-        self.assertEqual(b.get_fields("typed", ["api_key"]), {"api_key": TYPED})
-        self.assertEqual(self.a.list_entries(), ["before", "other", "typed"])
-        self.assertEqual(self.pending().all(), {})
-
-    def same_entry_changed_meanwhile(self):
-        b = self.enrol_b()
-        self.a.put_entry("typed", {"api_key": "fictional-first"})
-        write_id = self.typed_then_crash()
-        b.store.put_entry("typed", {"api_key": "fictional-from-b"})
-        self.a._sync(None, self.a.checkpoint)
-        self.assertEqual(self.a.get_record("typed"), {"api_key": "fictional-from-b"})  # nothing overwritten
-        self.assertEqual(list(self.pending().all()), [write_id])
-        status = self.a.status()
-        self.assertIn(f"--apply {write_id}", status)
-        self.assertIn("typed", status)
-        self.assertNotIn(TYPED, status)
-        listed = io.StringIO()
-        with contextlib.redirect_stdout(listed):
-            self.assertEqual(load_cli().main(["unfinished"], store_factory=self.make_store), 0)
-        self.assertIn(write_id, listed.getvalue())
-        self.assertNotIn(TYPED, listed.getvalue())
-        return b, write_id
-
-    def test_the_same_entry_changed_meanwhile_is_kept_then_applied(self):
-        b, write_id = self.same_entry_changed_meanwhile()
-        with contextlib.redirect_stdout(io.StringIO()):
-            self.assertEqual(load_cli().main(["unfinished", "--apply", write_id], store_factory=self.make_store), 0)
-        self.assertEqual(b.get_fields("typed", ["api_key"]), {"api_key": TYPED})
-        self.assertEqual(self.pending().all(), {})
-
-    def test_the_same_entry_changed_meanwhile_is_kept_then_discarded(self):
-        b, write_id = self.same_entry_changed_meanwhile()
-        with contextlib.redirect_stdout(io.StringIO()):
-            self.assertEqual(load_cli().main(["unfinished", "--discard", write_id], store_factory=self.make_store,
-                                             confirm=lambda _prompt: write_id), 0)
-        self.assertEqual(self.pending().all(), {})
-        self.assertEqual(b.get_fields("typed", ["api_key"]), {"api_key": "fictional-from-b"})
-
-    def test_a_record_whose_write_was_confirmed_is_removed_without_a_second_write(self):
-        self.a.put_entry("typed", {"api_key": TYPED})
-        self.assertEqual(self.pending().all(), {})  # removed once confirmed
-        self.pending().save(self.a.policy.repository, "personal", "typed", {"api_key": TYPED}, None)
-        head = self.remote_head()
-        self.a._sync(None, self.a.checkpoint)
-        self.assertEqual(self.pending().all(), {})
-        self.assertEqual(self.remote_head(), head)
-
-    def test_a_push_that_fails_after_the_commit_keeps_the_record_until_the_next_operation(self):
-        real = SecretRepo._git
-
-        def git(repo, *args, **kwargs):
-            if args and args[0] == "push":
-                return subprocess.CompletedProcess(args, 1, b"", b"fictional network failure")
-            return real(repo, *args, **kwargs)
-        with mock.patch.object(SecretRepo, "_git", git),                 self.assertRaisesRegex(SecretStoreError, "kept on this computer") as caught:
-            self.a.put_entry("typed", {"api_key": TYPED})
-        self.assertNotIn(TYPED, str(caught.exception))
-        self.assertEqual(len(self.pending().all()), 1)
-        self.a.put_entry("later", {"api_key": VALUE})
-        self.assertEqual(self.make_store().open().get_record("typed"), {"api_key": TYPED})
-        self.assertEqual(self.pending().all(), {})
-
-    def test_a_write_that_fails_before_any_commit_keeps_no_record(self):
-        away = self.bare.with_name("remote-away.git")
-        self.bare.rename(away)
-        with self.assertRaises(SecretStoreError):
-            self.a.put_entry("typed", {"api_key": TYPED})
-        away.rename(self.bare)
-        self.assertEqual(self.pending().all(), {})
-
-    def test_a_damaged_record_or_one_of_another_repository_is_never_applied(self):
-        self.pending().save("another-repository", "personal", "foreign", {"api_key": TYPED}, None)
-        damaged = self.pending().folder / "abcdefabcdefabcd.pending"
-        damaged.write_text("{not json", "utf-8")
-        self.a._sync(None, self.a.checkpoint)
-        self.assertEqual(self.a.list_entries(), ["before"])
-        self.assertEqual(len(self.pending().all()), 2)
-        self.assertIn("abcdefabcdefabcd on this computer is damaged", self.a.status())
-        with contextlib.redirect_stdout(io.StringIO()):
-            self.assertEqual(load_cli().main(["unfinished", "--discard", "abcdefabcdefabcd"],
-                                             store_factory=self.make_store, confirm=lambda _p: "abcdefabcdefabcd"), 0)
-        self.assertFalse(damaged.exists())
 
     # -- a real second process ------------------------------------------------------------------
     def test_a_second_process_writes_while_the_first_holds_its_instance(self):

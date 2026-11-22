@@ -63,7 +63,8 @@ Alphabetical, in `/shared/skills/manage-credentials/scripts/secret_store/`:
 - `enrol.py`: the enrolment protocol.
 - `handover.py`: the cooperative handover of a sign-in's refresher.
 - `journal.py`: the refresh journal and the per-entry lock.
-- `pending.py`: pending-write records of typed static fields.
+- `pending.py`, `typed_write.py`: pending-write records of typed values, and the one function that
+  makes a record and writes.
 - `keys.py`: key pairs and the keychain allowlist.
 - `oauth_ops.py`, `provider_profiles.py`, `provider_profiles.json`: rotating sign-ins and provider profiles.
 - `policy.py`: the signed policy and trust root.
@@ -245,22 +246,36 @@ A write is one local commit, then its push, then this computer's checkpoint. A c
 checkpoint (a crash before the push, a push that did not complete) is never followed: it is dropped
 from the clone. What a person typed survives through a pending-write record (`pending.py`):
 
-- before the first change to the store, `put_entry` writes the static fields it is about to store,
-  their values, the entry, the group, the repository, the time and the revision the write was built
-  on into `pending/<write id>.pending` beside the refresh journal: written atomically and flushed,
-  encrypted to this computer's key, with the repository and group in the authenticated header;
-- the record is removed only when the write is confirmed (pushed and checkpointed), when the entry
-  already holds exactly those values, or when the command failed before any local commit. A push that
-  fails after the commit keeps it, and the error says the values are kept and saved at the next
-  operation;
+- one function, `typed_write.write_typed`, makes the record and writes. `brain_secrets.py put` and
+  the agent's `set_text` and `set_json` of a static or grant field call it, always; the replay and
+  `unfinished --apply` call it under the record that exists. The writers beneath it (`put_entry`,
+  `oauth_ops.put_fields`, `set_grant_fields`, `put_signin`) make none, so a browser authorisation,
+  the migration, `save_settings` and a refresh never make a record, and no record holds a token;
+- the record holds the plain fields with their kinds, the typed grant fields (a client id or secret),
+  the base and the projected identities. The base names each object the write was built on by its id
+  and checkpoint hash; an entry or sign-in that did not exist is bound to the group's index object,
+  or, when the group has no index yet, to that fact and the policy hash. The projected identities are
+  the id and hash of every object revision the commit writes, an index excepted. It is written once,
+  after the change is built and verified and before the local commit (atomically, flushed, encrypted
+  to this computer's key, the repository and group in the authenticated header); each further attempt
+  rewrites only the projected identities;
+- the record is removed when the write is confirmed (pushed and checkpointed), or when the first
+  write failed before any local commit. A push that fails after the commit keeps it, and the error
+  says the values are kept and saved at the next operation;
 - at every sync (the next operation, by any process on this computer, under the repository lock) a
-  record of that repository is written again through the normal write path when its entry is
-  unchanged since, and removed. When the entry changed since, or the write is refused, nothing is
-  overwritten: the record stays and `status` names its write id, entry and time, never a value.
-  `unfinished` lists the records, `unfinished --apply ID` writes the kept values over the present
-  ones, `unfinished --discard ID` removes the record (type the id to confirm);
-- a damaged or unreadable record, or one for another repository, is never applied; a damaged one is
-  named in status until it is discarded.
+  current record of that repository is looked at in the verified state the write is built on, after
+  that write's own sync: when the checkpoint still holds every base identity it is written again by
+  the function that first wrote it, under the same record; when it holds every projected identity at
+  its exact hash it is *saved* and removed with nothing written; otherwise it is marked *held*. A
+  replay the store refuses (a changed target, no authority, any acceptance rule) is also held. A held
+  record is never applied by itself again: `unfinished --apply ID` writes the kept values over the
+  present ones, `unfinished --discard ID` removes the record (type the id to confirm). `status` and
+  `unfinished` name each record by write id, entry and time, never a value;
+- only a push that failed after the commit, a refusal by the store and an unexpected error building
+  that record's change are kept to the record; a failed sync, a refused remote commit, a checkpoint,
+  pin or local-copy check stop the operation as always, the record untouched;
+- a damaged record, one for another repository, or one kept by the first version without field kinds
+  is never applied; status names it until it is discarded.
 
 A refresh answer is kept by the refresh journal instead; a browser sign-in cut off by a crash is
 done again.

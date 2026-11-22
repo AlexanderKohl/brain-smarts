@@ -186,7 +186,8 @@ class SecretStore:
         if follow and at is None and cp is self.checkpoint and not self._syncing:
             self._follow(clone=True)
             return self._tree_object(oid, self.checkpoint, follow=False)
-        raise SecretStoreError(f"object {oid} in the local copy does not match the checkpoint")
+        from .typed_write import IntegrityError
+        raise IntegrityError(f"object {oid} in the local copy does not match the checkpoint")
 
     def _follow(self, clone: bool = False) -> None:
         """Plan section G: another process on this computer (brain_secrets.py beside the Vault
@@ -305,7 +306,8 @@ class SecretStore:
         with self.repo.lock():
             self._follow(clone=True)
             self._sync_locked(pinned, saved)
-            self._replay_pending()
+            from .typed_write import replay
+            replay(self)  # pending-write records left by a process that died (plan sections L2, L4)
 
     def _sync_locked(self, pinned: Any, saved: checkpoint.Checkpoint | None) -> None:
         if self.policy is None and saved is None and pinned is None and self.repo._fetch() is not None:
@@ -537,19 +539,39 @@ class SecretStore:
 
     # -- writing ------------------------------------------------------------------------------
     def _write(self, build: Callable[[], tuple[dict, str]]) -> None:
-        self.committed = False  # a local commit was made by this write, pushed or not (plan section L2)
-        self._ready()  # one repository lock spans sync, build, verify, commit, push and checkpoint
+        """One change through sync, build, verify, commit, push and checkpoint, under one repository
+        lock. A typed write (typed_write.write_typed) hands its Attempt in _typed_next: it is checked
+        after the sync, its record written after the verification and before repo.write touches the
+        clone, and told whether a local commit was made (plan section L4)."""
+        typed, self._typed_next = getattr(self, "_typed_next", None), None
+
+        def phase(name: str) -> None:
+            if typed is not None:
+                typed.phase = name
+        self._ready()
         with self.repo.lock():
             for _attempt in range(1 + RETRIES):
+                phase("sync")
                 self._sync(None, self.checkpoint)
+                phase("check")
+                if typed is not None:
+                    typed.check(self)
+                phase("build")
                 files, message = build()
+                phase("verify")
                 baseline, before = self._baseline(self.checkpoint, files), self.repo.head()
                 accepted = accept_commit(self.policy, self.checkpoint, files, self._identity().my_keys(), baseline)
+                phase("record")
+                if typed is not None:
+                    typed.before_commit(self, files)
+                phase("commit")
                 try:
                     written = self.repo.write(files, message, expected_parent=before)
-                    self.committed = self.committed or isinstance(written, Conflict) and bool(self.repo.last_commit)
+                    if typed is not None and self.repo.last_commit:
+                        typed.committed = True
                 except SecretStoreError as error:
-                    self.committed = self.committed or bool(self.repo.last_commit)
+                    if typed is not None and self.repo.last_commit:
+                        typed.committed = True
                     if isinstance(error, MovedHead):  # else a lost acknowledgement: settle it with the remote
                         raise
                     written = self.repo.settle_failed_write(before)
@@ -580,105 +602,18 @@ class SecretStore:
             raise SecretStoreError(f"{', '.join(exposed)} is a grant field and never goes in a plain entry; "
                                    "store it as the sign-in's grant field instead")
 
-        record: dict[str, Any] = {}
-        typed = (field_kinds if field_kinds is not None else {f: "text" for f in fields}) if kind == "static" else None
+        kinds = (field_kinds if field_kinds is not None else {f: "text" for f in fields}) if kind == "static" else None
 
         def build() -> tuple[dict, str]:
             index = self._index(group)
-            if typed is not None:  # plan section L2: saved and flushed before the first change to the store
-                base = self.checkpoint.objects[index[entry_name]]["revision"] if entry_name in index else None
-                record["id"] = self._pending().save(self.policy.repository, self._group(group), entry_name,
-                                                    fields, base, record.get("id"))
-                self._in_flight.add(record["id"])
-                self.repo.last_commit = None  # a replay during the sync above made its own commit
-                payload = static_fields.merged(self.static_payload(entry_name, group), fields, typed)
+            if kinds is not None:
+                payload = static_fields.merged(self.static_payload(entry_name, group), fields, kinds)
             else:
                 payload = self.get_record(entry_name, group) if entry_name in index else {}
                 payload.update(fields)
             return build_put(self.policy, self.checkpoint.objects, index, entry_name, payload, kind,
                              self._identity().ed25519, self._group(group))
-        try:
-            self._write(build)
-        except BaseException as error:
-            committed = self.committed or bool(self.repo.last_commit)  # a crash skips _write's own note
-            if record and not committed:  # failed before any local commit: nothing to keep
-                self._pending().remove(record["id"])
-            elif record and isinstance(error, SecretStoreError):
-                raise SecretStoreError(f"{error} The typed values of {entry_name} are kept on this computer "
-                                       f"(pending write {record['id']}) and are saved at the next operation of "
-                                       "the store.") from None
-            raise
-        finally:
-            self._in_flight.discard(record.get("id"))
-        if record:
-            self._pending().remove(record["id"])  # confirmed: pushed and checkpointed
-
-    # -- pending-write records (plan section L2) ----------------------------------------------
-    @property
-    def _in_flight(self) -> set:
-        """Write ids this instance is writing now: never replayed as a dead process's record."""
-        if "_flight" not in self.__dict__:
-            self._flight: set = set()
-        return self._flight
-
-    def _pending(self) -> Any:
-        from .pending import PendingWrites
-        return PendingWrites(self.config["checkpoint_dir"], self._identity().x25519)
-
-    def _entry_state(self, entry: str, group: str) -> tuple[int | None, dict | None]:
-        """The revision and fields the entry holds in the held verified state (None, None: absent)."""
-        index = self._index(group)
-        if entry not in index:
-            return None, None
-        return self.checkpoint.objects[index[entry]]["revision"], self.get_record(entry, group)
-
-    def pending_state(self, record: dict) -> str:
-        """'saved' (the entry holds exactly those values), 'replay' (unchanged since the record was
-        built) or 'held' (changed since, or not this store's)."""
-        if record["repository"] != self.policy.repository:
-            return "held"
-        revision, held = self._entry_state(record["entry"], record["group"])
-        if held is not None and all(held.get(k) == v for k, v in record["fields"].items()):
-            return "saved"
-        return "replay" if revision == record["base"] else "held"
-
-    def _replay_pending(self) -> None:
-        """Under the repository lock, after the sync: a record of this repository that no write of
-        this instance holds was left by a process that died (or a push that failed). It is removed
-        when the entry already holds its values, written again through the normal path when the entry
-        is unchanged since, and kept (status names it) when the entry changed or the write is refused."""
-        if self.policy is None or getattr(self, "_replaying", False):
-            return
-        self._replaying, committed = True, getattr(self, "committed", False)
-        try:
-            pending = self._pending()
-            for write_id, record in pending.all().items():
-                if record is None or write_id in self._in_flight or record["repository"] != self.policy.repository:
-                    continue  # damaged: never applied; another repository's: never applied here
-                try:
-                    state = self.pending_state(record)
-                    if state == "replay":
-                        self.put_entry(record["entry"], record["fields"], group=record["group"])
-                        state = "saved"
-                except SecretStoreError:
-                    continue  # kept; status names it
-                if state == "saved":
-                    pending.remove(write_id)
-        finally:
-            self._replaying, self.committed = False, committed  # the enclosing write's own flag
-
-    def apply_pending(self, write_id: str) -> str:
-        """brain_secrets.py unfinished --apply ID: the kept values over the present ones, through
-        the normal write path; returns the entry name."""
-        pending = self._pending()
-        record = pending.read(write_id) if pending.path(write_id).exists() else None
-        if record is None:
-            raise SecretStoreError(f"pending write {write_id} is not on this computer or cannot be read")
-        if record["repository"] != self.policy.repository:
-            raise SecretStoreError(f"pending write {write_id} belongs to another store; run it with or without --team")
-        self.put_entry(record["entry"], record["fields"], group=record["group"])
-        pending.remove(write_id)
-        return record["entry"]
+        self._write(build)
 
     def delete_entry(self, entry_name: str, group: str | None = None) -> None:
         self._write(lambda: build_delete(self.policy, self.checkpoint.objects, self._index(group), entry_name,

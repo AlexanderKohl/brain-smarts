@@ -280,8 +280,8 @@ class StoreBackend:
             if signin is None:
                 if oauth_ops.looks_like_signin(value):  # a first sign-in begins with new_authorisation
                     raise SecretStoreError(unbegun_message(entry, field))
-                st.put_entry(entry, {field: json.dumps(value, sort_keys=True)}, group=group,
-                             field_kinds={field: "json"})  # plan N2: the field's kind
+                from .typed_write import write_typed  # a typed value: always its pending record (plan L4)
+                write_typed(st, entry, {field: json.dumps(value, sort_keys=True)}, {field: "json"}, group=group)
                 return
             if not signin.mine:
                 oauth_ops.save_settings(st, signin, value)
@@ -297,10 +297,11 @@ class StoreBackend:
         with self._lock:
             self._ready()
             st, group = self._route(entry)
+            from .typed_write import write_typed  # a typed value: always its pending record (plan L4)
             if field not in provider_profiles.grant_fields():
-                st.put_entry(entry, {field: value}, group=group)
+                write_typed(st, entry, {field: value}, {field: "text"}, group=group)
                 return
-            put_grant_fields(st, group, entry, {field: value})
+            write_typed(st, entry, grant={field: value}, group=group)
 
     def clear(self, entry: str, field: str) -> dict[str, bool]:
         """clear() on a stored sign-in: the refresher publishes a revision without the tokens;

@@ -1,0 +1,267 @@
+"""Typed values and their pending-write records (plan sections L2 and L4 with their amendments).
+
+write_typed is the one function that makes a record and writes: brain_secrets.py put and the
+agent's set_text and set_json of a static or grant field call it, always; the replay and
+unfinished --apply call it under the record that exists. The writers beneath it (put_entry,
+oauth_ops.put_fields, set_grant_fields, put_signin) make no record, so a migration, a browser
+authorisation or a refresh never makes one.
+
+The store's _write runs the Attempt it is handed (SecretStore._typed_next) at three points: after
+the write's own sync (check: a replay is replayed, saved or held, decided in the verified state the
+write is built on, under the repository lock), after the change is built and verified (record:
+the first write's record is written, a later attempt rewrites only the projected identities;
+before repo.write touches the clone) and at the commit (committed)."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from .errors import SecretStoreError
+from .pending import PendingWrites
+from .policy import INDEX_PREFIX, object_hash
+
+
+class Saved(SecretStoreError):
+    """The verified checkpoint holds every projected identity: nothing is written."""
+
+
+class Held(SecretStoreError):
+    """A target changed since the record was built: nothing is written."""
+
+
+class IntegrityError(SecretStoreError):
+    """A check of the store itself failed (the local copy against the checkpoint): never swallowed."""
+
+
+def token_names() -> frozenset:
+    """Field names that hold a token: every profile's token fields and every grant spelling but the
+    client secret's (a client id or secret is what a person types)."""
+    from . import provider_profiles
+    return frozenset((provider_profiles.token_fields() | provider_profiles.grant_fields())
+                     - {"client_secret", "clientSecret", "client_id", "clientId"})
+
+
+def records(store: Any) -> PendingWrites:
+    return PendingWrites(store.config["checkpoint_dir"], store._identity().x25519)
+
+
+def _in_flight(store: Any) -> set:
+    """Write ids this instance is writing now: never replayed as a dead process's record."""
+    if "_typed_flight" not in store.__dict__:
+        store._typed_flight = set()
+    return store._typed_flight
+
+
+def _target_names(store: Any, entry: str, group: str, grant: dict) -> list[str]:
+    """The index names a write touches: the entry's static object, and with grant fields the grant
+    of its first sign-in (the default sign-in's grant when there is none)."""
+    if not grant:
+        return [entry]
+    from . import oauth_ops
+    fields = oauth_ops.signin_fields(store, entry, group)
+    return [entry, oauth_ops.signin_names(entry, fields[0] if fields else oauth_ops.DEFAULT_FIELD)[1]]
+
+
+def base_of(store: Any, entry: str, group: str, grant: dict) -> dict:
+    """Each target by object id and checkpoint hash; an absent one by the group's index object, or by
+    no index and the policy hash (amendment b)."""
+    index, objects = store._index(group), store.checkpoint.objects
+    targets = {name: ({"id": index[name], "hash": objects[index[name]]["hash"]} if name in index else None)
+               for name in _target_names(store, entry, group, grant)}
+    index_id = INDEX_PREFIX + group
+    anchor = {"id": index_id, "hash": objects[index_id]["hash"]} if index_id in objects else None
+    absent = None in targets.values()
+    return {"targets": targets, "index": anchor if absent else None,
+            "policy": store.policy.hash if absent and anchor is None else None}
+
+
+def base_holds(store: Any, record: dict) -> bool:
+    base, group = record["base"], record["group"]
+    index, objects = store._index(group), store.checkpoint.objects
+    for name, target in base["targets"].items():
+        if target is None:
+            if name in index:
+                return False
+        elif index.get(name) != target["id"] or objects.get(target["id"], {}).get("hash") != target["hash"]:
+            return False
+    if None in base["targets"].values():
+        index_id = INDEX_PREFIX + group
+        if base["index"] is not None:
+            return objects.get(index_id, {}).get("hash") == base["index"]["hash"]
+        return index_id not in objects and store.policy.hash == base["policy"]
+    return True
+
+
+def projected_of(files: dict) -> dict:
+    """Id and hash of every object revision the commit writes, an index excepted."""
+    out = {}
+    for path, obj in files.items():
+        if path.startswith("objects/") and obj is not None:
+            oid = path[len("objects/"):-len(".json")]
+            if not oid.startswith(INDEX_PREFIX):
+                out[oid] = object_hash(obj)
+    return out
+
+
+class Attempt:
+    """One write of typed values. mode: "first", "replay" or "apply"."""
+
+    def __init__(self, store: Any, entry: str, group: str, plain: dict, kinds: dict, grant: dict,
+                 record: dict | None, mode: str) -> None:
+        self.store, self.entry, self.group = store, entry, group
+        self.plain, self.kinds, self.grant = dict(plain), dict(kinds), dict(grant)
+        self.record, self.mode = record, mode
+        self.phase, self.committed = "sync", False  # phases: sync, check, prepare, build, verify, record, commit
+
+    def check(self, store: Any) -> None:
+        if self.mode != "replay":
+            return
+        if base_holds(store, self.record):
+            return
+        projected = self.record["projected"]
+        if projected and all(store.checkpoint.objects.get(o, {}).get("hash") == h for o, h in projected.items()):
+            raise Saved("the pending write is already in the store")
+        raise Held("a target of the pending write changed since it was made")
+
+    def before_commit(self, store: Any, files: dict) -> None:
+        projected = projected_of(files)
+        if self.record is None:
+            self.record = records(store).new(store.policy.repository, self.group, self.entry, self.plain,
+                                             self.kinds, self.grant, base_of(store, self.entry, self.group,
+                                                                             self.grant), projected)
+            _in_flight(store).add(self.record["id"])
+        else:  # each further attempt: the projected identities and nothing else
+            self.record = {**self.record, "projected": projected}
+            records(store).write(self.record)
+
+
+def _writer(store: Any, entry: str, group: str, plain: dict, kinds: dict, grant: dict) -> None:
+    from . import oauth_ops
+    if plain and grant:
+        oauth_ops.put_fields(store, entry, plain, grant, group, plain_kinds=kinds)
+    elif plain:
+        store.put_entry(entry, plain, group=group, field_kinds=kinds)
+    else:
+        from .broker_backend import put_grant_fields
+        put_grant_fields(store, group, entry, grant)
+
+
+def _run(attempt: Attempt) -> None:
+    store = attempt.store
+    if attempt.mode == "replay":  # decided before the writer looks at the store, after a sync of its own
+        with store.repo.lock():
+            store._sync(None, store.checkpoint)
+            attempt.phase = "check"
+            attempt.check(store)
+    attempt.phase = "prepare"  # the writer's own reads before its _write (finding the sign-in)
+    store._typed_next = attempt  # taken by the writer's _write at its start
+    try:
+        _writer(store, attempt.entry, attempt.group, attempt.plain, attempt.kinds, attempt.grant)
+    finally:
+        store._typed_next = None
+
+
+def _committed(attempt: Attempt) -> bool:
+    return attempt.committed or (attempt.phase == "commit" and bool(attempt.store.repo.last_commit))
+
+
+def write_typed(store: Any, entry: str, plain: dict | None = None, kinds: dict | None = None,
+                grant: dict | None = None, group: str | None = None) -> None:
+    """A first write of typed values: plain fields at their kinds and grant fields of one entry."""
+    plain, grant = dict(plain or {}), dict(grant or {})
+    kinds = dict(kinds) if kinds is not None else {f: "text" for f in plain}
+    tokens = sorted((set(plain) | set(grant)) & token_names())
+    if tokens:  # a pending record never holds a token (plan L4 rule 3)
+        raise SecretStoreError(f"{', '.join(tokens)} is a token and is never typed; sign in again in the browser "
+                               "instead")
+    attempt = Attempt(store, entry, store._group(group), plain, kinds, grant, None, "first")
+    try:
+        _run(attempt)
+    except BaseException as error:
+        if attempt.record is not None and not _committed(attempt):  # no change to the store: nothing kept
+            records(store).remove(attempt.record["id"])
+        elif attempt.record is not None and isinstance(error, SecretStoreError):
+            kept = attempt.record["id"]
+            raise SecretStoreError(f"{error} The typed values of {entry} are kept on this computer (pending write "
+                                   f"{kept}) and are saved at the next operation of the store.") from None
+        raise
+    finally:
+        if attempt.record is not None:
+            _in_flight(store).discard(attempt.record["id"])
+    records(store).remove(attempt.record["id"])  # confirmed: pushed and checkpointed
+
+
+def _again(store: Any, record: dict, mode: str) -> Attempt:
+    return Attempt(store, record["entry"], record["group"], record["plain"], record["kinds"], record["grant"],
+                   record, mode)
+
+
+def _run_record(attempt: Attempt) -> None:
+    flight = _in_flight(attempt.store)
+    flight.add(attempt.record["id"])
+    try:
+        _run(attempt)
+    finally:
+        flight.discard(attempt.record["id"])
+
+
+def replay(store: Any) -> None:
+    """After a sync, under the repository lock: each record of this repository that is current, not
+    held and not this instance's own write is replayed, saved or held. Only the record-local outcomes
+    (a push that failed after the commit, a refusal by the store, an unexpected error building this
+    record's change) are isolated; anything from the sync, a remote commit, the checkpoint or the pin
+    stops the operation."""
+    if store.policy is None or getattr(store, "_replaying", False):
+        return
+    store._replaying = True
+    try:
+        pending = records(store)
+        for write_id, record in pending.all().items():
+            if (record is None or record.get("legacy") or record["held"] or write_id in _in_flight(store)
+                    or record["repository"] != store.policy.repository):
+                continue
+            attempt = _again(store, record, "replay")
+            try:
+                _run_record(attempt)
+            except Saved:
+                pending.remove(write_id)
+                continue
+            except Held:
+                pending.write({**record, "held": True})
+                continue
+            except Exception as error:  # noqa: BLE001 - classified below; the rest is raised
+                if not _isolated(attempt, error):
+                    raise
+                continue
+            pending.remove(write_id)  # confirmed
+    finally:
+        store._replaying = False
+
+
+def _isolated(attempt: Attempt, error: Exception) -> bool:
+    """The three record-local rows of L4 rule 1; marks a refused record held. False: raise it."""
+    from .repo import MovedHead, RefusedCommit
+    if isinstance(error, (IntegrityError, RefusedCommit, MovedHead)):
+        return False
+    if attempt.phase in ("prepare", "build", "verify"):
+        if isinstance(error, SecretStoreError):  # the store refuses the change: held for good
+            records(attempt.store).write({**attempt.record, "held": True})
+        return True  # an unexpected error building this record's change: untouched
+    if attempt.phase == "record":
+        return not isinstance(error, SecretStoreError)
+    return attempt.phase == "commit" and _committed(attempt)  # the push failed after the local commit
+
+
+def apply(store: Any, write_id: str) -> str:
+    """unfinished --apply ID: the kept values over the present ones through the normal path, no
+    precondition check, under the same record; removed once confirmed. Returns the entry name."""
+    pending = records(store)
+    record = pending.read(write_id) if pending.path(write_id).exists() else None
+    if record is None or record.get("legacy"):
+        raise SecretStoreError(f"pending write {write_id} is not on this computer, cannot be read or has no field "
+                               "kinds; it is never applied")
+    if record["repository"] != store.policy.repository:
+        raise SecretStoreError(f"pending write {write_id} belongs to another store; run it with or without --team")
+    _run_record(_again(store, record, "apply"))
+    pending.remove(write_id)
+    return record["entry"]

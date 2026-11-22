@@ -506,13 +506,14 @@ writes a token out of the store, so every migrated sign-in needs a browser sign-
   delete command. The old refresher's next operation discards its record of the exact retired grant; a
   refresh answer that arrives after the deletion is never published and never retried.
 - `brain_secrets.py unfinished [--team] [--apply ID | --discard ID]` lists the pending writes kept on this
-  computer by write id, entry and time, never a value. Before a static write changes the store, the typed
-  fields are kept in an encrypted pending-write record beside the refresh journal; it is removed once the
-  write is confirmed, or when the command failed before any local commit. A crash or a failed push keeps
-  it, and the next operation of the store writes it again when the entry is unchanged since. When the entry
-  changed meanwhile nothing is overwritten: `status` names the write, `--apply ID` writes the kept values
-  over the present ones and `--discard ID` removes them (type the id to confirm). A damaged record is never
-  applied. A refused commit is named by a fixed rule code and the commit id, never by text from the commit.
+  computer by write id, entry and time, never a value. Every typed value (`put`, plain or grant fields, and
+  the agent's `set_text` and `set_json` of a static or grant field) is kept in one encrypted pending-write
+  record, written after the change is verified and before its local commit; it is removed once the write is
+  confirmed. A crash or a failed push keeps it, and the next operation writes it again when every object it
+  was built on is unchanged, removes it when the store already holds that very write, and otherwise marks it
+  held: `--apply ID` writes the kept values over the present ones, `--discard ID` removes them (type the id
+  to confirm). A browser sign-in, the migration and a settings save make no record, and no record holds a
+  token. A refused commit is named by a fixed rule code and the commit id, never by text from the commit.
 
 ### A failed refresh
 

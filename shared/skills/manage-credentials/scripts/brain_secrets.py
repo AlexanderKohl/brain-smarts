@@ -230,7 +230,8 @@ def _unfinished(store, apply_id, discard_id, confirm) -> int:
     from secret_store.pending import PendingWrites, describe
     pending = PendingWrites(store.config["checkpoint_dir"], store._identity().x25519)
     if apply_id:
-        print(f"Stored {store.open().apply_pending(apply_id)} from pending write {apply_id}.")
+        from secret_store.typed_write import apply
+        print(f"Stored {apply(store.open(), apply_id)} from pending write {apply_id}.")
         return 0
     if discard_id:
         pending.path(discard_id)  # refuses a malformed id
@@ -250,7 +251,7 @@ def _unfinished(store, apply_id, discard_id, confirm) -> int:
         print("No pending writes on this computer.")
         return 0
     for write_id, record in records.items():
-        print(describe(write_id, record, None if record is None else opened.pending_state(record) == "held"))
+        print(describe(write_id, record))
     return 0
 
 
@@ -302,18 +303,14 @@ def main(argv=None, store_factory=None, team_factory=None, ask=None, confirm=Non
                 fields.update(answer[0])
             fields.update({name: EMPTY_JSON for name in args.empty_json})
             from secret_store import provider_profiles
-            from secret_store.broker_backend import put_grant_fields
+            from secret_store.typed_write import write_typed
             opened = store.open()
             grant = {k: v for k, v in fields.items() if k in provider_profiles.grant_fields()}
             plain = {k: v for k, v in fields.items() if k not in grant}
             kinds = {k: "json" if k in args.empty_json else "text" for k in plain}  # plan N2
-            if plain and grant:  # one commit: static object, grant, index and policy together
-                from secret_store.oauth_ops import put_fields
-                put_fields(opened, args.entry, plain, grant, group, plain_kinds=kinds)
-            elif plain:
-                opened.put_entry(args.entry, plain, group=group, field_kinds=kinds)
-            else:  # the same path as the agent's set_text: never into a static object
-                put_grant_fields(opened, opened._group(group), args.entry, grant)
+            # One commit with its pending-write record (plan L4): static object, grant, index and policy
+            # together; grant fields never go into a static object.
+            write_typed(opened, args.entry, plain, kinds, grant, group=group)
             print(f"Stored {args.entry}: " + ", ".join(sorted(fields)))
         elif args.command == "get-check":
             print("\n".join(_describe(store.open(), args.entry, group)))
