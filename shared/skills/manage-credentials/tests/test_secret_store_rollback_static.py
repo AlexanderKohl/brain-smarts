@@ -1,8 +1,10 @@
-"""Follow-up plan K.2 (Sol round 9, medium): the rollback walks every static object of the store,
-not the old vault's listing, so a static entry or field created after the migration is restored
-too, text and JSON alike, and every entry it restored or could not restore is named; one that
-cannot be restored makes the exit code non-zero and keeps the migration marker. Temporary folders,
-an in-process agent and fictional values only."""
+"""Follow-up plan K.2 (Sol round 9, medium) and N2 (Sol round 10, medium): the rollback walks every
+static object of the store, so a static entry or field created after the migration is restored too,
+and every entry it restored or could not restore is named; one that cannot be restored makes the
+exit code non-zero and keeps the migration marker. A static field under the name of a migrated
+sign-in is restored, not skipped. The recorded kinds themselves are tested in
+test_secret_store_rollback_kinds.py. Temporary folders, an in-process agent and fictional values
+only."""
 import json
 import sys
 import unittest
@@ -14,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import migrate_to_store  # noqa: E402
 import portable_vault  # noqa: E402
 from portable_vault import CredentialError, PortableVault  # noqa: E402
+from secret_store import oauth_ops  # noqa: E402
 from test_secret_store_broker import (AT1, FIELD, KEY, PASS, RT1, SECRET, StoreFixture,  # noqa: E402,F401
                                       agent_request, setUpModule, tearDownModule)
 from vault_agent import VaultAgent  # noqa: E402
@@ -22,7 +25,9 @@ NEW_KEY, NEW_EXTRA = "fictional-new-key", "fictional-extra-value"
 LOOKS_LIKE_JSON = '{"note": "kept as text"}'
 
 
-class RollbackWalksTheStore(StoreFixture):
+class MigratedStore(StoreFixture):
+    """A migrated old vault and later store writes; no tests of its own."""
+
     def setUp(self):
         super().setUp()
         self.vault = PortableVault(self.root / "vault" / "credentials.vault")
@@ -52,6 +57,12 @@ class RollbackWalksTheStore(StoreFixture):
             self.assertNotIn(value, text)
         return code, text
 
+    def drop_the_signin(self):
+        self.a.delete_entry(oauth_ops.signin_names("xero-demo", FIELD)[0])  # its grant goes with it
+        self.assertNotIn(oauth_ops.signin_names("xero-demo", FIELD)[1], self.a.list_entries())
+
+
+class RollbackWalksTheStore(MigratedStore):
     def test_entries_and_fields_created_after_the_migration_are_restored_with_their_kind(self):
         code, text = self.run_it()
         self.assertEqual(code, 0, text)
@@ -60,7 +71,7 @@ class RollbackWalksTheStore(StoreFixture):
         self.assertEqual(self.vault.get("plain", "extra", PASS), NEW_EXTRA)
         self.assertEqual(self.vault.get("plain", "config", PASS), {"flag": True})
         self.assertEqual(self.vault.get("plain", "options", PASS), {"mode": "new"})
-        self.assertEqual(self.vault.get("plain", "shaped", PASS), LOOKS_LIKE_JSON)  # the vault's kind wins
+        self.assertEqual(self.vault.get("plain", "shaped", PASS), LOOKS_LIKE_JSON)
         self.assertEqual(self.vault.get("plain", "api_key", PASS), KEY)
         for name in ("new-text (api_key)", "new-json (settings)", "plain (api_key, config, extra, options, shaped)"):
             self.assertIn(name, text)
@@ -96,6 +107,40 @@ class RollbackWalksTheStore(StoreFixture):
         self.assertIn("odd (held)", text.split("could not be restored", 1)[1])
         self.assertNotIn("odd", self.vault.load(PASS)["entries"])
         self.assertEqual(self.vault.get("new-text", "api_key", PASS), NEW_KEY)
+
+    def test_a_static_field_under_the_name_of_a_migrated_signin_is_restored(self):
+        self.drop_the_signin()
+        self.ba.set_json("xero-demo", FIELD, {"note": "plain settings"})
+        code, text = self.run_it()
+        self.assertEqual(code, 0, text)
+        self.assertEqual(self.vault.get("xero-demo", FIELD, PASS), {"note": "plain settings"})
+        self.assertIn(f"xero-demo ({FIELD})", text)
+        self.assertFalse(self.marker.exists())
+
+    def test_a_failed_restore_under_a_migrated_signin_name_keeps_the_marker(self):
+        self.drop_the_signin()
+        self.ba.set_json("xero-demo", FIELD, {"note": "plain settings"})
+        before = portable_vault.migrated_signins(self.vault.path)
+
+        def refusing(operation, **request):
+            if operation == "vault_restore_static" and request.get("entry") == "xero-demo":
+                raise CredentialError("fictional refusal")
+            return self.request(operation, **request)
+        code, text = self.run_it(refusing)
+        self.assertEqual(code, 5, text)
+        self.assertIn(f"xero-demo ({FIELD})", text.split("could not be restored", 1)[1])
+        self.assertEqual(portable_vault.migrated_signins(self.vault.path), before)
+        self.assertNotIn("refresh_token", self.vault.get("xero-demo", FIELD, PASS))
+        self.assertEqual(self.vault.get("new-text", "api_key", PASS), NEW_KEY)
+
+    def test_a_static_field_shadowed_by_a_signin_the_store_still_holds_is_named(self):
+        self.a.put_entry("xero-demo", {FIELD: json.dumps({"note": "shadow"}, sort_keys=True)},
+                         field_kinds={FIELD: "json"})
+        code, text = self.run_it()
+        self.assertEqual(code, 5, text)
+        self.assertIn(f"xero-demo ({FIELD})", text.split("could not be restored", 1)[1])
+        self.assertTrue(self.marker.exists())
+        self.assertNotIn("note", self.vault.get("xero-demo", FIELD, PASS))
 
 
 if __name__ == "__main__":

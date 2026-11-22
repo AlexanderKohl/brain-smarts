@@ -275,7 +275,8 @@ class StoreBackend:
             if signin is None:
                 if oauth_ops.looks_like_signin(value):  # a first sign-in begins with new_authorisation
                     raise SecretStoreError(unbegun_message(entry, field))
-                st.put_entry(entry, {field: json.dumps(value, sort_keys=True)}, group=group)
+                st.put_entry(entry, {field: json.dumps(value, sort_keys=True)}, group=group,
+                             field_kinds={field: "json"})  # plan N2: the field's kind
                 return
             if not signin.mine:
                 oauth_ops.save_settings(st, signin, value)

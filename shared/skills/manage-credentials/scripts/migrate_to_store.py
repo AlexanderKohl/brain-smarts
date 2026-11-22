@@ -14,7 +14,11 @@ on or off, and a later migration leaves marked entries alone. The rollback resto
 secrets only (they never rotate), from the store's current value; it never writes a token out of
 the store. Every migrated sign-in keeps no token in the old vault and needs a browser sign-in.
 The rollback walks every static object of the store, so an entry or field created after the
-migration comes back too, text or JSON; it names each entry it restored and each it could not, and
+migration comes back too, a static field under a migrated sign-in's name included. Each static
+field comes back at the kind recorded beside it in the store (plan N2: the migration records the
+old vault's kind, every later writer the kind it wrote); nothing else decides. It names each entry
+it restored and each it could not (a field with no recorded kind, from a store made before kinds
+were kept: store the entry again; a token; a sign-in the store still holds under that name), and
 one it could not makes the exit code 5 and keeps the migration marker.
 
   python migrate_to_store.py --dry-run            list entry and field names only
@@ -66,7 +70,8 @@ def _plan(request: Callable, entry: str, fields: dict[str, str]) -> dict[str, An
             del static[oauth_ops.DEFAULT_FIELD]
         fields_of_signins = [oauth_ops.DEFAULT_FIELD]
     names = ([entry] if static else []) + [n for f in fields_of_signins for n in oauth_ops.signin_names(entry, f)]
-    return {"entry": entry, "static": static, "signins": signins, "grant": grant, "names": names}
+    kinds = {f: fields[f] for f in static}  # plan N2: the kind the old vault's listing gives
+    return {"entry": entry, "static": static, "kinds": kinds, "signins": signins, "grant": grant, "names": names}
 
 
 def _copy(store: Any, plan: dict[str, Any], replace: bool) -> None:
@@ -76,7 +81,7 @@ def _copy(store: Any, plan: dict[str, Any], replace: bool) -> None:
     if plan["grant"] and not plan["signins"]:
         put_grant_fields(store, store._group(None), plan["entry"], plan["grant"])
     if plan["static"]:
-        store.put_entry(plan["entry"], plan["static"])
+        store.put_entry(plan["entry"], plan["static"], field_kinds=plan["kinds"])
 
 
 def _backup(request: Callable, vault_path: Path, backup_dir: Any, names: list[str]) -> Path:
@@ -208,76 +213,109 @@ def rollback(request: Callable, open_store: Callable[[], Any], *, dry_run: bool 
         return _rollback(request, open_store, status, dry_run, out)
 
 
-def _kind(text: str, vault_kind: str | None) -> tuple[str, Any]:
-    """(kind, value) of one static store field for the old vault. The store keeps text only: a JSON
-    field is held as its canonical text (json.dumps with sorted keys, as the migration and set_json
-    write it). The old vault's own kind wins for a field it holds; any other field is JSON exactly
-    when its text is that canonical form of an object."""
-    if vault_kind == "text":
-        return "text", text
+def _value(text: str, kind: str | None) -> Any:
+    """The old vault's value of one static store field at its recorded kind (plan N2: the kind kept
+    in the store is the only authority). ValueError for a field with no recorded kind or a token."""
+    if kind is None:
+        raise ValueError("no kind")
     try:
-        value = json.loads(text)
+        parsed = json.loads(text)
     except ValueError:
-        value = None
-    if isinstance(value, dict) and (vault_kind == "json" or json.dumps(value, sort_keys=True) == text):
-        return "json", value
-    if vault_kind == "json":
-        raise ValueError("not a JSON object")
-    return "text", text
+        parsed = None
+    if oauth_ops.looks_like_signin(parsed):
+        raise ValueError("token")  # never a token out of the store, text or JSON
+    return parsed if kind == "json" else text
 
 
-def _static_plans(store: Any, listing: dict, marked: dict) -> tuple[list, list]:
-    """Every static object of the store, not the old vault's listing (Sol round 9): ([(entry,
-    {field: {value, kind}})], [(entry, fields or None, reason)] that cannot be restored)."""
-    plans, failed = [], []
-    for entry, oid in sorted(store._index(None).items()):
+def _static_plans(store: Any, marked: dict) -> tuple[list, list, list]:
+    """Every static object of the store (Sol rounds 9 and 10): ([(entry, {field: {value, kind}})],
+    [the same for fields under a migrated sign-in's name], [(entry, fields or None, reason)] that
+    cannot be restored). A static field under a migrated sign-in's name is restored, unless the store
+    still holds that sign-in: then it is shadowed and named."""
+    plans, late, failed = [], [], []
+    index = store._index(None)
+    for entry, oid in sorted(index.items()):
         if store.policy.assignment(oid)[1] != "static":
             continue
-        try:
-            record = store.get_record(entry)
+        try:  # malformed or unknown kind data is refused here, before any value is used
+            record, kinds = store.get_typed(entry)
         except (CredentialError, SecretStoreError) as error:
             failed.append((entry, None, str(error)))
             continue
-        kinds, values, bad = listing.get(entry) or {}, {}, []
-        for field, text in sorted((record or {}).items()):
-            if field in marked.get(entry, []):
-                continue  # a migrated sign-in's field: it needs a browser sign-in
+        values, later, untyped, bad = {}, {}, [], []
+        for field, text in sorted(record.items()):
+            migrated = field in marked.get(entry, [])
+            if migrated and oauth_ops.signin_names(entry, field)[0] in index:
+                bad.append(field)  # the store still serves the sign-in under this name
+                continue
             try:
-                kind, value = _kind(text, kinds.get(field)) if isinstance(text, str) else (None, None)
-            except ValueError:
-                kind = None
-            if kind is None or (kind == "json" and oauth_ops.looks_like_signin(value)):
-                bad.append(field)  # never a token out of the store, never a guessed kind
-            else:
-                values[field] = {"value": value, "kind": kind}
+                value = _value(text, kinds.get(field))
+            except ValueError as error:
+                (untyped if str(error) == "no kind" else bad).append(field)
+                continue
+            (later if migrated else values)[field] = {"value": value, "kind": kinds[field]}
+        if untyped:
+            failed.append((entry, untyped, "no kind is recorded for these fields (a store made before kinds were "
+                                           f"kept); store the entry again, for example brain_secrets.py put --entry "
+                                           f"{entry}, then run the rollback again"))
         if bad:
-            failed.append((entry, bad, "a field is not a static secret the old vault can hold"))
-        elif values:
+            failed.append((entry, bad, "a token, or a sign-in in the store has the same name"))
+        if untyped or bad:
+            continue
+        if values:
             plans.append((entry, values))
-    return plans, failed
+        if later:
+            late.append((entry, later))
+    return plans, late, failed
 
 
 def _names(items: list) -> str:
     return ", ".join(f"{e} ({', '.join(sorted(f))})" for e, f in items) or "none"
 
 
-def _rollback(request: Callable, open_store: Callable[[], Any], status: Any, dry_run: bool,
-              out: Callable[[str], None]) -> int:
-    marked = migrated_signins(status["vault_path"])
-    listing = request("vault_list_entries")
-    store = open_store()
-    plans, failed = _static_plans(store, listing, marked)
-    signins = [f"{e}#{f}" for e, fields in sorted(marked.items()) for f in sorted(fields)]
-    if dry_run:
-        out(f"Dry run: the rollback would restore these static secrets from the store: {_names(plans)}. "
-            "Nothing was changed.")
-    restored = []
-    for entry, values in ([] if dry_run else plans):
+def _restore(request: Callable, plans: list, restored: list, failed: list) -> None:
+    for entry, values in plans:
         try:
             request("vault_restore_static", entry=entry, values=values)
             restored.append((entry, values))
         except (CredentialError, SecretStoreError) as error:
             failed.append((entry, sorted(values), str(error)))
+
+
+def _restore_late(request: Callable, late: list, marked: dict, restored: list, failed: list) -> str:
+    """The agent refuses a field the marker names, so fields under a migrated sign-in's name come
+    back only after everything else did and the marker is cleared; if one fails, the marker is put
+    back as it was (the scrub names each sign-in again; the old vault holds no token to remove)."""
+    request("vault_clear_migration_marker")
+    _restore(request, late, restored, failed)
+    if not failed:
+        return ""
+    try:
+        for entry, fields in sorted(marked.items()):
+            for field in sorted(fields):
+                request("vault_scrub_signin", entry=entry, field=field)
+    except (CredentialError, SecretStoreError) as error:
+        return f" The migration marker could not be put back ({error}): run the rollback again at once."
+    return ""
+
+
+def _rollback(request: Callable, open_store: Callable[[], Any], status: Any, dry_run: bool,
+              out: Callable[[str], None]) -> int:
+    marked = migrated_signins(status["vault_path"])
+    store = open_store()
+    plans, late, failed = _static_plans(store, marked)
+    signins = [f"{e}#{f}" for e, fields in sorted(marked.items()) for f in sorted(fields)]
+    if dry_run:
+        out(f"Dry run: the rollback would restore these static secrets from the store: {_names(plans + late)}. "
+            "Nothing was changed.")
+    restored, warning = [], ""
+    if not dry_run:
+        _restore(request, plans, restored, failed)
+        if late and not failed:
+            warning = _restore_late(request, late, marked, restored, failed)
+        elif late:
+            failed.extend((e, sorted(v), "under a migrated sign-in's name, restored only once every other entry is")
+                          for e, v in late)
     for name in signins:
         out(f"{name}: sign in again in the browser; no token is brought back from the store.")
     if failed:
@@ -287,9 +325,9 @@ def _rollback(request: Callable, open_store: Callable[[], Any], status: Any, dry
         return 0 if not failed else 5
     if failed:
         out(f"Restored static secrets from the store: {_names(restored)}. The rollback is not complete: the "
-            "migration marker stays. Settle the entries above, then run the rollback again.")
+            "migration marker stays. Settle the entries above, then run the rollback again." + warning)
         return 5
-    if marked:
+    if marked and not late:
         request("vault_clear_migration_marker")
     out(f"Restored static secrets from the store: {_names(restored)}. Switch the secrets store off (enabled false "
         "in secret-store.json) and restart the Vault Agent before using the old vault.")
@@ -302,7 +340,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="migrate (the default) or rollback")
     parser.add_argument("--dry-run", action="store_true", help="list entry and field names only")
     parser.add_argument("--replace", action="store_true", help="overwrite entries the store already holds")
-    parser.add_argument("--backup-dir", help="folder for the backup (default: migration-backups beside the vault)")
+    parser.add_argument("--backup-dir", help="folder for the backup; it must be inside the vault's own folder, where the "
+                        "agent checks the copy (default: migration-backups beside the vault)")
     args = parser.parse_args(argv)
     from secret_store.store import SecretStore
     from vault_broker_client import broker_request

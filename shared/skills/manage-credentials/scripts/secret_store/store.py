@@ -14,7 +14,7 @@ from typing import Any, Callable
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 
-from . import canonical, checkpoint, keys, provider_profiles, recovery, recovery_package, signing
+from . import canonical, checkpoint, keys, provider_profiles, recovery, recovery_package, signing, static_fields
 from .accept import accept_commit
 from .delete_ops import build_delete
 from .errors import SecretStoreError
@@ -475,14 +475,34 @@ class SecretStore:
     def list_entries(self, group: str | None = None) -> list[str]:
         return sorted(self._index(group))
 
-    def get_record(self, entry_name: str, group: str | None = None) -> dict[str, str]:
+    def _payload(self, entry_name: str, group: str | None = None) -> tuple[dict, bool]:
         oid = self._index(group).get(entry_name)
         if oid is None:
             raise SecretStoreError(f"there is no entry {entry_name}")
         obj = self._tree_object(oid, self.checkpoint)
         if oid in self.unusable or sorted(r["key"] for r in obj["readers"]) != self.policy.readers_for(oid):
             raise SecretStoreError(f"entry {entry_name} is not usable yet: it waits for a verified new revision")
-        return self._open_object(obj)
+        return self._open_object(obj), self.policy.assignment(oid)[1] == "static"
+
+    def get_record(self, entry_name: str, group: str | None = None) -> dict[str, str]:
+        payload, static = self._payload(entry_name, group)
+        return static_fields.split(payload)[0] if static else payload
+
+    def get_typed(self, entry_name: str, group: str | None = None) -> tuple[dict[str, str], dict[str, str]]:
+        """(values, kinds) of a static entry (plan N2); kinds lacks fields written before kinds were kept."""
+        payload, static = self._payload(entry_name, group)
+        if not static:
+            raise SecretStoreError(f"entry {entry_name} is not a plain entry")
+        return static_fields.split(payload)
+
+    def static_payload(self, entry_name: str, group: str | None = None) -> dict | None:
+        """The raw payload of a static entry for a partial update, or None when there is none."""
+        if entry_name not in self._index(group):
+            return None
+        payload, static = self._payload(entry_name, group)
+        if not static:
+            raise SecretStoreError(f"entry {entry_name} is not a plain entry")
+        return payload
 
     def get_fields(self, entry_name: str, fields: list[str], group: str | None = None) -> dict[str, str]:
         record = self.get_record(entry_name, group)
@@ -521,8 +541,9 @@ class SecretStore:
         raise SecretStoreError("the personal repository kept changing; the change was not saved, try again")
 
     def put_entry(self, entry_name: str, fields: dict[str, str], kind: str = "static",
-                  group: str | None = None) -> None:
-        """Store fields in entry_name: a new entry, or the next revision with these fields changed."""
+                  group: str | None = None, field_kinds: dict[str, str] | None = None) -> None:
+        """Store fields in entry_name: a new entry, or the next revision with these fields changed.
+        A static entry records each written field's kind (plan N2): field_kinds, else text."""
         if not isinstance(entry_name, str) or not entry_name.strip():
             raise SecretStoreError("an entry needs a name")
         if not fields or not all(isinstance(k, str) and k and isinstance(v, str) for k, v in fields.items()):
@@ -532,10 +553,15 @@ class SecretStore:
             raise SecretStoreError(f"{', '.join(exposed)} is a grant field and never goes in a plain entry; "
                                    "store it as the sign-in's grant field instead")
 
+        typed = (field_kinds if field_kinds is not None else {f: "text" for f in fields}) if kind == "static" else None
+
         def build() -> tuple[dict, str]:
             index = self._index(group)
-            payload = self.get_record(entry_name, group) if entry_name in index else {}
-            payload.update(fields)
+            if typed is not None:
+                payload = static_fields.merged(self.static_payload(entry_name, group), fields, typed)
+            else:
+                payload = self.get_record(entry_name, group) if entry_name in index else {}
+                payload.update(fields)
             return build_put(self.policy, self.checkpoint.objects, index, entry_name, payload, kind,
                              self._identity().ed25519, self._group(group))
         self._write(build)
@@ -559,7 +585,7 @@ class SecretStore:
                 if self.policy.assignment(oid)[1] != "static":
                     continue
                 try:
-                    record = self._open_object(self._tree_object(oid, self.checkpoint))
+                    record = static_fields.split(self._open_object(self._tree_object(oid, self.checkpoint)))[0]
                 except SecretStoreError:
                     continue
                 held = sorted(set(record) & grant_keys)

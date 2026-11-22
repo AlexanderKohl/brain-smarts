@@ -17,7 +17,7 @@ import secrets
 from dataclasses import dataclass
 from typing import Any
 
-from . import envelope, provider_profiles, signing
+from . import envelope, provider_profiles, signing, static_fields
 from .errors import SecretStoreError
 from .keys import key_id
 from .policy import INDEX_PREFIX, Policy, object_hash
@@ -186,12 +186,13 @@ def _static_plan(store: Any, entry: str, group: str, names: set) -> tuple | None
     oid = store._index(group).get(entry)
     if oid is None or store.policy.assignment(oid)[1] != "static":
         return None
-    record = store.get_record(entry, group)
+    payload = store.static_payload(entry, group)
+    record = static_fields.split(payload)[0]
     grant_keys = provider_profiles.grant_fields()
     drop = {k for k in record if k in names or k in grant_keys}
     if not drop:
         return None
-    return (oid, {k: v for k, v in record.items() if k not in drop},
+    return (oid, static_fields.without(payload, drop),  # the fields kept keep their kinds (plan N2)
             {k: v for k, v in record.items() if k in grant_keys})
 
 
@@ -287,11 +288,13 @@ def put_signin(store: Any, entry: str, field: str, record: dict, grant_fields: d
         finish(store, entry, field, group)
 
 
-def put_fields(store: Any, entry: str, plain: dict, grant_fields: dict, group: str | None = None) -> None:
+def put_fields(store: Any, entry: str, plain: dict, grant_fields: dict, group: str | None = None,
+               plain_kinds: dict | None = None) -> None:
     """Plain and grant fields of one entry in one commit (brain_secrets.py put): the static object
     (plain fields, less any grant field it held), the grant (those grant fields and the new ones;
     a new sign-in with this computer as its refresher when none exists), and the policy and index
-    when either object is new."""
+    when either object is new. The plain fields are recorded at plain_kinds, else text (plan N2)."""
+    kinds = plain_kinds if plain_kinds is not None else {f: "text" for f in plain}
     group = store._group(group)
     if not plain or not grant_fields or not all(isinstance(v, str) and v for v in grant_fields.values()):
         raise SecretStoreError("put_fields needs plain fields and non-empty grant text fields")
@@ -301,10 +304,12 @@ def put_fields(store: Any, entry: str, plain: dict, grant_fields: dict, group: s
         sid = index.get(entry)
         if sid is not None and store.policy.assignment(sid)[1] != "static":
             raise SecretStoreError(f"entry {entry} is not a plain entry")
-        record = store.get_record(entry, group) if sid is not None else {}
+        previous = store.static_payload(entry, group) if sid is not None else None
+        record = static_fields.split(previous)[0] if previous is not None else {}
         grant_keys = provider_profiles.grant_fields()
         moved = {k: v for k, v in record.items() if k in grant_keys}
-        static = {**{k: v for k, v in record.items() if k not in grant_keys}, **plain}
+        kept = static_fields.without(previous, set(moved)) if previous is not None else None
+        static = static_fields.merged(kept, plain, kinds)
         names = signin_fields(store, entry, group)
         if not names:
             provider = provider_profiles.provider_for(entry) or provider_profiles.UNKNOWN
