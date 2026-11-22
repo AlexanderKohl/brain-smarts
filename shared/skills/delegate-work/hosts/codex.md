@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-15T07:45:00+10:00
-updated: 2026-11-22T10:47:07+10:00
+updated: 2026-11-22T12:52:34+10:00
 owner: brain-owner
 ---
 
@@ -38,21 +38,27 @@ records what actually happened and corrects this note.
 The ladder of SKILL.md (*Choosing a worker's model and effort*) in Codex model ids (S1). Effort
 values: `low`, `medium`, `high`, `xhigh`, `max`, `ultra` (S2); the app calls `low` "Light" (S1).
 
-| Ladder rung | Codex model and effort | Vendor's own description (S1) |
-|---|---|---|
-| no judgement, rework only | `gpt-6-luna`, `medium`; step up to `high` before changing model | "focused, high-volume tasks such as summarization, extraction, and focused coding" |
-| bounded judgement, or a person sees the result | `gpt-6.2-sol`, `medium` | "everyday coding, writing, and work across several sources"; 500 000-token default context |
-| open judgement, or data, money, security or production | `gpt-6.2-astra`, `high`, or `inherit` | "demanding work across code, apps, or research"; 272 000-token default context |
-| specialised, allowance healthy | `gpt-6.1-sol` for long repeated runs; `gpt-6.1-terra` for visual or computer-use work (CLI 0.159.0 or later) | "close to GPT-6 Astra at lower cost" (6.1 Sol) |
+| Ladder rung | Codex model and effort | Worker type | What the vendor says it is for (S1, paraphrased) |
+|---|---|---|---|
+| no judgement, rework only | `gpt-6-luna`, `medium`; step up to `high` before changing model | `worker-no-judgement` | focused, high-volume work: summarising, extraction, focused coding |
+| bounded judgement, or a person sees the result | `gpt-6.2-sol`, `medium` | `worker-bounded-judgement` | everyday work such as editing code or drafting a report; 500 000-token default context |
+| open judgement, or data, money, security or production | `gpt-6.2-astra`, `high`, or `inherit` | `worker-open-judgement` | demanding work such as tracing a bug across services; 272 000-token default context |
+| specialised, allowance healthy | `gpt-6.1-sol`, `medium`, for long repeated runs; `gpt-6.1-terra`, `medium`, for visual or computer-use work (CLI 0.159.0 or later, not the IDE extension) | `worker-specialised-long-runs`, `worker-specialised-visual` | close to GPT-6 Astra at lower cost (6.1 Sol); fast writing, visual understanding, computer use (6.1 Terra) |
 
-Whether `gpt-6.2-sol` and `gpt-6.2-astra` are generally available in the CLI or still a preview is
-not verified. Model names change: check the picker or S1 before a run, and record the model that
-actually ran.
+S1 marks none of these as a preview (read 22 November 2026). `gpt-6-luna` must first be enabled by
+an administrator on Enterprise and Edu plans (S1). The effort for the two specialised types is the
+brain's choice, not the vendor's. Model names change: check the picker or S1 before a run, and
+record the model that actually ran.
 
-A custom agent is one TOML file in `~/.codex/agents/` or `.codex/agents/` with `name`,
-`description`, `developer_instructions` and, optionally, `model` and `model_reasoning_effort` (S2).
-The brain does not yet install worker definitions for Codex; until it does, name the model and
-effort in the request that spawns the subagent.
+A custom agent is one TOML file in `~/.codex/agents/` or `.codex/agents/`; `name`, `description`
+and `developer_instructions` are required, `model` and `model_reasoning_effort` optional, and the
+`name` field, not the file name, identifies the agent (S2). The brain ships one file per row above
+in `/.codex/agents/`, with the worker instructions of `/.claude/agents/`. `host_wiring.py apply
+--host codex` copies them to `~/.codex/agents/` (SETUP.md step E), so they reach sessions opened in
+a project repository too; a file there that is not a brain copy, or that defines an agent of the
+same name, is the person's own and is kept. Spawn a worker by its type name ("spawn
+worker-no-judgement for packet W01"), or name the model and effort in the request when no type
+fits.
 
 ## Reading the allowance
 
@@ -76,34 +82,27 @@ before the guard does.
 
 ## Compaction hooks
 
-Codex offers the same two hooks as Claude Code (official configuration reference, read
-1 October 2026): `PreCompact` receives `session_id`, `cwd` and `trigger` on stdin, and
-`SessionStart` with matcher `compact` receives `session_id`, `cwd` and `source`, and its stdout
-is added to the model's context. So the brain's `hooks.py pre-compact` and `hooks.py post-compact`
-run unchanged. Enable hooks and add to `~/.codex/config.toml`, with the command run from the
-brain root:
+Codex offers the same two hooks as Claude Code (S4): every hook gets one JSON object on stdin with
+`session_id`, `transcript_path`, `cwd`, `hook_event_name` and `model`; `PreCompact` adds `trigger`
+(`manual` or `auto`), and `SessionStart` adds `source`, with matchers `startup`, `resume`, `clear`,
+`compact` and `fork`. Hooks are on by default (`[features] hooks`). So `hooks.py` reads the input
+unchanged.
 
-```toml
-[features]
-hooks = true
+`host_wiring.py apply --host codex` (at the `routine` and `edits` levels, SETUP.md step F.3) writes
+into `~/.codex/config.toml`, by merging and never replacing: `[features] hooks = true`,
+`[agents] max_concurrent_threads_per_session = 4`, and one `[[hooks.<event>]]` table for each
+`PreCompact` and `SessionStart` entry of the repository-preflight skill's `hooks/events.json`
+(session start and resume, before compaction, after compaction), each naming `hooks.py` by its
+absolute path, because Codex runs a hook in the session's folder. A hook the file already runs
+under the same matcher, the person's own copy included, is kept and not added twice; a value the
+person set is kept and reported.
 
-[[hooks.PreCompact]]
-matcher = "manual|auto"
-[[hooks.PreCompact.hooks]]
-type = "command"
-command = "python shared/skills/repository-preflight/scripts/hooks.py pre-compact"
-
-[[hooks.SessionStart]]
-matcher = "compact"
-[[hooks.SessionStart.hooks]]
-type = "command"
-command = "python shared/skills/repository-preflight/scripts/hooks.py post-compact"
-```
-
-Not yet verified on the owner's machine. Two differences to know: Codex's compaction summary is an
-opaque blob the model cannot steer, and `AGENTS.md` is re-read every turn, so the pointer file
-survives a compaction on its own; the `## Handover` reload still needs the hook. The brain's setup
-does not write these hooks for Codex yet: they are copied by hand.
+What reaches the model differs from Claude Code (S4): `SessionStart` adds plain text or a
+`hookSpecificOutput.additionalContext` reply to the context, so `session-start` and `post-compact`
+are heard; `PreCompact` ignores plain text, so `pre-compact` writes its marker but its reminder is
+not shown. Codex's compaction summary is an opaque blob the model cannot steer, and `AGENTS.md`
+is re-read every turn, so the pointer survives a compaction on its own; the `## Handover` reload
+still needs the hook. Not yet run on the owner's machine.
 
 ## Procedure
 
@@ -130,3 +129,4 @@ Read on 22 November 2026 unless a line says otherwise.
 - S1: the vendor's Codex models page, `https://learn.chatgpt.com/docs/models`.
 - S2: the vendor's subagents page, `https://learn.chatgpt.com/docs/agent-configuration/subagents.md`.
 - S3: `https://help.openai.com/en/articles/11369540-using-codex-with-your-chatgpt-plan`.
+- S4: the vendor's hooks page, `https://learn.chatgpt.com/docs/hooks`.

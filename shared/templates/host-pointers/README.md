@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-23T13:00:00+10:00
-updated: 2026-11-22T10:48:05+10:00
+updated: 2026-11-22T12:52:34+10:00
 owner: brain-owner
 ---
 
@@ -52,7 +52,8 @@ stale when rules are renumbered.
   from `id`, drop `install_to`, and set `created` and `updated` to the install time.
 - **Settings files:** merge into an existing file key by key; never overwrite a file the person
   already has. `host_wiring.py` adds a template hook to an event only when the event does not run that
-  command yet, and keeps every hook the person has. `/SETUP.md` step F gives the merge command for JSON and the placement rule for
+  command yet, and keeps every hook the person has; for Codex it appends `[[hooks.<event>]]` tables
+  only for a hook the file does not already run under the same matcher. `/SETUP.md` step F gives the merge command for JSON and the placement rule for
   TOML. JSON has no comments, so the reasons for each entry are in `/SETUP.md` step F. The allow
   list names `python -m unittest`, the runner every shared skill's tests use.
 
@@ -66,7 +67,7 @@ Alphabetical by file name.
 | `claude-code.settings.local.template.json` | `<BRAIN_ROOT>/.claude/settings.local.json`, and each project repository's `.claude/settings.local.json` | Settings – routine allow list |
 | `claude-code.user-settings.template.json` | merged into `~/.claude/settings.json` | Settings – deny and ask lists, default mode, and the per-prompt context check (`hooks.UserPromptSubmit`, the brain's `hooks.py context-check` by its absolute path, so a session opened in a project repository is warned too) |
 | `codex-user.AGENTS.template.md` | `~/.codex/AGENTS.md` | Pointer |
-| `codex.config.template.toml` | merged into `~/.codex/config.toml` | Settings – approval and sandbox |
+| `codex.config.template.toml` | merged into `~/.codex/config.toml` | Settings – approval and sandbox, at most four worker threads (`[agents]`), hooks kept on (`[features]`); `host_wiring.py` adds the brain's `PreCompact` and `SessionStart` hooks from the repository-preflight skill's `hooks/events.json`, each by its absolute path |
 | `cursor-cli.cli-config.template.json` | merged into `~/.cursor/cli-config.json` | Settings – Cursor CLI allow and deny lists |
 | `cursor-project-repo.brain-contract.mdc.template` | `<project repo>/.cursor/rules/brain-contract.mdc` | Pointer, only when Cursor does not read the project's `AGENTS.md` |
 | `memory-root.AGENTS.template.md` | `<BRAIN_ROOT>/memory/AGENTS.md` | Pointer – hosts that stop at the Git root otherwise miss the contract |
@@ -85,6 +86,12 @@ relying on them: Claude Code `permissions.ask`, `permissions.defaultMode`,
 `permissions.additionalDirectories` and `~` in path rules; Codex `approval_policy`,
 `sandbox_mode` and `[sandbox_workspace_write]`; Cursor CLI `Read(...)` entries and whether
 `Shell(<command> <subcommand>)` matches at subcommand level; Cursor `.mdc` rule front matter.
+
+Worker types are not templates: `host_wiring.py` copies `<BRAIN_ROOT>/.claude/agents/`,
+`<BRAIN_ROOT>/.codex/agents/` and `<BRAIN_ROOT>/.cursor/agents/` unchanged to the host's user
+folder (`--host claude-code`, `codex`, `cursor`). A Codex or Cursor file carries a
+`# From the brain's ...` comment line; a file in the user folder without it is the person's own and is
+kept, as is any file of theirs that defines an agent of the same name.
 
 Pattern rules match command prefixes. They are guard rails against mistakes, not a sandbox: a
 shell command can still reach a file that a `Read(...)` rule denies to the reading tool.
