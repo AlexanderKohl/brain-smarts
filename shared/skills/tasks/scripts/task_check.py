@@ -1,7 +1,9 @@
 """`tasks.py check`: the record checks and the store-level checks of P25 that need no Git.
 
 Per record: front matter, the required fields (`author` among them), `type`, the identifier and
-the file name, the status against its folder, dates, `schedule`, a conflict marker or an
+the file name, the status against its folder, dates, `schedule`, `reminder` without `next_review`,
+`repeat_days` that is not a positive whole number or sits outside recurring/ (recurring/ without
+it is a warning), a conflict marker or an
 unreadable file, an `updated` later than the newest attributed History entry (an edit nobody is
 named for), a first project reference that does not name the node holding the record (in
 /memory/tasks/, any project reference that names a node), and, outside completed/, references
@@ -25,6 +27,7 @@ from task_history import AUTHOR_RE, STAMP, newest_attributed, parse_stamp
 from task_new import SCHEDULE_RE
 from task_private import MEMORY_PATH
 from task_records import FOLDER_STATUSES, ID_RE, Task, load_tasks
+from task_reminders import is_reminder, repeat_days
 
 REQUIRED = ("id", "title", "type", "contract", "status", "owner", "author", "created", "updated")
 
@@ -39,6 +42,23 @@ def _ref_node(root: Path, ref: str) -> str | None:
     if ":" in ref and not ref.startswith("/"):
         return "repository " + ref.split(":", 1)[0]
     return task_stores.node_of(root, ref)
+
+
+def _check_reminder(task: Task, where: str, report: Report) -> None:
+    """`reminder: true` needs its day; `repeat_days` is a positive whole number on a record in
+    recurring/ (a completed one keeps it as history); recurring/ without it is a warning, for the
+    records made before the field existed."""
+    if is_reminder(task) and not task.get("next_review"):
+        report.errors.append(f"{where}: reminder: true without next_review (the day it is due)")
+    try:
+        days = repeat_days(task)
+    except ValueError as err:
+        report.errors.append(f"{where}: {err}")
+        days = 0
+    if days is not None and task.folder not in ("recurring", "completed"):
+        report.errors.append(f"{where}: repeat_days on a record in {task.folder}/; a repeating task lives in recurring/")
+    if days is None and task.folder == "recurring":
+        report.warnings.append(f"{where}: in recurring/ without repeat_days")
 
 
 def _check_record(root: Path, store, task: Task, where: str, report: Report) -> None:
@@ -74,6 +94,7 @@ def _check_record(root: Path, store, task: Task, where: str, report: Report) -> 
             report.errors.append(f"{where}: {key} {task.get(key)} is not a date")
     if task.get("schedule") and not SCHEDULE_RE.match(task.get("schedule")):
         report.errors.append(f"{where}: schedule is not \"<app> | <job> | <cadence>\"")
+    _check_reminder(task, where, report)
     text = task.path.read_text(encoding="utf-8")
     newest = newest_attributed(text)
     updated = parse_stamp(task.get("updated") or "")

@@ -4,7 +4,10 @@ Runs with no model and changes nothing that Git tracks, so it can run from the o
 own scheduler while sessions work in the same tree. Output: /temp/due.md (ignored by every brain
 repository), and a desktop notification when something needs attention. Its task section runs
 `tasks.py review`, which reads every task store the brain can reach (owner, node, pointer-private
-and checked-out repository stores) and names the ones it could not read.
+and checked-out repository stores) and names the ones it could not read. The report opens with
+`## Reminders`: one line per reminder task that has come due (`tasks.py reminders`), or
+`- none due`; the notification names them first, by title. The weekly learning review is one such
+repeating reminder, so nothing here holds its due date.
 
   python shared/skills/tasks/scripts/scheduled_review.py              write /temp/due.md, run the morning jobs, notify
   python shared/skills/tasks/scripts/scheduled_review.py --no-notify  the same without a notification
@@ -26,6 +29,7 @@ launchd agent on macOS, a systemd user timer on Linux, or cron where systemd is 
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import shutil
@@ -45,11 +49,6 @@ DAILY_AT = "07:00"
 # The Windows task is stopped at this limit, so the morning jobs' timeouts together stay under it.
 EXECUTION_LIMIT_MINUTES = 30
 REPOSITORIES = [(".", "mechanics"), ("library", "skill library"), ("memory", "memory")]
-DIGEST_INDEX = "memory/projects/brain-development/data/learning/index.md"
-# The phrase the learning index must carry before the next digest's due date; learning-maintenance's
-# SKILL.md tells the session that regenerates the index to write exactly this.
-DIGEST_DUE_PHRASE = "next is due"
-DIGEST_DUE = re.compile(re.escape(DIGEST_DUE_PHRASE) + r" (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2})")
 TASK_COUNT = re.compile(r"^(\d+) task\(s\) need attention", re.MULTILINE)
 
 
@@ -101,58 +100,55 @@ def freshness(root: Path) -> list[str]:
     return lines
 
 
-def digest_due(root: Path, now: datetime) -> str | None:
-    """"due since ..." or "state unreadable (...)" when the owner should act; None when not due or
-    when there is no learning index. An index without a readable due date is never "not due": a
-    regenerated index once dropped the phrase and the reminder went silent for weeks."""
-    index = root / DIGEST_INDEX
-    if not index.is_file():
-        return None
-    unreadable = f"state unreadable (no due date found in /{DIGEST_INDEX})"
+def due_reminders(root: Path) -> tuple[list[str], list[str]]:
+    """(the lines of the report's `## Reminders` section, the titles of the reminders due), read
+    through `tasks.py reminders --json`, the one reading of reminders (SMART-RULE-0018). A read that
+    fails is a line in the section, never a silent `none due`."""
+    output = run(root, "shared/skills/tasks/scripts/tasks.py", "reminders", "--json")
     try:
-        match = DIGEST_DUE.search(index.read_text(encoding="utf-8"))
-        due = datetime.fromisoformat(match.group(1)) if match else None
-    except (OSError, UnicodeDecodeError, ValueError):
-        due = None
-    if due is None:
-        return unreadable
-    return f"due since {match.group(1)}" if due <= now else None
+        found = json.loads(output)
+        rows, not_read = found["reminders"], found["not_read"]
+    except (ValueError, KeyError, TypeError):
+        tail = output.splitlines()[-1] if output.strip() else "no output"
+        return [f"- reminder: could not be read ({tail})"], []
+    lines = [row["entry"] for row in rows] + [f"- reminder: could not be read ({reason})" for reason in not_read]
+    return lines or ["- none due"], [row["title"] for row in rows]
 
 
-def digest_reason(digest: str | None) -> str | None:
-    """The notification's reason for the digest state digest_due returned."""
-    if not digest:
-        return None
-    return "weekly learning digest due" if digest.startswith("due since") else f"weekly learning digest: {digest}"
+def reminder_reasons(titles: list[str], most: int = 3) -> list[str]:
+    """The notification names the reminders first, by title, at most `most`, then how many more."""
+    shown = titles[:most]
+    return shown + ([f"and {len(titles) - most} more"] if len(titles) > most else [])
 
 
 def review(root: Path, now: datetime, jobs: bool = True) -> tuple[str, list[str], list[str]]:
     """The report, the short reasons it needs the owner's attention (empty when nothing does), and
     the lines of the morning jobs that failed, for the notification's text."""
     stamp = now.isoformat(timespec="seconds")
+    reminder_lines, reminder_titles = due_reminders(root)
     tasks = run(root, "shared/skills/tasks/scripts/tasks.py", "review")
     preflight = run(root, "shared/skills/repository-preflight/scripts/preflight.py")
     sections = [("Tasks due, blocked or waiting", tasks),
                 ("Skill exchange", run(root, "shared/skills/skill-exchange/scripts/skill_exchange.py", "due")),
                 ("Repository preflight", preflight)]
     fresh = freshness(root)
-    digest = digest_due(root, now)
+    # The reminders open the report: they are promises to the owner, one line each.
     lines = [f"# Due – {stamp}", "", "Written by the scheduled review; read-only, regenerated each run.", "",
+             "## Reminders", "", *reminder_lines, "",
              "## Checkout compared with origin", "", *(fresh or ["- no repositories found"]), ""]
     if any("up to date" not in line for line in fresh):
         lines += ["The lists below are read from this checkout, so they may miss work that is only on origin.", ""]
-    lines += ["## Weekly learning digest", "", f"- {digest}" if digest else "- not due", ""]
     for title, text in sections:
         lines += [f"## {title}", "", "```", text[-6000:] or "(nothing)", "```", ""]
     # The morning jobs run last, after the review's own report is complete.
     results, problem = morning_jobs.run_jobs(root) if jobs else ([], "skipped (--no-jobs)")
     lines += ["## Morning jobs", "", *morning_jobs.report_lines(results, problem), ""]
-    reasons = []
+    reasons = reminder_reasons(reminder_titles)
+    if any("could not be read" in line for line in reminder_lines):
+        reasons.append("reminders could not be read")
     count = TASK_COUNT.search(tasks)
     if count and int(count.group(1)):
         reasons.append(f"{count.group(1)} task(s) need attention")
-    if digest_reason(digest):
-        reasons.append(digest_reason(digest))
     if not preflight.startswith("PASS"):
         reasons.append("preflight not passing")
     reasons += morning_jobs.reasons(results)
