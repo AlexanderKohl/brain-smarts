@@ -620,8 +620,10 @@ class TheCheckCatchesAnUnlistedPath(unittest.TestCase):
                                   "def passed():\n    from secret_store.envelope import seal\n    return seal\n\n"
                                   "def bound(obj, key):\n    from secret_store import envelope\n"
                                   "    opener = envelope.open_\n    return opener(obj, 'k', key)\n\n"
-                                  "def vault(v, p):\n    return v._load_unlocked(p)")
-        self.assertEqual(self.problems(caller_problems), [
+                                  "def vault(v, p):\n    return v._load_unlocked(p)\n\n"
+                                  "def peek():\n    from vault_agent_runtime import read_state\n    return read_state()")
+        self.assertEqual(self.problems(caller_problems), [  # by endpoint id, then caller
+            "vault_tray.py peek: calls or names agent-state-read (read_state) and is not a reviewed caller",
             "vault_tray.py bound: calls or names open (open_) and is not a reviewed caller",
             "vault_tray.py more: calls or names open (open_) and is not a reviewed caller",
             "vault_tray.py passed: calls or names seal (seal) and is not a reviewed caller",
