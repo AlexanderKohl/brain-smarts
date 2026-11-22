@@ -107,7 +107,7 @@ e start or configure the agent. `mc/` is this skill's `scripts/`, `lib/` the ski
 | # | Path | Touches | Store on (S2, S3) | S4 | Status |
 |---|---|---|---|---|---|
 | 1 | `mc/brain_secrets.py` init, team-init | b, d | store only, no agent needed | same | OK |
-| 2 | `brain_secrets.py` put, delete | b | direct store write | same | OK |
+| 2 | `brain_secrets.py` put, delete | b | direct store write; `delete --field F` by an administrator retires exactly that sign-in's oauth and grant ids, the entry's plain fields and other sign-ins untouched; `delete` without `--field` the whole entry | same | OK |
 | 3 | `brain_secrets.py` status, list, get-check, grant-scan | a (names) | names only | same | OK |
 | 4 | `brain_secrets.py recovery-package [--team]` | d | personal or team package; an unwritable folder warns and writes the upkeep-error file | same | OK |
 | 5 | `brain_secrets.py` enrol-request, enrol-approve | b, d | direct store | same | OK |
@@ -157,7 +157,7 @@ e start or configure the agent. `mc/` is this skill's `scripts/`, `lib/` the ski
 | 49 | `repository-preflight` host wiring | none | – | – | not a credential path |
 | 50 | `mc/token_endpoint.py` `post_token` | c | not sent, refused and uncertain decided by fact; https only; never retried | – | OK |
 | 51 | `mc/migration_lock.py` | b (lock file) | exclusive; an absent, dead, old or malformed lock refuses | – | OK |
-| 52 | `brain_secrets.py replace-signin` | b, d | the refresher that is an administrator; a refresher that is not an administrator changes nothing and gets the step, the ordinary `delete` by an administrator (exit 3), and is refused with `--even-if-working`; an administrator that is not the refresher is refused, naming `delete`; settings kept in an encrypted hand-over file; one commit retires both ids; a failed push changes nothing; the old refresher discards its record of the retired grant | – | OK |
+| 52 | `brain_secrets.py replace-signin` | b, d | the refresher that is an administrator; a refresher that is not an administrator changes nothing and gets the step, `delete --entry E --field F` by an administrator (exit 3), and is refused with `--even-if-working`; an administrator that is not the refresher is refused, naming `delete --field`; settings kept in an encrypted hand-over file; one commit retires both ids; a failed push changes nothing; the old refresher discards its record of the retired grant | – | OK |
 | 53 | `brain_secrets.py unfinished [--team] [--apply ID \| --discard ID]`, `secret_store/pending.py`, `secret_store/typed_write.py` | a, b | one pending-write record per typed write (`put`, the agent's `set_text` and `set_json` of a static or grant field), encrypted to this computer's key beside the journal; a typed value whatever its field is called; a provider's token answer never enters a record (an authorisation, the migration, `save_settings` and a refresh make none); listed by write id, entry and time, never a value; replayed only while every base identity holds, held otherwise; `--apply` writes through the normal store path; `--discard` removes a record after its id is typed; a damaged record, one of another repository or one without field kinds is never applied; nothing is read from or sent to the vault | same | OK |
 
 Tests: rows 1 to 11 and 29 to 31 in `tests/test_secret_store_*.py`; rows 13 to 28 in `test_secret_store_round8.py`

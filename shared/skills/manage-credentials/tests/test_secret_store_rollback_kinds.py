@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from secret_store import oauth_ops  # noqa: E402
+from secret_store import oauth_ops, static_fields  # noqa: E402
 from secret_store.store_ops import build_put  # noqa: E402
 from test_secret_store_broker import FIELD, PASS, SECRET, StoreFixture, setUpModule, tearDownModule  # noqa: E402,F401
 from test_secret_store_rollback_static import MigratedStore  # noqa: E402
@@ -66,6 +66,42 @@ class RollbackUsesTheRecordedKind(MigratedStore):
         self.assertIn("bad-kind", named)
         self.assertIn("bad-form", named)
         self.assertTrue(self.marker.exists())
+
+
+class SchemaIsTheWrapperOnlyWhenAnInteger(MigratedStore):
+    """Plan R11, rule 4 (Sol round 11, medium): only an integer, non-boolean schema marks the wrapper;
+    a text field named schema in an object written before N2 is an ordinary legacy field."""
+
+    def test_a_legacy_text_field_named_schema_is_read_written_and_named_like_any_legacy_field(self):
+        raw_static(self.a, "legacy-schema", {"schema": "v1", "api_key": "fictional-legacy"})
+        self.assertEqual(self.ba.get_fields("legacy-schema", ["schema", "api_key"]),
+                         {"schema": "v1", "api_key": "fictional-legacy"})
+        self.ba.set_text("legacy-schema", "extra", "fictional-later")
+        values = {"schema": "v1", "api_key": "fictional-legacy", "extra": "fictional-later"}
+        self.assertEqual(self.a.get_typed("legacy-schema"), (values, {"extra": "text"}))
+        self.assertEqual(self.a.static_payload("legacy-schema"),
+                         {"schema": static_fields.SCHEMA, "values": values, "kinds": {"extra": "text"}})
+        code, text = self.run_it()
+        self.assertEqual(code, 5, text)
+        named = text.split("could not be restored", 1)[1]
+        self.assertIn("legacy-schema (api_key, schema)", named)
+        self.assertNotIn("legacy-schema", self.vault.load(PASS)["entries"])
+
+    def test_an_integer_or_boolean_schema_that_is_not_the_wrapper_is_refused(self):
+        values = {"k": "fictional"}
+        refused = {"int-3": {"schema": 3, "values": values, "kinds": {}},
+                   "bool-wrapper": {"schema": True, "values": values, "kinds": {}},
+                   "bool-legacy": {"schema": True, "k": "fictional"},
+                   "too-many": {"schema": 2, "values": values, "kinds": {}, "extra": "fictional"},
+                   "too-few": {"schema": 2, "values": values}}
+        for entry, payload in refused.items():
+            with self.assertRaisesRegex(Exception, "kinds are malformed", msg=entry):
+                static_fields.split(payload)
+            raw_static(self.a, entry, payload)
+            with self.assertRaisesRegex(Exception, "kinds are malformed", msg=entry):
+                self.a.get_record(entry)
+        self.assertEqual(static_fields.split({"schema": 2, "values": values, "kinds": {"k": "text"}}),
+                         (values, {"k": "text"}))
 
 
 class EveryWriterKeepsTheKind(StoreFixture):

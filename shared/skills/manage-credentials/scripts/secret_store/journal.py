@@ -52,6 +52,7 @@ def uncertain_message(entry: str, provider: str | None) -> str:
     name, _sep, field = label(entry).rpartition("#")
     name = name or field
     command = f'brain_secrets.py replace-signin "{name}"' + (f" --field {field}" if _sep and field != DEFAULT_FIELD else "")
+    delete = f'brain_secrets.py delete --entry "{name}" --field "{field if _sep else DEFAULT_FIELD}" --group G'
     procedure = ("" if provider_profiles.recovery_refusal(provider)
                  else "Run the uncertain-refresh procedure for this provider, or replace the sign-in. ")
     return (f"The last refresh of {label(entry)} is uncertain: the provider was called but its answer was never "
@@ -59,8 +60,8 @@ def uncertain_message(entry: str, provider: str | None) -> str:
             + procedure + "Next step: on the computer that refreshes it, run "
             f"{command} (add --group G for a team sign-in), then disconnect the app at the provider where it "
             "offers that and sign in again in the browser on that computer. For a team sign-in whose refreshing "
-            "computer is not an administrator's, an administrator instead deletes it on their own computer with "
-            f'brain_secrets.py delete --entry "{name}" --group G, signs in again in the browser there and hands '
+            "computer is not an administrator's, an administrator instead deletes that sign-in on their own "
+            f"computer with {delete}, signs in again in the browser there and hands "
             "the new sign-in back with handover-release and handover-accept.")
 
 

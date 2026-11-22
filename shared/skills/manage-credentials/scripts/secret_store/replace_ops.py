@@ -14,10 +14,11 @@ Nothing is ever retried with the old refresh token. Messages name entries and fi
 A team sign-in whose refresher is not an administrator (follow-up plan M2) is ended by the design's
 own deletion: the refresher's command changes nothing and names the step (AdministratorStep), its
 calling journal record keeping the sign-in blocked there (it refuses every refresh and survives
-restarts); an administrator deletes the entry with the ordinary delete command (section 7: one
-commit retiring both ids), signs in again and hands the new sign-in back with the existing
-handover; the old refresher's next operation discards its journal record of the exact retired
-grant (discard_retired)."""
+restarts); an administrator deletes exactly that sign-in with delete --entry E --field F
+(delete_signin, plan R11 rule 3: the same one commit retiring both ids that replace makes, built by
+_delete for both), signs in again and hands the new sign-in back with the existing handover; the
+old refresher's next operation discards its journal record of the exact retired grant
+(discard_retired). The entry's static object and its other sign-ins are never in that commit."""
 
 from __future__ import annotations
 
@@ -26,11 +27,11 @@ from pathlib import Path
 from typing import Any
 
 from . import canonical, envelope, fileio, provider_profiles
-from .delete_ops import build_delete
+from .delete_ops import build_signin_delete
 from .errors import SecretStoreError
 from .journal import KEY_SEPARATOR, Journal
 from .keys import key_id
-from .oauth_ops import PROVIDER_KEY, SignIn, find, read_shared, signin_fields, signin_names
+from .oauth_ops import PROVIDER_KEY, SignIn, find, read_shared, signin_fields
 from .store_ops import GROUP
 
 SUFFIX = ".handover"
@@ -137,8 +138,10 @@ def _is_admin(store: Any) -> bool:
     return store.policy.is_admin_key(key_id(store._identity().ed25519.public_key()))
 
 
-def _require_admin(store: Any) -> None:
+def _require_admin(store: Any, verb: str = "replaced") -> None:
     if not _is_admin(store):
+        if verb == "deleted":
+            raise SecretStoreError("only an administrator of the repository may delete a sign-in; nothing was deleted")
         raise SecretStoreError("only an administrator of the repository may replace a sign-in; nothing was changed")
 
 
@@ -159,24 +162,40 @@ def _keep(store: Any, journal: Journal, signin: SignIn, settings: dict) -> None:
             "group": signin.group, "settings": settings})
 
 
-def _delete(store: Any, signin: SignIn, group: str | None) -> None:
-    """The one administrator commit of section 7 retiring both ids, refused if the pair changed."""
-    oauth_name = signin_names(signin.entry, signin.field)[0]
+def _delete(store: Any, signin: SignIn, group: str | None, verb: str = "replaced") -> None:
+    """The one administrator commit of section 7 retiring the two ids of this sign-in, for replace
+    and for delete_signin alike. Inside the write, after its sync, the store's lookup must still
+    return the same pair (else refused: the sign-in changed meanwhile), and the commit is built from
+    those two ids alone, never from a scan of names."""
 
     def build() -> tuple[dict, str]:
-        _require_admin(store)
+        _require_admin(store, verb)
         current = find(store, signin.entry, signin.field, group)
         if current is None or (current.oauth_id, current.grant_id) != (signin.oauth_id, signin.grant_id):
-            raise SecretStoreError(f"the sign-in {signin.entry} {signin.field} changed meanwhile; nothing was replaced")
-        return build_delete(store.policy, store.checkpoint.objects, store._index(group), oauth_name,
-                            store._identity().ed25519)
+            raise SecretStoreError(f"the sign-in {signin.entry} {signin.field} changed meanwhile; nothing was {verb}")
+        return build_signin_delete(store.policy, store.checkpoint.objects, store._index(group), current.oauth_id,
+                                   current.grant_id, store._identity().ed25519)
     store._write(build)
 
 
+def delete_signin(store: Any, entry: str, field: str, group: str | None = None) -> SignIn:
+    """delete --entry E --field F (plan R11, rule 3): an administrator deletes exactly the sign-in of
+    entry E under field F, the pair the store's lookup returns, in the commit replace makes. Refused
+    with nothing written when there is no such sign-in or this computer is not an administrator's."""
+    if store.policy is None:
+        store.open()
+    signin = find(store, entry, field, group)
+    if signin is None:
+        raise SecretStoreError(f"{entry} has no sign-in {field}; nothing was deleted")
+    _require_admin(store, "deleted")
+    _delete(store, signin, group, "deleted")
+    return signin
+
+
 def delete_command(signin: SignIn) -> str:
-    """The store's ordinary deletion of the entry (design section 7), run by an administrator."""
+    """The administrator's step: the deletion of exactly this sign-in (delete --field)."""
     group = f" --group {signin.group}" if signin.group != GROUP else ""
-    return f'brain_secrets.py delete --entry "{signin.entry}"{group}'
+    return f'brain_secrets.py delete --entry "{signin.entry}" --field "{signin.field}"{group}'
 
 
 def replace(store: Any, entry: str, field: str | None = None, group: str | None = None,
@@ -187,7 +206,7 @@ def replace(store: Any, entry: str, field: str | None = None, group: str | None 
     discarded. On the refresher that is not an administrator: with an uncertain record
     AdministratorStep (nothing changed; the calling record keeps the sign-in blocked here), with
     even_if_working refused (a working sign-in moves by the cooperative handover). On any other
-    computer refused: an administrator ends it with the ordinary deletion. Returns the replaced
+    computer refused: an administrator ends it with delete --field. Returns the replaced
     sign-in."""
     if store.policy is None:
         store.open()
@@ -199,7 +218,7 @@ def replace(store: Any, entry: str, field: str | None = None, group: str | None 
         if admin:
             raise SecretStoreError(
                 f"this sign-in refreshes on {holder}, not here, so nothing was changed: replace it there, or as an "
-                f"administrator end it by deleting it: {delete_command(signin)}, then sign in again in the browser and "
+                f"administrator end it by deleting this sign-in: {delete_command(signin)}, then sign in again in the browser and "
                 "hand the new "
                 f"sign-in to {holder} with handover-release and handover-accept")
         raise SecretStoreError(f"this sign-in refreshes on {holder}; replace it there; nothing was changed")

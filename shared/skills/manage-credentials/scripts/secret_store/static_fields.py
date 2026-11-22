@@ -3,7 +3,12 @@ is {"schema": 2, "values": {field: text}, "kinds": {field: "text" | "json"}}. On
 kinds, a json field's text is a JSON object, and kind data that is malformed or unknown is refused
 before use. An object written before this change is {field: text} with no kinds: it reads as before,
 and any write to it records the kinds of the fields it writes. The payload is inside the envelope,
-so the acceptance rules are unchanged."""
+so the acceptance rules are unchanged.
+
+The discriminator (follow-up plan R11, rule 4): a payload is the wrapper only when its "schema" is an
+integer and not a boolean, and then it must be exactly the wrapper; any other integer schema is
+refused. Every other payload is a legacy one, where a text field named "schema" is an ordinary field.
+split is the only code that decides the layout; every reader goes through it."""
 from __future__ import annotations
 
 import json
@@ -34,11 +39,18 @@ def check_kind(field: str, text: Any, kind: Any) -> None:
             _refuse(f"{field} is recorded as JSON but is not a JSON object")
 
 
+def _is_wrapper(payload: dict) -> bool:
+    """The wrapper is marked by an integer schema; a boolean is not an integer here, and a legacy
+    object's text field named schema marks nothing."""
+    schema = payload.get("schema")
+    return isinstance(schema, int) and not isinstance(schema, bool)
+
+
 def split(payload: Any) -> tuple[dict[str, str], dict[str, str]]:
     """(values, kinds) of a static payload, checked; kinds is {} for an object written before N2."""
     if not isinstance(payload, dict):
         _refuse("not an object")
-    if "schema" not in payload:  # written before kinds were recorded: every value is text
+    if not _is_wrapper(payload):  # written before kinds were recorded: every value is text
         if not all(isinstance(k, str) and k and isinstance(v, str) for k, v in payload.items()):
             _refuse("a value is not text")
         return dict(payload), {}

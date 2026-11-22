@@ -6,10 +6,12 @@
                                                   recovery words typed in the masked window
   brain_secrets.py replace-signin ENTRY [--field F] [--group G] [--even-if-working]
                                                   refresher: end an uncertain sign-in (an administrator), or
-                                                  name the administrator's step, the delete command (exit 3)
+                                                  name the administrator's step, delete --field (exit 3)
   brain_secrets.py put --entry E --secret FIELD [--secret FIELD ...] [--empty-json FIELD ...] [--group G]
   brain_secrets.py get-check --entry E [--group G]
-  brain_secrets.py delete --entry E [--group G]
+  brain_secrets.py delete --entry E [--field F] [--group G]
+                                                  the whole entry, or with --field (an administrator) only
+                                                  that sign-in, the entry's other fields kept
   brain_secrets.py enrol-request [--team] --fingerprint F     new computer: write the request
   brain_secrets.py enrol-request [--team] --request ID        new computer: answer the challenge, show words
   brain_secrets.py enrol-approve [--team] --request ID        approver: answer, later compare words and approve
@@ -65,8 +67,9 @@ def _parser() -> argparse.ArgumentParser:
     check = sub.add_parser("get-check", help="names of the fields an entry holds")
     check.add_argument("--entry", required=True)
     check.add_argument("--group")
-    delete = sub.add_parser("delete", help="delete an entry (type its name to confirm)")
+    delete = sub.add_parser("delete", help="delete an entry, or one sign-in of it (type its name to confirm)")
     delete.add_argument("--entry", required=True)
+    delete.add_argument("--field", help="administrator: delete only this sign-in; the entry's other fields stay")
     delete.add_argument("--group")
     req = sub.add_parser("enrol-request", help="new computer: request enrolment, then answer the challenge")
     req.add_argument("--team", action="store_true")
@@ -143,6 +146,29 @@ def _describe(store, entry: str, group) -> list[str]:
             held = f"its grant is held on {signin.refresher[0]}/{signin.refresher[1]}"
         lines.append(f"{entry} sign-in {field}: shared fields: {shared}; {held}")
     return lines
+
+
+def _delete(store, entry: str, field, group, confirm) -> bool:
+    """Plan R11, rule 3: with field exactly the sign-in of entry under field (an administrator's step),
+    else the whole entry. The entry name is typed again first; False when it does not match."""
+    if field is not None:
+        prompt = f"Type the entry name {entry} to delete its sign-in {field}; the entry's other fields stay: "
+    else:
+        from secret_store import oauth_ops
+        fields = oauth_ops.signin_fields(store, entry, group)
+        prompt = (f"Type the entry name {entry} to delete it with its plain fields and every sign-in under it "
+                  f"({', '.join(fields)}): " if fields and entry in store._index(group)
+                  else f"Type the entry name {entry} to delete it: ")
+    if (confirm or input)(prompt).strip() != entry:
+        print("The name did not match; nothing was deleted.")
+        return False
+    if field is None:
+        store.delete_entry(entry, group)
+        print(f"Deleted {entry}.")
+    else:
+        store.delete_entry(entry, group, field=field)
+        print(f"Deleted the sign-in {field} of {entry}; its other fields stay.")
+    return True
 
 
 def _ask_window(title: str, fields: list[str]):
@@ -315,12 +341,8 @@ def main(argv=None, store_factory=None, team_factory=None, ask=None, confirm=Non
         elif args.command == "get-check":
             print("\n".join(_describe(store.open(), args.entry, group)))
         elif args.command == "delete":
-            typed = (confirm or input)(f"Type the entry name {args.entry} to delete it: ")
-            if typed.strip() != args.entry:
-                print("The name did not match; nothing was deleted.")
+            if not _delete(store.open(), args.entry, args.field, group, confirm):
                 return 1
-            store.open().delete_entry(args.entry, group)
-            print(f"Deleted {args.entry}.")
         elif args.command == "enrol-request":
             flag = " --team" if args.team else ""
             if args.fingerprint:

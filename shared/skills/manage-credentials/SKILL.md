@@ -494,17 +494,23 @@ writes a token out of the store, so every migrated sign-in needs a browser sign-
   encrypted hand-over file beside the journal, one commit deletes the sign-in and retires both ids, and
   the next browser sign-in under the same name gets the kept settings. A failed commit or push leaves
   the sign-in as it was; `status` reports a hand-over file whose sign-in was never completed.
-  A team sign-in whose refresher is not an administrator is ended by the store's ordinary deletion. On
+  A team sign-in whose refresher is not an administrator is ended by deleting that one sign-in. On
   the refresher, with the last refresh uncertain, the command changes nothing and exits 3: the sign-in
   stays blocked there, because its uncertain journal record refuses every refresh, offline, from a stale
-  copy and across restarts. The message names the administrator's step: delete the entry on their own
-  computer with `brain_secrets.py delete --entry E --group G` (one commit retiring both ids), sign in
+  copy and across restarts. The message names the administrator's step: delete the sign-in on their own
+  computer with `brain_secrets.py delete --entry E --field F --group G` (one commit retiring the ids of
+  that sign-in's oauth and grant objects; the entry's plain fields and its other sign-ins stay), sign in
   again in the browser there and hand the new sign-in back with `handover-release` and
   `handover-accept`. No settings are carried over that way; choose them again when signing in. On that
   refresher `--even-if-working` is refused: a working sign-in moves to an administrator by the
   cooperative handover. An administrator who is not the refresher is refused, and the message names the
-  delete command. The old refresher's next operation discards its record of the exact retired grant; a
-  refresh answer that arrives after the deletion is never published and never retried.
+  same `delete --field` command. The old refresher's next operation discards its record of the exact
+  retired grant; a refresh answer that arrives after the deletion is never published and never retried.
+- `brain_secrets.py delete --entry E [--field F] [--group G]` asks for the entry name to be typed again.
+  With `--field` it deletes exactly the sign-in `E` holds under `F`, by an administrator only, in the same
+  one commit `replace-signin` makes; a field that names no sign-in is refused and nothing is written.
+  Without `--field` it deletes the whole entry: its plain fields and every sign-in under it, and the
+  prompt says so when the entry holds both.
 - `brain_secrets.py unfinished [--team] [--apply ID | --discard ID]` lists the pending writes kept on this
   computer by write id, entry and time, never a value. Every typed value (`put`, plain or grant fields, and
   the agent's `set_text` and `set_json` of a static or grant field) is kept in one encrypted pending-write
