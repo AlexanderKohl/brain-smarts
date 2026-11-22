@@ -575,20 +575,22 @@ class SecretStore:
                 if typed is not None:
                     typed.before_commit(self, files)
                 phase("commit")
+                if typed is not None:
+                    self.repo.commit_started = False  # a replay's commit during the sync never counts here
                 try:
-                    written = self.repo.write(files, message, expected_parent=before)
-                    if typed is not None and self.repo.last_commit:
+                    try:
+                        written = self.repo.write(files, message, expected_parent=before)
+                    except SecretStoreError as error:
+                        if isinstance(error, MovedHead):  # else a lost acknowledgement: settle it with the remote
+                            raise
+                        written = self.repo.settle_failed_write(before)
+                        if written is None:
+                            raise
+                        accepted = accept_commit(self.policy, self.checkpoint, self.repo._changed_files(written),
+                                                 self._identity().my_keys(), baseline)
+                finally:  # plan R11 rule 1: a commit that may exist keeps the record, across the attempts
+                    if typed is not None and self.repo.commit_started:
                         typed.committed = True
-                except SecretStoreError as error:
-                    if typed is not None and self.repo.last_commit:
-                        typed.committed = True
-                    if isinstance(error, MovedHead):  # else a lost acknowledgement: settle it with the remote
-                        raise
-                    written = self.repo.settle_failed_write(before)
-                    if written is None:
-                        raise
-                    accepted = accept_commit(self.policy, self.checkpoint, self.repo._changed_files(written),
-                                             self._identity().my_keys(), baseline)
                 if isinstance(written, Conflict):
                     continue
                 phase("checkpoint")  # a failure here is the store's: never isolated (plan L4, correction 4)

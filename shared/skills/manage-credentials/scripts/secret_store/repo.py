@@ -314,13 +314,15 @@ class SecretRepo:
             self._git("read-tree", "-u", "-m", old, commit)
         self._git("update-ref", f"refs/heads/{BRANCH}", commit, *(([old]) if old else []))
 
-    last_commit: str | None = None  # the local commit the last write made, pushed or not (plan section L2)
+    commit_started = False  # this write ran git commit, whatever came of it (plan R11 rule 1)
 
     def write(self, change: dict[str, Any], message: str, expected_parent: Any = _ANY) -> "str | Conflict":
         """One change, one commit on the verified remote head, pushed without force. With
         expected_parent (the head the change was built and verified on), refuse when the head moved.
-        last_commit names the local commit once it exists, whatever happens to its push."""
-        self.last_commit = None
+        commit_started is cleared here and set immediately before git commit runs (after the head,
+        refusal and fetch checks and the staging); this write never clears it again, so a commit that
+        exists, or may, is never unknown to the caller, whatever interrupts it."""
+        self.commit_started = False
         if message not in ALLOWED_MESSAGES:
             raise SecretStoreError("commit message is not in the allowed set")
         if not change:
@@ -344,6 +346,7 @@ class SecretRepo:
             self._clean(local)  # nothing staged or loose may ride along with the declared files
             try:
                 self._stage(change, blobs, local)
+                self.commit_started = True
                 commit_result = self._git("commit", "--quiet", "--no-verify", "-m", message, check=False)
             except BaseException:
                 self._clean(local)
@@ -351,7 +354,7 @@ class SecretRepo:
             if commit_result.returncode != 0:
                 self._clean(local)
                 raise SecretStoreError("nothing to commit or commit failed")
-            new = self.last_commit = self.head()
+            new = self.head()
             push = self._git("push", "--quiet", "--porcelain", REMOTE,
                              f"refs/heads/{BRANCH}:refs/heads/{BRANCH}", check=False)
             if push.returncode != 0:

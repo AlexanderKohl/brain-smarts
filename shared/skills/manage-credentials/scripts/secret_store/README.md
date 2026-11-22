@@ -262,8 +262,10 @@ from the clone. What a person typed survives through a pending-write record (`pe
   to this computer's key, the repository and group in the authenticated header); each further attempt
   rewrites only the projected identities;
 - the record is removed when the write is confirmed (pushed and checkpointed), or when the first
-  write failed before any local commit. A push that fails after the commit keeps it, and the error
-  says the values are kept and saved at the next operation;
+  write failed and no attempt of it ever started a commit. `repo.write` sets its mark
+  `commit_started` immediately before `git commit`; once it is set the record is kept, whatever
+  follows (a commit that failed, a commit dropped again, a push that failed, an interrupt), and the
+  error says the values are kept and saved at the next operation;
 - at every sync (the next operation, by any process on this computer, under the repository lock) a
   current record of that repository is looked at in the verified state the write is built on, after
   that write's own sync: when the checkpoint still holds every base identity it is written again by
@@ -273,9 +275,11 @@ from the clone. What a person typed survives through a pending-write record (`pe
   record is never applied by itself again: `unfinished --apply ID` writes the kept values over the
   present ones, `unfinished --discard ID` removes the record (type the id to confirm). `status` and
   `unfinished` name each record by write id, entry and time, never a value;
-- only a push that failed after the commit, a refusal by the store and an unexpected error building
-  that record's change are kept to the record; a failed sync, a refused remote commit, a checkpoint,
-  pin or local-copy check stop the operation as always, the record untouched;
+- only a failure in the commit step after the commit was started, a refusal by the store and an
+  unexpected error building that record's change are kept to the record; a failed sync, a refused
+  remote commit, a checkpoint, pin or local-copy check, a record that cannot be rewritten and a commit
+  step that failed before any commit started stop the operation as always, the record on disk
+  untouched;
 - a damaged record, one for another repository, or one kept by the first version without field kinds
   is never applied; status names it until it is discarded.
 

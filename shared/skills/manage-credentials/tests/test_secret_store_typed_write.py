@@ -524,6 +524,80 @@ class Typed(unittest.TestCase):
         self.assertEqual(self.a.get_record("typed"), {"api_key": TYPED})
         self.assertEqual(self.a.get_record("other"), {"api_key": VALUE})
 
+    # -- round 11, rules 1 and 2: the commit mark, and a record that cannot be written ----------------
+    def interrupt_git(self, when):
+        """KeyboardInterrupt from the first git call for which when(args, calls) is true; calls lists
+        the git subcommands run so far in this test."""
+        real, calls = SecretRepo._git, []
+
+        def git(repo, *args, **kwargs):
+            if args and when(args, calls):
+                calls.append("interrupted")
+                raise KeyboardInterrupt()
+            calls.append(args[0] if args else "")
+            return real(repo, *args, **kwargs)
+        return mock.patch.object(SecretRepo, "_git", git)
+
+    def test_an_interrupt_right_after_git_commit_keeps_the_record_and_the_value_is_saved(self):
+        b = self.enrol_b()
+        writer = self.make_store().open()
+        with self.interrupt_git(lambda args, calls: calls and calls[-1] == "commit"), \
+                self.assertRaises(KeyboardInterrupt):
+            typed(writer, "typed", {"api_key": TYPED})
+        self.assertEqual(len(self.pending().all()), 1)
+        self.a._sync(None, self.a.checkpoint)
+        self.assertEqual(self.pending().all(), {})
+        b._sync(None, b.checkpoint)
+        self.assertEqual(b.get_record("typed"), {"api_key": TYPED})
+
+    def test_an_interrupt_during_the_staging_leaves_no_record_and_a_clean_clone(self):
+        writer = self.make_store().open()
+        parent = writer.repo.head()
+        with self.interrupt_git(lambda args, calls: args[0] == "add"), self.assertRaises(KeyboardInterrupt):
+            typed(writer, "typed", {"api_key": TYPED})
+        self.assertEqual(self.pending().all(), {})
+        self.assertEqual(writer.repo.head(), parent)
+        status = subprocess.run(["git", "-C", str(writer.clone), "status", "--porcelain", "--untracked-files=all"],
+                                capture_output=True, check=True).stdout
+        self.assertEqual(status, b"")
+
+    def test_a_commit_that_is_started_and_fails_keeps_the_record_and_it_is_replayed(self):
+        real = SecretRepo._git
+
+        def git(repo, *args, **kwargs):
+            if args and args[0] == "commit":
+                return subprocess.CompletedProcess(args, 1, b"", b"fictional commit failure")
+            return real(repo, *args, **kwargs)
+        with mock.patch.object(SecretRepo, "_git", git), self.assertRaises(SecretStoreError):
+            typed(self.a, "typed", {"api_key": TYPED})
+        self.assertEqual(len(self.pending().all()), 1)
+        self.a._sync(None, self.a.checkpoint)
+        self.assertEqual(self.pending().all(), {})
+        self.assertEqual(self.a.get_record("typed"), {"api_key": TYPED})
+
+    def test_a_replays_commit_mark_does_not_leak_into_the_write_that_triggered_it(self):
+        other = self.crash_typed(entry="other", plain={"api_key": VALUE})
+        # the replay's commit runs first; the write's own staging (an add after that commit) is interrupted
+        with self.interrupt_git(lambda args, calls: args[0] == "add" and "commit" in calls), \
+                self.assertRaises(KeyboardInterrupt):
+            typed(self.make_store().open(), "typed", {"api_key": TYPED})
+        self.assertEqual(self.pending().all(), {}, "the replay's record removed, no record of the write's own")
+        self.assertNotIn(other, self.pending().all())
+        self.assertNotIn("typed", self.make_store().open().list_entries())
+
+    def test_a_record_that_cannot_be_rewritten_during_a_replay_stops_the_sync(self):
+        write_id = self.crash_typed(entry="typed", plain={"api_key": TYPED})
+        before = self.pending().path(write_id).read_bytes()
+        real = PendingWrites.write
+
+        def write(pending, record):
+            if getattr(self.a, "_replaying", False):
+                raise OSError("fictional disk full")
+            return real(pending, record)
+        with mock.patch.object(PendingWrites, "write", write), self.assertRaises(OSError):
+            self.a._sync(None, self.a.checkpoint)
+        self.assertEqual(self.pending().path(write_id).read_bytes(), before)
+
     def test_a_push_that_fails_after_the_commit_keeps_the_record_until_the_next_operation(self):
         with self.push_fails(), self.assertRaisesRegex(SecretStoreError, "kept on this computer") as caught:
             typed(self.a, "typed", {"api_key": TYPED})

@@ -153,8 +153,15 @@ def _run(attempt: Attempt) -> None:
                                "entry and store it again")
 
 
+def _commit_mark(attempt: Attempt) -> bool:
+    """In the commit step, the repository's own mark (plan R11 rule 1): an interrupt can skip the
+    finally of _write that copies it into the attempt."""
+    return attempt.phase == "commit" and bool(attempt.store.repo.commit_started)
+
+
 def _committed(attempt: Attempt) -> bool:
-    return attempt.committed or (attempt.phase == "commit" and bool(attempt.store.repo.last_commit))
+    """An attempt of this write started a commit: its record is kept (plan R11 rule 1)."""
+    return attempt.committed or _commit_mark(attempt)
 
 
 def write_typed(store: Any, entry: str, plain: dict | None = None, kinds: dict | None = None,
@@ -236,8 +243,8 @@ def _isolated(attempt: Attempt, error: Exception) -> bool:
             records(attempt.store).write({**attempt.record, "held": True})
         return True  # an unexpected error building this record's change: untouched
     if attempt.phase == "record":
-        return not isinstance(error, SecretStoreError)
-    return attempt.phase == "commit" and _committed(attempt)  # the push failed after the local commit
+        return False  # a record that cannot be written stops the operation, whatever the error (R11 rule 2)
+    return _commit_mark(attempt)  # the attempt started a commit and its push failed: record-local
 
 
 def apply(store: Any, write_id: str) -> str:
