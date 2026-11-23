@@ -415,18 +415,19 @@ class VaultTrayApp:
                 log_tray(f"lock held by another agent: {exc}")
                 self._another_agent = True
                 self._stop.set()
-            except CredentialError as exc:
-                log_tray(f"agent stopped: {exc}")
-                _show_error(str(exc))
-                self._stop.set()
-                if self._icon is not None:
-                    self._icon.stop()
             except Exception as exc:  # noqa: BLE001
-                log_tray(f"agent stopped unexpectedly: {exc!r}")
-                _show_error(f"Vault Agent stopped unexpectedly: {exc}")
+                # Shut down and stop before anything is logged or shown (plan R21): a dialog must
+                # never stand in front of an agent that still serves, or of a tray that stays up.
+                self._give_up_start()
                 self._stop.set()
                 if self._icon is not None:
                     self._icon.stop()
+                if isinstance(exc, CredentialError):
+                    log_tray(f"agent stopped: {exc}")
+                    _show_error(str(exc))
+                else:
+                    log_tray(f"agent stopped unexpectedly: {exc!r}")
+                    _show_error(f"Vault Agent stopped unexpectedly: {exc}")
 
         self._serve_thread = threading.Thread(target=run, name="vault-agent", daemon=True)
         self._serve_thread.start()
@@ -453,6 +454,13 @@ class VaultTrayApp:
             f"Vault Agent did not start within {window:.0f} seconds: its state file was not written."
         )
 
+    def _icon_ready(self, icon: Any) -> None:
+        """pystray's setup, once the icon's loop runs: shown, or stopped at once when the agent stopped
+        between the check in run and the icon's existence (plan R21)."""
+        icon.visible = True
+        if self._stop.is_set():
+            icon.stop()
+
     def _give_up_start(self) -> None:
         """A start the tray gives up on may already have its listener: it is shut down before the
         failure is reported (plan R20, amendments)."""
@@ -468,6 +476,9 @@ class VaultTrayApp:
         if self._unlocked():
             _show_info("Vault is already unlocked.")
             self._refresh_icon()
+            return
+        if self._stop.is_set() or self.agent._fenced():
+            # A stopping agent takes no passphrase: no window asks for one (plan R21, rule 6).
             return
         passphrase = _prompt_passphrase()
         if passphrase is None:
@@ -542,13 +553,17 @@ class VaultTrayApp:
             if _ask_unlock_now():
                 self._do_unlock()
 
+        if self._stop.is_set():
+            # The agent stopped before the icon existed (plan R21): its loop is never entered.
+            self._give_up_start()
+            return 2
         self._icon = self.pystray.Icon(
             "PortableAIBrainVault",
             _make_icon(self._unlocked(), self.Image, self.ImageDraw),
             self._title(),
             self._menu(),
         )
-        self._icon.run()
+        self._icon.run(setup=self._icon_ready)
         try:
             self.agent.shutdown()  # directly, as in _do_quit
         except Exception:

@@ -149,7 +149,7 @@ FORMS: dict[str, frozenset[tuple[str, str]]] = {
         ("migrate_to_store.py", "migrate"),
         ("migrate_to_store.py", "rollback"), ("token_relay.py", "_seed"), ("token_relay.py", "_status"),
         ("token_relay.py", "main"), ("token_relay_store.py", "RelayedStore._warn"),
-        ("vault_agent.py", "VaultAgent.serve_forever"), ("vault_agent.py", "_diagnose.write"),
+        ("vault_agent.py", "VaultAgent._serve_with_listener"), ("vault_agent.py", "_diagnose.write"),
         ("vault_agent.py", "main"), ("vault_credentials.py", "_cancelled"),
         ("vault_credentials.py", "_put_entry_window"), ("vault_credentials.py", "main"), ("vaultctl.py", "main")}),
     # input(): a typed confirmation (an entry name, a write id), never a value
@@ -315,7 +315,7 @@ DIRECT_CALLERS: dict[str, dict[tuple[str, str], str]] = {
     "agent-pipe": {("vault_agent.py", "VaultAgent._accept_loop"): "one thread per admitted connection"},
     "agent-auth-make": {("vault_agent.py", "build_agent"): "the one way serve and the tray build the agent",
                         ("vault_tray.py", "VaultTrayApp._start_broker"): "reads LOCK_WAIT_SECONDS only"},
-    "agent-state-write": {("vault_agent.py", "VaultAgent.serve_forever"): "once the listener is up",
+    "agent-state-write": {("vault_agent.py", "VaultAgent._serve_with_listener"): "once the listener is up",
                           ("vault_agent.py", "VaultAgent._keep_state"): "again when the file went missing"},
     "agent-state-read": {("vault_broker_client.py", "_connect"): "the client's one read",
                          ("vault_agent.py", "VaultAgent._keep_state"): "compares the file with its own payload",

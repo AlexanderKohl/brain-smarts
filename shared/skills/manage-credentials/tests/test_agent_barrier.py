@@ -653,5 +653,45 @@ class BarrierTest(TemporaryRuntime):
         self.assertEqual(order, ["exit 2"])
 
 
+    # -- plan R21: every abnormal end of serve_forever is fenced by the agent itself ------------------
+    def test_a_worker_thread_that_cannot_start_fences_the_agent_before_serve_forever_raises(self) -> None:
+        agent = vault_agent.VaultAgent(self.folder / "fictional.vault")
+        outcome: list = []
+
+        def serve():
+            try:
+                agent.serve_forever()
+            except BaseException as exc:  # noqa: BLE001
+                outcome.append((exc, self.fenced(agent)))
+
+        thread = threading.Thread(target=serve, daemon=True)
+        thread.start()
+        state = self.folder / "agent-state.json"
+        deadline = time.time() + 5
+        while time.time() < deadline and not state.is_file():
+            time.sleep(0.02)
+        self.addCleanup(self._stop, agent, thread)
+        self.addCleanup(self.release.set)
+        second = self.client(agent)
+        second.send(self.request(agent))
+        self.assertIs(second.recv()["ok"], True)  # registered before
+        real_start = threading.Thread.start
+
+        def start(worker):
+            if getattr(worker, "_target", None) == agent._serve_connection:
+                raise RuntimeError("fictional: can't start new thread")
+            real_start(worker)
+
+        with mock.patch.object(threading.Thread, "start", start), mock.patch.object(sys, "stderr", io.StringIO()):
+            third = self.client(agent)  # accepted and registered; its worker cannot start
+            thread.join(5)
+        self.assertEqual(len(outcome), 1, "serve_forever did not end")
+        self.assertIsInstance(outcome[0][0], RuntimeError)
+        self.assertTrue(outcome[0][1], "serve_forever raised before the fence was up")
+        asking, answer = self.ask_in_thread(second, self.request(agent))
+        asking.join(3)
+        self.assertEqual(answer[0][0], "no answer")
+        third.close()
+
 if __name__ == "__main__":
     unittest.main()

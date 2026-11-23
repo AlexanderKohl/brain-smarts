@@ -73,7 +73,7 @@ class TrayStopTest(unittest.TestCase):
     def test_the_end_of_run_with_an_operation_holding_the_lock_reaches_the_fence(self) -> None:
         agent = self.agent()
         app = self.app(agent)
-        app.pystray.Icon.return_value.run.side_effect = lambda: self.hold_the_lock(agent)
+        app.pystray.Icon.return_value.run.side_effect = lambda **_kwargs: self.hold_the_lock(agent)
         with mock.patch.object(app, "_start_broker"), mock.patch.object(vault_tray, "_make_icon"):
             running = threading.Thread(target=app.run, kwargs={"prompt_on_start": False}, daemon=True)
             running.start()
@@ -103,6 +103,71 @@ class TrayStopTest(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertEqual(order, ["shutdown", "reported"])
 
+
+    # -- plan R21: the tray shuts down before it reports, and an early stop keeps the icon's loop out --
+    def test_a_failure_in_the_serve_thread_is_shut_down_and_stopped_before_it_is_reported(self) -> None:
+        order: list = []
+
+        class Failing:
+            _store = None
+
+            def serve_forever(self_inner):
+                raise RuntimeError("fictional: can't start new thread")
+
+            def shutdown(self_inner):
+                order.append("shutdown")
+                return True
+
+        app = self.app(Failing())
+        with mock.patch.object(vault_tray, "log_tray", lambda line: order.append(("logged", app._stop.is_set()))), \
+                mock.patch.object(vault_tray, "_show_error", lambda _message: order.append("reported")):
+            with self.assertRaises(vault_tray.CredentialError):
+                app._start_broker()
+            app._serve_thread.join(5)
+        logged = next(entry for entry in order if isinstance(entry, tuple))
+        self.assertEqual(order[0], "shutdown", order)
+        self.assertIs(logged[1], True, "logged before _stop was set")
+        self.assertLess(order.index(logged), order.index("reported"))
+
+    def test_a_stop_set_before_the_icon_exists_keeps_its_loop_from_running(self) -> None:
+        agent = self.agent()
+        app = self.app(agent)
+        app._stop.set()  # the serve thread failed before the icon was made
+        with mock.patch.object(app, "_start_broker"), mock.patch.object(vault_tray, "_make_icon"):
+            code = app.run(prompt_on_start=False)
+        app.pystray.Icon.return_value.run.assert_not_called()
+        self.assertEqual(code, 2)
+        self.assertTrue(agent._shutdown_requested.is_set())
+        icon = mock.Mock()
+        app._icon_ready(icon)  # a stop that came between the check and the loop: stopped at once
+        icon.stop.assert_called_once_with()
+
+    # -- plan R21, rule 6: a fenced agent takes no passphrase ------------------------------------------
+    def test_unlock_after_shutdown_began_is_refused_and_keeps_no_passphrase(self) -> None:
+        agent = self.agent()
+        with mock.patch.object(agent.vault, "load"):  # the fictional passphrase would open the vault
+            agent.shutdown()
+            with self.assertRaisesRegex(vault_tray.CredentialError, "stopping"):
+                agent.unlock("fictional passphrase")
+        self.assertIsNone(agent._passphrase)
+
+    def test_unlock_during_which_shutdown_begins_keeps_no_passphrase(self) -> None:
+        agent = self.agent()
+        with mock.patch.object(agent.vault, "load", side_effect=lambda _passphrase: agent.shutdown()):
+            with self.assertRaisesRegex(vault_tray.CredentialError, "stopping"):
+                agent.unlock("fictional passphrase")
+        self.assertIsNone(agent._passphrase)
+
+    def test_the_trays_unlock_on_a_fenced_agent_shows_no_passphrase_window(self) -> None:
+        agent = self.agent()
+        app = self.app(agent)
+        agent.shutdown()  # the serve thread failed while the start-up question was open
+        with mock.patch.object(vault_tray, "_prompt_passphrase", return_value="fictional passphrase") as prompt, \
+                mock.patch.object(agent.vault, "load"), mock.patch.object(vault_tray, "_show_error"), \
+                mock.patch.object(vault_tray, "_show_info"):
+            app._do_unlock()
+        prompt.assert_not_called()
+        self.assertIsNone(agent._passphrase)
 
 if __name__ == "__main__":
     unittest.main()
