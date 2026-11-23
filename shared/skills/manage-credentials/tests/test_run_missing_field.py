@@ -5,6 +5,7 @@ Run from the brain root:
 """
 from __future__ import annotations
 
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import contextlib
 import io
 import os

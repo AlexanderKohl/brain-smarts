@@ -1,5 +1,6 @@
 """vault_credentials.py delete-field removes one field and leaves the rest of its entry. Every vault
 here is a fictional one in a temporary folder, never the owner's vault."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import contextlib
 import io
 import os

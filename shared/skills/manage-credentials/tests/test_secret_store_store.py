@@ -2,6 +2,7 @@
 and the command line. A bare local repository is the remote; a fake keyring and a fake words
 callback stand in for the keychain and the window. No network, no real keychain, no real memory
 configuration. Every key and value here is fictional."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import base64
 import contextlib
 import importlib.util

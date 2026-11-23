@@ -1,6 +1,7 @@
 """Policy, commit acceptance and checkpoint of the synced secrets store (design sections 6 to 9).
 Every key is generated for the test and every token is fictional; nothing touches a keychain, Git
 or the network."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import copy
 import sys
 import tempfile

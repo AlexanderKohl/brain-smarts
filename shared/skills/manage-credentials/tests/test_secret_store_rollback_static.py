@@ -5,6 +5,7 @@ exit code non-zero and keeps the migration marker. A static field under the name
 sign-in is restored, not skipped. The recorded kinds themselves are tested in
 test_secret_store_rollback_kinds.py. Temporary folders, an in-process agent and fictional values
 only."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import json
 import sys
 import unittest

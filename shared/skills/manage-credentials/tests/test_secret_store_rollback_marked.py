@@ -5,6 +5,7 @@ restores only fields the marker names and leaves the marker as it is; the marker
 only when every restore of both kinds succeeded. The operation validates its whole request before
 its first write. Temporary folders, bare local repositories, an in-process agent, the fake keyring
 and fictional values only."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import json
 import sys
 import unittest

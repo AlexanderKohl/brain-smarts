@@ -3,6 +3,7 @@ with injected fakes (bare local repositories as remotes, a fake keyring, fake re
 enrolment-word windows). Each call must give the expected exit code, the output must name entries,
 fields, groups, people and computers only, and no value, recovery word or private key may appear in
 stdout or stderr. Every value here is fictional."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import importlib.util
 import re
 import sys

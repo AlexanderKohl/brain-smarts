@@ -1,6 +1,7 @@
 """secret_window.py checks, and vault_credentials.py init/put-entry --window routing with the windows
 and the Vault Agent mocked. Every vault here is a fictional one in a temporary folder, never the
 owner's vault; no window is ever shown."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import contextlib
 import io
 import os

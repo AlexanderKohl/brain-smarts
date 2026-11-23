@@ -1,6 +1,7 @@
 """Secrets-store primitives: RFC 9180 HPKE vector, canonical JSON, signatures, keychain allowlist,
 BIP-39 recovery and the object envelope. Every key here is fictional and made for the test; the
 keychain is an in-memory fake patched in per test, never the real one."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import copy
 import hashlib
 import sys

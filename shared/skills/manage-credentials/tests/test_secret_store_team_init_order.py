@@ -5,6 +5,7 @@ stops init_team in a second instance. Once the team store exists the same backen
 without a restart. A team clone holding any commit or ref, or a team checkpoint, still refuses
 init_team. Bare local repositories are the remotes and a fake keyring the keychain; every value
 is fictional."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import unittest
 
 from test_secret_store_store import VALUE, StoreCase, git, setUpModule, tearDownModule  # noqa: F401

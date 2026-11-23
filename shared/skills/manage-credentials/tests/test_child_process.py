@@ -5,6 +5,7 @@ a process, except the three calls that run the person's own command; (b) a store
 written to in a temporary folder passes NO_WINDOW on every call; (c) on Windows, for real: a parent
 without a console starts a child through the helper, which has no console window, and the same child
 with plain subprocess.run, which has one. Every remote is a bare repository in a temporary folder."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import ast
 import os
 import subprocess

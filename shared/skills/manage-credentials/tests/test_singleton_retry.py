@@ -3,6 +3,7 @@
 Everything runs in a temporary runtime folder, never the owner's running agent."""
 from __future__ import annotations
 
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import errno
 import shutil
 import sys

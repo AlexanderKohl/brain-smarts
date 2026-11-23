@@ -2,6 +2,7 @@
 section 9, Handing over item 1): one provider key, grant fields kept out of oauth revisions and static
 objects, a superseded grant read as empty, the broker fixture enrolling for real, and a full handover in
 a personal and a team repository. Every value is fictional."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import contextlib
 import io
 import sys

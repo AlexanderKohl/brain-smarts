@@ -2,6 +2,7 @@
 the recovery words come only through the injected masked-window reader, the package is chosen by path,
 the target must be new or empty, freshness is reported, and a refusal writes nothing. Bare local
 repositories and a fake keyring only. Every value is fictional."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import sys
 import unittest
 from pathlib import Path

@@ -3,6 +3,7 @@ fields are protected, an unrecognised provider is bound as "unknown"); an enable
 back to the passphrase vault; a recovery package is fresh only when its signed marker matches the
 current policy, a failed write is retried at the next use, and the daily due check reports a stale
 or missing package. Every token is fictional."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import importlib.util
 import json
 import os

@@ -2,6 +2,7 @@
 grant bound to its oauth id for life, the provider recorded in the policy and bound into a
 supersession, and the supersede command refused while no provider profile is verified. Every value
 is fictional."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import contextlib
 import io
 import sys

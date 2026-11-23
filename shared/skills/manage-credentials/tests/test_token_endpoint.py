@@ -4,6 +4,7 @@ plan's table; then the journal and the broker treat ProviderRefused like Provide
 time-out after the request was written as uncertain. The socket is a fake behind the real
 connection class: no network, no TLS. A bare local repository is the remote and a fake keyring the
 keychain. Every value is fictional."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import http.client
 import io
 import json

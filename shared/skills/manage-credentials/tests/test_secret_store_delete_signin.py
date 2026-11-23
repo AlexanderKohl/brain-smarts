@@ -5,6 +5,7 @@ administrator and a second sign-in G. The member's replace-signin names brain_se
 the store's own lookup, and the static object and G are untouched. delete --entry E without --field
 still removes the whole entry. Two real key sets, bare local repositories, a fake keyring and
 in-process stores only. Every value is fictional."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import contextlib
 import io
 import subprocess

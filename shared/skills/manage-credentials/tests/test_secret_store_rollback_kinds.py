@@ -3,6 +3,7 @@ encrypted payload, every writer and every partial update writes or keeps it, and
 kind is the only authority. A field with no recorded kind (an object written before N2) reads as
 before and fails closed at rollback, naming the fix; malformed or unknown kind data is refused
 before use. Temporary folders, an in-process agent and fictional values only."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import json
 import sys
 import unittest

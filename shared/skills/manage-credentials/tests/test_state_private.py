@@ -5,6 +5,7 @@ Everything runs in real temporary folders, never the user's runtime folder; no r
 tray is started (an agent here listens on a pipe of its own, in-process)."""
 from __future__ import annotations
 
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import io
 import os
 import secrets

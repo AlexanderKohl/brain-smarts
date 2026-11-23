@@ -1,6 +1,7 @@
 """The secrets store through the Vault Agent: refresher and other-computer roles, a member's
 settings save, grant fields, vault_credentials run in both modes and the store switched off. A
 bare local repository is the remote and a fake keyring the keychain. Every value is fictional."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import json
 import os
 import subprocess

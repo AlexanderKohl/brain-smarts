@@ -4,6 +4,7 @@ clone and checkpoint folder. The holder follows the newer checkpoint at its next
 timed sync is waited for); an older, forked or unsigned checkpoint and a local copy that differs
 from the reloaded checkpoint are still refused. A bare local repository is the remote and a fake
 keyring the keychain. Every value is fictional."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import importlib.util
 import json
 import os

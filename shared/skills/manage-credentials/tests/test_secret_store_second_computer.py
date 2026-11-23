@@ -7,6 +7,7 @@ fictional. Found: the second computer was never enrolled in the personal store i
 names, so its backend's first open of that store met the personal trust root with no pin and
 refused the root commit with no reason. The product now says so plainly, a refused commit names
 the rule, and the sequence that does both enrolments (design section 6) reads the team secret."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import unittest
 
 from test_secret_store_store import VALUE, git, setUpModule, tearDownModule  # noqa: F401
