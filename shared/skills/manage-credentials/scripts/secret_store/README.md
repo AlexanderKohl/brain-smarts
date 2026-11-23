@@ -279,8 +279,10 @@ from the clone. What a person typed survives through a pending-write record (`pe
   to this computer's key, the repository and group in the authenticated header); each further attempt
   rewrites only the projected identities;
 - the record is removed when the write is confirmed (pushed and checkpointed), or when the first
-  write failed and no attempt of it ever started a commit. `repo.write` sets its mark
-  `commit_started` immediately before `git commit`; once it is set the record is kept, whatever
+  write failed and no attempt of it ever started a commit. The repository sets its mark
+  `commit_started` in the one helper that launches `git commit`, by the statement right after the
+  child is created; an interrupt during the launch also sets it (the launch may have happened), and
+  a launch that fails with an operating-system error leaves it unset. Once it is set the record is kept, whatever
   follows (a commit that failed, a commit dropped again, a push that failed, an interrupt), and the
   error says the values are kept and saved at the next operation;
 - at every sync (the next operation, by any process on this computer, under the repository lock) a

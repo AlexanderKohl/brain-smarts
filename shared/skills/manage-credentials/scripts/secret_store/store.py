@@ -588,7 +588,7 @@ class SecretStore:
                             raise
                         accepted = accept_commit(self.policy, self.checkpoint, self.repo._changed_files(written),
                                                  self._identity().my_keys(), baseline)
-                finally:  # plan R11 rule 1: a commit that may exist keeps the record, across the attempts
+                finally:  # plan R11 rule 1: a commit whose child was created, or may have been, keeps the record
                     if typed is not None and self.repo.commit_started:
                         typed.committed = True
                 if isinstance(written, Conflict):

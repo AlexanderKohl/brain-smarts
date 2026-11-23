@@ -67,6 +67,14 @@ class Crash(BaseException):
     """The writing process dies: no handler in the store catches it."""
 
 
+class InterruptedCollect(subprocess.Popen):
+    """A real git commit child; the interrupt comes while its output is collected, after it ended."""
+
+    def communicate(self, *args, **kwargs):
+        super().communicate(*args, **kwargs)
+        raise KeyboardInterrupt()
+
+
 def typed(store, entry, plain=None, kinds=None, grant=None, group=None):
     """The one function that writes typed values (write_typed); before it existed, the writers."""
     try:
@@ -528,7 +536,7 @@ class Typed(unittest.TestCase):
     def interrupt_git(self, when):
         """KeyboardInterrupt from the first git call for which when(args, calls) is true; calls lists
         the git subcommands run so far in this test."""
-        real, calls = SecretRepo._git, []
+        real, real_commit, calls = SecretRepo._git, SecretRepo._run_commit, []
 
         def git(repo, *args, **kwargs):
             if args and when(args, calls):
@@ -536,7 +544,24 @@ class Typed(unittest.TestCase):
                 raise KeyboardInterrupt()
             calls.append(args[0] if args else "")
             return real(repo, *args, **kwargs)
-        return mock.patch.object(SecretRepo, "_git", git)
+
+        def run_commit(repo, message):  # git commit is launched by its own helper, not by _git
+            calls.append("commit")
+            return real_commit(repo, message)
+        stack = contextlib.ExitStack()
+        stack.enter_context(mock.patch.object(SecretRepo, "_git", git))
+        stack.enter_context(mock.patch.object(SecretRepo, "_run_commit", run_commit))
+        return stack
+
+    def commit_child(self, launch):
+        """subprocess.Popen replaced for git commit only: launch(real_popen, args, kwargs) runs instead."""
+        real = subprocess.Popen
+
+        def popen(args, *rest, **kwargs):
+            if list(args[:2]) == ["git", "commit"]:
+                return launch(real, args, rest, kwargs)
+            return real(args, *rest, **kwargs)
+        return mock.patch.object(subprocess, "Popen", popen)
 
     def test_an_interrupt_right_after_git_commit_keeps_the_record_and_the_value_is_saved(self):
         b = self.enrol_b()
@@ -550,6 +575,65 @@ class Typed(unittest.TestCase):
         b._sync(None, b.checkpoint)
         self.assertEqual(b.get_record("typed"), {"api_key": TYPED})
 
+    # -- round 15, low: the mark means git commit's child was created, or may have been ------------------
+    def test_an_interrupt_after_staging_before_the_commit_launch_leaves_no_record(self):
+        """(a) Interrupted after the staging, before the helper's try: no child, no mark, no record."""
+        writer = self.make_store().open()
+        staged = []
+
+        def run_commit(repo, message):
+            staged.append(subprocess.run(["git", "-C", str(repo.path), "diff", "--cached", "--name-only"],
+                                         capture_output=True, check=True).stdout)
+            raise KeyboardInterrupt()
+        with mock.patch.object(SecretRepo, "_run_commit", run_commit), self.assertRaises(KeyboardInterrupt):
+            typed(writer, "typed", {"api_key": TYPED})
+        self.assertTrue(staged and staged[0].strip(), "the interrupt came after the staging")
+        self.assertFalse(writer.repo.commit_started)
+        self.assertEqual(self.pending().all(), {})
+        self.a._sync(None, self.a.checkpoint)
+        self.assertNotIn("typed", self.a.list_entries())
+
+    def test_a_launch_interrupted_inside_popen_keeps_the_record_and_it_is_published(self):
+        """(b) Popen raises KeyboardInterrupt: the launch may have happened, so it counts as started."""
+        writer = self.make_store().open()
+
+        def launch(real, args, rest, kwargs):
+            raise KeyboardInterrupt()
+        with self.commit_child(launch), self.assertRaises(KeyboardInterrupt):
+            typed(writer, "typed", {"api_key": TYPED})
+        self.assertTrue(writer.repo.commit_started)
+        self.assertEqual(len(self.pending().all()), 1)
+        self.a._sync(None, self.a.checkpoint)
+        self.assertEqual(self.pending().all(), {})
+        self.assertEqual(self.a.get_record("typed"), {"api_key": TYPED})
+
+    def test_a_launch_that_fails_with_an_os_error_leaves_no_record_and_the_error_reaches_the_caller(self):
+        """(c) Popen raises FileNotFoundError: no child was created; the mark stays unset."""
+        writer = self.make_store().open()
+
+        def launch(real, args, rest, kwargs):
+            raise FileNotFoundError("fictional: git not found")
+        with self.commit_child(launch), self.assertRaisesRegex(FileNotFoundError, "fictional: git not found"):
+            typed(writer, "typed", {"api_key": TYPED})
+        self.assertFalse(writer.repo.commit_started)
+        self.assertEqual(self.pending().all(), {})
+        self.a._sync(None, self.a.checkpoint)
+        self.assertNotIn("typed", self.a.list_entries())
+
+    def test_an_interrupt_while_the_commit_output_is_collected_keeps_the_record(self):
+        """(d) The child exists; an interrupt while its output is read keeps the mark and the record."""
+        writer = self.make_store().open()
+
+        def launch(real, args, rest, kwargs):
+            return InterruptedCollect(args, *rest, **kwargs)
+        with self.commit_child(launch), self.assertRaises(KeyboardInterrupt):
+            typed(writer, "typed", {"api_key": TYPED})
+        self.assertTrue(writer.repo.commit_started)
+        self.assertEqual(len(self.pending().all()), 1)
+        self.a._sync(None, self.a.checkpoint)
+        self.assertEqual(self.pending().all(), {})
+        self.assertEqual(self.a.get_record("typed"), {"api_key": TYPED})
+
     def test_an_interrupt_during_the_staging_leaves_no_record_and_a_clean_clone(self):
         writer = self.make_store().open()
         parent = writer.repo.head()
@@ -562,13 +646,9 @@ class Typed(unittest.TestCase):
         self.assertEqual(status, b"")
 
     def test_a_commit_that_is_started_and_fails_keeps_the_record_and_it_is_replayed(self):
-        real = SecretRepo._git
-
-        def git(repo, *args, **kwargs):
-            if args and args[0] == "commit":
-                return subprocess.CompletedProcess(args, 1, b"", b"fictional commit failure")
-            return real(repo, *args, **kwargs)
-        with mock.patch.object(SecretRepo, "_git", git), self.assertRaises(SecretStoreError):
+        def launch(real, args, rest, kwargs):  # a real child that fails: an option git does not know
+            return real([*args[:2], "--fictional-option-not-real", *args[2:]], *rest, **kwargs)
+        with self.commit_child(launch), self.assertRaises(SecretStoreError):
             typed(self.a, "typed", {"api_key": TYPED})
         self.assertEqual(len(self.pending().all()), 1)
         self.a._sync(None, self.a.checkpoint)

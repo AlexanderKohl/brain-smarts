@@ -155,8 +155,9 @@ def _run(attempt: Attempt) -> None:
 
 
 def _commit_mark(attempt: Attempt) -> bool:
-    """In the commit step, the repository's own mark (plan R11 rule 1): an interrupt can skip the
-    finally of _write that copies it into the attempt."""
+    """In the commit step, the repository's own mark (plan R11 rule 1), set once git commit's child
+    was created or may have been (plan R15 fix 2): an interrupt can skip the finally of _write that
+    copies it into the attempt."""
     return attempt.phase == "commit" and bool(attempt.store.repo.commit_started)
 
 

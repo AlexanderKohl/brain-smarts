@@ -314,14 +314,39 @@ class SecretRepo:
             self._git("read-tree", "-u", "-m", old, commit)
         self._git("update-ref", f"refs/heads/{BRANCH}", commit, *(([old]) if old else []))
 
-    commit_started = False  # this write ran git commit, whatever came of it (plan R11 rule 1)
+    commit_started = False  # this write created git commit's child, or may have (plan R11 rule 1, R15 fix 2)
+
+    def _run_commit(self, message: str) -> subprocess.CompletedProcess:
+        """Launch git commit: the only place that does. commit_started is set by the statement right
+        after the child is created. An OSError from the launch (no child was created) leaves it unset;
+        any other exception out of the launch (an interrupt while it is under way, or between the
+        child's creation and the mark) sets it, since the launch may have happened. An exception while
+        the output is collected ends the child as subprocess.run does; the mark stays set."""
+        command = ["git", "commit", "--quiet", "--no-verify", "-m", message]
+        try:
+            child = subprocess.Popen(command, cwd=str(self.path), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self.commit_started = True
+        except OSError:
+            raise
+        except BaseException:
+            self.commit_started = True
+            raise
+        with child:
+            try:
+                stdout, stderr = child.communicate()
+            except BaseException:
+                child.kill()  # Popen's exit waits for it
+                raise
+            returncode = child.poll()
+        return subprocess.CompletedProcess(command, returncode, stdout, stderr)
 
     def write(self, change: dict[str, Any], message: str, expected_parent: Any = _ANY) -> "str | Conflict":
         """One change, one commit on the verified remote head, pushed without force. With
         expected_parent (the head the change was built and verified on), refuse when the head moved.
-        commit_started is cleared here and set immediately before git commit runs (after the head,
-        refusal and fetch checks and the staging); this write never clears it again, so a commit that
-        exists, or may, is never unknown to the caller, whatever interrupts it."""
+        commit_started is cleared here and set only by _run_commit, once git commit's child was
+        created or may have been (after the head, refusal and fetch checks and the staging); this
+        write never clears it again, so a commit that exists, or may, is never unknown to the caller,
+        whatever interrupts it, and a commit whose child was never created is never taken for one."""
         self.commit_started = False
         if message not in ALLOWED_MESSAGES:
             raise SecretStoreError("commit message is not in the allowed set")
@@ -346,8 +371,7 @@ class SecretRepo:
             self._clean(local)  # nothing staged or loose may ride along with the declared files
             try:
                 self._stage(change, blobs, local)
-                self.commit_started = True
-                commit_result = self._git("commit", "--quiet", "--no-verify", "-m", message, check=False)
+                commit_result = self._run_commit(message)
             except BaseException:
                 self._clean(local)
                 raise
