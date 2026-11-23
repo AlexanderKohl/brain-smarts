@@ -435,6 +435,7 @@ class VaultTrayApp:
         deadline = time.time() + window
         while time.time() < deadline:
             if self._stop.is_set():
+                self._give_up_start()
                 raise CredentialError("Vault Agent failed to start.")
             try:
                 import os
@@ -447,9 +448,18 @@ class VaultTrayApp:
             except Exception:
                 pass
             time.sleep(0.1)
+        self._give_up_start()
         raise CredentialError(
             f"Vault Agent did not start within {window:.0f} seconds: its state file was not written."
         )
+
+    def _give_up_start(self) -> None:
+        """A start the tray gives up on may already have its listener: it is shut down before the
+        failure is reported (plan R20, amendments)."""
+        try:
+            self.agent.shutdown()
+        except Exception:  # noqa: BLE001
+            pass
 
     def _do_unlock(self, _icon: Any = None, _item: Any = None) -> None:
         if self.agent._store is not None:  # store mode: no unlock window (round-9 plan, M2)
@@ -483,8 +493,9 @@ class VaultTrayApp:
         )
 
     def _do_quit(self, icon: Any, _item: Any = None) -> None:
+        # shutdown directly: it takes the passphrase away itself, and lock() would take _lock before
+        # the fence (plan R20, amendments).
         try:
-            self.agent.lock()
             self.agent.shutdown()
         except Exception:
             pass
@@ -539,8 +550,7 @@ class VaultTrayApp:
         )
         self._icon.run()
         try:
-            self.agent.lock()
-            self.agent.shutdown()
+            self.agent.shutdown()  # directly, as in _do_quit
         except Exception:
             pass
         return 0
