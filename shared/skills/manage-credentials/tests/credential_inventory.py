@@ -150,7 +150,7 @@ FORMS: dict[str, frozenset[tuple[str, str]]] = {
         ("migrate_to_store.py", "rollback"), ("token_relay.py", "_seed"), ("token_relay.py", "_status"),
         ("token_relay.py", "main"), ("token_relay_store.py", "RelayedStore._warn"),
         ("vault_agent.py", "VaultAgent._keep_state"), ("vault_agent.py", "VaultAgent.serve_forever"),
-        ("vault_agent.py", "main"), ("vault_credentials.py", "_cancelled"),
+        ("vault_agent.py", "_end_process"), ("vault_agent.py", "main"), ("vault_credentials.py", "_cancelled"),
         ("vault_credentials.py", "_put_entry_window"), ("vault_credentials.py", "main"), ("vaultctl.py", "main")}),
     # input(): a typed confirmation (an entry name, a write id), never a value
     "input": frozenset({("brain_secrets.py", "_delete"), ("brain_secrets.py", "_unfinished"), ("vault_credentials.py", "main")}),

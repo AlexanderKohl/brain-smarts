@@ -46,9 +46,11 @@ class TemporaryRuntime(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.parent, ignore_errors=True)
         self.folder = self.parent / "vault-agent"
         self.folder.mkdir()
-        patch = mock.patch.object(runtime, "runtime_base", lambda: self.folder)
-        patch.start()
-        self.addCleanup(patch.stop)
+        self.exits = mock.Mock(name="_exit_now")  # no test may end the test process (plan R18)
+        for patch in (mock.patch.object(runtime, "runtime_base", lambda: self.folder),
+                      mock.patch.object(vault_agent, "_exit_now", self.exits)):
+            patch.start()
+            self.addCleanup(patch.stop)
 
     def payload(self) -> dict:
         return {"pid": os.getpid(), "address": "fictional-address", "authkey": "ab" * 32, "token": TOKEN,
@@ -559,37 +561,83 @@ class BarrierTest(TemporaryRuntime):
         self.assertLessEqual(sent[0], drained[0][1])
         self.assertEqual(answer[0][0], "answer")  # sent before stopping began
 
-    def test_a_send_that_never_ends_leaves_shutdown_not_drained_within_its_bound(self) -> None:
-        agent, _thread = self.start()
-        sending = threading.Event()
+    def hold_the_answer(self) -> tuple[threading.Event, list]:
+        """PipeConnection.send that holds the agent's answer under the barrier until the test ends:
+        a client that does not read. Returns the event set when the send began, and the event log."""
+        sending, events = threading.Event(), []
         real_send = PipeConnection.send
 
         def send(connection, obj):
-            if isinstance(obj, dict) and "ok" in obj:  # the answer: a client that does not read, until the test ends
+            if isinstance(obj, dict) and "ok" in obj:
                 sending.set()
-                self.release.wait(10)
+                self.release.wait(20)
+                real_send(connection, obj)
+                events.append("answer sent")
             else:
                 real_send(connection, obj)
 
-        with mock.patch.object(PipeConnection, "send", send), \
-                mock.patch.object(vault_agent.VaultAgent, "DRAIN_SECONDS", 0.5):
+        patch = mock.patch.object(PipeConnection, "send", send)
+        patch.start()
+        self.addCleanup(patch.stop)
+        return sending, events
+
+    def test_a_send_that_never_ends_makes_shutdown_end_the_process(self) -> None:
+        agent, _thread = self.start()
+        sending, _events = self.hold_the_answer()
+        with mock.patch.object(vault_agent.VaultAgent, "DRAIN_SECONDS", 0.5), \
+                mock.patch.object(sys, "stderr", io.StringIO()) as stderr:
             self.ask_in_thread(self.client(agent), self.request(agent))
             self.assertTrue(sending.wait(5))
             register = set(agent._connections)
             began = time.monotonic()
-            drained = agent.shutdown()
+            agent.shutdown()  # returns only because the test replaced _exit_now
             took = time.monotonic() - began
-            # Without the barrier shutdown touches nothing it protects (plan R17, rule 1).
-            self.assertIs(drained, False)
-            self.assertLess(took, 2.0)
-            self.assertEqual(self.flag_changes, [], "the stopping flag changed without the barrier")
+        # Without the barrier shutdown touches nothing it protects (R17) and ends the process (R18).
+        self.exits.assert_called_once_with(2)
+        self.assertLess(took, 2.0)
+        self.assertIn("could not take the barrier", stderr.getvalue())
+        self.assertEqual(self.flag_changes, [], "the stopping flag changed without the barrier")
+        self.assertIs(agent._stopping, False)
+        self.assertEqual(agent._connections, register)
+        self.assertTrue(register, "the held connection is not registered")
+        self.assertIsNone(agent._singleton_handle)
+        self.assertFalse((self.folder / "agent-state.json").exists())
+
+    def test_repeated_accept_errors_during_a_held_send_end_the_process_before_anything_more(self) -> None:
+        # The reviewer's sequence (round 18): a send held under the barrier, then the accept loop's
+        # repeated-error limit. The replaced exit stands for the end of the process: it records and
+        # keeps its thread there, as a real exit would end every thread.
+        agent, thread = self.start()
+        sending, events = self.hold_the_answer()
+        real_admit = agent._admit
+
+        def admit():
+            admitted = real_admit()
+            events.append("admitted" if admitted else "refused")
+            return admitted
+
+        def end(code):
+            events.append(f"exit {code}")
+            self.release.wait(10)
+
+        self.exits.side_effect = end
+        with mock.patch.object(vault_agent.VaultAgent, "DRAIN_SECONDS", 0.5), \
+                mock.patch.object(agent, "_admit", admit), mock.patch.object(sys, "stderr", io.StringIO()):
+            self.ask_in_thread(self.client(agent), self.request(agent))
+            self.assertTrue(sending.wait(5))
+            register = set(agent._connections)
+            agent._listener.accept = mock.Mock(side_effect=OSError("fictional accept failure"))
+            try:
+                Client(self.address).close()  # ends the accept that waits, so the failing one is used
+            except Exception:  # noqa: BLE001
+                pass
+            deadline = time.time() + 15
+            while time.time() < deadline and "exit 2" not in events:
+                time.sleep(0.05)
+            self.assertEqual(events, ["admitted", "exit 2"], "anything but the held answer before the exit")
             self.assertIs(agent._stopping, False)
             self.assertEqual(agent._connections, register)
-            self.assertTrue(register, "the held connection is not registered")
-            self.release.set()
-            time.sleep(0.2)
-            self.assertIs(agent._stopping, False)
-        self.assertNotIn(False, self.flag_changes)
+            self.assertTrue(thread.is_alive(), "the accept loop went on past the exit")
 
     def test_a_failed_first_wake_up_is_retried_and_the_accept_loop_ends(self) -> None:
         agent, thread = self.start()
@@ -626,6 +674,29 @@ class BarrierTest(TemporaryRuntime):
         self.assertIn("ends its process", stderr.getvalue())
         self.assertIsNone(agent._listener)
         self.assertIsNone(agent._singleton_handle)
+
+    def test_keep_state_ends_the_process_before_any_wake_up_when_shutdown_did_not_drain(self) -> None:
+        state, order = self.folder / "agent-state.json", []
+        self.exits.side_effect = lambda code: order.append(f"exit {code}")
+        with mock.patch.object(vault_agent.VaultAgent, "STATE_CHECK_SECONDS", 0.05), \
+                mock.patch.object(sys, "stderr", io.StringIO()) as stderr:
+            agent, _thread = self.start()
+            real_shutdown = agent.shutdown
+
+            def not_drained():
+                real_shutdown()
+                return False  # operations still in flight at the end of the wait
+
+            with mock.patch.object(agent, "shutdown", not_drained), \
+                    mock.patch.object(vault_agent, "Client", side_effect=lambda address: order.append("wake-up")), \
+                    mock.patch.object(vault_agent, "write_state", side_effect=NotPrivate(state, "fictional failure")):
+                state.unlink()
+                deadline = time.time() + 10
+                while time.time() < deadline and "exit 2" not in order:
+                    time.sleep(0.02)
+                time.sleep(0.3)  # time enough for a wake-up that should not come
+        self.assertEqual(order, ["exit 2"])
+        self.assertIn("still in flight", stderr.getvalue())
 
 
 if __name__ == "__main__":

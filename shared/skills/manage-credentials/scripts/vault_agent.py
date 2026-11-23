@@ -464,9 +464,10 @@ class VaultAgent:
         Clients find the agent through that file. If another process removes it, the agent
         would run on unreachable until it was restarted; this puts the file back. A rewrite that
         cannot be proved private (NotPrivate) stops the agent: the reason is written to standard
-        error and the tray's log, shutdown runs, the waiting accept is woken and serve_forever
-        raises it. When shutdown did not drain or the accept loop does not end, the process ends
-        itself with exit code 2: an agent that could not prove its state file private never stays up.
+        error and the tray's log and shutdown runs. When shutdown did not drain, the process ends at
+        once with exit code 2, before any wake-up (plan R18). Otherwise the waiting accept is woken and
+        serve_forever raises the reason; when the accept loop does not end, the process ends itself
+        the same way. An agent that could not prove its state file private never stays up.
         """
         while self._listener is not None:
             time.sleep(self.STATE_CHECK_SECONDS)
@@ -487,14 +488,11 @@ class VaultAgent:
             # _lock is released here: shutdown never waits while it is held.
             print(f"Vault Agent stopped: {self._stopped_by}", file=sys.stderr, flush=True)
             log_tray(f"agent stopped: {self._stopped_by}")
-            drained = self.shutdown()
-            ended = self._wake_accept(payload["address"])
-            if not (drained and ended):
-                reason = ("operations still in flight after shutdown" if not drained
-                          else "the accept loop did not end")
-                print(f"Vault Agent ends its process: {reason}", file=sys.stderr, flush=True)
-                log_tray(f"agent ends its process: {reason}")
-                _exit_now(2)
+            if not self.shutdown():
+                _end_process("operations still in flight after shutdown")
+                return
+            if not self._wake_accept(payload["address"]):
+                _end_process("the accept loop did not end")
             return
 
     def _wake_accept(self, address: Any) -> bool:
@@ -577,18 +575,18 @@ class VaultAgent:
         answer), removes this agent's state file, releases the singleton and waits until no
         operation is in flight. The barrier and the wait are bounded by DRAIN_SECONDS.
 
-        It returns False ("not drained") in three cases (plan R17). (1) It did not get the barrier in
-        time (a send that never ends: a client that does not read). Then it touches nothing the barrier
-        protects: no stopping flag, no register, no connection closed. It still does what the barrier
-        does not protect: the passphrase, listener and payload taken away, the listener closed, the
-        state file removed, the singleton released. (2) Operations were still in flight at the end of
-        the wait. (3) It was called from inside an operation: it waits for the others, but its own
-        operation has not yet suppressed its answer or finished.
+        When it does not get the barrier in time (a send that never ends: a client that does not
+        read), it touches nothing the barrier protects (no stopping flag, no register, no connection
+        closed), does what the barrier does not protect (the passphrase, listener and payload taken
+        away, the listener closed, the state file removed, the singleton released), writes the reason
+        to standard error and the tray's log and ends the process with exit code 2 (plan R18): it never
+        returns to its caller then. So once a shutdown was attempted, either the agent is stopping and
+        nothing more is admitted or answered, or the process has ended; no caller needs a check of its own.
 
-        A caller that gets False ends the process. `_keep_state` does so itself (`_exit_now(2)`). The
-        tray's quit and `atexit` are ending it anyway. A start that failed (a state file that cannot
-        be written, or repeated accept errors) raises out of `serve_forever`, so `serve` and the tray
-        exit.
+        It returns False ("not drained") in two cases only, both with the agent stopping, every
+        registered connection closed and every answer still to come suppressed: operations were still
+        in flight at the end of the wait (`_keep_state` then ends the process at once), or it was called
+        from inside an operation, whose own answer is not yet suppressed nor the operation finished.
         """
         with self._lock:
             self._passphrase = None
@@ -612,7 +610,8 @@ class VaultAgent:
                 pass
             self._release_singleton()
             if not held:
-                return False
+                _end_process("shutdown could not take the barrier: a send has not ended")
+                return False  # only when a test replaced _exit_now
             own = 1 if getattr(self._operation, "active", False) else 0
             others_ended = self._barrier.wait_for(lambda: self._in_flight <= own,
                                                   timeout=max(0.0, deadline - time.monotonic()))
@@ -627,6 +626,13 @@ def _close_quietly(closable: Any) -> None:
         closable.close()
     except Exception:  # noqa: BLE001
         pass
+
+
+def _end_process(reason: str) -> None:
+    """The last resort: the reason to standard error and the tray's log, then exit code 2."""
+    print(f"Vault Agent ends its process: {reason}", file=sys.stderr, flush=True)
+    log_tray(f"agent ends its process: {reason}")
+    _exit_now(2)
 
 
 def _exit_now(code: int) -> None:
