@@ -4,14 +4,14 @@ title: The synced secrets store becomes an approved credential provider
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: accepted
+status: implemented
 owner: brain-owner
 created: 2026-11-20T18:15:52+10:00
-updated: 2026-11-23T15:48:49+10:00
+updated: 2026-11-23T15:49:48+10:00
 rule_id: null
 accepted_by: brain-owner
 accepted_at: 2026-11-23T15:48:49+10:00
-implemented_at: null
+implemented_at: 2026-11-23T15:49:48+10:00
 previous_contract_version: 3.2.0
 new_contract_version: 3.2.0
 target_files:
@@ -151,3 +151,10 @@ wording, reason, scope, risks, migration, rollback and validation were shown. Th
 same day ("Yes, I accept"), recorded at 2026-11-23T15:48:49+10:00. The owner's record of the acceptance is in their memory.
 
 ## Implementation record
+
+Applied at 2026-11-23T15:49:48+10:00, exactly as worded above, to the *Credential policy* of
+`/shared/skills/manage-credentials/SKILL.md`: the eight added sentences and the sub-section *Synced secrets
+store*. The policy carries no rule number, so `rule_id` stays empty. No contract wording changed. The store
+was built, reviewed and merged before the acceptance, switched off (code review round 23: no finding; the
+whole test folder and the rehearsal with real processes pass); it stays off in a brain until its owner creates
+the configuration and runs the cut-over. The repository preflight passes on the result.
