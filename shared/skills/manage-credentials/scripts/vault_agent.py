@@ -11,7 +11,7 @@ import sys
 import threading
 import time
 from multiprocessing import AuthenticationError
-from multiprocessing.connection import Listener
+from multiprocessing.connection import Client, Listener
 from pathlib import Path
 from typing import Any
 
@@ -19,8 +19,10 @@ import portable_vault
 from portable_vault import CredentialError, PortableVault, default_vault_path, refuse_migrated
 from vault_agent_runtime import (
     AGENT_PROTOCOL_VERSION,
+    NotPrivate,
     clear_state,
     ipc_address,
+    log_tray,
     prepare_runtime_dir,
     read_state,
     restrict_to_current_user,
@@ -86,6 +88,8 @@ class VaultAgent:
         self._listener: Listener | None = None
         self._singleton_handle: Any = None
         self._state_payload: dict[str, Any] | None = None
+        # Why _keep_state stopped the agent (its state file could not be proved private), or None.
+        self._stopped_by: NotPrivate | None = None
 
     def _entry_lock(self, entry: str) -> threading.Lock:
         with self._lock:
@@ -354,6 +358,8 @@ class VaultAgent:
             pass
 
     def serve_forever(self) -> None:
+        # A runtime folder that cannot be proved private stops the start here, before the
+        # singleton lock and the listener exist (NotPrivate leaves this method).
         prepare_runtime_dir()
         self._acquire_singleton()
         address = ipc_address()
@@ -370,7 +376,12 @@ class VaultAgent:
             "vault_path": str(self.vault.path.resolve()),
             "protocol": AGENT_PROTOCOL_VERSION,
         }
-        write_state(self._state_payload)
+        try:
+            write_state(self._state_payload)
+        except BaseException:
+            # The listener is up: close it and release the singleton through the shutdown path.
+            self.shutdown()
+            raise
         atexit.register(self.shutdown)
         threading.Thread(target=self._keep_state, name="vault-agent-state", daemon=True).start()
         timer = self._package_timer()
@@ -415,12 +426,16 @@ class VaultAgent:
                 daemon=True,
             )
             thread.start()
+        if self._stopped_by is not None:
+            raise self._stopped_by
 
     def _keep_state(self) -> None:
         """Write the state file again when it has gone missing while this agent still listens.
 
         Clients find the agent through that file. If another process removes it, the agent
-        would run on unreachable until it was restarted; this puts the file back.
+        would run on unreachable until it was restarted; this puts the file back. A rewrite that
+        cannot be proved private (NotPrivate) stops the agent: the reason is written to standard
+        error and the tray's log, shutdown runs, and serve_forever raises it.
         """
         while self._listener is not None:
             time.sleep(self.STATE_CHECK_SECONDS)
@@ -433,8 +448,21 @@ class VaultAgent:
                 try:
                     if read_state() != payload:
                         write_state(payload)
-                except OSError:
                     continue
+                except NotPrivate as exc:
+                    self._stopped_by = exc
+                except OSError:  # a passing failure of reading or replacing
+                    continue
+            print(f"Vault Agent stopped: {self._stopped_by}", file=sys.stderr, flush=True)
+            log_tray(f"agent stopped: {self._stopped_by}")
+            self.shutdown()
+            # Closing the listener does not end an accept that is waiting on a Windows pipe: one
+            # connection without a key ends it (its handshake fails), and serve_forever then raises.
+            try:
+                Client(payload["address"]).close()
+            except Exception:  # noqa: BLE001
+                pass
+            return
 
     def _serve_connection(self, connection: Any) -> None:
         try:
@@ -497,7 +525,7 @@ def main() -> int:
         if args.operation == "serve":
             agent.serve_forever()
             return 0
-    except CredentialError as exc:
+    except (CredentialError, NotPrivate) as exc:
         print(f"Vault Agent failed: {exc}", file=sys.stderr)
         return 2
     parser.error("Unsupported operation.")

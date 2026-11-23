@@ -12,7 +12,7 @@ from typing import Any
 from portable_vault import CredentialError, default_vault_path
 from secret_store.errors import SecretStoreError
 from vault_agent import AgentAlreadyRunning, VaultAgent, build_agent
-from vault_agent_runtime import log_tray, prepare_runtime_dir
+from vault_agent_runtime import NotPrivate, log_tray, prepare_runtime_dir
 from vault_broker_client import broker_available
 
 user32 = ctypes.windll.user32
@@ -509,11 +509,12 @@ class VaultTrayApp:
         )
 
     def run(self, *, prompt_on_start: bool = True) -> int:
-        prepare_runtime_dir()
         log_tray("tray starting")
         try:
+            # A runtime folder that cannot be proved private is a failed start like any other.
+            prepare_runtime_dir()
             self._start_broker()
-        except CredentialError as exc:
+        except (CredentialError, NotPrivate) as exc:
             if self._another_agent and broker_available():
                 # A healthy agent already serves this login, so there is nothing to start or report.
                 log_tray("a healthy agent is already running; this start ends quietly")

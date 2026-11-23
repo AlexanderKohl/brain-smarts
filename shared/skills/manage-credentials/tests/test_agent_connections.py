@@ -30,9 +30,7 @@ class AgentConnectionsTest(unittest.TestCase):
             mock.patch.object(vault_agent_runtime, "runtime_dir", lambda: self.folder),
             mock.patch.object(vault_agent, "ipc_address", lambda: address),
             mock.patch.object(vault_broker_client, "ipc_address", lambda: address),
-            mock.patch.object(vault_agent_runtime, "restrict_to_current_user", lambda path: None),
-            mock.patch.object(vault_agent, "restrict_to_current_user", lambda path: None),
-        ]
+        ]  # the real proof of a private folder and file runs in the temporary folder (plan R15, rule 9)
         for patch in patches:
             patch.start()
             self.addCleanup(patch.stop)

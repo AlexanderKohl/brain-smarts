@@ -25,7 +25,6 @@ class SingletonRetryTest(unittest.TestCase):
         self.folder = Path(tempfile.mkdtemp())
         for patch in (
             mock.patch.object(vault_agent_runtime, "runtime_dir", lambda: self.folder),
-            mock.patch.object(vault_agent, "restrict_to_current_user", lambda path: None),
             mock.patch.object(vault_agent.VaultAgent, "LOCK_RETRY_SECONDS", 0.01),
         ):
             patch.start()
@@ -109,7 +108,10 @@ class TrayStartTest(unittest.TestCase):
 
     def run_app(self, healthy: bool):
         app = self.make_app(healthy)
-        with mock.patch.object(vault_tray, "prepare_runtime_dir"), \
+        folder = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        # The real prepare_runtime_dir, proving a temporary folder private; never the user's folder.
+        with mock.patch.object(vault_agent_runtime, "runtime_dir", lambda: folder), \
                 mock.patch.object(vault_tray, "log_tray"), \
                 mock.patch.object(vault_tray, "broker_available", return_value=healthy), \
                 mock.patch.object(vault_tray, "_show_error") as show_error, \

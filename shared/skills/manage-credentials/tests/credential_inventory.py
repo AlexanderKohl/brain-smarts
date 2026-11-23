@@ -67,8 +67,12 @@ EXTERNAL_SYMBOLS: dict[tuple[str, str], tuple[str, ...]] = {
                                      "PublicFormat", "PublicFormat.Raw"),
     ("ctypes", "secret_store/fileio.py"): ("WinDLL", "WinError", "get_last_error", "wintypes", "wintypes.BOOL",
                                            "wintypes.DWORD", "wintypes.LPCWSTR"),
-    ("ctypes", "vault_agent_runtime.py"): ("windll", "windll.kernel32", "windll.kernel32.CloseHandle",
-                                           "windll.kernel32.OpenProcess"),
+    ("ctypes", "vault_agent_runtime.py"): ("CDLL", "POINTER", "Structure", "WinDLL", "byref", "c_int", "c_ubyte",
+                                           "c_ushort", "c_void_p", "c_void_p.from_buffer", "cast",
+                                           "create_string_buffer", "get_errno", "get_last_error", "sizeof", "windll", "windll.kernel32", "windll.kernel32.CloseHandle",
+                                           "windll.kernel32.OpenProcess", "wintypes", "wintypes.BOOL",
+                                           "wintypes.DWORD", "wintypes.HANDLE", "wintypes.LPCWSTR", "wintypes.LPWSTR",
+                                           "wintypes.ULONG", "wintypes.WORD"),
     ("ctypes", "vault_credentials.py"): ("byref", "c_ulong", "c_void_p", "windll", "windll.kernel32",
                                          "windll.kernel32.GetConsoleMode"),
     ("ctypes", "vault_tray.py"): (
@@ -97,7 +101,7 @@ EXTERNAL_SYMBOLS: dict[tuple[str, str], tuple[str, ...]] = {
     ("msvcrt", "vault_agent.py"): _LOCK_M,
     ("msvcrt", "vault_credentials.py"): ("get_osfhandle",),
     ("multiprocessing", "vault_agent.py"): ("AuthenticationError",),
-    ("multiprocessing.connection", "vault_agent.py"): ("Listener",),
+    ("multiprocessing.connection", "vault_agent.py"): ("Client", "Listener"),
     ("multiprocessing.connection", "vault_broker_client.py"): ("Client",),
     ("shutil", "migrate_to_store.py"): ("copyfile",),
     ("shutil", "secret_store/recovery_package.py"): ("rmtree",),
@@ -111,7 +115,6 @@ EXTERNAL_SYMBOLS: dict[tuple[str, str], tuple[str, ...]] = {
     ("subprocess", "secret_store/store.py"): ("run",),
     ("subprocess", "secret_store/team.py"): ("run",),
     ("subprocess", "token_relay_backend.py"): ("TimeoutExpired", "run"),
-    ("subprocess", "vault_agent_runtime.py"): ("run",),
     ("subprocess", "vault_credentials.py"): ("run",),
     ("subprocess", "vaultctl.py"): ("run",),
     ("tempfile", "portable_vault.py"): ("gettempdir", "mkstemp"),
@@ -146,7 +149,8 @@ FORMS: dict[str, frozenset[tuple[str, str]]] = {
         ("migrate_to_store.py", "migrate"),
         ("migrate_to_store.py", "rollback"), ("token_relay.py", "_seed"), ("token_relay.py", "_status"),
         ("token_relay.py", "main"), ("token_relay_store.py", "RelayedStore._warn"),
-        ("vault_agent.py", "VaultAgent.serve_forever"), ("vault_agent.py", "main"), ("vault_credentials.py", "_cancelled"),
+        ("vault_agent.py", "VaultAgent._keep_state"), ("vault_agent.py", "VaultAgent.serve_forever"),
+        ("vault_agent.py", "main"), ("vault_credentials.py", "_cancelled"),
         ("vault_credentials.py", "_put_entry_window"), ("vault_credentials.py", "main"), ("vaultctl.py", "main")}),
     # input(): a typed confirmation (an entry name, a write id), never a value
     "input": frozenset({("brain_secrets.py", "_delete"), ("brain_secrets.py", "_unfinished"), ("vault_credentials.py", "main")}),
@@ -166,8 +170,8 @@ FORMS: dict[str, frozenset[tuple[str, str]]] = {
         ("secret_store/repo.py", "SecretRepo.clone_or_open"), ("secret_store/repo.py", "repo_lock"),
         ("secret_store/store.py", "SecretStore._save_pin"), ("secret_store/store_ops.py", "write_marker"),
         ("secret_store/store_ops.py", "write_upkeep_error"), ("token_relay_store.py", "holder_name"),
-        ("vault_agent.py", "VaultAgent._acquire_singleton"), ("vault_agent_runtime.py", "log_tray"),
-        ("vault_agent_runtime.py", "write_state")}),
+        ("vault_agent.py", "VaultAgent._acquire_singleton"), ("vault_agent_runtime.py", "_remove"),
+        ("vault_agent_runtime.py", "log_tray"), ("vault_agent_runtime.py", "write_state")}),
     # eval, exec, __import__, compile, globals, locals, vars; getattr, setattr or delattr with a name that
     # is not a literal
     "reflection": frozenset({("secret_store/store_ops.py", "store_status")}),  # getattr over a tuple of two literals
@@ -206,8 +210,9 @@ ENDPOINTS: dict[str, tuple[str, str, str, str]] = {
                    "compares its token) and sends the reply"),
     "agent-auth-make": ("vault_agent.py", "VaultAgent", "P", "the agent's authentication token and pipe key, made "
                         "fresh at each start (its __init__); serve_forever gives the key to the Listener"),
-    "agent-state-write": ("vault_agent_runtime.py", "write_state", "S", "the token and key in the clear into the state "
-                          "file restricted to the user"),
+    "agent-state-write": ("vault_agent_runtime.py", "write_state", "S", "the token and key in the clear, written only "
+                          "into a file proved private to the user and the system account, inside a folder proved "
+                          "private the same way; the agent does not start, or stops, when that cannot be proved"),
     "agent-state-read": ("vault_agent_runtime.py", "read_state", "P", "the token and key first in the client process"),
     "agent-connect": ("vault_broker_client.py", "_connect", "PS", "spends the key in the pipe's handshake and returns "
                       "the token to broker_request"),
@@ -361,7 +366,8 @@ CREDENTIAL: dict[str, str] = {  # module -> what passes through it in the clear
     "token_relay_backend.py": "the token record encrypted and decrypted",
     "token_relay_store.py": "the token held, synced, pushed and adopted",
     "vault_agent.py": "every request's value and every answer; the unlock passphrase held in memory",
-    "vault_agent_runtime.py": "the agent's IPC key and token, written to and read from the state file",
+    "vault_agent_runtime.py": "the agent's IPC key and token, written to and read from the state file (written only "
+                              "into a file and a folder proved private to the user and the system account)",
     "vault_broker_client.py": "every request and answer; the IPC key read from the state file",
     "vault_credentials.py": "the passphrase and typed values; vault reads; a child's environment",
     "vault_tray.py": "the passphrase from the Win32 dialog to the agent",

@@ -385,8 +385,8 @@ class Scenarios:
     # -- the agent's state file, in a temporary folder: the token and key written and read back ----------
     def agent_state(self) -> None:
         folder = self.world.root / "runtime"
+        # The real proof of a private folder and file runs here (follow-up plan R15, rule 9).
         with self.rec.named("agent-state"), mock.patch.object(vault_agent_runtime, "runtime_base", lambda: folder), \
-                mock.patch.object(vault_agent_runtime, "restrict_to_current_user", lambda _path: None), \
                 self.rec.operation("the agent's state file"):
             agent = VaultAgent(self.world.root / "A.vault")  # makes the token and the pipe key
             payload = {"pid": os.getpid(), "address": "fictional-address", "authkey": agent._authkey.hex(),
