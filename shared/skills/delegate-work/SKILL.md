@@ -10,7 +10,7 @@ script_paths:
   - /shared/skills/delegate-work/scripts/delegation.py
   - /shared/skills/delegate-work/scripts/results.py
 created: 2026-09-15T07:45:00+10:00
-updated: 2026-11-07T13:22:37+10:00
+updated: 2026-11-22T10:50:30+10:00
 owner: brain-owner
 project_refs:
   - /memory/projects/brain-development
@@ -186,6 +186,10 @@ The ladder, lowest first; the host note maps it to model names:
 | bounded judgement, or a person sees the result | the current Opus-class model; medium effort |
 | open judgement, or data, money, security or production | the Opus-class model at high effort, or the conductor's own model and effort (`inherit`) |
 | open judgement where a specialised model is known to do better, and its allowance is healthy | that model; the reason names why |
+
+A worker type is named for its rung, not for a model: `worker-no-judgement`,
+`worker-bounded-judgement` and `worker-open-judgement`, the same on every host (owner, 23 Nov 2026), so a
+packet never has to change when it moves to another host. The host note maps each name to a model.
 
 **Effort rises before the model does:** the next step up for a packet is the same model at a
 higher effort, then the next model. A worker that comes back weak is resumed or re-run one step up
@@ -384,6 +388,13 @@ handing work over, not only before committing.
 - **Git Bash rewrites leading-slash arguments** (`/CONTRACT.md` becomes a path under the Git
   installation). Prefix the command with `MSYS_NO_PATHCONV=1` or run the script from
   PowerShell.
+- **A run refuses a write path an earlier packet of the same run named**, even after that worker
+  has finished, and a folder path overlaps every file under it. Open a new run for the next
+  batch, and give parallel workers their own test folders, moving the tests together after review.
+- **Set the tool-call budget on a build packet.** The default (`max_tool_calls`, 15) suits a
+  read-only question; a careful worker on a build stops `blocked` at the cap before writing
+  anything. Allow about 35 calls per module built with fail-first tests, raise
+  `--max-output-words`, and keep a packet to two or three modules.
 - **Do not put counts in acceptance criteria unless verified at packet time.** An expected
   count typed from memory is often stale. Workers can handle it, but a stale number invites a
   worker to force the data to fit.

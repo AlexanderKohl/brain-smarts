@@ -9,10 +9,12 @@ from datetime import date, timedelta
 from typing import Any
 
 from task_records import Task, id_sort_key
+from task_reminders import is_reminder
 
 
 def review(tasks: list[Task], today: date, horizon: int) -> list[dict[str, Any]]:
-    """One row per inbox or open task that needs attention, each naming its store."""
+    """One row per inbox or open task that needs attention, each naming its store and marked
+    `reminder` true or false (task_reminders.split sets the due reminders apart)."""
     rows: list[dict[str, Any]] = []
     limit = today + timedelta(days=horizon)
     for task in tasks:
@@ -52,6 +54,8 @@ def review(tasks: list[Task], today: date, horizon: int) -> list[dict[str, Any]]
                     "title": task.get("title") or "",
                     "store": task.store.label if task.store is not None else "",
                     "path": task.path.as_posix(),
+                    "reminder": is_reminder(task),
+                    "next_review": next_review.isoformat() if next_review else "",
                 }
             )
     # Undated items (inbox, blocked) first, then earliest date, then identifier.

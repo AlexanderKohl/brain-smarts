@@ -368,9 +368,11 @@ def run(root: Path, writing: bool) -> Result:
     validate_governance(root, records, result, clock())
     validate_personal_data(root, result)
     from checks_b import validate_knowledge_provenance, validate_knowledge_review_dates, validate_pointer_files
+    from checks_b import validate_learning_views
     validate_pointer_files(root, result.errors)
     validate_knowledge_provenance(root, result.errors)
     validate_knowledge_review_dates(root, result.errors)
+    validate_learning_views(root, result.errors)
     from file_sizes import validate_file_sizes
     validate_file_sizes(root, result.errors)
     validate_core(root, result.errors)

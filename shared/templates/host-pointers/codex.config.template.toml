@@ -17,3 +17,12 @@ network_access = false
 # Confirmed on a working install.
 [projects.'<BRAIN_ROOT>']
 trust_level = "trusted"
+
+# At most four workers at once, as SMART-RULE-0024 allows (vendor's subagents page, read 22 Nov 2026).
+[agents]
+max_concurrent_threads_per_session = 4
+
+# Hooks are on by default; this keeps them on (vendor's hooks page, read 22 Nov 2026). host_wiring.py
+# adds the PreCompact and SessionStart hooks from hooks/events.json of the repository-preflight skill.
+[features]
+hooks = true

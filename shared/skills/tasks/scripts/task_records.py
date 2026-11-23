@@ -162,6 +162,10 @@ def _scalar_or_null(value: str | None) -> str:
 
 
 def _field_lines(key: str, value: Any) -> list[str]:
+    if isinstance(value, bool):          # before int: a bool is an int in Python
+        return [f"{key}: {'true' if value else 'false'}"]
+    if isinstance(value, int):
+        return [f"{key}: {value}"]
     if isinstance(value, (list, tuple)):
         return [f"{key}: []"] if not value else [f"{key}:"] + [f"  - {_yaml_scalar(str(v))}" for v in value]
     return [f"{key}: {_scalar_or_null(value)}"]

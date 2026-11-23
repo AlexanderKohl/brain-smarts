@@ -18,7 +18,7 @@ metadata:
     - /shared/skills/owner-board
     - /shared/skills/repository-preflight
   created: 2026-09-23T13:10:00+10:00
-  updated: 2026-11-09T11:51:57+10:00
+  updated: 2026-11-22T10:46:45+10:00
 ---
 
 # Tasks
@@ -115,6 +115,37 @@ rules, CONTRACT §16.3).
 5. Set `due` only for a real deadline. Waiting or scheduled work gets `--next-review`, and
    waiting work names what it waits on in `--waiting-on`.
 
+### 1a. Reminders and repeating tasks
+
+**A promise to remind is a task.** An agent that tells the owner it will remind him, check back
+or follow up at a later time creates the reminder first, with `tasks.py remind`, and names its
+identifier in the same reply. A wake-up, a timer or a background command inside the thread is not
+a reminder: it dies with the thread, and nothing else knows of it.
+
+```powershell
+python shared/skills/tasks/scripts/tasks.py remind --title "<what to remind the owner of>" --on YYYY-MM-DD `
+    [--repeat-days N] [--project /memory/projects/<node>] [--next-action "..."] [--waiting-on "..."]
+```
+
+- `remind` creates the record through the same path as `new`: status `scheduled`,
+  `reminder: true`, `next_review` the day it is due, in `open/`, or in `recurring/` with
+  `--repeat-days`. It prints the identifier on its own first line.
+- Two front-matter fields: `reminder: true` marks a promise to the owner, which `review`, the
+  daily report and the session start show apart from the other tasks once its `next_review` has
+  come; `repeat_days: <positive whole number>` makes a repeating task, which lives in its store's
+  `recurring/`.
+- `done` on a task with `repeat_days` re-arms it: it stays in `recurring/`, status `scheduled`,
+  `next_review` the day of completion plus `repeat_days`, a claim cleared, the History entry
+  `done; next on <date>`. `done --final` completes it for good (moved to `completed/`). A
+  `repeat_days` that is not a positive whole number is refused and the record left unchanged.
+- `tasks.py reminders [--json]` prints one line per due reminder,
+  `reminder: <title> – <ID>, due <date>; when done: python shared/skills/tasks/scripts/tasks.py done <ID>`,
+  earliest first, nothing when none is due, and `reminder: could not be read (<reason>)` for a
+  store it could not read; it always exits 0. `sync.py` prints the same lines after its repository
+  lines, so every host's session start shows them.
+- The weekly learning review is such a repeating reminder: delivering it ends with
+  `tasks.py done <ID>`, and nothing else holds its due date.
+
 ### 2. Process the inbox
 
 For each inbox record: give it an outcome, one owner and project references, then set a status
@@ -129,7 +160,11 @@ python shared/skills/tasks/scripts/tasks.py review [--all]
 
 Every reachable store, once each: blocked tasks, inbox items, tasks past `due`, tasks whose
 `next_review` has come, tasks due within the horizon (`--horizon N`, default 7), conflicted or
-unreadable records, earliest first, each with its store. In a repository store only tasks whose
+unreadable records, earliest first, each with its store. It prints first
+`Reminders for the owner (N)`, one line per due reminder (title, identifier, due date, store and
+the `done` command), then the table without those rows; `N task(s) need attention` counts the
+table only, and a second line says `R reminder(s) due`. `--json` marks each row `reminder` true
+or false. In a repository store only tasks whose
 `owner` is this brain are listed unless `--all`; every task in memory is this brain's. Stores
 that could not be read are named under the table. Act on each row as before: check the awaited
 party, tell the owner about deadlines, name what would unblock, process the inbox. Report a short
@@ -141,7 +176,7 @@ Every change goes through one writer (`task_history.apply_change`): the fields, 
 one History entry `- <timestamp> – <author>: <what changed>` with the same timestamp.
 
 ```powershell
-python shared/skills/tasks/scripts/tasks.py done TASK-... [--note "..."]
+python shared/skills/tasks/scripts/tasks.py done TASK-... [--note "..."] [--final]
 python shared/skills/tasks/scripts/tasks.py do-now TASK-... [--note "..."]
 python shared/skills/tasks/scripts/tasks.py note TASK-... --note "..." [--run <job> | --private]
 python shared/skills/tasks/scripts/tasks.py edit TASK-... --set key=value [--set ...] --note "<why>"
@@ -166,7 +201,8 @@ python shared/skills/tasks/scripts/tasks.py release TASK-... [--note "..."]
   lapsed one by anyone.
 - `tasks.py claims` lists the cards other brains hold in shared repositories, live claims
   first, then lapsed ones; `sync.py` shows the same lines at session start.
-- `done`: status `completed`, a claim cleared, the record moved to its store's `completed/`.
+- `done`: status `completed`, a claim cleared, the record moved to its store's `completed/`; a
+  task with `repeat_days` is re-armed instead unless `--final` (procedure 1a).
 - `do-now`: priority `high`, status `ready` unless `in_progress`; an inbox task moves to `open/`.
 - `note`: the note verbatim. `--run <job>` records a scheduled run as `run of `<job>`: <outcome>`
   and warns when the record's `schedule` names another job (P11). `--private` appends to the
@@ -196,9 +232,11 @@ identifier, file name, date or `schedule`, a `created` or `updated` that is not 
 seconds and an offset, an `author` that is not an author name, an identifier used twice across
 stores, a first project reference that does not name the store's node (in `/memory/tasks/`, any
 project reference at all), references to several nodes outside `completed/`, a `/memory/` path in a repository store,
-a conflict marker, an `updated` later than the newest attributed History entry, and a `STATE.md`
-that differs from the generated one. It warns on waiting without `waiting_on`, no priority,
-claims that do not fit the status, and stores it could not read. `state` regenerates `STATE.md`;
+a conflict marker, an `updated` later than the newest attributed History entry, `reminder: true`
+without `next_review`, a `repeat_days` that is not a positive whole number or sits on a record
+outside `recurring/` (a completed record keeps it as history), and a `STATE.md` that differs from
+the generated one. It warns on waiting without `waiting_on`, no priority, claims that do not fit
+the status, a record in `recurring/` without `repeat_days`, and stores it could not read. `state` regenerates `STATE.md`;
 a Git conflict in `STATE.md` is resolved by running it.
 
 ### 6. Repository stores and conflicts
@@ -233,14 +271,16 @@ Each move keeps identifier and file name, adds `author`, an attributed entry and
 
 | Command | Role |
 |---|---|
-| `tasks.py review [--today] [--horizon N] [--all]` | What needs attention, across every store |
+| `tasks.py review [--today] [--horizon N] [--all]` | What needs attention, across every store, due reminders first |
+| `tasks.py reminders [--json]` | One line per due reminder; always exits 0 (procedure 1a) |
+| `tasks.py remind --title T --on YYYY-MM-DD [--repeat-days N] ...` | A reminder for the owner (procedure 1a) |
 | `tasks.py check [--store LABEL]` | Record and store checks; exit code 1 on errors |
 | `tasks.py state [--store LABEL]` | Regenerate `STATE.md` |
 | `tasks.py next-id [--year] [--author]` | The next free number of an author |
 | `tasks.py new ...` | Procedure 1 |
-| `tasks.py done`, `do-now`, `note`, `edit`, `claim`, `release` | Procedure 4 |
+| `tasks.py done [--final]`, `do-now`, `note`, `edit`, `claim`, `release` | Procedure 4 |
 | `tasks.py migrate ...` | Procedure 7 |
-| `scheduled_review.py [--register \| --status \| --unregister] [--no-notify] [--no-jobs]` | Read-only review with no model: writes the ignored `/temp/due.md` (each repository compared with origin, the weekly learning digest when due, or its state unreadable when the learning index has no `next is due <timestamp>` line, tasks due in every store through `tasks.py review`, skill exchange, preflight), then runs the owner's **morning jobs** (below) and reports one line per job, and shows a desktop notification when something needs attention, a failed or timed-out job included. `--register` runs it daily at 07:00 from the operating system's scheduler – Windows Task Scheduler, a launchd agent on macOS, a systemd user timer on Linux (cron without systemd) – catching up after the computer was off except under cron, always from the shared checkout named in `/memory/OWNER.md`; `--status` shows it and `--unregister` removes it. Set up per computer in `/SETUP.md` G.2. Once registered, follow-up is real under CONTRACT §14. `--no-jobs` writes the report without the jobs |
+| `scheduled_review.py [--register \| --status \| --unregister] [--no-notify] [--no-jobs]` | Read-only review with no model: writes the ignored `/temp/due.md` (opening with `## Reminders`: one line per due reminder, or `- none due`, or the store it could not read; then each repository compared with origin, tasks due in every store through `tasks.py review`, skill exchange, preflight), then runs the owner's **morning jobs** (below) and reports one line per job, and shows a desktop notification when something needs attention – the due reminders first, by title, at most three and then `and N more`, then the task count – a failed or timed-out job included. `--register` runs it daily at 07:00 from the operating system's scheduler – Windows Task Scheduler, a launchd agent on macOS, a systemd user timer on Linux (cron without systemd) – catching up after the computer was off except under cron, always from the shared checkout named in `/memory/OWNER.md`; `--status` shows it and `--unregister` removes it. Set up per computer in `/SETUP.md` G.2. Once registered, follow-up is real under CONTRACT §14. `--no-jobs` writes the report without the jobs |
 
 Common options: `--tasks <path>` (the owner store; default `/memory/tasks`), `--json`,
 `--offline`, and on changing commands `--now` and `--no-board`. Standard library only.
@@ -249,6 +289,7 @@ Modules (each one job, `SMART-RULE-0018`): `task_records.py` (identifiers `ID_RE
 records, atomic writes), `task_history.py` (author name, entries, `apply_change`),
 `task_stores.py`, `task_state.py`, `task_git.py`, `task_write.py` (the change pipeline),
 `task_new.py`, `task_private.py` (companion file, `flags`), `task_check.py`, `task_claims.py`,
+`task_reminders.py` (the two fields and the reminder lines),
 `state_table.py` (review), `task_migrate.py` and `task_migrate_lists.py`.
 
 **Morning jobs.** Anything that should refresh once a day – a generated page, a snapshot, a

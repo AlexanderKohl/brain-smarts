@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-23T13:00:00+10:00
-updated: 2026-11-20T15:02:29+10:00
+updated: 2026-11-22T12:52:34+10:00
 owner: brain-owner
 skill_refs:
   - /shared/skills/manage-credentials
@@ -197,7 +197,7 @@ Rows are in install order: the later tools depend on the earlier ones.
 | Git | any 2.x | `git --version` |
 | Python | 3.11 | `python --version` (Windows: also `py -3 --version`) |
 | GitHub CLI | any 2.x | `gh --version` |
-| The AI host | current | Claude Code CLI: `claude --version`; Claude Code desktop: present if this session runs in it (the desktop app ships no `claude` command, so a failing `claude --version` there is not a gap); Codex: `codex --version`; Cursor: `cursor --version` or the app's About box |
+| The AI host | current | Claude Code CLI: `claude --version`; Claude Code desktop: present if this session runs in it (the desktop app ships no `claude` command, so a failing `claude --version` there is not a gap); Codex: `codex --version`; Cursor: `cursor --version` or the app's About box; ChatGPT: not a setup host – it cannot run the brain's scripts, so on a ChatGPT plan set up through Codex, which uses the same plan (`/shared/skills/delegate-work/hosts/chatgpt.md`) |
 
 ### A.1 Windows (first)
 
@@ -214,6 +214,11 @@ irm https://claude.ai/install.ps1 | iex        # Claude Code, native installer
 npm install -g @openai/codex                   # Codex CLI (needs Node.js: winget install --id OpenJS.NodeJS.LTS -e)
 winget install --id Anysphere.Cursor -e        # Cursor
 ```
+
+ChatGPT has no install step here: on the web or a phone it is an answer-only host, and its
+desktop app writes the brain only once someone has confirmed it runs `python` and `git` in the
+brain root (`/shared/skills/delegate-work/hosts/chatgpt.md`). Install Codex for brain work on a
+ChatGPT plan.
 
 Windows notes:
 
@@ -581,7 +586,7 @@ front matter, and `<brain_root>/memory/` is its own Git repository with an `orig
    cd C:\dev\brain\memory
    git init -b main
    git add -A
-   git commit -m "<host> <model>: memory created from the skeleton"
+   git commit -m "Memory created from the skeleton" -m "Tool: <host>`nCo-Authored-By: <model> <no-reply address>"
    gh repo create <github_account>/brain-memory --private --source . --remote origin --push
    ```
 
@@ -1242,7 +1247,10 @@ Rows are grouped by host, then in the order a session looks for them.
 | Codex, Cursor and others | `<project repo>/AGENTS.md` | `project-repo.AGENTS.template.md` | A project repository's own pointer |
 | Cursor | `<brain_root>/AGENTS.md` | already in the smarts | Cursor reads `AGENTS.md` |
 | Cursor | `<project repo>/.cursor/rules/brain-contract.mdc` | `cursor-project-repo.brain-contract.mdc.template` | Only when the project's Cursor does not pick up `AGENTS.md` (`verify`) |
+| Codex | `~/.codex/agents/worker-*.toml` | copies of `<brain_root>/.codex/agents/*.toml`, unchanged | The worker types of `/shared/skills/delegate-work/` (`hosts/codex.md`) in every Codex session; a file of the person's own, or one defining an agent of the same name, is kept |
 | Cursor | Cursor Settings (Ctrl+Shift+J, not the editor settings) → Rules → User Rules | the pointer text | Every Cursor project, including ones opened on their own |
+| Cursor | `~/.cursor/agents/worker-*.md` | copies of `<brain_root>/.cursor/agents/*.md`, unchanged | The worker types of `hosts/cursor.md` in every Cursor project; kept as above. Two rungs have no file, because Cursor documents no id for their models |
+| ChatGPT | the project's instructions (a ChatGPT project, not a file) | the pointer text | Chat and Work are not documented to read an `AGENTS.md`; the project's instructions apply inside that project only. No worker types and no hooks: ChatGPT has neither for the brain (`/shared/skills/delegate-work/hosts/chatgpt.md`). Brain work on a ChatGPT plan goes through Codex, rows above |
 
 Two kinds of file, two owners:
 
@@ -1266,17 +1274,24 @@ Two kinds of file, two owners:
 
    ```powershell
    cd C:\dev\brain
-   python shared/skills/repository-preflight/scripts/host_wiring.py plan --host claude-code --host codex --level routine
+   python shared/skills/repository-preflight/scripts/host_wiring.py plan --host claude-code --host codex --host cursor --host cursor-cli --level routine
    ```
 
-   It prints one line per file (create, replace, merge or unchanged, and the backup it would
-   make), then any setting the person already has that differs from the template; those are
-   kept, and the F.1 question decides each.
+   Name only the hosts the person uses: `cursor` installs Cursor's worker types (editor and CLI
+   alike), `cursor-cli` the Cursor CLI's settings. It prints one line per file (create, replace,
+   merge or unchanged, and the backup it would make; `keep` for a file of the person's own that it
+   leaves alone, `skip` for a configuration file it cannot parse and leaves untouched), then any
+   setting the person already has that differs from the template; those are kept, and the F.1
+   question decides each.
 3. After a yes, run the same command with `apply` in place of `plan`. It makes a dated backup of
    each file it changes (only one per date, so a second run never overwrites the first backup),
    writes, and re-reads what it wrote. A second run reports `unchanged`. The worker definitions
    load from the next session; after an update that changes a file under
-   `<brain_root>/.claude/agents/`, run `apply` again.
+   `<brain_root>/.claude/agents/`, `<brain_root>/.codex/agents/` or `<brain_root>/.cursor/agents/`,
+   run `apply` again. A copy under an old, model-named Claude Code worker type (renamed on 23 November 2026 to
+   `worker-no-judgement`, `worker-bounded-judgement`, `worker-open-judgement`) in `~/.claude/agents/`
+   shows as `remove` in the plan; only `apply` deletes it, after a dated backup. On the fallback path,
+   delete those three old files by hand (the plan names them).
 4. Record the result under `## Setup`.
 
 **Fallback** (section 1.6), when the host refuses to run `host_wiring.py` at all: give the person
@@ -1323,8 +1338,12 @@ manual steps below still work.
    mkdir -p ~/.claude/agents && cp <brain_root>/.claude/agents/worker-*.md ~/.claude/agents/
    ```
 
-   They load from the next session. After an update that changes a file under
-   `<brain_root>/.claude/agents/`, give the person the same command again.
+   For Codex and Cursor the same, from `<brain_root>\.codex\agents\*.toml` to
+   `$HOME\.codex\agents\` and from `<brain_root>\.cursor\agents\*.md` to `$HOME\.cursor\agents\`,
+   after checking that neither folder already holds a file of the person's own of the same name.
+
+   They load from the next session. After an update that changes a file under one of those
+   folders, give the person the same command again.
 
    Give only the lines for the hosts the person uses. A backup is made only when none exists
    for that date, so running the commands a second time never overwrites the first backup with
@@ -1346,7 +1365,9 @@ manual steps below still work.
    a file, so this is the only way to reach projects opened on their own. If you saved
    multi-folder workspaces that include a brain folder (they live in Cursor's application data,
    `glassMultiRootWorkspaces` on Windows), re-add the brain there after any move.
-3. **Other hosts** (for example a desktop agent app that runs commands on this computer): if the
+3. **ChatGPT**, if used for questions: in the ChatGPT project that holds the brain's work, paste
+   the pointer text into the project's instructions (`/shared/skills/delegate-work/hosts/chatgpt.md`).
+4. **Other hosts** (for example a desktop agent app that runs commands on this computer): if the
    app has a custom-instructions field, paste the pointer text there; otherwise start each task
    with "Work in `<brain_root>`; read `<brain_root>/CONTRACT.md` first".
 
@@ -1488,6 +1509,12 @@ host's documentation, not re-checked offline (`verify against current host docs`
 (`read-only`, `workspace-write`, `danger-full-access`) and the `[sandbox_workspace_write]`
 table (`writable_roots`, `network_access`).
 
+At the `routine` and `edits` levels the same merge also writes what the delegation skill needs
+(`/shared/skills/delegate-work/hosts/codex.md`): `[agents] max_concurrent_threads_per_session = 4`,
+`[features] hooks = true`, and the brain's `PreCompact` and `SessionStart` hooks as
+`[[hooks.<event>]]` tables, each running `hooks.py` by its absolute path. A hook the file already
+runs is not added twice, and a value the person set is kept and reported.
+
 Recommended: `approval_policy = "on-request"` with `sandbox_mode = "workspace-write"`: the agent
 works inside the brain and project repositories without asking, and asks to leave the sandbox.
 Codex has no per-command deny list in this file; the safety floor there is the sandbox plus the
@@ -1508,6 +1535,15 @@ credentialed command.
   Confirmed from a working file: `permissions.allow` and `permissions.deny` lists with
   `Shell(<command>)` entries, and `approvalMode: "allowlist"`. `Read(...)` and `Write(...)`
   entries are from the host's documentation (`verify`).
+- **Hooks:** none are written for Cursor. Its hook input and replies do not match what the brain's
+  `hooks.py` reads and prints, and no event follows a compaction
+  (`/shared/skills/delegate-work/hosts/cursor.md`, *Compaction hooks*).
+
+### F.5 ChatGPT
+
+Nothing to install. ChatGPT keeps its permissions in its own app, offers no hooks the brain can
+use, and on the web or a phone cannot reach this computer. On a ChatGPT plan the settings that
+apply to brain work are Codex's, F.3 (`/shared/skills/delegate-work/hosts/chatgpt.md`).
 
 ## 9. Step G – Optional extras
 
@@ -1626,8 +1662,9 @@ and library working trees are clean, and the tour (H.1) is given or declined.
    python shared/skills/repository-preflight/scripts/preflight.py --root . --write-manifest
    ```
 
-3. Commit the memory, staging named paths only, with the host and model in the message
-   (`SMART-RULE-0009`), and leave the smarts clean:
+3. Commit the memory, staging named paths only, with a subject that says what changed and the
+   host and model in the `Tool:` and `Co-Authored-By:` trailers (`SMART-RULE-0009`), and leave the
+   smarts clean:
 
    **Memory.** List what setup changed, check that no secret or vault file is among it, then
    stage exactly the paths that list shows – no path from an example, because `git add` stops
@@ -1637,7 +1674,7 @@ and library working trees are clean, and the tour (H.1) is given or declined.
    cd C:\dev\brain\memory
    git status --short
    git add -- <each path git status listed, for example OWNER.md STATE.md LOG.md>
-   git commit -m "<host> <model>: setup complete"
+   git commit -m "Setup complete" -m "Tool: <host>`nCo-Authored-By: <model> <no-reply address>"
    git push
    ```
 
@@ -1722,9 +1759,13 @@ Collected from the steps above so they can be checked in one pass. Alphabetical.
 
 - Claude Code: `ask` list, `defaultMode` values, `~` in path rules, rule precedence, the
   automatic mode, and the native installer command.
-- Codex: `approval_policy`, `sandbox_mode`, `[sandbox_workspace_write]`, and the install command.
+- ChatGPT: whether desktop Work runs `python` and `git` in the brain root, and whether project
+  instructions override the global custom instructions.
+- Codex: `approval_policy`, `sandbox_mode`, `[sandbox_workspace_write]`, the install command, and
+  the worker types' model ids (`/shared/skills/delegate-work/hosts/codex.md`).
 - Cursor: Auto-run allowlist setting names, whether `AGENTS.md` is read in every project, the
-  `.cursor/rules/*.mdc` front matter (`alwaysApply`), and CLI `Read(...)`/`Write(...)` entries.
+  `.cursor/rules/*.mdc` front matter (`alwaysApply`), CLI `Read(...)`/`Write(...)` entries, the
+  worker types' model ids, and how Cursor treats the brain's metadata fields in an agent file.
 - Google Cloud Console page paths (Google Auth Platform) and the seven-day refresh-token limit in
   Testing.
 - HighLevel Marketplace labels (Private app, Client Keys, Installation URL).

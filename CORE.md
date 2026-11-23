@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-29T08:00:00+10:00
-updated: 2026-11-22T11:10:29+10:00
+updated: 2026-11-22T12:47:34+10:00
 owner: brain-owner
 generated_by: /shared/skills/repository-preflight/scripts/core.py
 canonical_sources:
@@ -32,7 +32,7 @@ Every AI agent, script or person working anywhere in the brain must:
 2. Treat a bootstrap reference to a repository directory as an instruction to locate the `CONTRACT.md` inside that directory and bootstrap from it.
 3. Treat an absolute bootstrap path as a location hint, not repository authority. Verify that the path exists and contains this contract.
 4. Choose a bootstrap tier for the current turn, before reading further:
-   - **Scoped bootstrap** (allowed only for answer-only / read-only fact retrieval with no durable writes): read what the answer needs – injected host context, a file already read in this session, or targeted reads of known paths – and nothing else. Research beyond the brain's own files, and work the owner asks to run in parallel or hand to workers, is not answer-only: it takes the full bootstrap first, because `SMART-RULE-0024` decides how it runs.
+   - **Scoped bootstrap** (allowed only for answer-only / read-only fact retrieval with no durable writes): read what the answer needs – injected host context, a file already read in this session, or targeted reads of known paths – and nothing else. Research beyond the brain's own files, and work the owner asks to run in parallel or hand to workers, is not answer-only: it takes the full bootstrap first, because `SMART-RULE-0024` decides how it runs. Nor is a proposal to start a new project, product or venture: it takes the full bootstrap first, because `SMART-RULE-0016` decides how it starts.
    - **Full bootstrap** (required before the first creation, change or deletion of brain content, a governance change, use of a skill with side effects, or when applicable policy is unclear): read `/CORE.md` and `/CORE-RULES.md`, then the owner profile `/memory/OWNER.md` and the owner-layer rules `/memory/RULES.md`, then inherited node `RULES.md` files down to the active node, then the active node's `README.md`, `STATE.md` and relevant dependencies before acting. The two files are generated from this contract and `/RULES.md`: `/CORE.md` holds, verbatim, the sections of this contract that always apply; `/CORE-RULES.md` holds the tables that say when every other section and rule applies, and, verbatim, the rules that always apply. Each is short enough for a host to show whole; read them, and every bootstrap file, with the host's file-reading tool (for example Read), not a shell command such as `cat`: a shell may show only the start of a long file.
    - **Worker bootstrap** (allowed only for a worker executing a delegation packet under `SMART-RULE-0024`): read the worker brief the packet names, the packet itself, and the `RULES.md` of each node the packet's write paths touch. The worker writes only inside the packet's write paths, never commits, and escalates by a blocked result. The conductor that wrote the packet has completed the full bootstrap, validates the result before it is integrated, and remains accountable for routing, tasks, logs, state and commits. A worker that must act outside its packet escalates instead of bootstrapping further.
    - **Read by situation.** Before acting in a situation named under `Applies when` in those tables, read that section of this contract, or that rule in its canonical home, in full. When it is unclear whether a row applies, read it.
@@ -324,6 +324,6 @@ When an agent starts work:
 12. before pausing or reporting completion, execute the applicable inherited Git checkpoint rule for every repository modified during the task: the mechanics repository, the memory repository and each project repository are separate repositories with separate commits
 13. report completed work, unresolved issues, created tasks, commit hashes and push status; when no commit was created despite durable changes, report the exact blocking reason
 
-An agent must not claim autonomous future follow-up unless an external scheduler or automation capability is actually configured.
+An agent must not claim autonomous future follow-up unless an external scheduler or automation capability is actually configured. A promise to remind the owner, check back or follow up at a later time is a task: before the reply that makes it, the agent creates a reminder dated for that time (`/shared/skills/tasks/`, section 9) and names its identifier in the reply. A timer, wake-up or background command inside the session is not a reminder, because it ends with the session. The session-start sync (`SMART-RULE-0034`) prints the reminders that have come due; the agent opens its first reply with them, and completes each one when the owner has it.
 
 Next: read `/CORE-RULES.md`, with the file-reading tool.

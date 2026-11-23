@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-29T08:00:00+10:00
-updated: 2026-11-22T11:10:29+10:00
+updated: 2026-11-22T12:47:34+10:00
 owner: brain-owner
 generated_by: /shared/skills/repository-preflight/scripts/core.py
 canonical_sources:
@@ -64,7 +64,7 @@ that always apply, verbatim.
 | `SMART-RULE-0013` | Per-API quirk knowledge base | this file | external-API behaviour is unexpected, undocumented or newly explained |
 | `SMART-RULE-0014` | Lightweight Git exit check | this file | always |
 | `SMART-RULE-0015` | Reuse project-native UI patterns | this file | creating or styling a user-interface element |
-| `SMART-RULE-0016` | Product-development process | this file; `/shared/skills/product-development/` | starting or continuing non-trivial software or product work, at any stage |
+| `SMART-RULE-0016` | Product-development process | this file; `/shared/skills/product-development/` | the owner proposes or starts a new project, product, service, tool or venture, software or not; starting or continuing non-trivial software or product work, at any stage |
 | `SMART-RULE-0017` | Surface external-system configuration mismatches before coding around them | this file | an external system's configuration disagrees with what the task needs |
 | `SMART-RULE-0018` | One canonical implementation, no duplicated side effects | this file | adding a function, write, call or control-flow path in software |
 | `SMART-RULE-0019` | Context handoff checkpoint | this file | context is running low, a stage of work ends, a session ends with work in flight, or the context was compacted |

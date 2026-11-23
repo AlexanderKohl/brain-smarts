@@ -39,12 +39,18 @@ that carries `brain/JOINING.md` (a shared project's joining manifest) but has no
 this memory, or a shared board the manifest lists that is not registered, is reported as
 `not joined` with the join command (`/shared/skills/join-project/`). A nudge never changes the
 exit code: joining is the person's own step.
+
+Last, after its repository lines, it prints one line per reminder task that has come due,
+`reminder: <title> – <ID>, due <date>; when done: python shared/skills/tasks/scripts/tasks.py done <ID>`,
+read through `tasks.py reminders` (the tasks skill), and includes them in `--json`. A reminder read
+that fails prints `reminder: could not be read (<reason>)` and never changes the exit code.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -179,6 +185,43 @@ def held_by_others(root: Path) -> list[dict]:
     return [{"name": "claim", "path": "", "state": "held elsewhere", "detail": line, "ok": True} for line in lines]
 
 
+REMINDERS_TIMEOUT = 60   # seconds; a slow read becomes a `could not be read` line, never a hang
+
+
+def reminders(root: Path) -> list[dict]:
+    """The reminders that have come due, one result each, so every host's session start shows them.
+
+    Read through the tasks skill's own command, `tasks.py reminders --json` (its review function,
+    SMART-RULE-0018), found from this script's brain root rather than by a relative import. Each
+    result carries `line`, printed unchanged in the text form. A read that fails is one
+    `reminder: could not be read (<reason>)` result; reminders are `ok`, so the exit code is
+    never changed by them."""
+    def result(line: str, state: str, path: str = "") -> dict:
+        return {"name": "reminder", "path": path, "state": state, "detail": line, "line": line, "ok": True}
+
+    def failed(reason: str) -> list[dict]:
+        return [result(f"reminder: could not be read ({' '.join(reason.split())})", "could not be read")]
+
+    script = (brain_root(Path(__file__).resolve().parent) or root) / "shared" / "skills" / "tasks" / "scripts" / "tasks.py"
+    if not script.is_file():
+        return failed(f"the tasks skill is not at {script.as_posix()}")
+    command = [sys.executable, str(script), "--tasks", str(root / "memory" / "tasks"), "reminders", "--json"]
+    done = None
+    try:
+        done = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                              timeout=REMINDERS_TIMEOUT, stdin=subprocess.DEVNULL,
+                              env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+        found = json.loads(done.stdout)
+        rows, lines = found["reminders"], found["lines"]
+    except subprocess.TimeoutExpired:
+        return failed(f"tasks.py reminders took longer than {REMINDERS_TIMEOUT} s")
+    except (OSError, ValueError, KeyError, TypeError) as err:
+        said = ((done.stderr or done.stdout).strip().splitlines() or [""])[-1] if done is not None else ""
+        return failed(said or str(err) or type(err).__name__)
+    paths = {row.get("line"): row.get("path", "") for row in rows if isinstance(row, dict)}
+    return [result(line, "due" if line in paths else "could not be read", paths.get(line, "")) for line in lines]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--root", type=Path, default=None, help="the brain root (default: found from here)")
@@ -203,11 +246,12 @@ def main(argv: list[str] | None = None) -> int:
         results += upstream_merge.merge_all(root)
     results += not_joined(root)
     results += held_by_others(root)
+    results += reminders(root)
     if args.json:
         print(json.dumps(results, indent=2))
     else:
         for r in results:
-            print(f"{r['name']}: {r['state']}" + (f" – {r['detail']}" if r["detail"] else ""))
+            print(r["line"] if "line" in r else f"{r['name']}: {r['state']}" + (f" – {r['detail']}" if r["detail"] else ""))
     return 0 if all(r["ok"] for r in results) else 1
 
 

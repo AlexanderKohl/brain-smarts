@@ -24,53 +24,75 @@ class ScheduledReviewTest(unittest.TestCase):
                              capture_output=True, text=True)
         self.assertEqual(run.returncode, 0, run.stderr)
         due = (ROOT / "temp" / "due.md").read_text(encoding="utf-8")
-        for heading in ("## Checkout compared with origin", "## Weekly learning digest",
+        for heading in ("## Reminders", "## Checkout compared with origin",
                         "## Tasks due, blocked or waiting", "## Repository preflight", "## Morning jobs"):
             self.assertIn(heading, due)
+        self.assertLess(due.index("## Reminders"), due.index("## Checkout compared with origin"))
+        self.assertNotIn("## Weekly learning digest", due)
         self.assertIn("- skipped (--no-jobs)", due)
         self.assertNotIn("�", due, "a child's output was decoded in the wrong code page")
         after = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True).stdout
         self.assertEqual(before, after)
 
-    def test_digest_is_due_only_once_its_time_has_passed(self):
-        with tempfile.TemporaryDirectory() as folder:
-            index = Path(folder) / scheduled_review.DIGEST_INDEX
-            index.parent.mkdir(parents=True)
-            index.write_text("- delivered; the next is due 2026-10-04T16:41:23+10:00. No scheduler.", encoding="utf-8")
-            before = datetime.fromisoformat("2026-10-04T16:41:22+10:00")
-            after = datetime.fromisoformat("2026-10-04T16:41:23+10:00")
-            self.assertIsNone(scheduled_review.digest_due(Path(folder), before))
-            self.assertEqual(scheduled_review.digest_due(Path(folder), after), "due since 2026-10-04T16:41:23+10:00")
+    # ------------------------------------------------ reminders (fictional titles)
 
-    def test_missing_digest_index_is_not_due(self):
-        with tempfile.TemporaryDirectory() as folder:
-            self.assertIsNone(scheduled_review.digest_due(Path(folder), datetime.now().astimezone()))
-
-    def test_index_without_the_due_phrase_is_unreadable_not_silent(self):
-        # A regenerated index once wrote "overdue since" instead of the phrase, and the review said
-        # "not due" for weeks. An index that exists without a readable due date is a reason to act.
-        now = datetime.fromisoformat("2026-10-28T08:00:00+10:00")
-        for text in ("- delivered; overdue since 2026-10-04T16:41:23+10:00.",
-                     f"- delivered; the {scheduled_review.DIGEST_DUE_PHRASE} 2026-13-40T16:41:23+10:00."):
+    def canned(self, reminders_json: str, task_count: int = 2):
+        """review() with every child command answered by a canned output, no Git and no jobs."""
+        def run(root, *args):
+            if args[-2:] == ("reminders", "--json"):
+                return reminders_json
+            if args[-1] == "review":
+                return f"Reminders for the owner (0)\n\n{task_count} task(s) need attention\n0 reminder(s) due"
+            return "PASS: preflight" if "preflight" in args[0] else ""
+        saved = scheduled_review.run, scheduled_review.freshness
+        scheduled_review.run, scheduled_review.freshness = run, lambda root: ["- mechanics: up to date"]
+        try:
             with tempfile.TemporaryDirectory() as folder:
-                index = Path(folder) / scheduled_review.DIGEST_INDEX
-                index.parent.mkdir(parents=True)
-                index.write_text(text, encoding="utf-8")
-                state = scheduled_review.digest_due(Path(folder), now)
-                self.assertEqual(state, f"state unreadable (no due date found in /{scheduled_review.DIGEST_INDEX})")
-                self.assertEqual(scheduled_review.digest_reason(state),
-                                 f"weekly learning digest: {state}")
+                return scheduled_review.review(Path(folder), datetime.fromisoformat("2026-03-10T07:00:00+10:00"),
+                                               jobs=False)
+        finally:
+            scheduled_review.run, scheduled_review.freshness = saved
 
-    def test_digest_reason_only_when_due_or_unreadable(self):
-        self.assertIsNone(scheduled_review.digest_reason(None))
-        self.assertEqual(scheduled_review.digest_reason("due since 2026-10-04T16:41:23+10:00"),
-                         "weekly learning digest due")
+    @staticmethod
+    def reminders(*titles: str, not_read: tuple = ()) -> str:
+        rows = [{"id": f"TASK-sam-2026-{n:04d}", "title": t, "next_review": "2026-03-09", "store": "/memory/tasks",
+                 "entry": f"- {t} – TASK-sam-2026-{n:04d}, due 2026-03-09, /memory/tasks; when done: "
+                          f"python shared/skills/tasks/scripts/tasks.py done TASK-sam-2026-{n:04d}"}
+                for n, t in enumerate(titles, 1)]
+        return json.dumps({"reminders": rows, "not_read": list(not_read), "lines": []})
 
-    def test_the_reader_finds_the_phrase_the_skill_tells_the_generator_to_write(self):
-        skill = (ROOT / "shared/skills/learning-maintenance/SKILL.md").read_text(encoding="utf-8")
-        self.assertIn(f"`{scheduled_review.DIGEST_DUE_PHRASE} <timestamp>`", skill)
-        self.assertTrue(scheduled_review.DIGEST_DUE.search(
-            f"the {scheduled_review.DIGEST_DUE_PHRASE} 2026-11-14T13:47:56+10:00"))
+    def test_the_report_opens_with_the_reminders_and_the_notification_names_them_first(self):
+        report, reasons, _ = self.canned(self.reminders("Water the ferns", "Ring the plumber"))
+        lines = report.splitlines()
+        start = lines.index("## Reminders")
+        self.assertEqual(lines[:start], [lines[0], "", "Written by the scheduled review; read-only, regenerated each run.", ""])
+        self.assertTrue(lines[start + 2].startswith("- Water the ferns – TASK-sam-2026-0001, due 2026-03-09"))
+        self.assertIn("tasks.py done TASK-sam-2026-0002", lines[start + 3])
+        self.assertLess(start, lines.index("## Checkout compared with origin"))
+        self.assertEqual(reasons, ["Water the ferns", "Ring the plumber", "2 task(s) need attention"])
+
+    def test_the_notification_names_three_reminders_then_how_many_more(self):
+        _, reasons, _ = self.canned(self.reminders("One", "Two", "Three", "Four", "Five"), task_count=0)
+        self.assertEqual(reasons, ["One", "Two", "Three", "and 2 more"])
+
+    def test_no_reminder_due_says_none_due(self):
+        report, reasons, _ = self.canned(self.reminders())
+        self.assertIn("## Reminders\n\n- none due\n", report)
+        self.assertEqual(reasons, ["2 task(s) need attention"])
+
+    def test_a_failed_reminder_read_is_named_never_silent(self):
+        report, reasons, _ = self.canned(self.reminders("Water the ferns", not_read=["example-app:brain/tasks: offline"]))
+        self.assertIn("- reminder: could not be read (example-app:brain/tasks: offline)", report)
+        self.assertIn("- Water the ferns – TASK-sam-2026-0001", report)
+        report, reasons, _ = self.canned("Traceback (most recent call last):\nOSError: disk gone")
+        self.assertIn("## Reminders\n\n- reminder: could not be read (OSError: disk gone)\n", report)
+        self.assertEqual(reasons[0], "reminders could not be read")
+
+    def test_the_weekly_digest_phrase_is_no_longer_read(self):
+        for name in ("digest_due", "digest_reason", "DIGEST_INDEX", "DIGEST_DUE_PHRASE", "DIGEST_DUE"):
+            self.assertFalse(hasattr(scheduled_review, name), name)
+        report, _, _ = self.canned(self.reminders())
+        self.assertNotIn("learning digest", report)
 
     SCRIPT = Path("/brain/shared/skills/tasks/scripts/scheduled_review.py")
     PYTHON = Path("/usr/bin/python3")

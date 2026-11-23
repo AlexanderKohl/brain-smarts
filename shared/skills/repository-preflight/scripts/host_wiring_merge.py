@@ -1,4 +1,4 @@
-"""Pure merge helpers for host_wiring.py: placeholder filling, JSON settings merge, TOML merge."""
+"""Pure merge helpers for host_wiring.py: placeholder filling, JSON settings merge, TOML merge, Codex hooks."""
 from __future__ import annotations
 
 import json
@@ -148,3 +148,45 @@ def merge_toml(existing: str, template: str) -> tuple[str, list[str]]:
     text = "\n".join(lines) + "\n" if lines else ""
     tomllib.loads(text)
     return text, conflicts
+
+
+def _runs(entry: Any, subcommand: str) -> bool:
+    """True when a Codex hook entry already runs the brain's `hooks.py <subcommand>`, in any form
+    (absolute or relative script path, any quoting): the person's own copy counts and is kept."""
+    if not isinstance(entry, dict):
+        return False
+    pattern = re.compile(r"hooks\.py[\"']?\s+" + re.escape(subcommand) + r"\b")
+    return any(isinstance(h, dict) and pattern.search(str(h.get("command", ""))) for h in entry.get("hooks", []) or [])
+
+
+def add_toml_hooks(text: str, wanted: list[tuple[str, str | None, str, str]]) -> tuple[str, list[str]]:
+    """Append each Codex hook (event, matcher, command, subcommand) the file lacks, as
+    `[[hooks.<event>]]` tables at the end. An entry that already runs the same subcommand under the
+    same matcher is kept as it is. A `hooks` value written another way (inline, not a table) is left
+    alone and reported. Returns the text (it must parse) and the conflict lines."""
+    data = tomllib.loads(text) if text.strip() else {}
+    hooks = data.get("hooks", {})
+    if not isinstance(hooks, dict):
+        return text, [f"hooks: kept {_value(hooks)}; {len(wanted)} brain hook(s) not added"]
+    conflicts: list[str] = []
+    blocks: list[str] = []
+    for event, matcher, command, subcommand in wanted:
+        current = hooks.get(event, [])
+        if not isinstance(current, list):
+            conflicts.append(f"hooks.{event}: kept as written; brain hook {subcommand} not added")
+            continue
+        # The same subcommand under the same matcher, or under any matcher when the brain's has none
+        # (PreCompact runs for every trigger; a person's "manual|auto" covers the same).
+        if any(_runs(e, subcommand) and (matcher is None or e.get("matcher") == matcher) for e in current):
+            continue
+        block = [f"[[hooks.{event}]]"] + ([f"matcher = {_value(matcher)}"] if matcher else [])
+        block += [f"[[hooks.{event}.hooks]]", 'type = "command"', f"command = {_value(command)}"]
+        blocks.append("\n".join(block))
+    if not blocks:
+        return text, conflicts
+    merged = text.rstrip("\n") + ("\n\n" if text.strip() else "") + "\n\n".join(blocks) + "\n"
+    try:
+        tomllib.loads(merged)
+    except tomllib.TOMLDecodeError:                      # e.g. hooks.<event> written as an inline array
+        return text, conflicts + [f"hooks: written another way; {len(blocks)} brain hook(s) not added"]
+    return merged, conflicts

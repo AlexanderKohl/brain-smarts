@@ -48,7 +48,8 @@ TEMPLATE = Path("templates") / "TASK_TEMPLATE.md"
 SKELETON_TEMPLATE = Path(__file__).resolve().parents[3] / "templates" / "memory-skeleton" / "tasks" / TEMPLATE
 PLACEHOLDER_OWNERS = {"", "OWNER_SHORT_NAME", "null"}
 # Where a field the template lacks is written (front matter order of the task schema).
-ANCHORS = {"author": "owner", "schedule": "waiting_on", "related_tasks": "depends_on"}
+ANCHORS = {"author": "owner", "schedule": "waiting_on", "related_tasks": "depends_on",
+           "reminder": "next_review", "repeat_days": "reminder"}
 SCHEDULE_RE = re.compile(r"^[^|]*\S[^|]*\|[^|]*\S[^|]*\|[^|]*\S[^|]*$")
 MSYS_HINT = ("Git Bash rewrites an argument that starts with / into a Windows path; "
              "run the command with MSYS_NO_PATHCONV=1 in front")
@@ -202,11 +203,20 @@ def create(root: Path, title: str, status: str = "inbox", priority: str = "norma
            slug: str | None = None, outcome: str | None = None, next_action: str | None = None,
            now: str | None = None, year: int | None = None, team: str | None = None,
            private: bool = False, schedule: str | None = None, offline: bool = False,
-           update_state: bool = True) -> tuple[list[Path], list[str]]:
-    """Write one task per project (one in total without a project). Returns the paths and what was said."""
+           update_state: bool = True, reminder: bool = False,
+           repeat_days: int | None = None) -> tuple[list[Path], list[str]]:
+    """Write one task per project (one in total without a project). Returns the paths and what was said.
+
+    `reminder` marks a promise to the owner (`reminder: true`, shown first by the review); a
+    `repeat_days` task goes into `recurring/` and is re-armed by `done` (tasks.py remind)."""
     import task_claims  # the team label check lives with the claims
     if status not in NEW_STATUSES:
         raise ValueError(f"status {status} is not one of {', '.join(NEW_STATUSES)}")
+    if repeat_days is not None and (isinstance(repeat_days, bool) or not isinstance(repeat_days, int)
+                                    or repeat_days < 1):
+        raise ValueError(f"repeat_days {repeat_days!r} is not a positive whole number of days")
+    if reminder and not next_review:
+        raise ValueError("a reminder needs the day it is due (next_review)")
     if team:
         team = task_claims.check_team(team)
     for key, value in (("due", due), ("next_review", next_review)):
@@ -249,6 +259,10 @@ def create(root: Path, title: str, status: str = "inbox", priority: str = "norma
         }
         if team:
             fields["team"] = team
+        if reminder:
+            fields["reminder"] = True
+        if repeat_days is not None:
+            fields["repeat_days"] = repeat_days
         history = [entry(at, author, f"captured with `tasks.py new` ({status})")]
         if others:
             history.append(entry(at, author, "split: part of work for several projects ("
@@ -265,7 +279,7 @@ def create(root: Path, title: str, status: str = "inbox", priority: str = "norma
     for n, (store, _refs) in enumerate(groups):
         tid = ids[n]
         text, memory_refs = render(n, ids)
-        folder = "inbox" if status == "inbox" else "open"
+        folder = "inbox" if status == "inbox" else "recurring" if repeat_days is not None else "open"
         path = store.path / folder / f"{tid}-{slug or slugify(title)}.md"
         write_atomic(path, text)
         paths.append(path)

@@ -4,8 +4,12 @@ Commands:
     review   tasks that need attention today, across every reachable store
     check    record and store checks of every store, or one (`--store LABEL`)
     next-id  the next free TASK-<author>-YYYY-NNNN number
+    reminders  one line per reminder that has come due (sync.py and the session start print it); exit 0
     new      one task per project, each in its project's store (task_new.py), and its board
-    done     complete a task: status, History, move to completed/
+    remind   a reminder for the owner: a scheduled task with `reminder: true` due on a day; with
+             `--repeat-days N` a repeating one in recurring/ (task_reminders.py)
+    done     complete a task: status, History, move to completed/; a repeating task is re-armed
+             unless `--final`
     do-now   ask for a task now: priority high, status ready (unless in progress), History
     note     a History entry; `--run JOB` records a scheduled run; `--private` writes the
              companion file in memory instead of the record
@@ -38,11 +42,12 @@ import argparse
 import json
 import subprocess
 import sys
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import task_claims
 import task_migrate
+import task_reminders
 import task_stores
 from task_check import REQUIRED, Report, check  # noqa: F401  (Report, REQUIRED: re-exported)
 from task_git import WriteRefused
@@ -85,12 +90,26 @@ def find_task(store: Path, tid: str) -> Task:
 
 
 def complete(store: Path, tid: str, note: str | None = None, shots: list[str] | None = None,
-             now: str | None = None, shot_stamp: str | None = None, offline: bool = False) -> tuple[Path, list[str]]:
+             now: str | None = None, shot_stamp: str | None = None, offline: bool = False,
+             final: bool = False) -> tuple[Path, list[str]]:
     """Mark a task completed: status, a History entry with the note, the record moved to its
-    store's completed/, a claim on it cleared, STATE.md regenerated."""
+    store's completed/, a claim on it cleared, STATE.md regenerated.
+
+    A task with `repeat_days` is re-armed instead, unless `final`: it stays in its folder,
+    status scheduled, `next_review` the day of completion plus `repeat_days`, a claim cleared, and
+    the History entry `done; next on <date>`. A `repeat_days` that is not a positive whole number
+    is refused before anything is written."""
     root, task = locate(store, tid)
     if task.folder == "completed":
         raise ValueError(f"{tid} is already {task.get('status') or 'completed'}")
+    days = None if final else task_reminders.repeat_days(task)   # ValueError: the record is unchanged
+    if days is not None:
+        at, notes = stamp(root, now)
+        following = (date.fromisoformat(at[:10]) + timedelta(days=days)).isoformat()
+        fields = dict(task_claims.cleared(task), status="scheduled", next_review=following)
+        path, said = change(root, task, fields, f"done; next on {following}", note=note, shots=shots,
+                            shot_stamp=shot_stamp, now=at, offline=offline)
+        return path, notes + [f"done {tid}; next on {following}: {path}"] + said
     fields = dict(task_claims.cleared(task), status="completed")
     path, said = change(root, task, fields, "done (completed)", note=note, shots=shots, shot_stamp=shot_stamp,
                         folder="completed", now=now, offline=offline)
@@ -188,6 +207,21 @@ def edit(store: Path, tid: str, sets: list[str], why: str, now: str | None = Non
     return path, [f"edited {tid}: {path}"] + said
 
 
+def remind(root: Path, title: str, on: str, repeat_days: int | None = None, project: str | None = None,
+           next_action: str | None = None, waiting_on: str | None = None, now: str | None = None,
+           offline: bool = False, update_state: bool = True) -> tuple[str, Path, list[str]]:
+    """A reminder for the owner, through the one path that creates tasks (`create`): status
+    scheduled, `reminder: true`, `next_review` the day it is due; recurring/ with `repeat_days`.
+    Returns the identifier, the path and what was said."""
+    if not DATE_RE.match(on or "") or len(on) != 10:
+        raise ValueError(f"--on {on} is not a date YYYY-MM-DD")
+    paths, said = create(root, title, status="scheduled", projects=[project] if project else [],
+                         next_review=on, waiting_on=waiting_on, next_action=next_action, now=now,
+                         offline=offline, update_state=update_state, reminder=True, repeat_days=repeat_days)
+    meta = parse_front_matter(paths[0].read_text(encoding="utf-8")) or {}
+    return str(meta.get("id") or paths[0].stem), paths[0], said
+
+
 ACTIONS = {"done": complete, "do_now": do_now, "note": add_note}
 
 
@@ -223,6 +257,19 @@ def _parser() -> argparse.ArgumentParser:
     r.add_argument("--today", help="YYYY-MM-DD, default the local date")
     r.add_argument("--horizon", type=int, default=7, help="days ahead for deadlines (default 7)")
     r.add_argument("--all", action="store_true", help="also tasks in repositories that other brains own")
+    m = sub.add_parser("reminders", help="one line per reminder that has come due; always exits 0")
+    m.add_argument("--today", help="YYYY-MM-DD, default the local date")
+    m.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help="machine-readable output")
+    w = sub.add_parser("remind", help="a reminder for the owner, due on a day (repeating with --repeat-days)")
+    w.add_argument("--title", required=True, help="what the owner is to be reminded of, in his words")
+    w.add_argument("--on", required=True, metavar="YYYY-MM-DD", help="the day it is due")
+    w.add_argument("--repeat-days", type=int, metavar="N", help="repeat every N days: recurring/, re-armed by done")
+    w.add_argument("--project", metavar="NODE", help="a project reference such as /memory/projects/<node> "
+                                                    "(Git Bash: put MSYS_NO_PATHCONV=1 in front)")
+    w.add_argument("--next-action", help="text for the Next action section")
+    w.add_argument("--waiting-on", help="who or what is expected to move it")
+    w.add_argument("--now", help="the creation timestamp, ISO 8601 with offset; default now")
+    w.add_argument("--no-board", action="store_true", help="do not refresh the owner board")
     for name, text in (("check", "validate task records and stores"), ("state", "regenerate STATE.md")):
         s = sub.add_parser(name, help=text)
         s.add_argument("--store", metavar="LABEL", help="one store, as `check` names it")
@@ -262,6 +309,8 @@ def _parser() -> argparse.ArgumentParser:
         a.add_argument("--note", required=name in ("note", "edit"), help="kept verbatim in History")
         a.add_argument("--now", help="the timestamp, ISO 8601 with offset; default now")
         a.add_argument("--no-board", action="store_true", help="do not refresh the owner board")
+        if name == "done":
+            a.add_argument("--final", action="store_true", help="complete a repeating task for good")
         if name == "note":
             a.add_argument("--run", metavar="JOB", help="record the outcome of a run of this scheduled job")
             a.add_argument("--private", action="store_true", help="the companion file in memory, not the record")
@@ -283,19 +332,26 @@ def _say(args, paths: list[Path], said: list[str]) -> None:
         print("\n".join(said))
 
 
+def _rows(root: Path, today: date, horizon: int, everyone: bool = False) -> tuple[list[dict], list]:
+    """The review's rows of this brain's tasks (every brain's with `everyone`), and the stores not read."""
+    own = brain_author(root) if not everyone else None
+    tasks = [t for t in task_stores.load_all(root)
+             if everyone or t.store.kind != "repository" or author_name(t.get("owner") or "") == own]
+    return review(tasks, today, horizon), task_stores.unreachable(root)
+
+
 def _review(args, root: Path) -> int:
     today = date.fromisoformat(args.today) if args.today else date.today()
-    own = brain_author(root) if not args.all else None
-    tasks = [t for t in task_stores.load_all(root)
-             if args.all or t.store.kind != "repository" or author_name(t.get("owner") or "") == own]
-    rows = review(tasks, today, args.horizon)
-    missing = task_stores.unreachable(root)
+    rows, missing = _rows(root, today, args.horizon, args.all)
     if args.json:
         print(json.dumps(rows, indent=2))
         for store in missing:      # stderr, so the JSON on stdout keeps one shape
             print(f"Not read: {store.label} ({store.reason})", file=sys.stderr)
         return 0
-    print(f"Task review {today.isoformat()} (deadlines within {args.horizon} days)\n")
+    due, rows = task_reminders.split(rows, today)
+    print(f"Reminders for the owner ({len(due)})\n")
+    print("\n".join(task_reminders.entry(row) for row in due) or "- none due")
+    print(f"\nTask review {today.isoformat()} (deadlines within {args.horizon} days)\n")
     print("| Task | Status | Priority | Why | Waiting on | Title | Store |")
     print("|---|---|---|---|---|---|---|")
     for row in rows:
@@ -303,14 +359,56 @@ def _review(args, root: Path) -> int:
                  row["waiting_on"] or "-", row["title"], row["store"]]
         print("| " + " | ".join(cell.replace("|", "/") for cell in cells) + " |")
     print(f"\n{len(rows)} task(s) need attention")
+    print(f"{len(due)} reminder(s) due")
     for store in missing:
         print(f"Not read: {store.label} ({store.reason})")
+    return 0
+
+
+def reminders(store: Path, today: date | None = None) -> dict:
+    """The reminders that have come due, and a line for each store that could not be read.
+
+    Never raises: whatever stops the read becomes one `reminder: could not be read (...)` line,
+    and the reminders read before it still count. `lines` is exactly what the text form prints."""
+    found: list[dict] = []
+    not_read: list[str] = []
+    try:
+        root = brain_root(store) if store.is_dir() else None
+        if root is None:
+            raise LookupError(f"task store not found: {store}")
+        rows, missing = _rows(root, today or date.today(), 0)
+        found = task_reminders.split(rows, today or date.today())[0]
+        not_read = [f"{s.label}: {s.reason}" for s in missing]
+    except Exception as err:  # noqa: BLE001 – a reminder read never fails its caller (interface 5)
+        not_read.append(str(err).strip(chr(39)) or type(err).__name__)
+    for row in found:
+        row["line"] = task_reminders.line(row)
+        row["entry"] = task_reminders.entry(row)
+    lines = [row["line"] for row in found] + [task_reminders.unreadable(r) for r in not_read]
+    return {"reminders": found, "not_read": not_read, "lines": lines}
+
+
+def _reminders(args, store: Path) -> int:
+    try:
+        today = date.fromisoformat(args.today) if args.today else None
+    except ValueError:
+        today = None
+    result = reminders(store, today)
+    if args.today and today is None:
+        result["not_read"].append(f"--today {args.today} is not a date")
+        result["lines"].append(task_reminders.unreadable(result["not_read"][-1]))
+    if getattr(args, "json", False):
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    elif result["lines"]:
+        print("\n".join(result["lines"]))
     return 0
 
 
 def main(argv: list[str] | None = None, cwd: Path | None = None) -> int:
     args = _parser().parse_args(argv)
     store = resolve_store(args.tasks, cwd or Path.cwd())
+    if args.command == "reminders":     # always exits 0, naming what it could not read (interface 5)
+        return _reminders(args, store)
     root = brain_root(store) if store.exists() else None
     if not store.is_dir() or root is None:
         hint = f" ({MSYS_HINT})" if args.tasks and looks_path_converted(args.tasks) else ""
@@ -343,6 +441,17 @@ def _run(args, store: Path, root: Path) -> int:
                 said += refresh_board(path, store)
         _say(args, paths, said)
         return 0
+    if args.command == "remind":
+        tid, path, said = remind(root, args.title, args.on, repeat_days=args.repeat_days, project=args.project,
+                                 next_action=args.next_action, waiting_on=args.waiting_on, now=args.now,
+                                 offline=args.offline)
+        if not args.no_board:
+            said += refresh_board(path, store)
+        if args.json:
+            print(json.dumps({"id": tid, "path": path.as_posix(), "notes": said}, indent=2))
+        else:
+            print("\n".join([tid] + said))    # the identifier on its own line, for the agent's reply
+        return 0
     if args.command in ("done", "do-now", "note", "edit", "claim", "release"):
         common = {"now": args.now, "offline": args.offline}
         if args.command == "claim":
@@ -353,6 +462,8 @@ def _run(args, store: Path, root: Path) -> int:
             path, said = edit(store, args.task, args.set, args.note, **common)
         elif args.command == "note":
             path, said = add_note(store, args.task, note=args.note, run=args.run, private=args.private, **common)
+        elif args.command == "done":
+            path, said = complete(store, args.task, note=args.note, final=args.final, **common)
         else:
             path, said = ACTIONS[args.command.replace("-", "_")](store, args.task, note=args.note, **common)
         if not args.no_board and not (args.command == "note" and args.private):

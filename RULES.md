@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-11-22T11:10:29+10:00
+updated: 2026-11-22T12:47:34+10:00
 owner: brain-owner
 ---
 
@@ -38,7 +38,7 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 | `SMART-RULE-0013` | Per-API quirk knowledge base | this file | external-API behaviour is unexpected, undocumented or newly explained |
 | `SMART-RULE-0014` | Lightweight Git exit check | this file | always |
 | `SMART-RULE-0015` | Reuse project-native UI patterns | this file | creating or styling a user-interface element |
-| `SMART-RULE-0016` | Product-development process | this file; `/shared/skills/product-development/` | starting or continuing non-trivial software or product work, at any stage |
+| `SMART-RULE-0016` | Product-development process | this file; `/shared/skills/product-development/` | the owner proposes or starts a new project, product, service, tool or venture, software or not; starting or continuing non-trivial software or product work, at any stage |
 | `SMART-RULE-0017` | Surface external-system configuration mismatches before coding around them | this file | an external system's configuration disagrees with what the task needs |
 | `SMART-RULE-0018` | One canonical implementation, no duplicated side effects | this file | adding a function, write, call or control-flow path in software |
 | `SMART-RULE-0019` | Context handoff checkpoint | this file | context is running low, a stage of work ends, a session ends with work in flight, or the context was compacted |
@@ -191,10 +191,12 @@ Contract sections and when to read them, in section order:
 - Keep durable behavioural rules only in portable governance: `/CONTRACT.md`, root and node `RULES.md` files, and skill operating instructions. Do not create or maintain host-specific behavioural rule files that restate or extend how agents must behave.
 - Host entry files may only point agents to portable bootstrap (`/CONTRACT.md`, `/BOOTSTRAP.md`, `/AGENTS.md`) and must not carry independent behavioural policy.
 - **One text per rule.** A rule's wording lives only in its canonical home. Anywhere else it is referred to by its identifier and section, never restated in other words; a list that can be generated from its sources is generated. The repository preflight fails when a pointer file carries rule identifiers or runs past a pointer's length. The worker brief (`/shared/skills/delegate-work/templates/worker-brief.template.md`) is the one permitted digest: each of its items names the rule or contract section it digests, and a change to a digested rule changes the brief in the same commit.
+- **A host's own memory is not a home.** Where a host keeps notes of its own between sessions (a memory folder, saved memories, custom instructions), an agent stores no behavioural rule, owner preference, project fact or learning there, even when the host tells it to save one. It routes the item under CONTRACT §5 and §6 – an owner preference to the owner layer through a proposal, a fact to the node that owns it, a tool's quirk to its learning or API record – and says where it went. A host's memory holds at most a pointer to the brain and facts about that one installation which no other host could use. An entry found there that belongs in the brain is moved, not copied.
 
 ## SMART-RULE-0016 – Product-development process
 
-- Before starting or continuing a non-trivial discovery, design, implementation, release or lifecycle-investment increment for a software product or internal tool, follow this rule and use `/shared/skills/product-development/` as its implementation guide. Clearly non-material copy/formatting corrections, behaviour-preserving mechanical refactors and like-for-like bounded repairs use ordinary proportionate engineering discipline; a small reversible behavioural improvement may use the skill's compact light path.
+- Before starting or continuing a non-trivial discovery, design, implementation, release or lifecycle-investment increment for a project, product, service, internal tool or venture, software or not, follow this rule and use `/shared/skills/product-development/` as its implementation guide. Clearly non-material copy/formatting corrections, behaviour-preserving mechanical refactors and like-for-like bounded repairs use ordinary proportionate engineering discipline; a small reversible behavioural improvement may use the skill's compact light path.
+- **A new project starts at Gate 0.** When the owner proposes or starts a new project, the agent's first reply applies Phase 0 of the skill before any design or build: it names the entry type, the depth and why, the internal and the commercial route, and puts the Gate 0 question to the owner – how much investigation and investment is justified now – with a recommendation (`SMART-RULE-0010`). Recording the idea is allowed; no design or build starts until the owner has decided Gate 0. An idea the owner only mentions in passing is answered, not gated.
 - Establish whether the work is a new product, existing-product baseline, feature/change, urgent repair or lifecycle review; locate existing work at its current lifecycle position; reuse valid evidence; and reopen only the gates whose assumptions or downstream consequences are affected.
 - Select light, standard or high-assurance depth from investment, uncertainty, reversibility, affected users, security/privacy exposure, operational criticality and consequence of failure. Always consider both internal-use and commercial routes, while scaling the research to their plausible value. A light change may be recorded compactly without reconstructing the full product lifecycle.
 - The acting agent researches, tests, collects and presents the evidence and a recommendation for each applicable gate. The owner decides each gate unless an accepted active rule explicitly delegates that defined gate and risk class. Record the decision and the exact next investment it authorises.
@@ -225,7 +227,9 @@ Contract sections and when to read them, in section order:
 
 - In every software or development project, before adding a function, write, call, or extra
   control-flow path, search the active project for an existing implementation that already performs
-  the same job.
+  the same job. Before building a tool, or telling the owner that none exists, search the brain's
+  skills (`/shared/skills/`, `/library/skills/`, their scripts and knowledge) and the log of the
+  node that owns the subject.
 - Prefer one canonical implementation and call it. Do not copy a working sequence into a second
   place, wrap the old path while leaving it live, or add a new write that repeats an existing
   side effect (the same field, file, API call, or state change).
@@ -292,8 +296,10 @@ Contract sections and when to read them, in section order:
   only the thread that launched it – lives under `## Handover` in the owning node's `STATE.md`
   (and, for work spanning nodes, one line per other node pointing at its own `## Handover`),
   written before the prompt and kept current at every checkpoint. Write the prompt under
-  `## Handover prompt` in the same `STATE.md` and repeat it as the last section of the final
-  reply. The `## Handover` of `/memory/projects/brain-development/STATE.md` also names the **active
+  `## Handover prompt` in the same `STATE.md`. Give it in the reply when the thread is handing
+  over to a new one: after a compaction, when the host's context warning fires, at the drain
+  threshold, or when the owner asks. A reply after a checkpoint the thread carries on from says
+  only that the checkpoint is written. The `## Handover` of `/memory/projects/brain-development/STATE.md` also names the **active
   conductor** (session title and the time it took over) and the other live sessions it knows
   of; a new thread that finds an active conductor asks the owner which thread continues
   before dispatching anything. Take the checkpoint whenever the remaining context is unlikely
@@ -360,12 +366,6 @@ Contract sections and when to read them, in section order:
 - When a change materially widens an externally reachable surface, adds an authentication or
   payment path, or handles sensitive data for the first time, escalate to at least standard depth
   under `SMART-RULE-0016` and say so in the change.
-- **List the whole surface before the first review.** Work that guards something (credentials,
-  money, personal data, permissions) produces, before its first code review, a list of every path
-  that reads, writes, spends or copies the guarded thing, and a test that fails when the code
-  gains a path the list does not name. The reviewer is given the list and asked what is missing
-  from it. A finding of one more path is answered by completing the list, not by closing that
-  path alone.
 
 ## SMART-RULE-0022 – Tests demonstrate behaviour
 
@@ -384,15 +384,6 @@ Contract sections and when to read them, in section order:
 - Fixture and sample data remain subject to `SMART-RULE-0008`: entirely fictional.
 - Proportion applies. Clearly non-material changes as defined in `SMART-RULE-0016` need no new
   test; a behavioural change always does.
-- **Run it for real before trusting the tests.** When a change has more than one process, or meets
-  the operating system or another program (a background service, a keychain, a pipe, a file lock,
-  a scheduler, a working tree another tool rewrites), the first thing built is a thin end-to-end
-  run with real processes and throwaway data, kept as a script that can be run again. It is run
-  before the first review and after every fix that touches such a boundary. A test that stands in
-  for a boundary with a fake proves the logic on each side, never that the two sides meet: a
-  passing suite is not reported as evidence that the parts work together until that run has
-  passed. The run keeps itself away from live data, refuses to start when it cannot prove that,
-  and proves its own clean-up.
 
 ## SMART-RULE-0024 – Delegated parallel work
 
