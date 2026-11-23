@@ -112,7 +112,7 @@ class LinuxProofTest(unittest.TestCase):
     @unittest.skipUnless(ROOT, "a second user id needs root")
     def test_a_second_user_reads_through_its_entry_until_the_file_is_made_private(self) -> None:
         outer = self.folder("tmpfs")
-        os.chmod(outer, 0o711)  # nobody can traverse it
+        os.chmod(outer, 0o711)  # others, the user nobody among them, may traverse it but not list it
         file = outer / "fictional.txt"
         file.write_text("x", encoding="utf-8")
         os.chmod(file, 0o600)

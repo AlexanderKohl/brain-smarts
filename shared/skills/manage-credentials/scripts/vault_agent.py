@@ -575,9 +575,20 @@ class VaultAgent:
         Under the barrier it marks the agent stopping (nothing is admitted from then on), closes the
         listener and every registered connection (an operation still in flight can deliver no
         answer), removes this agent's state file, releases the singleton and waits until no
-        operation is in flight. A shutdown called from inside an operation does not wait for that
-        operation. The barrier and the wait are bounded by DRAIN_SECONDS: a send that never ends
-        (a client that does not read) leaves it "not drained".
+        operation is in flight. The barrier and the wait are bounded by DRAIN_SECONDS.
+
+        It returns False ("not drained") in three cases (plan R17). (1) It did not get the barrier in
+        time (a send that never ends: a client that does not read). Then it touches nothing the barrier
+        protects: no stopping flag, no register, no connection closed. It still does what the barrier
+        does not protect: the passphrase, listener and payload taken away, the listener closed, the
+        state file removed, the singleton released. (2) Operations were still in flight at the end of
+        the wait. (3) It was called from inside an operation: it waits for the others, but its own
+        operation has not yet suppressed its answer or finished.
+
+        A caller that gets False ends the process. `_keep_state` does so itself (`_exit_now(2)`). The
+        tray's quit and `atexit` are ending it anyway. A start that failed (a state file that cannot
+        be written, or repeated accept errors) raises out of `serve_forever`, so `serve` and the tray
+        exit.
         """
         with self._lock:
             self._passphrase = None
@@ -587,12 +598,12 @@ class VaultAgent:
         deadline = time.monotonic() + self.DRAIN_SECONDS
         held = self._barrier.acquire(timeout=self.DRAIN_SECONDS)
         try:
-            self._stopping = True
-            connections = list(self._connections)
+            if held:
+                self._stopping = True
+                for connection in list(self._connections):
+                    _close_quietly(connection)
             if listener is not None:
                 _close_quietly(listener)
-            for connection in connections:
-                _close_quietly(connection)
             # Only this agent's own state file: never the file of another, running agent.
             clear_state(only_pid=os.getpid())
             try:
@@ -603,8 +614,9 @@ class VaultAgent:
             if not held:
                 return False
             own = 1 if getattr(self._operation, "active", False) else 0
-            return self._barrier.wait_for(lambda: self._in_flight <= own,
-                                          timeout=max(0.0, deadline - time.monotonic()))
+            others_ended = self._barrier.wait_for(lambda: self._in_flight <= own,
+                                                  timeout=max(0.0, deadline - time.monotonic()))
+            return others_ended and not own
         finally:
             if held:
                 self._barrier.release()

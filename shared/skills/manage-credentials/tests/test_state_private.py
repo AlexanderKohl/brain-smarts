@@ -341,7 +341,18 @@ class BarrierTest(TemporaryRuntime):
         self.release = threading.Event()  # set at cleanup, so nothing blocked outlives the test
 
     def start(self) -> tuple[vault_agent.VaultAgent, threading.Thread]:
-        agent = vault_agent.VaultAgent(self.folder / "fictional.vault")
+        # Each change of the stopping flag records whether this thread owned the barrier (plan R17).
+        self.flag_changes: list[bool] = []
+        changes = self.flag_changes
+
+        class Watched(vault_agent.VaultAgent):
+            def __setattr__(self_inner, name, value):
+                if name == "_stopping" and "_barrier" in self_inner.__dict__:
+                    changes.append(self_inner._barrier._is_owned())
+                super().__setattr__(name, value)
+
+        agent = Watched(self.folder / "fictional.vault")
+        changes.clear()  # the value __init__ gives it
         thread = threading.Thread(target=self._serve, args=(agent,), daemon=True)
         thread.start()
         state = self.folder / "agent-state.json"
@@ -454,9 +465,43 @@ class BarrierTest(TemporaryRuntime):
             asking, answer = self.ask_in_thread(self.client(agent), self.request(agent))
             self.assertTrue(done.wait(10), "shutdown from inside the operation did not return")
             asking.join(5)
-        self.assertTrue(inside[0][0])
+        self.assertIs(inside[0][0], False)  # its own operation has not finished: never "drained" (plan R17)
         self.assertLess(inside[0][1], 2.0)
         self.assertEqual(answer[0][0], "no answer")
+        self.assertEqual(self.flag_changes, [True])
+
+    def test_a_shutdown_from_inside_an_operation_waits_for_the_others_and_returns_not_drained(self) -> None:
+        agent, _thread = self.start()
+        other_started, returned, inside, other_ended = threading.Event(), threading.Event(), [], []
+
+        def handle(request):
+            if request["op"] == "ping":  # the other operation, in flight when shutdown begins
+                other_started.set()
+                self.release.wait(5)
+                other_ended.append(time.monotonic())
+            else:
+                inside.append(agent.shutdown())
+                inside.append(time.monotonic())
+                returned.set()
+            return {"ok": True, "id": 1, "result": "fictional"}
+
+        with mock.patch.object(agent, "handle", handle):
+            other, other_answer = self.ask_in_thread(self.client(agent), self.request(agent, "ping"))
+            self.assertTrue(other_started.wait(5))
+            own, own_answer = self.ask_in_thread(self.client(agent), self.request(agent, "status"))
+            deadline = time.time() + 2
+            while time.time() < deadline and not agent._stopping:
+                time.sleep(0.01)
+            time.sleep(0.2)
+            self.assertEqual(inside, [], "shutdown returned before the other operation ended")
+            self.release.set()
+            self.assertTrue(returned.wait(10), "shutdown from inside the operation did not return")
+            own.join(5)
+            other.join(5)
+        self.assertIs(inside[0], False)
+        self.assertLessEqual(other_ended[0], inside[1])  # the others drained first
+        self.assertEqual((other_answer[0][0], own_answer[0][0]), ("no answer", "no answer"))
+        self.assertEqual(self.flag_changes, [True])
 
     def test_an_answer_ready_when_shutdown_begins_is_suppressed_before_shutdown_drains(self) -> None:
         agent, _thread = self.start()
@@ -530,11 +575,21 @@ class BarrierTest(TemporaryRuntime):
                 mock.patch.object(vault_agent.VaultAgent, "DRAIN_SECONDS", 0.5):
             self.ask_in_thread(self.client(agent), self.request(agent))
             self.assertTrue(sending.wait(5))
+            register = set(agent._connections)
             began = time.monotonic()
             drained = agent.shutdown()
             took = time.monotonic() - began
-        self.assertIs(drained, False)
-        self.assertLess(took, 2.0)
+            # Without the barrier shutdown touches nothing it protects (plan R17, rule 1).
+            self.assertIs(drained, False)
+            self.assertLess(took, 2.0)
+            self.assertEqual(self.flag_changes, [], "the stopping flag changed without the barrier")
+            self.assertIs(agent._stopping, False)
+            self.assertEqual(agent._connections, register)
+            self.assertTrue(register, "the held connection is not registered")
+            self.release.set()
+            time.sleep(0.2)
+            self.assertIs(agent._stopping, False)
+        self.assertNotIn(False, self.flag_changes)
 
     def test_a_failed_first_wake_up_is_retried_and_the_accept_loop_ends(self) -> None:
         agent, thread = self.start()
