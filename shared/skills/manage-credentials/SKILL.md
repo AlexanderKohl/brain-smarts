@@ -11,7 +11,7 @@ metadata:
   scope: shared
   project_ref: /memory/projects/credential-management
   created: 2026-08-04T16:11:53+10:00
-  updated: 2026-11-21T14:31:20+10:00
+  updated: 2026-11-23T15:49:23+10:00
 ---
 
 # Credential Management
@@ -28,14 +28,14 @@ The rules every use of this skill follows (moved here from an owner's node rules
 
 ### Storage policy
 
-- Use the vault file named under *Required inputs* as the canonical encrypted store for future credentials unless a credential set explicitly declares another approved provider.
+- Use the vault file named under *Required inputs* as the canonical encrypted store for future credentials unless a credential set explicitly declares another approved provider. The synced secrets store (`scripts/secret_store/`) is an approved provider for a brain whose owner has switched it on.
 - Store no plaintext password, API key, client secret, access token, refresh token, private key or recovery passphrase in the brain.
-- Permit only the approved authenticated encrypted `credentials.vault` container in the project data directory; exclude it from Git.
+- Permit only the approved authenticated encrypted `credentials.vault` container in the project data directory; exclude it from Git. The synced secrets store's objects are permitted too: signed and encrypted, in their own private repositories outside every brain repository.
 - Store only non-secret aliases, provider names, field names, ownership, consumers and lifecycle metadata in the repository.
 - Do not duplicate connector-managed credentials into the portable vault when the connector keeps them opaque and local code does not require them.
-- Do not use Windows Credential Manager or an external password manager as the default backend.
+- Do not use Windows Credential Manager or an external password manager as the default backend. The synced secrets store keeps each computer's private keys there (or in the macOS login keychain or the Linux Secret Service), and only those keys.
 - Do not place secrets in command-line arguments, Markdown, committed JSON, `.env` files, shell history, logs or task records.
-- Accept new secret values through a hidden prompt or standard input.
+- Accept new secret values through a hidden prompt or standard input. The masked window (`--window`, `secret_window.py`) counts as a hidden prompt.
 - Collect all fields for a new credential entry after one vault unlock and commit them together only after every required input validates.
 - Inject static credentials only into the environment of an authorised short-lived child process when that process cannot use the Vault Agent broker, and do not persist that environment. Do not place the vault recovery passphrase or vault encryption key in any child environment.
 - Prefer the per-login Vault Agent as the runtime unlock holder: the owner unlocks once after Windows login (or after agent restart / explicit lock) through a hidden prompt; the agent retains the derived vault key in its own memory only; authorised consumers obtain scoped results (normally short-lived OAuth access tokens or explicitly mapped static fields) through the local broker without a chat-long credential-aware shell.
@@ -66,6 +66,8 @@ The rules every use of this skill follows (moved here from an owner's node rules
   entry is listed in the token relay's configuration. Brains that share a relayed entry refresh
   only while holding the relay's lease, take the newest token from the relay before refreshing,
   and write the new token back at once.
+  In the synced secrets store the policy names one refresher computer per rotating sign-in; only that
+  computer refreshes, and its refresh token is encrypted to it and the recovery key only.
 - Pass tenant or organisation context explicitly; do not infer it from an unrelated process.
 - Reauthorise when refresh credentials expire, are revoked or cannot be reconciled safely.
 
@@ -77,13 +79,17 @@ The rules every use of this skill follows (moved here from an owner's node rules
   locking. The token relay's record is not the vault: it is one rotating token bundle, encrypted
   with the relay key, and may be committed only to the private store named in the relay's
   configuration.
+  The synced secrets store's objects are committed to their own repositories by design; they are
+  never merged as text.
 - Use one active writer for each rotating OAuth credential set across devices, or the token
   relay for an entry several brains share.
 - The relay store holds ciphertext only. The relay key and the provider's client secret live in
   each brain's vault and reach another person only through a password manager, never through
   chat, e-mail or a repository. When the relay cannot be reached and the local token is about
   to expire, a brain refuses to refresh.
-- Do not enable unattended vault unlock after reboot without a separately accepted runtime design (for example a future TPM/device-bound key slot). Per-login interactive unlock into the Vault Agent is the approved workstation model.
+  With the synced secrets store, a secret reaches another person only as an object encrypted to
+  that person's computers, after an administrator's signed policy change.
+- Do not enable unattended vault unlock after reboot without a separately accepted runtime design (for example a future TPM/device-bound key slot). Per-login interactive unlock into the Vault Agent is the approved workstation model. The synced secrets store's computer keys in the operating system's keychain are that accepted design (`PROPOSAL-synced-secrets-store`); they unlock with the person's sign-in to the computer.
 - Do not substitute a plaintext `.env` passphrase for interactive unlock.
 - Before prompting for the recovery passphrase, check whether the Vault Agent is already unlocked for this Windows login. If it is unlocked, reuse it for further credential operations; do not prompt again and do not start a second agent instance.
 - Keep the vault file data lock short-lived around each authenticated read or write. Do not treat `credentials.vault.lock` as a session lease. Use a distinct agent singleton / session lease so only one Vault Agent instance holds the unlock key, while OAuth token refresh can still serialise per entry without blocking unrelated vault maintenance incorrectly.
@@ -95,6 +101,28 @@ The rules every use of this skill follows (moved here from an owner's node rules
 - Never log secret values, passphrases, token payloads, child environments or decrypted vault contents.
 - Fail closed when the vault is missing, cannot authenticate, is malformed, has unsupported parameters, or the cryptography dependency is unavailable.
 - Create a task for rotation failure, provider outage, suspected disclosure or required reauthorisation.
+
+### Synced secrets store
+
+- No secret value, private key or recovery word is ever written to Git, the chat, a log or a
+  command argument. Recovery words are shown once, and typed for a restore, only in the masked
+  window.
+- Who can read an object changes only through a policy change signed by an administrator of that
+  repository, judged against the current trusted policy; a commit that does not verify in full is
+  refused whole.
+- Removing a person or a computer re-encrypts, in the same commit, every object it could read, and
+  the agent lists the provider secrets to change, because what was read cannot be recalled.
+- A rotating sign-in is handed to another refresher only through a signed release, or after a
+  revocation the provider's profile proves complete; without such a profile it is never handed
+  over.
+- A refresh whose answer is lost is never repeated with the old refresh token. The sign-in is
+  blocked until it is replaced: deleted by an administrator, its identifiers retired, and signed
+  in again in the browser.
+- While the store is switched on, the old vault is closed: no path reads or writes a credential
+  in it, and the token relay is not used. Moving to the store is one cut-over, which removes the
+  old vault's sign-in tokens once the store's copy of each is verified.
+- The store's rules in full are in `scripts/secret_store/README.md`; they apply to every brain
+  that switches the store on.
 
 ## Allowed operations and permissions
 
@@ -416,9 +444,9 @@ An alternative provider keeps secrets as encrypted, signed files in private Git 
 each computer's keys in the operating system's keychain and no passphrase. Its code is in
 `scripts/secret_store/`, its commands are `scripts/brain_secrets.py` and `scripts/migrate_to_store.py`,
 and `scripts/secret_store/README.md` describes the rules, files, roles, commands and recovery. The
-*Credential policy* vault rules above apply until the owner accepts `PROPOSAL-synced-secrets-store`
-and switches the store on (`config/secret-store.json` in the owner's memory folder for this skill,
-`enabled` true). `CREDENTIAL-PATHS.md` in this folder lists every path that reads, writes, spends or
+*Credential policy* names it an approved provider (`PROPOSAL-synced-secrets-store`); the vault rules
+above apply to a brain until its owner switches the store on (`config/secret-store.json` in the
+owner's memory folder for this skill, `enabled` true). `CREDENTIAL-PATHS.md` in this folder lists every path that reads, writes, spends or
 copies a credential, and `tests/test_credential_paths.py` fails when a script gains a caller of the
 agent or the vault that the list does not name.
 
