@@ -104,6 +104,9 @@ class VaultAgent:
         self._stopping = False
         self._operation = threading.local()  # .active: this thread runs an admitted operation
         self._serve_ended = threading.Event()  # set when the accept loop of serve_forever has ended
+        # The fence visible at once (plan R20): set by the first statement of shutdown, and by _keep_state
+        # after a failed proof before it releases _lock. Registration, admission and answering refuse on it.
+        self._shutdown_requested = threading.Event()
 
     def _entry_lock(self, entry: str) -> threading.Lock:
         with self._lock:
@@ -396,6 +399,11 @@ class VaultAgent:
             # The listener is up: close it and release the singleton through the shutdown path.
             self.shutdown()
             raise
+        if self._shutdown_requested.is_set():
+            # Shut down while it was starting (a start the tray gave up on): the listener and the state
+            # file made after that shutdown are taken away again, and the start fails.
+            self.shutdown()
+            raise CredentialError("Vault Agent was shut down while it was starting.")
         atexit.register(self.shutdown)
         threading.Thread(target=self._keep_state, name="vault-agent-state", daemon=True).start()
         timer = self._package_timer()
@@ -444,10 +452,12 @@ class VaultAgent:
             failures = 0
             # The admission of the connection into the register (plan R16, rule 3): one accepted
             # while the agent is stopping is closed and never served, and the loop ends.
-            with self._barrier:
-                admitted = not self._stopping and self._listener is not None
-                if admitted:
-                    self._connections.add(connection)
+            admitted = not self._fenced()
+            if admitted:
+                with self._barrier:
+                    admitted = not self._fenced() and self._listener is not None
+                    if admitted:
+                        self._connections.add(connection)
             if not admitted:
                 _close_quietly(connection)
                 break
@@ -464,9 +474,10 @@ class VaultAgent:
         Clients find the agent through that file. If another process removes it, the agent
         would run on unreachable until it was restarted; this puts the file back. A rewrite that
         cannot be proved private (NotPrivate) stops the agent: the reason is written to standard
-        error and the tray's log, shutdown runs, the waiting accept is woken and serve_forever
-        raises it. When shutdown did not drain or the accept loop does not end, the process ends
-        itself with exit code 2: an agent that could not prove its state file private never stays up.
+        error and the tray's log and shutdown runs. When shutdown did not drain, the process ends at
+        once with exit code 2, before any wake-up (plan R18). Otherwise the waiting accept is woken and
+        serve_forever raises the reason; when the accept loop does not end, the process ends itself
+        the same way. An agent that could not prove its state file private never stays up.
         """
         while self._listener is not None:
             time.sleep(self.STATE_CHECK_SECONDS)
@@ -482,20 +493,30 @@ class VaultAgent:
                     continue
                 except NotPrivate as exc:
                     self._stopped_by = exc
+                    # The fence is visible before _lock is released (plan R20, amendments).
+                    self._shutdown_requested.set()
                 except OSError:  # a passing failure of reading or replacing
                     continue
-            # _lock is released here: shutdown never waits while it is held.
-            print(f"Vault Agent stopped: {self._stopped_by}", file=sys.stderr, flush=True)
-            log_tray(f"agent stopped: {self._stopped_by}")
-            drained = self.shutdown()
-            ended = self._wake_accept(payload["address"])
-            if not (drained and ended):
-                reason = ("operations still in flight after shutdown" if not drained
-                          else "the accept loop did not end")
-                print(f"Vault Agent ends its process: {reason}", file=sys.stderr, flush=True)
-                log_tray(f"agent ends its process: {reason}")
-                _exit_now(2)
+            # _lock is released here: shutdown never waits while it is held. The fence comes first,
+            # then the reason, best effort; the wake-up or the exit stands in a finally (plan R20).
+            drained = False
+            try:
+                drained = self.shutdown()
+            finally:
+                try:
+                    _diagnose(f"Vault Agent stopped: {self._stopped_by}", f"agent stopped: {self._stopped_by}")
+                finally:
+                    self._after_the_fence(drained, payload["address"])
             return
+
+    def _after_the_fence(self, drained: bool, address: Any) -> None:
+        """After a failed proof and its shutdown: the process ends at once when shutdown did not drain,
+        and when the woken accept loop does not end."""
+        if not drained:
+            _end_process("operations still in flight after shutdown")
+            return
+        if not self._wake_accept(address):
+            _end_process("the accept loop did not end")
 
     def _wake_accept(self, address: Any) -> bool:
         """End an accept that waits on the pipe after shutdown: closing the listener does not end it
@@ -520,7 +541,7 @@ class VaultAgent:
                 except Exception:  # noqa: BLE001 - the client left, or shutdown closed the connection
                     break  # (on Windows a pipe closed under a waiting recv raises RuntimeError)
                 if not self._admit():
-                    break  # stopping: the request is refused and gets no answer
+                    break  # fenced: the request is refused and gets no answer
                 try:
                     # Never echo passphrase material in responses.
                     if isinstance(request, dict):
@@ -531,26 +552,38 @@ class VaultAgent:
                     # The answer is part of the operation (plan R16, second amendments): it is sent
                     # under the barrier, or suppressed when the agent is stopping, so no answer is
                     # handed to the pipe after stopping began and shutdown never drains during a send.
-                    with self._barrier:
-                        sent = not self._stopping
-                        if sent:
-                            try:
-                                connection.send(response)
-                            except (OSError, ValueError):  # the client left, or the connection was closed
-                                sent = False
+                    # Fenced (R20): suppressed without waiting for the barrier.
+                    sent = not self._fenced()
+                    if sent:
+                        with self._barrier:
+                            sent = not self._fenced()
+                            if sent:
+                                try:
+                                    connection.send(response)
+                                except (OSError, ValueError):  # the client left, or the connection was closed
+                                    sent = False
                 finally:
                     self._finish()
                 if not sent or (isinstance(request, dict) and request.get("op") == "shutdown"):
                     break
         finally:
+            # Closed first: a refused request's connection closes at once, even while a send holds
+            # the barrier (plan R20); it leaves the register when the barrier is free.
+            _close_quietly(connection)
             with self._barrier:
                 self._connections.discard(connection)
-            _close_quietly(connection)
+
+    def _fenced(self) -> bool:
+        """Shutdown was requested or has begun: nothing more is registered, admitted or answered."""
+        return self._stopping or self._shutdown_requested.is_set()
 
     def _admit(self) -> bool:
-        """Admit one request (plan R16, rule 3): only while the agent is not stopping."""
+        """Admit one request (plan R16, rule 3; R20): only while the agent is not fenced. The event is
+        looked at before the barrier too, so a request is refused while shutdown waits for it."""
+        if self._fenced():
+            return False
         with self._barrier:
-            if self._stopping:
+            if self._fenced():
                 return False
             self._in_flight += 1
             self._operation.active = True
@@ -568,46 +601,72 @@ class VaultAgent:
             self._barrier.notify_all()
 
     def shutdown(self) -> bool:
-        """Stop the agent as a barrier (plan R16, rule 3, with its amendments); True when it drained.
+        """Stop the agent (plans R16 to R20); True when it drained.
 
-        Under the agent's lock it takes the passphrase, the listener and the payload away, and lets
-        the lock go: it never waits while holding it, so an admitted operation that needs it can end.
-        Under the barrier it marks the agent stopping (nothing is admitted from then on), closes the
-        listener and every registered connection (an operation still in flight can deliver no
-        answer), removes this agent's state file, releases the singleton and waits until no
-        operation is in flight. A shutdown called from inside an operation does not wait for that
-        operation. The barrier and the wait are bounded by DRAIN_SECONDS: a send that never ends
-        (a client that does not read) leaves it "not drained".
+        The fence comes first, all under one deadline of DRAIN_SECONDS (plan R20):
+        - The first statement sets `_shutdown_requested`, so from then on nothing is registered,
+          admitted or answered, even while shutdown waits.
+        - (a) It takes the barrier.
+        - (b) Under the barrier it marks the agent stopping and closes every registered connection
+          (an operation still in flight can deliver no answer), then releases the barrier.
+        - (c) It takes `_lock` with what is left of the deadline and, under it, takes away the
+          passphrase, the listener and the payload.
+        - (d) It closes the listener, removes this agent's state file, unregisters from `atexit` and
+          releases the singleton.
+        - (e) It takes the barrier again and waits until no other operation is in flight.
+
+        `_lock` is never taken while the barrier is held, nor the barrier while `_lock` is held.
+
+        When (a) does not get the barrier (a send that never ends) or (c) does not get `_lock` (an
+        operation holds it through work without a bound), it ends the process at once with exit
+        code 2, without the clean-up of (c) and (d). A state file left behind names a process that
+        is gone, which every client refuses, and the operating system releases the singleton with
+        the process. It never returns to its caller then.
+
+        It returns False ("not drained"), with the fence up, in two cases:
+        - operations are still in flight at the end of (e) (`_keep_state` then ends the process);
+        - it was called from inside an operation, whose own answer is not yet suppressed nor the
+          operation finished.
         """
-        with self._lock:
+        self._shutdown_requested.set()
+        deadline = time.monotonic() + self.DRAIN_SECONDS
+        if not self._barrier.acquire(timeout=self.DRAIN_SECONDS):
+            _end_process("shutdown could not take the barrier: a send has not ended")
+            return False  # only when a test replaced _exit_now
+        try:
+            self._stopping = True
+            for connection in list(self._connections):
+                _close_quietly(connection)
+        finally:
+            self._barrier.release()
+        if not self._lock.acquire(timeout=max(0.0, deadline - time.monotonic())):
+            _end_process("shutdown could not take the agent's lock: an operation holds it")
+            return False  # only when a test replaced _exit_now
+        try:
             self._passphrase = None
             listener = self._listener
             self._listener = None
             self._state_payload = None
-        deadline = time.monotonic() + self.DRAIN_SECONDS
-        held = self._barrier.acquire(timeout=self.DRAIN_SECONDS)
-        try:
-            self._stopping = True
-            connections = list(self._connections)
-            if listener is not None:
-                _close_quietly(listener)
-            for connection in connections:
-                _close_quietly(connection)
-            # Only this agent's own state file: never the file of another, running agent.
-            clear_state(only_pid=os.getpid())
-            try:
-                atexit.unregister(self.shutdown)
-            except Exception:  # noqa: BLE001
-                pass
-            self._release_singleton()
-            if not held:
-                return False
-            own = 1 if getattr(self._operation, "active", False) else 0
-            return self._barrier.wait_for(lambda: self._in_flight <= own,
-                                          timeout=max(0.0, deadline - time.monotonic()))
         finally:
-            if held:
-                self._barrier.release()
+            self._lock.release()
+        if listener is not None:
+            _close_quietly(listener)
+        # Only this agent's own state file: never the file of another, running agent.
+        clear_state(only_pid=os.getpid())
+        try:
+            atexit.unregister(self.shutdown)
+        except Exception:  # noqa: BLE001
+            pass
+        self._release_singleton()
+        if not self._barrier.acquire(timeout=max(0.0, deadline - time.monotonic())):
+            return False  # the fence is up; a send began before it still holds the barrier
+        try:
+            own = 1 if getattr(self._operation, "active", False) else 0
+            others_ended = self._barrier.wait_for(lambda: self._in_flight <= own,
+                                                  timeout=max(0.0, deadline - time.monotonic()))
+            return others_ended and not own
+        finally:
+            self._barrier.release()
 
 
 def _close_quietly(closable: Any) -> None:
@@ -615,6 +674,45 @@ def _close_quietly(closable: Any) -> None:
         closable.close()
     except Exception:  # noqa: BLE001
         pass
+
+
+# How long the diagnostics may hold up whatever follows them (plan R20, rule 3).
+DIAGNOSTICS_SECONDS = 2.0
+
+
+def _diagnose(message: str, tray_line: str) -> None:
+    """Say why, best effort and bounded (plans R19, R20). In a daemon thread it writes the message to
+    standard error, only when that stream exists (the tray under pythonw has none), then the line to
+    the tray's log, each in its own guard that suppresses every Exception. The caller waits for that
+    thread at most DIAGNOSTICS_SECONDS. Making, starting and joining the thread are best effort too: it
+    never raises an Exception, and a stream that never returns cannot hold up the fence or the exit."""
+    def write() -> None:
+        stream = sys.stderr
+        if stream is not None:
+            try:
+                print(message, file=stream, flush=True)
+            except Exception:  # noqa: BLE001 - a broken stream must not keep the agent up
+                pass
+        try:
+            log_tray(tray_line)
+        except Exception:  # noqa: BLE001
+            pass
+
+    try:
+        thread = threading.Thread(target=write, name="vault-agent-diagnostics", daemon=True)
+        thread.start()
+        thread.join(DIAGNOSTICS_SECONDS)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _end_process(reason: str) -> None:
+    """The last resort: the reason, best effort, then exit code 2 from a finally, so no failure of the
+    diagnostics and no interrupt during them keeps the process alive."""
+    try:
+        _diagnose(f"Vault Agent ends its process: {reason}", f"agent ends its process: {reason}")
+    finally:
+        _exit_now(2)
 
 
 def _exit_now(code: int) -> None:
