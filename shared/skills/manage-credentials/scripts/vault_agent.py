@@ -64,6 +64,9 @@ def migration_backup_age(vault_path: Path | str) -> str | None:
     return f"{max(0.0, time.time() - max(times)) / 86400:.1f} days"
 
 
+STOPPING_MESSAGE = "The Vault Agent is stopping and takes no passphrase. Start it again to unlock."
+
+
 class AgentAlreadyRunning(CredentialError):
     """The singleton lock stayed held for the whole wait: another agent is running."""
 
@@ -157,11 +160,21 @@ class VaultAgent:
     def unlock(self, passphrase: str) -> dict[str, Any]:
         if not passphrase:
             raise CredentialError("The vault passphrase is required.")
+        if self._fenced():  # a stopping agent takes no passphrase (plan R21, rule 6)
+            raise CredentialError(STOPPING_MESSAGE)
         # Authenticate without retaining a wrong passphrase. In store mode the passphrase is held only
         # for the migration and rollback operations, which open the vault under the migration lock.
         (PortableVault(self.vault.path, migration=True) if self._store is not None else self.vault).load(passphrase)
         with self._lock:
+            # Again under _lock: shutdown sets its event before it takes _lock to clear the passphrase.
+            if self._fenced():
+                raise CredentialError(STOPPING_MESSAGE)
             self._passphrase = passphrase
+            # And after the assignment (plan R22): the passphrase is stored before the fence or not at
+            # all. A shutdown that set its event between the check and the assignment is seen here.
+            if self._fenced():
+                self._passphrase = None
+                raise CredentialError(STOPPING_MESSAGE)
         return {"unlocked": True}
 
     def lock(self) -> dict[str, Any]:
@@ -385,6 +398,16 @@ class VaultAgent:
             if sock.exists():
                 sock.unlink()
         self._listener = Listener(address, authkey=self._authkey)
+        try:
+            self._serve_with_listener(address)
+        except BaseException:
+            # Every abnormal end once the listener exists is fenced by the agent itself (plan R21):
+            # an accept loop that fails, a worker thread that cannot be started, a failed write_state.
+            # shutdown is idempotent, so a path that already fenced itself loses nothing.
+            self.shutdown()
+            raise
+
+    def _serve_with_listener(self, address: Any) -> None:
         self._state_payload = {
             "pid": os.getpid(),
             "address": address if isinstance(address, str) else list(address),
@@ -393,12 +416,7 @@ class VaultAgent:
             "vault_path": str(self.vault.path.resolve()),
             "protocol": AGENT_PROTOCOL_VERSION,
         }
-        try:
-            write_state(self._state_payload)
-        except BaseException:
-            # The listener is up: close it and release the singleton through the shutdown path.
-            self.shutdown()
-            raise
+        write_state(self._state_payload)  # a failure is fenced by serve_forever
         if self._shutdown_requested.is_set():
             # Shut down while it was starting (a start the tray gave up on): the listener and the state
             # file made after that shutdown are taken away again, and the start fails.
