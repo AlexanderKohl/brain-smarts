@@ -3,6 +3,7 @@ migration scrubs the old vault's sign-in tokens once the store holds them, leave
 marker every legacy OAuth path and the relay obey, and rolls back static secrets only, every
 sign-in needing a browser sign-in; agent status and the daily check cover the team recovery package too. Every token
 is fictional."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import contextlib
 import io
 import json

@@ -1,6 +1,7 @@
 """Round-4 review fixes: the Meta provider profile, journal records that need a provider call, a
 clean Git index for every write, the recovery package's default place and its automatic refresh,
 and the recorded provider on every oauth revision. Every token is fictional."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import os
 import subprocess
 import sys

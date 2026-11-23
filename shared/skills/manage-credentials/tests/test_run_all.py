@@ -1,5 +1,6 @@
 """run_all.py: every test file in its own process, a failing file rerun once alone, exit code 1 on a failure."""
 
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import contextlib
 import io
 import sys

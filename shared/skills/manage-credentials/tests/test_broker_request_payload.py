@@ -5,6 +5,7 @@ was never met: a refresh passes the journal's operation id as the payload key "o
 collided with the function's own first parameter and raised TypeError on a real Vault Agent (found
 by the rehearsal with a real agent process). The connection here is an in-memory fake."""
 
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import sys
 import unittest
 from pathlib import Path

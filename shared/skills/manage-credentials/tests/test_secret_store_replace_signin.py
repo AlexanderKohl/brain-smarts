@@ -2,6 +2,7 @@
 refresh-failure plan part B): an uncertain sign-in is deleted in one administrator commit, its shared
 settings kept in a local hand-over file, and the first new authorisation applies them. In-process
 stores over bare local repositories and a fake keyring only. Every value is fictional."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import contextlib
 import io
 import sys

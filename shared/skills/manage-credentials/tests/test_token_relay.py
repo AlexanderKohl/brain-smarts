@@ -10,6 +10,7 @@ Agent and no real vault. Every name, token and key is invented.
 
 from __future__ import annotations
 
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import base64
 import copy
 import io

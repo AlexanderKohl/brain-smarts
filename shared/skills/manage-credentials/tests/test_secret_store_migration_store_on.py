@@ -4,6 +4,7 @@ lock. Every step (lock, backup, verify the backup copy, copy, read-back, scrub, 
 through the agent; the backup copy is opened with the same migration permission as the vault the
 operation was given, so it is read under a live lock and refused without one. Every token is
 fictional; every agent is in-process; nothing touches the live vault or the network."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import inspect
 import sys
 import unittest

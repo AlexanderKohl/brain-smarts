@@ -1,6 +1,7 @@
 """vault_credentials.py list prints the entry names of a vault in alphabetical order and their count,
 never a field name or value, and prints nothing when the vault cannot be unlocked. Every vault here is
 a fictional one in a temporary folder, never the owner's vault."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import os
 import secrets
 import shutil

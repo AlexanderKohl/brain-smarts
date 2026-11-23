@@ -1,5 +1,6 @@
 """The Vault Agent survives a client with the wrong key, and the client never connects with the key of
 an agent that has ended. Runs on its own pipe and runtime folder, never the owner's running agent."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import os
 import secrets
 import shutil

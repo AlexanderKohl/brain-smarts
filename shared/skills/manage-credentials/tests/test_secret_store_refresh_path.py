@@ -3,6 +3,7 @@ uncertain after an exception, removal only when the provider was not called, the
 reading before calling, publication reconciliation, grant fields whatever the entry name, the
 group of a revision, team routing, clear and sync, bounded locks and durable journal writes. A
 bare local repository is the remote and a fake keyring the keychain. Every value is fictional."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import os
 import subprocess
 import sys

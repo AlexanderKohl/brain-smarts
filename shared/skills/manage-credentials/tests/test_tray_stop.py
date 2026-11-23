@@ -4,6 +4,7 @@ icon, dialog or agent of the user is used: the icon and the dialogs are replaced
 own, unstarted or fake, in a temporary runtime folder, and the process exit is replaced."""
 from __future__ import annotations
 
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import shutil
 import sys
 import tempfile

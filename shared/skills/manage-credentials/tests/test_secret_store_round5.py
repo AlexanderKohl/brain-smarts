@@ -3,6 +3,7 @@ authorisation, with an operation id) or an administrator; recovery-package upkee
 is a warning, never a failure; a missing package is rebuilt and the age check runs daily while the
 store stays open; put with plain and grant fields is one commit; incoming commit subjects outside
 the allowed set are refused. Every token is fictional."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import contextlib
 import importlib.util
 import io

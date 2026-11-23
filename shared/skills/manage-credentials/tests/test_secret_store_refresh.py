@@ -1,6 +1,7 @@
 """Rotating sign-in refresh: the journal's crash and lost-acknowledgement cases, the disabled
 flag, refused recovery for unverified providers, and migration from the portable vault. A bare
 local repository is the remote and a fake keyring the keychain. Every value is fictional."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import json
 import subprocess
 import sys

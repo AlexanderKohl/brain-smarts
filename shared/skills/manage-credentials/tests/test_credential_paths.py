@@ -27,6 +27,7 @@ module in exactly one table, a no-credential module importing from a credential 
 its exemption row allows; every public operation of every parser and of the agent. Each check is
 shown failing on a copy of scripts/ with one change, or on a patched table, never on a file added
 to the skill. The runtime recorder is tests/test_credential_paths_runtime.py."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import ast
 import re
 import shutil

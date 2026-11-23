@@ -1,5 +1,6 @@
 """Secrets-store Git transactions and recovery packages. Two or more local clones of a bare
 repository in a temporary folder; no network. Every key and value here is fictional."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import base64
 import os
 import subprocess

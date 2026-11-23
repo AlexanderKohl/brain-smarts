@@ -3,6 +3,7 @@ serve the store (a vault-only agent started earlier is refused with a restart me
 enabled configuration is fatal, and no token relay is built or used; the Vault Agent keeps the
 recovery package fresh on its own timer and keeps its failures for status and the due check.
 Every token is fictional."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import contextlib
 import io
 import os

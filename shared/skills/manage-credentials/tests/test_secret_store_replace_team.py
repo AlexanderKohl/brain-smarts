@@ -5,6 +5,7 @@ an administrator deletes exactly that sign-in (brain_secrets.py delete --field, 
 plan R11 rule 3), signs in again and hands the new sign-in back. The member's agent discards the journal
 record of the exact retired grant. Two real key sets, bare local repositories, a fake keyring and
 in-process stores only. Every value is fictional."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import contextlib
 import io
 import unittest

@@ -4,6 +4,7 @@ temporary folders on the real pipe under a throwaway name, with the test's own i
 the user's runtime folder; no real agent or tray is started, and every test replaces _exit_now."""
 from __future__ import annotations
 
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import contextlib
 import io
 import secrets

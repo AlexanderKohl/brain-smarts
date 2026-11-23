@@ -5,6 +5,7 @@ without the skill's other dependencies. Every folder is made with tempfile under
 removed; nothing else is changed. On any other system its tests are skipped by platform."""
 from __future__ import annotations
 
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import ctypes
 import os
 import shutil

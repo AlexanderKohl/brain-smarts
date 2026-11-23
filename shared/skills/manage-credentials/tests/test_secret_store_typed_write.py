@@ -6,6 +6,7 @@ and is held for good when a target changed or the store refused it. A browser au
 migration's writes and save_settings make no record, and no record holds a token. A bare local
 repository is the remote, a fake keyring the keychain and VaultAgent runs in process. Every value
 is fictional."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import contextlib
 import io
 import os

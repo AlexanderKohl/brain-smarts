@@ -7,6 +7,7 @@ pair of the list names the scenario that produced it, or the reason no test can 
 real pipe). The scenarios run once (setUpClass); the checks are separate tests. Every value is
 fictional. What this does not do is written in CREDENTIAL-PATHS.md: it follows no branch no
 scenario runs."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import contextlib
 import io
 import os

@@ -2,6 +2,7 @@
 mismatches, an expired request, groups, removal, a non-administrator, and a forged recovery
 package. Bare local repositories are the remotes; a fake keyring, fake recovery-word and
 enrolment-word displays stand in for the keychain and the windows. Every key and value is fictional."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import time
 import unittest
 

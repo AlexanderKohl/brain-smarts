@@ -3,6 +3,7 @@
 exists in the folder, or is created in it afterwards, must still open for the user, or the tray fails
 with "Permission denied" at unlock (the vault's .lock file, a README). Only temporary folders are
 changed here."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import os
 import shutil
 import sys

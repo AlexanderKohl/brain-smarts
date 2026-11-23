@@ -3,6 +3,7 @@ ghl_oauth, google_oauth, linkedin_client and google_tray_token are imported from
 run against in-process Vault Agents serving StoreBackends. Computer A is the refresher, B another
 computer of the same person (a follower, which never calls the provider). Only the provider's HTTP
 answer is a stand-in. Every value is fictional."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import contextlib
 import datetime as dt
 import json
@@ -21,12 +22,15 @@ for folder in ("xero-access", "gohighlevel-access", "google-workspace-access", "
 sys.path.insert(0, str(SCRIPTS))
 sys.path.insert(0, str(HERE.parent))
 
-import google_oauth.client as google  # noqa: E402
-import google_tray_token as tray  # noqa: E402
-import ghl_oauth.client as ghl  # noqa: E402
-import linkedin_client as linkedin  # noqa: E402
+if LIBRARY.is_dir():
+    import google_oauth.client as google  # noqa: E402
+    import google_tray_token as tray  # noqa: E402
+    import ghl_oauth.client as ghl  # noqa: E402
+    import linkedin_client as linkedin  # noqa: E402
+    import xero_oauth.client as xero  # noqa: E402
+else:  # a brain without a library: every test here is skipped (load_tests, at the end)
+    google = tray = ghl = linkedin = xero = None
 import vault_broker_client  # noqa: E402
-import xero_oauth.client as xero  # noqa: E402
 from portable_vault import CredentialError, PortableVault, PortableVaultJsonStore  # noqa: E402
 from test_secret_store_broker import (AT1, FIELD, PASS, RT1, AgentClients, agent_request,  # noqa: E402,F401
                                       setUpModule, tearDownModule)
@@ -212,6 +216,30 @@ class StoreOff(AgentClients):
             connection = xero.XeroConnection(xero.XeroConfig("id-example", "fictional-secret", "http://x/cb"), store)
             self.assertEqual(connection.access_token(), NEW_AT)
         self.assertEqual((provider.calls, vault.get("xero-demo", FIELD, PASS)["refresh_token"]), (1, NEW_RT))
+
+
+class NoLibrary(unittest.TestCase):
+    """Stands in for every test above in a brain without a library."""
+
+    def test_connectors(self):
+        self.skipTest(f"no library at {LIBRARY}: the connectors are tested where the brain holds one")
+
+
+def load_tests(loader, tests, pattern):
+    """With a library every test but NoLibrary's; without one, NoLibrary's skip alone."""
+    chosen = unittest.TestSuite()
+    for test in _flatten(tests):
+        if isinstance(test, NoLibrary) != LIBRARY.is_dir():
+            chosen.addTest(test)
+    return chosen
+
+
+def _flatten(suite):
+    for test in suite:
+        if isinstance(test, unittest.TestSuite):
+            yield from _flatten(test)
+        else:
+            yield test
 
 
 if __name__ == "__main__":

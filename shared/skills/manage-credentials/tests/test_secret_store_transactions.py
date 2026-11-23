@@ -2,6 +2,7 @@
 lock spans the whole write, the expected parent is checked, crash windows between the clone, the
 remote and the checkpoint recover or refuse plainly, unusable objects are never served, and the
 recovery-package marker is signed. A bare local repository is the remote; every value is fictional."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import subprocess
 import threading
 import unittest

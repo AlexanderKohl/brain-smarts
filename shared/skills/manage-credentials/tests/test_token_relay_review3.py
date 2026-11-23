@@ -9,6 +9,7 @@ name, token and key is invented.
 
 from __future__ import annotations
 
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import io
 import shutil
 import sys

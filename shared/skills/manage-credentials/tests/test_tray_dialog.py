@@ -1,6 +1,7 @@
 """The unlock dialog: Enter submits, Esc cancels, and the window is tall enough for its buttons."""
 from __future__ import annotations
 
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import sys
 import unittest
 from pathlib import Path

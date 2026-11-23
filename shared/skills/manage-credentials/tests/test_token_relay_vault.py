@@ -8,6 +8,7 @@ test_review3_finding_2_... reproduces the third review's finding 2 through seed 
 
 from __future__ import annotations
 
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import base64
 import getpass
 import io

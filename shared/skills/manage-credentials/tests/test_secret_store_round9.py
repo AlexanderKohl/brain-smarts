@@ -4,6 +4,7 @@ restart message once the store is on; the passphrase open refuses unless the mig
 an unverified sign-in leaves no store copy; the agent's scrub, restore and marker operations need
 the migration lock; the skeleton ignores the migration files; every command line refuses. Every
 token is fictional; every agent is in-process; nothing touches the live vault or the network."""
+import hermetic  # noqa: F401 (first: plan R24, tests/hermetic.py)
 import contextlib
 import fnmatch
 import io
