@@ -50,6 +50,17 @@ from secret_store.broker_backend import TOKEN_KEYS, StoreBackend, put_grant_fiel
 from secret_store.errors import SecretStoreError  # noqa: E402
 
 
+def _say(text: str) -> None:
+    """The default out: standard output, flushed at once, so each progress line shows as it happens
+    (plan R23, rule 4: one entry takes a few seconds, and silence reads as a hang)."""
+    print(text, flush=True)
+
+
+def _field_names(plan: dict[str, Any]) -> str:
+    """One entry's field names for its progress line; never a value."""
+    return ", ".join(sorted(set(plan["static"]) | set(plan["signins"]) | set(plan["grant"])))
+
+
 def _plan(request: Callable, entry: str, fields: dict[str, str]) -> dict[str, Any]:
     """What the store will hold for one entry; values stay in memory and are never printed."""
     text = sorted(f for f, kind in fields.items() if kind == "text")
@@ -140,7 +151,7 @@ def _remove_unverified(store: Any, unverified: list[tuple[str, str]]) -> list[st
 
 
 def migrate(request: Callable, open_store: Callable[[], Any], *, dry_run: bool = False, replace: bool = False,
-            backup_dir: Any = None, out: Callable[[str], None] = print) -> int:
+            backup_dir: Any = None, out: Callable[[str], None] = _say) -> int:
     status = _unlocked_status(request, out)
     if status is None:
         return 2
@@ -170,8 +181,10 @@ def _migrate(request: Callable, open_store: Callable[[], Any], status: Any, dry_
         return 3
     names = sorted(listing)
     backup = _backup(request, Path(status["vault_path"]), backup_dir, names)
-    for plan in plans:
+    out(f"Copying {len(plans)} entries; each is committed and pushed, which takes a few seconds an entry.")
+    for number, plan in enumerate(plans, 1):
         _copy(store, plan, replace)
+        out(f"  {number}/{len(plans)} {plan['entry']}: {_field_names(plan)}")
     backend, retired, unverified = StoreBackend(store, sync_seconds=0), [], []
     for plan in plans:
         for field, value in sorted(plan["signins"].items()):
@@ -202,7 +215,7 @@ def _migrate(request: Callable, open_store: Callable[[], Any], status: Any, dry_
 
 
 def rollback(request: Callable, open_store: Callable[[], Any], *, dry_run: bool = False,
-             out: Callable[[str], None] = print) -> int:
+             out: Callable[[str], None] = _say) -> int:
     """Put the store's current static secrets back into the old vault (static secrets never rotate)
     and clear the migration marker. A migrated sign-in gets nothing back: no token ever leaves the
     store, and the old vault holds none, so each needs a browser sign-in."""
@@ -273,22 +286,24 @@ def _names(items: list) -> str:
     return ", ".join(f"{e} ({', '.join(sorted(f))})" for e, f in items) or "none"
 
 
-def _restore(request: Callable, plans: list, restored: list, failed: list,
+def _restore(request: Callable, plans: list, restored: list, failed: list, out: Callable[[str], None],
              operation: str = "vault_restore_static") -> None:
     for entry, values in plans:
         try:
             request(operation, entry=entry, values=values)
             restored.append((entry, values))
+            out(f"  restored {entry}: {', '.join(sorted(values))}")
         except (CredentialError, SecretStoreError) as error:
             failed.append((entry, sorted(values), str(error)))
+            out(f"  not restored {entry}: {', '.join(sorted(values))}")
 
 
-def _restore_late(request: Callable, late: list, restored: list, failed: list) -> None:
+def _restore_late(request: Callable, late: list, restored: list, failed: list, out: Callable[[str], None]) -> None:
     """Plan R11, rule 5: fields under a migrated sign-in's name come back through the agent's
     vault_restore_marked_static, which takes only names the marker holds and leaves the marker as it
     is. The marker is never cleared before the last step and nothing is scrubbed, so every marked
     name stays refused to every other caller until the clear, and a stop at any point keeps it."""
-    _restore(request, late, restored, failed, "vault_restore_marked_static")
+    _restore(request, late, restored, failed, out, "vault_restore_marked_static")
 
 
 def _rollback(request: Callable, open_store: Callable[[], Any], status: Any, dry_run: bool,
@@ -302,8 +317,9 @@ def _rollback(request: Callable, open_store: Callable[[], Any], status: Any, dry
             "Nothing was changed.")
     restored = []
     if not dry_run:  # ordinary fields, then late fields; the marker is cleared below, only when all succeeded
-        _restore(request, plans, restored, failed)
-        _restore_late(request, late, restored, failed)
+        out(f"Restoring {len(plans) + len(late)} entries into the old vault through the agent.")
+        _restore(request, plans, restored, failed, out)
+        _restore_late(request, late, restored, failed, out)
     for name in signins:
         out(f"{name}: sign in again in the browser; no token is brought back from the store.")
     if failed:

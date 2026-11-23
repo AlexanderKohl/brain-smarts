@@ -23,6 +23,7 @@ from typing import Any, Callable
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
+import child_process
 from portable_vault import CredentialError
 
 
@@ -237,7 +238,7 @@ class GitHubBackend:
         if not isinstance(repository, str) or not _REPOSITORY_PATTERN.match(repository):
             raise CredentialError("The relay repository must be written as owner/name.")
         self.repository = repository
-        self._runner = runner or subprocess.run
+        self._runner = runner or child_process.run
         self._gh = gh
 
     def _path(self, name: str) -> str:

@@ -4,6 +4,7 @@ lock. Every step (lock, backup, verify the backup copy, copy, read-back, scrub, 
 through the agent; the backup copy is opened with the same migration permission as the vault the
 operation was given, so it is read under a live lock and refused without one. Every token is
 fictional; every agent is in-process; nothing touches the live vault or the network."""
+import inspect
 import sys
 import unittest
 from pathlib import Path
@@ -59,6 +60,30 @@ class MigrationWithTheStoreOn(StoreFixture):
             self.request("vault_verify_copy", path=str(copy))
         with migration_lock.MigrationLock(self.vault.path, "migrate"):
             self.assertIn("plain", self.request("vault_verify_copy", path=str(copy)))
+
+    def test_the_migration_and_the_rollback_print_one_line_per_entry_with_names_only(self):
+        """Plan R23, rule 4 and test (d): a start line, then one line per entry as it is done (its name
+        and field names), on the same stream as the summary; no value of the test's secrets."""
+        lines = []
+        self.assertEqual(migrate_to_store.migrate(self.request, lambda: self.a, out=lines.append), 0, lines)
+        start = lines.index("Copying 2 entries; each is committed and pushed, which takes a few seconds an entry.")
+        progress = [line for line in lines if line.startswith("  ")]
+        self.assertEqual(progress, ["  1/2 plain: api_key", f"  2/2 xero-demo: client_secret, {FIELD}"])
+        self.assertLess(start, lines.index(progress[0]))
+        self.assertTrue(lines[-1].startswith("Copied 2 entries into the store."))
+        back = []
+        self.assertEqual(migrate_to_store.rollback(self.request, lambda: self.a, out=back.append), 0, back)
+        self.assertIn("  restored plain: api_key", back)
+        self.assertIn("Restoring", " ".join(back))
+        for secret in (RT1, SECRET, KEY, PASS):
+            self.assertNotIn(secret, " | ".join(lines + back))
+
+    def test_the_default_output_is_flushed_at_once(self):
+        for command in (migrate_to_store.migrate, migrate_to_store.rollback):
+            self.assertIs(inspect.signature(command).parameters["out"].default, migrate_to_store._say)
+        with mock.patch("builtins.print") as printed:
+            migrate_to_store._say("a line")
+        printed.assert_called_once_with("a line", flush=True)
 
 
 if __name__ == "__main__":

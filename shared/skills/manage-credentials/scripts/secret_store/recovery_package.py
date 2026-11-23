@@ -13,7 +13,6 @@ import os
 import shutil
 import stat
 import struct
-import subprocess
 import tempfile
 import time
 from pathlib import Path
@@ -22,6 +21,8 @@ from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+import child_process  # the scripts folder is on sys.path wherever secret_store is importable
 
 from . import canonical, hpke
 from .errors import SecretStoreError
@@ -55,7 +56,7 @@ def _unparts(data: bytes, count: int) -> list[bytes]:
 
 def repository_id(repo: SecretRepo) -> str:
     """The repository identity from the committed policy.json."""
-    result = subprocess.run(["git", "cat-file", "blob", "HEAD:policy.json"], cwd=str(repo.path),
+    result = child_process.run(["git", "cat-file", "blob", "HEAD:policy.json"], cwd=str(repo.path),
                             capture_output=True)
     if result.returncode != 0:
         raise SecretStoreError("the repository has no committed policy.json")
@@ -84,7 +85,7 @@ def build(repo: SecretRepo, checkpoint_bytes: bytes, recovery_public_key: X25519
     identity = repository_id(repo)
     with tempfile.TemporaryDirectory() as tmp:
         bundle_path = Path(tmp) / "history.bundle"
-        result = subprocess.run(["git", "bundle", "create", "--quiet", str(bundle_path), f"refs/heads/{BRANCH}"],
+        result = child_process.run(["git", "bundle", "create", "--quiet", str(bundle_path), f"refs/heads/{BRANCH}"],
                                 cwd=str(repo.path), capture_output=True)
         if result.returncode != 0:
             raise SecretStoreError("git bundle could not be created")
@@ -131,11 +132,11 @@ def _open(package: bytes, recovery_private_key: X25519PrivateKey) -> tuple[str, 
 
 def _check_trust_root(target: Path, recovery_signing_public: Ed25519PublicKey) -> None:
     """The first commit's policy.json must carry a valid endorsement by this recovery key."""
-    roots = subprocess.run(["git", "rev-list", "--max-parents=0", "HEAD"], cwd=str(target), capture_output=True)
+    roots = child_process.run(["git", "rev-list", "--max-parents=0", "HEAD"], cwd=str(target), capture_output=True)
     first = roots.stdout.decode().split()
     if roots.returncode != 0 or len(first) != 1:
         raise SecretStoreError("the restored history has no single first commit")
-    blob = subprocess.run(["git", "cat-file", "blob", f"{first[0]}:policy.json"], cwd=str(target), capture_output=True)
+    blob = child_process.run(["git", "cat-file", "blob", f"{first[0]}:policy.json"], cwd=str(target), capture_output=True)
     if blob.returncode != 0:
         raise SecretStoreError("the restored history has no trust root")
     check_endorsement(canonical.loads(blob.stdout), recovery_signing_public)
@@ -169,12 +170,12 @@ def restore(package_path: str | os.PathLike, recovery_private_key: X25519Private
         bundle_path = Path(tmp) / "history.bundle"
         bundle_path.write_bytes(bundle)
         # git clone checks the bundle itself (git bundle verify needs an existing repository).
-        clone = subprocess.run(["git", "clone", "--quiet", "-c", "core.autocrlf=false", "--branch", BRANCH,
+        clone = child_process.run(["git", "clone", "--quiet", "-c", "core.autocrlf=false", "--branch", BRANCH,
                                 str(bundle_path), str(target)], cwd=tmp, capture_output=True)
         if clone.returncode != 0:
             raise SecretStoreError("git clone of the recovery bundle failed")
-    subprocess.run(["git", "remote", "remove", "origin"], cwd=str(target), capture_output=True)
-    subprocess.run(["git", "config", "--local", "core.autocrlf", "false"], cwd=str(target), capture_output=True)
+    child_process.run(["git", "remote", "remove", "origin"], cwd=str(target), capture_output=True)
+    child_process.run(["git", "config", "--local", "core.autocrlf", "false"], cwd=str(target), capture_output=True)
     try:
         if repository_id(SecretRepo(target, "")) != identity:
             raise SecretStoreError("the restored repository id does not match the package")
