@@ -74,6 +74,11 @@ class VaultAgent:
     # How long a start waits for a busy singleton lock before it reports another running agent.
     LOCK_WAIT_SECONDS = 10.0
     LOCK_RETRY_SECONDS = 0.25
+    # Shutdown waits at most this long for the barrier and for the operations in flight (plan R16).
+    DRAIN_SECONDS = 30.0
+    # After a failed proof: connections without a key that wake a waiting accept, and the pause after each.
+    WAKE_ATTEMPTS = 25
+    WAKE_WAIT_SECONDS = 0.2
 
     def __init__(self, vault_path: Path | str | None = None, store: Any = None) -> None:
         self.vault = PortableVault(vault_path)
@@ -90,6 +95,15 @@ class VaultAgent:
         self._state_payload: dict[str, Any] | None = None
         # Why _keep_state stopped the agent (its state file could not be proved private), or None.
         self._stopped_by: NotPrivate | None = None
+        # The shutdown barrier (plan R16, rule 3): under one condition, the open connections, the count
+        # of operations in flight and whether the agent is stopping. Lock order: _lock is never taken
+        # while the barrier is held, and shutdown never waits while holding _lock.
+        self._barrier = threading.Condition(threading.RLock())
+        self._connections: set[Any] = set()
+        self._in_flight = 0
+        self._stopping = False
+        self._operation = threading.local()  # .active: this thread runs an admitted operation
+        self._serve_ended = threading.Event()  # set when the accept loop of serve_forever has ended
 
     def _entry_lock(self, entry: str) -> threading.Lock:
         with self._lock:
@@ -394,6 +408,14 @@ class VaultAgent:
             flush=True,
         )
         print(f"Vault path: {self.vault.path.resolve()}", flush=True)
+        try:
+            self._accept_loop()
+        finally:
+            self._serve_ended.set()
+        if self._stopped_by is not None:
+            raise self._stopped_by
+
+    def _accept_loop(self) -> None:
         failures = 0
         while True:
             listener = self._listener
@@ -420,14 +442,21 @@ class VaultAgent:
                 time.sleep(0.1)
                 continue
             failures = 0
+            # The admission of the connection into the register (plan R16, rule 3): one accepted
+            # while the agent is stopping is closed and never served, and the loop ends.
+            with self._barrier:
+                admitted = not self._stopping and self._listener is not None
+                if admitted:
+                    self._connections.add(connection)
+            if not admitted:
+                _close_quietly(connection)
+                break
             thread = threading.Thread(
                 target=self._serve_connection,
                 args=(connection,),
                 daemon=True,
             )
             thread.start()
-        if self._stopped_by is not None:
-            raise self._stopped_by
 
     def _keep_state(self) -> None:
         """Write the state file again when it has gone missing while this agent still listens.
@@ -435,7 +464,9 @@ class VaultAgent:
         Clients find the agent through that file. If another process removes it, the agent
         would run on unreachable until it was restarted; this puts the file back. A rewrite that
         cannot be proved private (NotPrivate) stops the agent: the reason is written to standard
-        error and the tray's log, shutdown runs, and serve_forever raises it.
+        error and the tray's log, shutdown runs, the waiting accept is woken and serve_forever
+        raises it. When shutdown did not drain or the accept loop does not end, the process ends
+        itself with exit code 2: an agent that could not prove its state file private never stays up.
         """
         while self._listener is not None:
             time.sleep(self.STATE_CHECK_SECONDS)
@@ -453,57 +484,142 @@ class VaultAgent:
                     self._stopped_by = exc
                 except OSError:  # a passing failure of reading or replacing
                     continue
+            # _lock is released here: shutdown never waits while it is held.
             print(f"Vault Agent stopped: {self._stopped_by}", file=sys.stderr, flush=True)
             log_tray(f"agent stopped: {self._stopped_by}")
-            self.shutdown()
-            # Closing the listener does not end an accept that is waiting on a Windows pipe: one
-            # connection without a key ends it (its handshake fails), and serve_forever then raises.
-            try:
-                Client(payload["address"]).close()
-            except Exception:  # noqa: BLE001
-                pass
+            drained = self.shutdown()
+            ended = self._wake_accept(payload["address"])
+            if not (drained and ended):
+                reason = ("operations still in flight after shutdown" if not drained
+                          else "the accept loop did not end")
+                print(f"Vault Agent ends its process: {reason}", file=sys.stderr, flush=True)
+                log_tray(f"agent ends its process: {reason}")
+                _exit_now(2)
             return
+
+    def _wake_accept(self, address: Any) -> bool:
+        """End an accept that waits on the pipe after shutdown: closing the listener does not end it
+        on Windows. One connection without a key does (its handshake fails); a failed connection is
+        retried. True when the accept loop has ended."""
+        for _attempt in range(self.WAKE_ATTEMPTS):
+            if self._serve_ended.is_set():
+                return True
+            try:
+                Client(address).close()
+            except Exception:  # noqa: BLE001 - retried; the loop's end is what counts
+                pass
+            if self._serve_ended.wait(self.WAKE_WAIT_SECONDS):
+                return True
+        return self._serve_ended.is_set()
 
     def _serve_connection(self, connection: Any) -> None:
         try:
             while True:
                 try:
                     request = connection.recv()
-                except EOFError:
-                    break
-                # Never echo passphrase material in responses.
-                if isinstance(request, dict):
-                    response = self.handle(request)
-                else:
-                    response = {"ok": False, "error": "Malformed request."}
-                connection.send(response)
-                if isinstance(request, dict) and request.get("op") == "shutdown":
+                except Exception:  # noqa: BLE001 - the client left, or shutdown closed the connection
+                    break  # (on Windows a pipe closed under a waiting recv raises RuntimeError)
+                if not self._admit():
+                    break  # stopping: the request is refused and gets no answer
+                try:
+                    # Never echo passphrase material in responses.
+                    if isinstance(request, dict):
+                        response = self.handle(request)
+                    else:
+                        response = {"ok": False, "error": "Malformed request."}
+                    self._answer_ready()
+                    # The answer is part of the operation (plan R16, second amendments): it is sent
+                    # under the barrier, or suppressed when the agent is stopping, so no answer is
+                    # handed to the pipe after stopping began and shutdown never drains during a send.
+                    with self._barrier:
+                        sent = not self._stopping
+                        if sent:
+                            try:
+                                connection.send(response)
+                            except (OSError, ValueError):  # the client left, or the connection was closed
+                                sent = False
+                finally:
+                    self._finish()
+                if not sent or (isinstance(request, dict) and request.get("op") == "shutdown"):
                     break
         finally:
-            try:
-                connection.close()
-            except Exception:  # noqa: BLE001
-                pass
+            with self._barrier:
+                self._connections.discard(connection)
+            _close_quietly(connection)
 
-    def shutdown(self) -> None:
+    def _admit(self) -> bool:
+        """Admit one request (plan R16, rule 3): only while the agent is not stopping."""
+        with self._barrier:
+            if self._stopping:
+                return False
+            self._in_flight += 1
+            self._operation.active = True
+            return True
+
+    def _answer_ready(self) -> None:
+        """The moment an admitted operation's answer is ready, before the barrier is taken: a seam
+        the tests use to start shutdown exactly there. It does nothing."""
+
+    def _finish(self) -> None:
+        """The operation ended, its answer sent or suppressed: the count falls."""
+        with self._barrier:
+            self._in_flight -= 1
+            self._operation.active = False
+            self._barrier.notify_all()
+
+    def shutdown(self) -> bool:
+        """Stop the agent as a barrier (plan R16, rule 3, with its amendments); True when it drained.
+
+        Under the agent's lock it takes the passphrase, the listener and the payload away, and lets
+        the lock go: it never waits while holding it, so an admitted operation that needs it can end.
+        Under the barrier it marks the agent stopping (nothing is admitted from then on), closes the
+        listener and every registered connection (an operation still in flight can deliver no
+        answer), removes this agent's state file, releases the singleton and waits until no
+        operation is in flight. A shutdown called from inside an operation does not wait for that
+        operation. The barrier and the wait are bounded by DRAIN_SECONDS: a send that never ends
+        (a client that does not read) leaves it "not drained".
+        """
         with self._lock:
             self._passphrase = None
             listener = self._listener
             self._listener = None
             self._state_payload = None
-        # Only this agent's own state file: never the file of another, running agent.
-        clear_state(only_pid=os.getpid())
+        deadline = time.monotonic() + self.DRAIN_SECONDS
+        held = self._barrier.acquire(timeout=self.DRAIN_SECONDS)
         try:
-            atexit.unregister(self.shutdown)
-        except Exception:  # noqa: BLE001
-            pass
-        if listener is not None:
+            self._stopping = True
+            connections = list(self._connections)
+            if listener is not None:
+                _close_quietly(listener)
+            for connection in connections:
+                _close_quietly(connection)
+            # Only this agent's own state file: never the file of another, running agent.
+            clear_state(only_pid=os.getpid())
             try:
-                listener.close()
+                atexit.unregister(self.shutdown)
             except Exception:  # noqa: BLE001
                 pass
-        self._release_singleton()
+            self._release_singleton()
+            if not held:
+                return False
+            own = 1 if getattr(self._operation, "active", False) else 0
+            return self._barrier.wait_for(lambda: self._in_flight <= own,
+                                          timeout=max(0.0, deadline - time.monotonic()))
+        finally:
+            if held:
+                self._barrier.release()
 
+
+def _close_quietly(closable: Any) -> None:
+    try:
+        closable.close()
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _exit_now(code: int) -> None:
+    """End the process at once (the last resort after a failed proof; tests replace it)."""
+    os._exit(code)
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)

@@ -113,18 +113,20 @@ def make_private(path: Path | str) -> None:
     (inherited by children on a folder), is written whole, then the owner is set to that SID.
     The proof reads both back: the list is present, protected, without an inherited entry, every
     entry an allow entry for that SID or SYSTEM, the user's entry full access; the owner is that
-    SID and nothing else. POSIX: the path is opened without following a link and changed and
-    proved on that descriptor: mode 0700 or 0600, owner the effective user, a folder or a regular
-    file as expected; on Linux the POSIX access lists are removed and an NFSv4 list refuses; on
-    macOS the extended access list is emptied; any other POSIX system is refused.
+    SID and nothing else. Linux: the path is opened without following a link and changed and proved
+    on that descriptor: its file system must be the ext family or tmpfs (fstatfs), where the kernel
+    checks the mode and the POSIX access lists; those lists are removed, and any other attribute in
+    the system. namespace or with "acl" in its name refuses; then mode 0700 or 0600, owner the
+    effective user, a folder or a regular file as expected. macOS and every other system are refused.
 
-    Limits: the proof covers the folder and the file, not the folder's ancestors (the user's
-    profile, private by the system's default), and a client does not prove the file again when it
-    reads it; both are to be looked at again if the runtime folder ever becomes configurable.
-    SYSTEM reads through its entry, members of the Administrators group can take ownership by
-    privilege, and root reads on POSIX, by design. A file system without access lists (FAT, some
-    network shares) cannot be proved private: the agent refuses to start there, naming the folder.
-    The POSIX branches (Linux and macOS) are untested on the computer they were written on.
+    Run for real: Windows (NTFS) and Linux (in WSL: ext4 and tmpfs, a second user id refused after
+    the proof, 9p refused). Limits: the proof covers the folder and the file, not the folder's
+    ancestors (the user's profile, private by the system's default), and a client does not prove the
+    file again when it reads it; both are to be looked at again if the runtime folder ever becomes
+    configurable. SYSTEM reads through its entry, members of the Administrators group can take
+    ownership by privilege, and root reads on Linux, by design. A file system without access lists or
+    outside the admitted list cannot be proved private: the agent refuses to start there, naming
+    the folder.
     """
     path = Path(path)
     if os.name == "nt":
@@ -329,8 +331,11 @@ def _windows_prove(path: Path) -> None:
         _local_free(api, descriptor, path)
 
 
-# POSIX: untested on the Windows computer this was written on (follow-up plan R15, amendments).
+# POSIX: Linux only, run for real in WSL (ext4, tmpfs, 9p refused); every other system refused (plan R16).
 def _posix(path: Path, change: bool) -> None:
+    if not sys.platform.startswith("linux"):
+        raise NotPrivate(path, f"the proof of a private state file has never been run on {sys.platform}, so the "
+                               "Vault Agent does not start there")
     try:
         before = os.lstat(path)
     except OSError as exc:
@@ -338,23 +343,18 @@ def _posix(path: Path, change: bool) -> None:
     if stat.S_ISLNK(before.st_mode):
         raise NotPrivate(path, "it is a symbolic link")
     folder = stat.S_ISDIR(before.st_mode)
-    flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NONBLOCK", 0)
     try:
-        descriptor = os.open(path, flags | (os.O_DIRECTORY if folder else 0))
+        descriptor = _open_no_follow(path, folder)
     except OSError as exc:
         raise NotPrivate(path, f"it cannot be opened without following a link ({exc.strerror})") from exc
     try:
+        _admitted_file_system(path, descriptor)
         if change:
             try:
                 os.fchmod(descriptor, 0o700 if folder else 0o600)
             except OSError as exc:
                 raise NotPrivate(path, f"its mode cannot be set ({exc.strerror})") from exc
-        if sys.platform.startswith("linux"):
-            _linux_lists(path, descriptor, change)
-        elif sys.platform == "darwin":
-            _darwin_lists(path, descriptor, change)
-        else:
-            raise NotPrivate(path, f"access lists on {sys.platform} cannot be proved")
+        _linux_lists(path, descriptor, change)
         info = os.fstat(descriptor)
         if info.st_uid != os.geteuid():
             raise NotPrivate(path, "its owner is not this user")
@@ -366,96 +366,78 @@ def _posix(path: Path, change: bool) -> None:
         os.close(descriptor)
 
 
+def _open_no_follow(path: Path, folder: bool) -> int:
+    flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NONBLOCK", 0)
+    return os.open(path, flags | (os.O_DIRECTORY if folder else 0))
+
+
+def _best_effort_mode(path: Path) -> None:
+    """The mode 0700 or 0600 through a descriptor that follows no link, nothing proved (the fallback of
+    restrict_to_current_user on a POSIX system whose proof refuses)."""
+    try:
+        before = os.lstat(path)
+        if stat.S_ISLNK(before.st_mode):
+            return
+        folder = stat.S_ISDIR(before.st_mode)
+        descriptor = _open_no_follow(path, folder)
+        try:
+            os.fchmod(descriptor, 0o700 if folder else 0o600)
+        finally:
+            os.close(descriptor)
+    except OSError:
+        pass
+
+
+# The file systems on which the kernel itself checks the mode and the POSIX access lists, with no mount
+# option that turns the check off, and on which the proof has run for real: the ext family and tmpfs.
+_ADMITTED_FILE_SYSTEMS = {0xEF53: "ext2/3/4", 0x01021994: "tmpfs"}
+
+
+@functools.lru_cache(maxsize=None)
+def _linux_libc() -> SimpleNamespace:
+    import ctypes
+
+    libc = ctypes.CDLL(None, use_errno=True)
+    return SimpleNamespace(fstatfs=_bind(libc.fstatfs, ctypes.c_int, ctypes.c_int, ctypes.c_void_p))
+
+
+def _admitted_file_system(path: Path, descriptor: int) -> None:
+    import ctypes
+
+    # A zeroed buffer far larger than any struct statfs; f_type is its first field, a native long.
+    buffer = ctypes.create_string_buffer(1024)
+    if _linux_libc().fstatfs(descriptor, buffer) != 0:
+        raise NotPrivate(path, f"its file system cannot be read (fstatfs error {ctypes.get_errno()})")
+    kind = ctypes.c_long.from_buffer(buffer).value
+    if kind not in _ADMITTED_FILE_SYSTEMS:
+        raise NotPrivate(path, f"its file system (type {kind:#x}) cannot be proved private")
+
+
 _LINUX_ACLS = ("system.posix_acl_access", "system.posix_acl_default")
 
 
 def _linux_names(path: Path, descriptor: int) -> list[str]:
     try:
-        names = os.listxattr(descriptor)
+        return os.listxattr(descriptor)
     except OSError as exc:
-        if exc.errno in (errno.ENOTSUP, errno.EOPNOTSUPP):  # no extended attributes, so no access lists
+        if exc.errno in (errno.ENOTSUP, errno.EOPNOTSUPP):  # on an admitted file system: no access list kept
             return []
         raise NotPrivate(path, f"its extended attributes cannot be listed ({exc.strerror})") from exc
-    if any(name.startswith("system.nfs4") for name in names):
-        raise NotPrivate(path, "it carries an NFSv4 access list, which its mode does not show")
-    return [name for name in _LINUX_ACLS if name in names]
 
 
 def _linux_lists(path: Path, descriptor: int, change: bool) -> None:
-    present = _linux_names(path, descriptor)
-    if present and change:
-        for name in present:
-            try:
-                os.removexattr(descriptor, name)
-            except OSError as exc:
-                raise NotPrivate(path, f"its access list {name} cannot be removed ({exc.strerror})") from exc
-        present = _linux_names(path, descriptor)
-    if present:
-        raise NotPrivate(path, "it carries a POSIX access list")
-
-
-_ACL_TYPE_EXTENDED, _ACL_FIRST_ENTRY = 0x00000100, 0
-
-
-@functools.lru_cache(maxsize=None)
-def _darwin_api() -> SimpleNamespace:
-    import ctypes
-
-    libc = ctypes.CDLL(None, use_errno=True)
-    p, i = ctypes.c_void_p, ctypes.c_int
-    return SimpleNamespace(
-        get_fd=_bind(libc.acl_get_fd_np, p, i, i),
-        get_entry=_bind(libc.acl_get_entry, i, p, i, ctypes.POINTER(p)),
-        init=_bind(libc.acl_init, p, i),
-        set_fd=_bind(libc.acl_set_fd_np, i, i, p, i),
-        free=_bind(libc.acl_free, i, p),
-    )
-
-
-def _darwin_free(api: SimpleNamespace, acl: Any, path: Path) -> None:
-    import ctypes
-
-    if api.free(acl) != 0:
-        raise NotPrivate(path, f"acl_free failed (error {ctypes.get_errno()})")
-
-
-def _darwin_has_entry(api: SimpleNamespace, path: Path, descriptor: int) -> bool:
-    import ctypes
-
-    acl = api.get_fd(descriptor, _ACL_TYPE_EXTENDED)
-    if not acl:
-        if ctypes.get_errno() == errno.ENOENT:  # no extended access list
-            return False
-        raise NotPrivate(path, f"its access list cannot be read (error {ctypes.get_errno()})")
-    try:
-        entry = ctypes.c_void_p()
-        if api.get_entry(acl, _ACL_FIRST_ENTRY, ctypes.byref(entry)) == 0:
-            return True
-        if ctypes.get_errno() == errno.EINVAL:  # an empty list
-            return False
-        raise NotPrivate(path, f"its access list cannot be read (error {ctypes.get_errno()})")
-    finally:
-        _darwin_free(api, acl, path)
-
-
-def _darwin_lists(path: Path, descriptor: int, change: bool) -> None:
-    import ctypes
-
-    api = _darwin_api()
-    if not _darwin_has_entry(api, path, descriptor):
-        return
-    if change:
-        empty = api.init(0)
-        if not empty:
-            raise NotPrivate(path, f"acl_init failed (error {ctypes.get_errno()})")
-        try:
-            if api.set_fd(descriptor, empty, _ACL_TYPE_EXTENDED) != 0:
-                raise NotPrivate(path, f"its access list cannot be emptied (error {ctypes.get_errno()})")
-        finally:
-            _darwin_free(api, empty, path)
-        if not _darwin_has_entry(api, path, descriptor):
-            return
-    raise NotPrivate(path, "it carries an extended access list")
+    names = _linux_names(path, descriptor)
+    if change and any(name in names for name in _LINUX_ACLS):
+        for name in _LINUX_ACLS:
+            if name in names:
+                try:
+                    os.removexattr(descriptor, name)
+                except OSError as exc:
+                    raise NotPrivate(path, f"its access list {name} cannot be removed ({exc.strerror})") from exc
+        names = _linux_names(path, descriptor)
+    for name in names:
+        if name.startswith("system.") or "acl" in name.lower():
+            raise NotPrivate(path, f"it carries the attribute {name}, which may grant access its mode does not show")
 
 
 def prepare_runtime_dir() -> None:
@@ -480,68 +462,100 @@ def prepare_runtime_dir() -> None:
 
 def restrict_to_current_user(path: Path) -> None:
     """Best effort: make_private for what does not hold the token or the key in the clear (the
-    old vault's folder, the singleton lock). A failure is swallowed; nothing is proved."""
+    old vault's folder, the singleton lock). A failure is swallowed; nothing is proved. On a POSIX
+    system whose proof refuses, the mode 0700 or 0600 is still set, through a descriptor that follows
+    no link, as before the proof existed."""
     path = Path(path)
     if not path.exists():
         return
     try:
         make_private(path)
-    except (NotPrivate, OSError):
+    except NotPrivate:
+        if os.name != "nt":
+            _best_effort_mode(path)
+    except OSError:
         pass
 
 
-def _remove(path: Path) -> None:
+def _unlink_quietly(path: Path) -> None:
     try:
         path.unlink()
-    except FileNotFoundError:
-        pass
     except OSError:
-        # Could not remove it: empty it, so no copy of the payload stays.
-        try:
-            with path.open("w", encoding="utf-8"):
-                pass
-            path.unlink()
-        except OSError:
-            pass
+        pass
 
 
 def write_state(payload: dict[str, Any]) -> None:
     """Publish the agent's state file, holding its token and pipe key in the clear.
 
-    The order (follow-up plan R15, fix 1, rule 4): the folder is proved private; the temporary
-    file is created in it and proved private while it is still empty, its descriptor open
-    (Windows accepts a new access list on a file this process holds open); only then the
-    payload is written, flushed and synced; the file takes the published name; the published
-    path is proved private again. Any failure raises (NotPrivate when a proof fails) and leaves
-    no file holding the payload.
+    The order (follow-up plan R16, rule 4, with its amendment): (a) the folder is proved private;
+    (b) the temporary file is created, closed and made private while empty; (c) the empty private
+    file takes the published name; (d) the published path is opened for writing without truncation
+    and that handle is kept to the end; (e) the published file, still empty, is proved private;
+    (f) only then the payload is written through the handle, unbuffered, and synced; (g) it is
+    proved private again. A failure in (a) to (e) leaves an empty file, unlinked best effort. From
+    the first payload byte to the end of (g), any exception empties the file through the retained
+    handle, syncs that and is raised again; when the emptying fails, NotPrivate says content remains
+    in the named file. A reader between (c) and (f) finds an empty or partial file, which is not JSON
+    and reads as no agent.
     """
     path = state_path()
     folder = path.parent
     make_private(folder)
-    # Unique temp name avoids PermissionError on a stale locked agent-state.tmp.
     descriptor, temporary_name = tempfile.mkstemp(prefix="agent-state.", suffix=".tmp", dir=folder)
     temporary = Path(temporary_name)
-    published = False
+    try:
+        os.close(descriptor)
+        make_private(temporary)
+        os.replace(temporary, path)
+    except BaseException:
+        _unlink_quietly(temporary)
+        raise
+    try:
+        flags = os.O_WRONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOINHERIT", 0) \
+            | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+        handle = os.open(path, flags)  # no O_CREAT, no O_TRUNC: the empty file just published
+    except BaseException:
+        _unlink_quietly(path)
+        raise
+    emptied = False
     try:
         try:
-            make_private(temporary)
+            if not is_private(path):
+                raise NotPrivate(path, "the published file is not private before the payload is written")
         except BaseException:
-            os.close(descriptor)
+            emptied = True  # nothing written yet
             raise
-        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
-            json.dump(payload, stream, sort_keys=True, indent=2)
-            stream.write("\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, path)
-        published = True
-        if not is_private(path):
-            raise NotPrivate(path, "the published file did not keep its private access")
-    except BaseException:
-        _remove(temporary)
-        if published:
-            _remove(path)
-        raise
+        try:
+            json.dump(payload, _Unbuffered(handle), sort_keys=True, indent=2)
+            _Unbuffered(handle).write("\n")
+            os.fsync(handle)
+            if not is_private(path):
+                raise NotPrivate(path, "the published file did not keep its private access")
+        except BaseException:
+            try:
+                os.ftruncate(handle, 0)
+                os.fsync(handle)
+            except OSError as exc:
+                raise NotPrivate(path, "content remains in the file: it could not be emptied") from exc
+            emptied = True
+            raise
+    finally:
+        os.close(handle)
+        if emptied:
+            _unlink_quietly(path)
+
+
+class _Unbuffered:
+    """A text sink that puts every character into the file at once, so that emptying the file
+    through its descriptor removes everything written: no buffer is flushed afterwards."""
+
+    def __init__(self, descriptor: int) -> None:
+        self.descriptor = descriptor
+
+    def write(self, text: str) -> None:
+        data = text.encode("utf-8")
+        while data:
+            data = data[os.write(self.descriptor, data):]
 
 
 def read_state() -> dict[str, Any] | None:

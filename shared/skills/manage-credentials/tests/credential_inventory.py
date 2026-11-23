@@ -67,7 +67,7 @@ EXTERNAL_SYMBOLS: dict[tuple[str, str], tuple[str, ...]] = {
                                      "PublicFormat", "PublicFormat.Raw"),
     ("ctypes", "secret_store/fileio.py"): ("WinDLL", "WinError", "get_last_error", "wintypes", "wintypes.BOOL",
                                            "wintypes.DWORD", "wintypes.LPCWSTR"),
-    ("ctypes", "vault_agent_runtime.py"): ("CDLL", "POINTER", "Structure", "WinDLL", "byref", "c_int", "c_ubyte",
+    ("ctypes", "vault_agent_runtime.py"): ("CDLL", "POINTER", "Structure", "WinDLL", "byref", "c_int", "c_long", "c_long.from_buffer", "c_ubyte",
                                            "c_ushort", "c_void_p", "c_void_p.from_buffer", "cast",
                                            "create_string_buffer", "get_errno", "get_last_error", "sizeof", "windll", "windll.kernel32", "windll.kernel32.CloseHandle",
                                            "windll.kernel32.OpenProcess", "wintypes", "wintypes.BOOL",
@@ -111,7 +111,7 @@ EXTERNAL_SYMBOLS: dict[tuple[str, str], tuple[str, ...]] = {
     ("ssl", "token_endpoint.py"): ("create_default_context",),
     ("subprocess", "brain_secrets.py"): ("run",),
     ("subprocess", "secret_store/recovery_package.py"): ("run",),
-    ("subprocess", "secret_store/repo.py"): ("run",),
+    ("subprocess", "secret_store/repo.py"): ("CompletedProcess", "PIPE", "Popen", "run"),
     ("subprocess", "secret_store/store.py"): ("run",),
     ("subprocess", "secret_store/team.py"): ("run",),
     ("subprocess", "token_relay_backend.py"): ("TimeoutExpired", "run"),
@@ -170,8 +170,8 @@ FORMS: dict[str, frozenset[tuple[str, str]]] = {
         ("secret_store/repo.py", "SecretRepo.clone_or_open"), ("secret_store/repo.py", "repo_lock"),
         ("secret_store/store.py", "SecretStore._save_pin"), ("secret_store/store_ops.py", "write_marker"),
         ("secret_store/store_ops.py", "write_upkeep_error"), ("token_relay_store.py", "holder_name"),
-        ("vault_agent.py", "VaultAgent._acquire_singleton"), ("vault_agent_runtime.py", "_remove"),
-        ("vault_agent_runtime.py", "log_tray"), ("vault_agent_runtime.py", "write_state")}),
+        ("vault_agent.py", "VaultAgent._acquire_singleton"), ("vault_agent_runtime.py", "log_tray"),
+        ("vault_agent_runtime.py", "write_state")}),
     # eval, exec, __import__, compile, globals, locals, vars; getattr, setattr or delattr with a name that
     # is not a literal
     "reflection": frozenset({("secret_store/store_ops.py", "store_status")}),  # getattr over a tuple of two literals
@@ -211,8 +211,10 @@ ENDPOINTS: dict[str, tuple[str, str, str, str]] = {
     "agent-auth-make": ("vault_agent.py", "VaultAgent", "P", "the agent's authentication token and pipe key, made "
                         "fresh at each start (its __init__); serve_forever gives the key to the Listener"),
     "agent-state-write": ("vault_agent_runtime.py", "write_state", "S", "the token and key in the clear, written only "
-                          "into a file proved private to the user and the system account, inside a folder proved "
-                          "private the same way; the agent does not start, or stops, when that cannot be proved"),
+                          "into the published file proved private in place (Windows; Linux on the ext family and "
+                          "tmpfs; every other system refused), through a kept handle that empties it on any failure "
+                          "after the first byte, inside a folder proved private the same way; the agent does not "
+                          "start, or stops, when that cannot be proved"),
     "agent-state-read": ("vault_agent_runtime.py", "read_state", "P", "the token and key first in the client process"),
     "agent-connect": ("vault_broker_client.py", "_connect", "PS", "spends the key in the pipe's handshake and returns "
                       "the token to broker_request"),
@@ -310,7 +312,7 @@ DIRECT_CALLERS: dict[str, dict[tuple[str, str], str]] = {
         ("vault_credentials.py", "_put_entry_window"): "set_text and set_json", ("vault_credentials.py", "_try_broker_fields"):
         "status and get_fields", ("vault_credentials.py", "main"): "set_text (put)", ("vaultctl.py", "_mapped_environment"):
         "get_fields", ("vaultctl.py", "main"): "unlock, lock, get_access_token, set_text"},
-    "agent-pipe": {("vault_agent.py", "VaultAgent.serve_forever"): "one thread per connection"},
+    "agent-pipe": {("vault_agent.py", "VaultAgent._accept_loop"): "one thread per admitted connection"},
     "agent-auth-make": {("vault_agent.py", "build_agent"): "the one way serve and the tray build the agent",
                         ("vault_tray.py", "VaultTrayApp._start_broker"): "reads LOCK_WAIT_SECONDS only"},
     "agent-state-write": {("vault_agent.py", "VaultAgent.serve_forever"): "once the listener is up",
