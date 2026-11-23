@@ -169,5 +169,72 @@ class TrayStopTest(unittest.TestCase):
         prompt.assert_not_called()
         self.assertIsNone(agent._passphrase)
 
+    # -- plan R22: no check-then-use gap against the fence on the unlock path -------------------------
+    def test_a_fence_set_between_the_trays_check_and_the_window_makes_no_window(self) -> None:
+        agent = self.agent()
+        app = self.app(agent)
+        real_fenced, calls = agent._fenced, []
+
+        def fenced():
+            calls.append(1)
+            if len(calls) == 1:  # the tray's check passes; the agent stops right after it
+                agent.shutdown()
+                return False
+            return real_fenced()
+
+        with mock.patch.object(agent, "_fenced", fenced), \
+                mock.patch.object(vault_tray, "_win_password_dialog", return_value="fictional passphrase") as window, \
+                mock.patch.object(agent, "unlock") as unlock, mock.patch.object(vault_tray, "_show_error"):
+            app._do_unlock()
+        window.assert_not_called()
+        unlock.assert_not_called()
+        self.assertIsNone(agent._passphrase)
+
+    def test_a_window_open_when_the_fence_is_set_closes_and_returns_nothing(self) -> None:
+        agent = self.agent()
+        app = self.app(agent)
+        opened, closed = threading.Event(), threading.Event()
+
+        def dialog(_title, window=None):  # stands in for the Win32 window: it ends when it is closed
+            if window is not None:
+                window["hwnd"] = 7
+            opened.set()
+            closed.wait(10)
+            return None if closed.is_set() else "fictional passphrase"
+
+        def post(hwnd, message, _wparam, _lparam):
+            if (hwnd, message) == (7, vault_tray._WM_CLOSE):
+                closed.set()
+            return 1
+
+        outcome: list = []
+        with mock.patch.object(vault_tray, "_win_password_dialog", dialog), \
+                mock.patch.object(vault_tray.user32, "PostMessageW", post), \
+                mock.patch.object(agent, "unlock") as unlock:
+            unlocking = threading.Thread(target=lambda: outcome.append(app._do_unlock()), daemon=True)
+            unlocking.start()
+            self.assertTrue(opened.wait(5))
+            agent.shutdown()
+            unlocking.join(3)
+        self.assertEqual(outcome, [None], "the window did not close when the agent stopped")
+        self.assertTrue(closed.is_set())
+        unlock.assert_not_called()
+
+    def test_a_fence_set_between_the_locked_check_and_the_assignment_keeps_no_passphrase(self) -> None:
+        agent = self.agent()
+        real_fenced, calls = agent._fenced, []
+
+        def fenced():
+            calls.append(1)
+            if len(calls) == 2:  # the check under _lock passes; shutdown sets its event right after it
+                agent._shutdown_requested.set()
+                return False
+            return real_fenced()
+
+        with mock.patch.object(agent.vault, "load"), mock.patch.object(agent, "_fenced", fenced):
+            with self.assertRaisesRegex(vault_tray.CredentialError, "stopping"):
+                agent.unlock("fictional passphrase")
+        self.assertIsNone(agent._passphrase)
+
 if __name__ == "__main__":
     unittest.main()

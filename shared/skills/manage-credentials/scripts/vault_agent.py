@@ -170,6 +170,11 @@ class VaultAgent:
             if self._fenced():
                 raise CredentialError(STOPPING_MESSAGE)
             self._passphrase = passphrase
+            # And after the assignment (plan R22): the passphrase is stored before the fence or not at
+            # all. A shutdown that set its event between the check and the assignment is seen here.
+            if self._fenced():
+                self._passphrase = None
+                raise CredentialError(STOPPING_MESSAGE)
         return {"unlocked": True}
 
     def lock(self) -> dict[str, Any]:

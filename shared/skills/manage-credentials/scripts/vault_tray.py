@@ -68,6 +68,8 @@ user32.DefWindowProcW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM,
 user32.DefWindowProcW.restype = _LRESULT
 user32.SendMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
 user32.SendMessageW.restype = _LRESULT
+user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+user32.PostMessageW.restype = wintypes.BOOL
 
 
 class _RECT(ctypes.Structure):
@@ -186,20 +188,35 @@ def _make_icon(unlocked: bool, Image: Any, ImageDraw: Any) -> Any:
     return image
 
 
-def _prompt_passphrase(title: str = "Unlock Portable Vault") -> str | None:
-    """Modal Win32 password dialog anchored near the system tray (closes on OK/Cancel)."""
+def _prompt_passphrase(title: str = "Unlock Portable Vault", cancelled: Any = None) -> str | None:
+    """Modal Win32 password dialog anchored near the system tray (closes on OK/Cancel).
+
+    `cancelled` (plan R22): when it returns True the window is not made, or closes itself while open
+    (it is looked at every 0.2 seconds), and nothing is returned; it is looked at again after the
+    window has returned. The window also closes itself after ten minutes."""
+    stopped = cancelled or (lambda: False)
+    if stopped():
+        return None
     result: dict[str, str | None] = {"value": None}
+    window: dict[str, Any] = {"hwnd": None, "cancelled": False}
     done = threading.Event()
 
     def ui() -> None:
         try:
-            result["value"] = _win_password_dialog(title)
+            result["value"] = _win_password_dialog(title, window)
         finally:
             done.set()
 
     thread = threading.Thread(target=ui, name="vault-passphrase-ui", daemon=True)
     thread.start()
-    if not done.wait(timeout=600):
+    deadline = time.monotonic() + 600
+    while not done.wait(timeout=0.2):
+        if stopped() or time.monotonic() >= deadline:
+            window["cancelled"] = True  # a window not yet made closes as soon as it is
+            if window["hwnd"]:
+                user32.PostMessageW(window["hwnd"], _WM_CLOSE, 0, 0)
+            return None
+    if stopped():
         return None
     value = result["value"]
     if value is None:
@@ -229,7 +246,7 @@ def _outer_size(client_width: int, client_height: int, style: int, ex_style: int
     return rect.right - rect.left, rect.bottom - rect.top
 
 
-def _win_password_dialog(title: str) -> str | None:
+def _win_password_dialog(title: str, window: dict[str, Any] | None = None) -> str | None:
     style = _WS_POPUP | _WS_CAPTION | _WS_SYSMENU | _DS_MODALFRAME
     ex_style = _WS_EX_DLGMODALFRAME | _WS_EX_TOPMOST
     width, height = _outer_size(372, _DIALOG_CLIENT_HEIGHT, style, ex_style)
@@ -331,6 +348,13 @@ def _win_password_dialog(title: str) -> str | None:
         None,
     )
     state["edit"] = edit
+    if window is not None:
+        # Published before the cancel flag is read; the waiting side sets the flag before it reads
+        # the handle, so either this sees the flag or that side posts WM_CLOSE (plan R22).
+        window["hwnd"] = hwnd
+        if window.get("cancelled"):
+            user32.DestroyWindow(hwnd)
+            return None
     user32.CreateWindowExW(
         0,
         "BUTTON",
@@ -477,11 +501,14 @@ class VaultTrayApp:
             _show_info("Vault is already unlocked.")
             self._refresh_icon()
             return
-        if self._stop.is_set() or self.agent._fenced():
+        def stopping() -> bool:
+            return self._stop.is_set() or self.agent._fenced()
+
+        if stopping():
             # A stopping agent takes no passphrase: no window asks for one (plan R21, rule 6).
             return
-        passphrase = _prompt_passphrase()
-        if passphrase is None:
+        passphrase = _prompt_passphrase(cancelled=stopping)
+        if passphrase is None or stopping():  # looked at again before the value is handed over (R22)
             return
         try:
             self.agent.unlock(passphrase)
