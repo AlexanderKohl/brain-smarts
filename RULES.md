@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-11-22T12:47:34+10:00
+updated: 2026-11-23T14:38:10+10:00
 owner: brain-owner
 ---
 
@@ -366,6 +366,12 @@ Contract sections and when to read them, in section order:
 - When a change materially widens an externally reachable surface, adds an authentication or
   payment path, or handles sensitive data for the first time, escalate to at least standard depth
   under `SMART-RULE-0016` and say so in the change.
+- **List the whole surface before the first review.** Work that guards something (credentials,
+  money, personal data, permissions) produces, before its first code review, a list of every path
+  that reads, writes, spends or copies the guarded thing, and a test that fails when the code
+  gains a path the list does not name. The reviewer is given the list and asked what is missing
+  from it. A finding of one more path is answered by completing the list, not by closing that
+  path alone.
 
 ## SMART-RULE-0022 – Tests demonstrate behaviour
 
@@ -384,6 +390,15 @@ Contract sections and when to read them, in section order:
 - Fixture and sample data remain subject to `SMART-RULE-0008`: entirely fictional.
 - Proportion applies. Clearly non-material changes as defined in `SMART-RULE-0016` need no new
   test; a behavioural change always does.
+- **Run it for real before trusting the tests.** When a change has more than one process, or meets
+  the operating system or another program (a background service, a keychain, a pipe, a file lock,
+  a scheduler, a working tree another tool rewrites), the first thing built is a thin end-to-end
+  run with real processes and throwaway data, kept as a script that can be run again. It is run
+  before the first review and after every fix that touches such a boundary. A test that stands in
+  for a boundary with a fake proves the logic on each side, never that the two sides meet: a
+  passing suite is not reported as evidence that the parts work together until that run has
+  passed. The run keeps itself away from live data, refuses to start when it cannot prove that,
+  and proves its own clean-up.
 
 ## SMART-RULE-0024 – Delegated parallel work
 
