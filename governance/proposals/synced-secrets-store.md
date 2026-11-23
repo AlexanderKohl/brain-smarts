@@ -4,13 +4,13 @@ title: The synced secrets store becomes an approved credential provider
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: draft
+status: accepted
 owner: brain-owner
 created: 2026-11-20T18:15:52+10:00
-updated: 2026-11-21T13:15:36+10:00
+updated: 2026-11-23T15:48:49+10:00
 rule_id: null
-accepted_by: null
-accepted_at: null
+accepted_by: brain-owner
+accepted_at: 2026-11-23T15:48:49+10:00
 implemented_at: null
 previous_contract_version: 3.2.0
 new_contract_version: 3.2.0
@@ -146,7 +146,8 @@ the owner's computers before any other person is invited.
 
 ## Acceptance
 
-Not yet requested. Ask one direct question that identifies this proposal. Do not treat silence,
-adjacent approval or general agreement as acceptance.
+Requested on 23 November 2026 with one direct question that named this proposal, after its full
+wording, reason, scope, risks, migration, rollback and validation were shown. The owner accepted it the
+same day ("Yes, I accept"), recorded at 2026-11-23T15:48:49+10:00. The owner's record of the acceptance is in their memory.
 
 ## Implementation record
