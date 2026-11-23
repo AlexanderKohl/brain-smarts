@@ -4,6 +4,7 @@ Everything runs in real temporary folders, never the user's runtime folder; no r
 tray is started (an agent here listens on a pipe of its own, in-process)."""
 from __future__ import annotations
 
+import contextlib
 import io
 import os
 import secrets
@@ -697,6 +698,78 @@ class BarrierTest(TemporaryRuntime):
                 time.sleep(0.3)  # time enough for a wake-up that should not come
         self.assertEqual(order, ["exit 2"])
         self.assertIn("still in flight", stderr.getvalue())
+
+    # -- plan R19: ending does not depend on standard error (the tray runs under pythonw) -----------
+    def streams(self, kind: str):
+        """No terminal streams at all ("none", as under pythonw), or a standard error whose write
+        raises ("broken"). mock.patch restores both streams when the test leaves the block."""
+        class Broken:
+            def write(self, _text):
+                raise OSError("fictional broken stream")
+
+            def flush(self):
+                raise OSError("fictional broken stream")
+
+        stack = contextlib.ExitStack()
+        stack.enter_context(mock.patch.object(sys, "stderr", None if kind == "none" else Broken()))
+        if kind == "none":
+            stack.enter_context(mock.patch.object(sys, "stdout", None))
+        return stack
+
+    def test_end_process_exits_whatever_the_streams_do(self) -> None:
+        for kind in ("broken", "none"):
+            with self.subTest(kind):
+                self.exits.reset_mock()
+                with self.streams(kind):
+                    vault_agent._end_process(f"fictional reason {kind}")
+                self.exits.assert_called_once_with(2)
+                self.assertIn(f"agent ends its process: fictional reason {kind}",
+                              (self.folder / "tray.log").read_text(encoding="utf-8"))
+
+    def shutdown_without_the_barrier(self, kind: str) -> None:
+        agent, _thread = self.start()
+        sending, _events = self.hold_the_answer()
+        with mock.patch.object(vault_agent.VaultAgent, "DRAIN_SECONDS", 0.5):
+            self.ask_in_thread(self.client(agent), self.request(agent))
+            self.assertTrue(sending.wait(5))
+            with self.streams(kind):
+                agent.shutdown()  # returns only because the test replaced _exit_now
+        self.exits.assert_called_once_with(2)
+        self.assertIs(agent._stopping, False)
+
+    def test_a_shutdown_without_the_barrier_exits_with_a_broken_standard_error(self) -> None:
+        self.shutdown_without_the_barrier("broken")
+
+    def test_a_shutdown_without_the_barrier_exits_with_no_streams(self) -> None:
+        self.shutdown_without_the_barrier("none")
+
+    def keep_state_after_a_failed_proof(self, kind: str) -> None:
+        state, order = self.folder / "agent-state.json", []
+        self.exits.side_effect = lambda code: order.append(f"exit {code}")
+        with mock.patch.object(vault_agent.VaultAgent, "STATE_CHECK_SECONDS", 0.05):
+            agent, _thread = self.start()
+            real_shutdown = agent.shutdown
+
+            def not_drained():
+                order.append("shutdown")
+                real_shutdown()
+                return False
+
+            with mock.patch.object(agent, "shutdown", not_drained), \
+                    mock.patch.object(vault_agent, "write_state", side_effect=NotPrivate(state, "fictional failure")), \
+                    self.streams(kind):
+                state.unlink()
+                deadline = time.time() + 10
+                while time.time() < deadline and "exit 2" not in order:
+                    time.sleep(0.02)
+        self.assertEqual(order, ["shutdown", "exit 2"])
+        self.assertIn("agent stopped", (self.folder / "tray.log").read_text(encoding="utf-8"))
+
+    def test_keep_state_reaches_shutdown_and_the_exit_with_a_broken_standard_error(self) -> None:
+        self.keep_state_after_a_failed_proof("broken")
+
+    def test_keep_state_reaches_shutdown_and_the_exit_with_no_streams(self) -> None:
+        self.keep_state_after_a_failed_proof("none")
 
 
 if __name__ == "__main__":

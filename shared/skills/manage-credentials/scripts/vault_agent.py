@@ -485,15 +485,22 @@ class VaultAgent:
                     self._stopped_by = exc
                 except OSError:  # a passing failure of reading or replacing
                     continue
-            # _lock is released here: shutdown never waits while it is held.
-            print(f"Vault Agent stopped: {self._stopped_by}", file=sys.stderr, flush=True)
-            log_tray(f"agent stopped: {self._stopped_by}")
-            if not self.shutdown():
-                _end_process("operations still in flight after shutdown")
-                return
-            if not self._wake_accept(payload["address"]):
-                _end_process("the accept loop did not end")
+            # _lock is released here: shutdown never waits while it is held. Saying why is best
+            # effort; the shutdown after it is not (plan R19): it runs whatever the diagnostics do.
+            try:
+                _diagnose(f"Vault Agent stopped: {self._stopped_by}", f"agent stopped: {self._stopped_by}")
+            finally:
+                self._stop_after_failed_proof(payload["address"])
             return
+
+    def _stop_after_failed_proof(self, address: Any) -> None:
+        """Shutdown after a failed proof; the process ends at once when it did not drain, and when the
+        woken accept loop does not end."""
+        if not self.shutdown():
+            _end_process("operations still in flight after shutdown")
+            return
+        if not self._wake_accept(address):
+            _end_process("the accept loop did not end")
 
     def _wake_accept(self, address: Any) -> bool:
         """End an accept that waits on the pipe after shutdown: closing the listener does not end it
@@ -628,11 +635,29 @@ def _close_quietly(closable: Any) -> None:
         pass
 
 
+def _diagnose(message: str, tray_line: str) -> None:
+    """Say why, best effort (plan R19): the message to standard error only when that stream exists
+    (the tray under pythonw has none), then the line to the tray's log, each in its own guard that
+    suppresses every Exception. It never raises one, so nothing after it depends on a stream."""
+    stream = sys.stderr
+    if stream is not None:
+        try:
+            print(message, file=stream, flush=True)
+        except Exception:  # noqa: BLE001 - a broken stream must not keep the agent up
+            pass
+    try:
+        log_tray(tray_line)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _end_process(reason: str) -> None:
-    """The last resort: the reason to standard error and the tray's log, then exit code 2."""
-    print(f"Vault Agent ends its process: {reason}", file=sys.stderr, flush=True)
-    log_tray(f"agent ends its process: {reason}")
-    _exit_now(2)
+    """The last resort: the reason, best effort, then exit code 2 from a finally, so no failure of the
+    diagnostics and no interrupt during them keeps the process alive."""
+    try:
+        _diagnose(f"Vault Agent ends its process: {reason}", f"agent ends its process: {reason}")
+    finally:
+        _exit_now(2)
 
 
 def _exit_now(code: int) -> None:
