@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-11-21T14:31:20+10:00
-updated: 2026-11-22T16:01:21+10:00
+updated: 2026-11-24T07:29:20+10:00
 ---
 
 # Credential paths
@@ -222,7 +222,7 @@ Symbols are written as the import name followed by the attribute path used, thre
 | `shutil` | `migrate_to_store.py`: copyfile (the backup, a byte copy of ciphertext). `secret_store/recovery_package.py`, `secret_store/team.py`: rmtree |
 | `socket` | `secret_store/store_ops.py`, `token_relay_store.py`: gethostname |
 | `ssl` | `token_endpoint.py`: create_default_context |
-| `subprocess` | `brain_secrets.py`, `secret_store/recovery_package.py`, `secret_store/store.py`, `secret_store/team.py`, `vault_credentials.py`, `vaultctl.py`: run. `secret_store/repo.py`: CompletedProcess, PIPE, Popen (the one launch of `git commit`), run. `token_relay_backend.py`: TimeoutExpired, run |
+| `subprocess` | `child_process.py`: CREATE_NO_WINDOW, Popen, run (every `git` and `gh` the skill starts, without a console window; plan R23). `secret_store/repo.py`: CompletedProcess, PIPE (its `git` calls and the one launch of `git commit` go through `child_process.py`). `secret_store/store.py`, `secret_store/team.py`: none (annotations only). `token_relay_backend.py`: TimeoutExpired. `vault_credentials.py`, `vaultctl.py`: run (the person's own command, in the person's console) |
 | `tempfile` | `portable_vault.py`: gettempdir, mkstemp. `secret_store/recovery_package.py`: TemporaryDirectory, mkstemp. `vault_agent_runtime.py`: mkstemp |
 | `tkinter` | `secret_window.py`: BooleanVar, Button, Checkbutton, Entry, Frame, Label, TclError, Tk |
 | `urllib.parse` | `token_endpoint.py`: urlencode, urlsplit. `token_relay_backend.py`: quote |
@@ -230,7 +230,9 @@ Symbols are written as the import name followed by the attribute path used, thre
 
 Where a module of the no-credential table holds one of these imports, the test requires a reason: `policy.py`,
 `checkpoint.py` and `signing.py` take key types and `InvalidSignature` for signatures and public keys, never the
-cipher or key bytes; `fileio.py` takes the lock calls and the write-through move.
+cipher or key bytes; `fileio.py` takes the lock calls and the write-through move; `child_process.py` starts
+`git` and `gh` with `CREATE_NO_WINDOW`, and their arguments and input (names, paths and sealed bytes) pass through
+it unread.
 
 ### Forms that need no import
 
@@ -239,7 +241,7 @@ longer uses the form.
 
 | Form | Allowed in |
 |---|---|
-| the terminal: `print`, or a reference to `sys.stdout` or `sys.stderr` (names, presence and fingerprints only, except the two sinks `vaultctl.py` `main` and `token_relay.py` `main` below) | `brain_secrets.py` `_delete`, `_recovery_package`, `_restore`, `_unfinished`, `main`; `migrate_to_store.py` `main`, `migrate`, `rollback`; `token_relay.py` `_seed`, `_status`, `main`; `token_relay_store.py` `RelayedStore._warn`; `vault_agent.py` `VaultAgent._serve_with_listener`, `_diagnose.write` (in a bounded daemon thread, best effort, only when standard error exists: why a rewrite could not be proved private, or why the agent ends its process), `main`; `vault_credentials.py` `_cancelled`, `_put_entry_window`, `main`; `vaultctl.py` `main` |
+| the terminal: `print`, or a reference to `sys.stdout` or `sys.stderr` (names, presence and fingerprints only, except the two sinks `vaultctl.py` `main` and `token_relay.py` `main` below) | `brain_secrets.py` `_delete`, `_recovery_package`, `_restore`, `_unfinished`, `main`; `migrate_to_store.py` `_say` (the default output of `migrate` and `rollback`: the progress lines and the summary, flushed at once; names only), `main`; `token_relay.py` `_seed`, `_status`, `main`; `token_relay_store.py` `RelayedStore._warn`; `vault_agent.py` `VaultAgent._serve_with_listener`, `_diagnose.write` (in a bounded daemon thread, best effort, only when standard error exists: why a rewrite could not be proved private, or why the agent ends its process), `main`; `vault_credentials.py` `_cancelled`, `_put_entry_window`, `main`; `vaultctl.py` `main` |
 | `input()`: a typed confirmation (an entry name, a write id), never a value | `brain_secrets.py` `_delete`, `_unfinished`; `vault_credentials.py` `main` |
 | `sys.stdin.read`: a value piped in | `vault_credentials.py` `_secret_value` (put --stdin) |
 | an environment write: `os.environ[...] =`, `del`, `update`, `pop`, `setdefault`, `clear`, `os.putenv`, `os.unsetenv` | `token_relay.py` `main` (PORTABLE_VAULT_PATH, a path) |
@@ -448,6 +450,7 @@ Through these none does:
 
 | Module | Why | Imports from a credential module (exempt, with the names) |
 |---|---|---|
+| `child_process.py` | starts `git` and `gh` without a console window; reads nothing that passes through | none |
 | `migration_lock.py` | a lock file with a process id, a time and a command name | `portable_vault.py`: CredentialError; `vault_agent_runtime.py`: _pid_is_running (a process-id check; reads no state file) |
 | `secret_store/__init__.py` | re-exports the error class | none |
 | `secret_store/checkpoint.py` | object ids, revisions and hashes, signed with the key object | `canonical.py`: dumps, loads (the signed checkpoint); `keys.py`: key_id |

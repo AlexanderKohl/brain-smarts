@@ -110,12 +110,11 @@ EXTERNAL_SYMBOLS: dict[tuple[str, str], tuple[str, ...]] = {
     ("socket", "secret_store/store_ops.py"): ("gethostname",),
     ("socket", "token_relay_store.py"): ("gethostname",),
     ("ssl", "token_endpoint.py"): ("create_default_context",),
-    ("subprocess", "brain_secrets.py"): ("run",),
-    ("subprocess", "secret_store/recovery_package.py"): ("run",),
-    ("subprocess", "secret_store/repo.py"): ("CompletedProcess", "PIPE", "Popen", "run"),
-    ("subprocess", "secret_store/store.py"): ("run",),
-    ("subprocess", "secret_store/team.py"): ("run",),
-    ("subprocess", "token_relay_backend.py"): ("TimeoutExpired", "run"),
+    ("subprocess", "child_process.py"): ("CREATE_NO_WINDOW", "Popen", "run"),
+    ("subprocess", "secret_store/repo.py"): ("CompletedProcess", "PIPE"),
+    ("subprocess", "secret_store/store.py"): (),  # annotations only: its git and gh go through child_process.py
+    ("subprocess", "secret_store/team.py"): (),  # annotations only: its git and gh go through child_process.py
+    ("subprocess", "token_relay_backend.py"): ("TimeoutExpired",),
     ("subprocess", "vault_credentials.py"): ("run",),
     ("subprocess", "vaultctl.py"): ("run",),
     ("tempfile", "portable_vault.py"): ("gettempdir", "mkstemp"),
@@ -129,6 +128,8 @@ EXTERNAL_SYMBOLS: dict[tuple[str, str], tuple[str, ...]] = {
 # Why a no-credential module may hold a data-carrying import: one line per row above whose module
 # is in NO_CREDENTIAL. The test requires a line for each.
 NO_CREDENTIAL_EXTERNAL: dict[tuple[str, str], str] = {
+    ("subprocess", "child_process.py"): "starts git and gh with CREATE_NO_WINDOW; their arguments and input pass "
+                                        "through unread: names, paths and sealed bytes",
     (_EXC, "secret_store/policy.py"): "InvalidSignature: a signature check, no key material",
     (_EXC, "secret_store/signing.py"): "InvalidSignature: a signature check",
     (_ED, "secret_store/checkpoint.py"): "key types for annotations; the signing key object is used, never its bytes",
@@ -146,9 +147,8 @@ FORMS: dict[str, frozenset[tuple[str, str]]] = {
     # two sinks below (vaultctl.py main prints an access token; token_relay.py main the relay key)
     "terminal": frozenset({
         ("brain_secrets.py", "_delete"), ("brain_secrets.py", "_recovery_package"), ("brain_secrets.py", "_restore"),
-        ("brain_secrets.py", "_unfinished"), ("brain_secrets.py", "main"), ("migrate_to_store.py", "main"),
-        ("migrate_to_store.py", "migrate"),
-        ("migrate_to_store.py", "rollback"), ("token_relay.py", "_seed"), ("token_relay.py", "_status"),
+        ("brain_secrets.py", "_unfinished"), ("brain_secrets.py", "main"), ("migrate_to_store.py", "_say"),
+        ("migrate_to_store.py", "main"), ("token_relay.py", "_seed"), ("token_relay.py", "_status"),
         ("token_relay.py", "main"), ("token_relay_store.py", "RelayedStore._warn"),
         ("vault_agent.py", "VaultAgent._serve_with_listener"), ("vault_agent.py", "_diagnose.write"),
         ("vault_agent.py", "main"), ("vault_credentials.py", "_cancelled"),
@@ -404,6 +404,7 @@ CREDENTIAL: dict[str, str] = {  # module -> what passes through it in the clear
     "secret_store/typed_write.py": "the typed plain and grant values of one write, and its record",
 }
 NO_CREDENTIAL: dict[str, str] = {  # module -> why none does
+    "child_process.py": "starts git and gh without a console window; reads nothing that passes through",
     "migration_lock.py": "a lock file with a process id, a time and a command name",
     "secret_store/__init__.py": "re-exports the error class",
     "secret_store/checkpoint.py": "object ids, revisions and hashes, signed with the key object",

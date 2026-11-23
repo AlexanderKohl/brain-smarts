@@ -13,6 +13,8 @@ import sys
 from pathlib import Path
 from typing import Any, Callable
 
+import child_process  # the scripts folder is on sys.path wherever secret_store is importable
+
 from . import keys, recovery
 from .errors import SecretStoreError
 from .policy import INDEX_PREFIX, NAME, create_trust_root, public_entry
@@ -25,12 +27,12 @@ _PIN = "team-trust-root.json"
 
 
 def _gh(*args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["gh", *args], capture_output=True)
+    return child_process.run(["gh", *args], capture_output=True)
 
 
 def _clone_git(clone: Path, *args: str) -> subprocess.CompletedProcess:
     # --git-dir: a damaged clone fails here instead of git finding a repository above it
-    return subprocess.run(["git", "--git-dir", str(clone / ".git"), *args], capture_output=True)
+    return child_process.run(["git", "--git-dir", str(clone / ".git"), *args], capture_output=True)
 
 
 def clone_has_history(clone: Path) -> bool:
@@ -85,7 +87,7 @@ class TeamStore(SecretStore):
     def _remote_url(self) -> str:
         url = self.config["team_repo_url"]
         if not url and (self.clone / ".git").is_dir():
-            result = subprocess.run(["git", "remote", "get-url", "origin"], cwd=str(self.clone), capture_output=True)
+            result = child_process.run(["git", "remote", "get-url", "origin"], cwd=str(self.clone), capture_output=True)
             url = result.stdout.decode().strip() if result.returncode == 0 else None
         if not url:
             raise SecretStoreError("no team repository is configured; run team-init or set team_repo_url")

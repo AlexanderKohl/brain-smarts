@@ -192,8 +192,9 @@ def _clear_target(target: Path, created: bool) -> None:
 def _restore(args, ask, errors: tuple) -> int:
     """Recover a person's or the team's store from a package chosen by path into an empty folder;
     the words are typed in the masked window only. Refused with nothing written otherwise."""
-    import subprocess
     import time
+
+    import child_process
     from secret_store.store import SecretStore
     from secret_store.team import TeamStore
     target, package = Path(args.target), Path(args.package)
@@ -220,7 +221,7 @@ def _restore(args, ask, errors: tuple) -> int:
     finally:
         del words, answer
     days = int((time.time() - package.stat().st_mtime) // 86400)
-    log = subprocess.run(["git", "log", "-1", "--format=%cs"], cwd=str(store.clone), capture_output=True)
+    log = child_process.run(["git", "log", "-1", "--format=%cs"], cwd=str(store.clone), capture_output=True)
     dated = log.stdout.decode().strip() or "unknown"
     print(f"Restored the {'team' if args.team else 'personal'} store into {store.clone}.")
     print(f"Freshness: the package was made {days} day(s) ago and its latest change is dated {dated}; "

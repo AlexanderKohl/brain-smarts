@@ -17,6 +17,8 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Iterator
 
+import child_process  # the scripts folder is on sys.path wherever secret_store is importable
+
 from . import canonical
 from .accept_rules import REFUSAL_CODES, RuleRefusal
 from .errors import SecretStoreError
@@ -158,7 +160,7 @@ class SecretRepo:
 
     # -- git plumbing -------------------------------------------------------------------------
     def _git(self, *args: str, check: bool = True, cwd: Path | None = None) -> subprocess.CompletedProcess:
-        result = subprocess.run(["git", *args], cwd=str(cwd or self.path), capture_output=True)
+        result = child_process.run(["git", *args], cwd=str(cwd or self.path), capture_output=True)
         if check and result.returncode != 0:
             raise SecretStoreError(f"git {args[0]} failed")
         return result
@@ -324,7 +326,7 @@ class SecretRepo:
         the output is collected ends the child as subprocess.run does; the mark stays set."""
         command = ["git", "commit", "--quiet", "--no-verify", "-m", message]
         try:
-            child = subprocess.Popen(command, cwd=str(self.path), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            child = child_process.popen(command, cwd=str(self.path), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             self.commit_started = True
         except OSError:
             raise

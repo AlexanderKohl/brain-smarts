@@ -14,6 +14,8 @@ from typing import Any, Callable
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 
+import child_process  # the scripts folder is on sys.path wherever secret_store is importable
+
 from . import canonical, checkpoint, keys, provider_profiles, recovery, recovery_package, signing, static_fields
 from .accept import accept_commit
 from .accept_rules import RuleRefusal, coded
@@ -82,7 +84,7 @@ class SecretStore:
     def _remote_url(self) -> str:
         url = self.config["personal_repo_url"]
         if not url and (self.clone / ".git").is_dir():
-            result = subprocess.run(["git", "remote", "get-url", "origin"], cwd=str(self.clone), capture_output=True)
+            result = child_process.run(["git", "remote", "get-url", "origin"], cwd=str(self.clone), capture_output=True)
             url = result.stdout.decode().strip() if result.returncode == 0 else None
         if not url:
             raise SecretStoreError("no personal repository is configured; run init first")
@@ -98,7 +100,7 @@ class SecretStore:
     def _github_repository() -> str:
         """Create <login>/brain-secrets as a private repository, or reuse it when it is empty."""
         def gh(*args: str) -> subprocess.CompletedProcess:
-            return subprocess.run(["gh", *args], capture_output=True)
+            return child_process.run(["gh", *args], capture_output=True)
         login = gh("api", "user", "--jq", ".login")
         if login.returncode != 0 or not login.stdout.strip():
             raise SecretStoreError("GitHub sign-in through gh is needed first (gh auth login)")
