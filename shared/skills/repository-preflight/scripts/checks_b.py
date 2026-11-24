@@ -29,10 +29,19 @@ SOURCE_CITE = re.compile(r"(?:/memory/)?(?:raw|sources)/[A-Za-z0-9]")
 STATUS = re.compile(r"\bunverified\b|\bverified by\b", re.I)
 
 
-def added_knowledge_lines(memory: Path) -> list[tuple[str, str]]:
-    """Lines being added to KNOWLEDGE.md files: uncommitted changes, as a pre-commit run sees them."""
+def subject_files(index: Path) -> list[Path]:
+    """The subject files of a node whose knowledge is kept by subject: the Markdown in `knowledge/` beside
+    its KNOWLEDGE.md (CONTRACT section 4)."""
+    folder = index.parent / "knowledge"
+    return sorted(folder.glob("*.md")) if folder.is_dir() else []
+
+
+def added_knowledge_lines(memory: Path, subjects: bool = False) -> list[tuple[str, str]]:
+    """Lines being added to KNOWLEDGE.md files: uncommitted changes, as a pre-commit run sees them. With
+    `subjects`, also lines added to a subject file beside one."""
     import subprocess
-    diff = subprocess.run(["git", "diff", "HEAD", "--unified=0", "--", "*KNOWLEDGE.md"], cwd=memory,
+    specs = ["*KNOWLEDGE.md"] + (["*knowledge/*.md"] if subjects else [])
+    diff = subprocess.run(["git", "diff", "HEAD", "--unified=0", "--", *specs], cwd=memory,
                           capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
     current, found = "", []
     for line in diff.splitlines():
@@ -40,15 +49,18 @@ def added_knowledge_lines(memory: Path) -> list[tuple[str, str]]:
             current = line[6:]
         elif line.startswith("+") and not line.startswith("+++"):
             found.append((current, line[1:]))
+    if subjects:  # only a knowledge/ folder that sits beside a KNOWLEDGE.md holds subject files
+        found = [(path, line) for path, line in found
+                 if path.endswith("KNOWLEDGE.md") or (memory / path).parent.parent.joinpath("KNOWLEDGE.md").is_file()]
     return found
 
 
-def validate_knowledge_provenance(root: Path, errors: list[str]) -> None:
+def validate_knowledge_provenance(root: Path, errors: list[str], subjects: bool = False) -> None:
     """CONTRACT 11.6 rule 3: knowledge from outside content names its source and evidence status."""
     memory = root / "memory"
     if not (memory / ".git").exists():
         return
-    for path, line in added_knowledge_lines(memory):
+    for path, line in added_knowledge_lines(memory, subjects):
         if SOURCE_CITE.search(line) and not STATUS.search(line):
             errors.append(f"/memory/{path}: new knowledge cites a source without an evidence status "
                           f"(unverified, or verified by ...) (CONTRACT 11.6)")
@@ -57,11 +69,13 @@ def validate_knowledge_provenance(root: Path, errors: list[str]) -> None:
 REVIEW_BY = re.compile(r"review by (\d{4}-\d{2}-\d{2})")
 
 
-def validate_knowledge_review_dates(root: Path, errors: list[str], today: date | None = None) -> None:
+def validate_knowledge_review_dates(root: Path, errors: list[str], today: date | None = None,
+                                    subjects: bool = False) -> None:
     """CONTRACT section 4, KNOWLEDGE.md: a claim past its review date surfaces as an error."""
     today = today or date.today()
     for base in (root, root / "memory"):
-        for path in base.rglob("KNOWLEDGE.md"):
+        indexes = sorted(base.rglob("KNOWLEDGE.md"))
+        for path in [each for index in indexes for each in [index] + (subject_files(index) if subjects else [])]:
             if "raw" in path.parts or ".git" in path.parts:
                 continue
             if base == root and "memory" in path.relative_to(root).parts[:1]:

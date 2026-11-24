@@ -53,6 +53,43 @@ class ReviewDateTest(unittest.TestCase):
             self.assertEqual(len(errors), 1)
             self.assertIn("2026-09-25", errors[0])
 
+class SubjectFilesTest(unittest.TestCase):
+    def test_a_subject_file_is_checked_only_when_asked_and_only_beside_a_knowledge_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            node = root / "memory" / "projects" / "example"
+            (node / "knowledge").mkdir(parents=True)
+            (node / "KNOWLEDGE.md").write_text("- Subject files: `knowledge/pricing.md`.\n", encoding="utf-8")
+            (node / "knowledge" / "pricing.md").write_text("- The price is 5 (as of 2026-01-01; review by 2026-02-01)\n", encoding="utf-8")
+            stray = root / "memory" / "skills" / "example-access" / "knowledge"
+            stray.mkdir(parents=True)
+            (stray / "quirk.md").write_text("- Old (review by 2026-02-01)\n", encoding="utf-8")
+            errors = []
+            checks_b.validate_knowledge_review_dates(root, errors, today=date(2026, 9, 27))
+            self.assertEqual(errors, [])
+            checks_b.validate_knowledge_review_dates(root, errors, today=date(2026, 9, 27), subjects=True)
+            self.assertEqual(len(errors), 1)
+            self.assertTrue(errors[0].startswith("/memory/projects/example/knowledge/pricing.md:1: knowledge past its review date"))
+
+    def test_a_line_added_to_a_subject_file_needs_its_evidence_status(self):
+        with tempfile.TemporaryDirectory() as d:
+            memory = Path(d) / "memory"
+            node = memory / "projects" / "example"
+            (node / "knowledge").mkdir(parents=True)
+            (node / "KNOWLEDGE.md").write_text("- Index.\n", encoding="utf-8")
+            (node / "knowledge" / "pricing.md").write_text("- Start.\n", encoding="utf-8")
+            git = lambda *a: subprocess.run(["git", *a], cwd=memory, check=True, capture_output=True)
+            git("init", "-q")
+            git("add", "-A")
+            git("-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", "start")
+            (node / "knowledge" / "pricing.md").write_text("- Start.\n- From the quote (/memory/sources/quote-1.md).\n", encoding="utf-8")
+            errors = []
+            checks_b.validate_knowledge_provenance(Path(d), errors)
+            self.assertEqual(errors, [])
+            checks_b.validate_knowledge_provenance(Path(d), errors, subjects=True)
+            self.assertEqual(len(errors), 1)
+            self.assertIn("projects/example/knowledge/pricing.md: new knowledge cites a source", errors[0])
+
 
 if __name__ == "__main__":
     unittest.main()

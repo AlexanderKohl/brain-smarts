@@ -233,6 +233,29 @@ python shared/skills/repository-preflight/scripts/background.py list
   changing `hooks/events.json`; the file is git-ignored, so each checkout the owner opens sessions in
   regenerates its own.
 
+## Keeping state files short
+
+A node's `STATE.md` says what is true now (CONTRACT §4). `scripts/state.py` moves what a later
+checkpoint superseded out of it, unchanged, so that no agent reads a long file to tidy it:
+
+```bash
+python shared/skills/repository-preflight/scripts/state.py list <STATE.md>
+python shared/skills/repository-preflight/scripts/state.py history <STATE.md> --keep 1,3
+python shared/skills/repository-preflight/scripts/state.py detail <STATE.md> --entry 1 --name <thread>
+python shared/skills/repository-preflight/scripts/state.py check [--knowledge] [paths]
+```
+
+- `list` numbers the entries under `## Handover` with their sizes. An entry is a `### ` heading and
+  what follows it, or, in a section without such headings, a paragraph that opens in bold.
+- `history` moves the entries not kept (`--keep`), or those named (`--move`, `--move-matching`), to
+  `STATE-HISTORY.md` beside the state file, appended under the time of the move, and leaves one line
+  in the section saying where they went. Nothing is rewritten and nothing is deleted.
+- `detail` moves one entry's body to `HANDOVER-<thread>.md` beside the state file and leaves the
+  entry's first line with a pointer to it.
+- `check` names every node `STATE.md` (or, with `--knowledge`, every `KNOWLEDGE.md`) in the mechanics
+  and the memory that is longer than 28,000 characters, largest first, and exits 1 when there is
+  one. Given paths, it checks those files instead, which is how a project repository's are checked.
+
 ## Outputs
 
 - pass or fail result

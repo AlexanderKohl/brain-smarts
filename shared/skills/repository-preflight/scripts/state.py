@@ -13,6 +13,7 @@ it needs what happened earlier. Nothing is rewritten and nothing is deleted.
     state.py detail <STATE.md> --entry 1 --name N    move one entry's body to HANDOVER-<N>.md, keep its
                                                      first line and a pointer in the state file
     state.py check [--root <brain root>] [paths]     name every STATE.md longer than the limit; exit 1
+    state.py check --knowledge [paths]               the same for KNOWLEDGE.md files
 
 An entry is a `### ` heading and what follows it; in a section without such headings it is a
 paragraph that opens in bold (`**Checkpoint of ...`) after a blank line, and what follows it.
@@ -208,6 +209,38 @@ def state_files(root: Path) -> list[Path]:
     return sorted(found)
 
 
+def knowledge_files(root: Path) -> list[Path]:
+    """Every node's KNOWLEDGE.md under a brain root: the index of its knowledge, read whole."""
+    found: list[Path] = []
+    for base in (root / "systems", root / "memory"):
+        if base.is_dir():
+            found += [path for path in base.rglob("KNOWLEDGE.md")
+                      if not {"raw", "templates"} & set(path.relative_to(root).parts)
+                      and not any(p.startswith(".") for p in path.relative_to(root).parts)]
+    if (root / "KNOWLEDGE.md").is_file():
+        found.append(root / "KNOWLEDGE.md")
+    return sorted(found)
+
+
+def shown(root: Path, path: Path) -> str:
+    return "/" + path.relative_to(root).as_posix()
+
+
+def validate_state_sizes(root: Path, errors: list[str]) -> None:
+    """SMART-RULE-0019: a node's STATE.md in the mechanics or the memory is short enough to be read whole."""
+    for path, size in oversized(state_files(root)):
+        errors.append(f"{shown(root, path)}: {size:,} characters, over the {LIMIT:,} a host shows whole; move superseded "
+                      "handover entries to the history file beside it with scripts/state.py history, or a long entry's "
+                      "detail to a handover file with scripts/state.py detail (SMART-RULE-0019)")
+
+
+def validate_knowledge_sizes(root: Path, errors: list[str]) -> None:
+    """CONTRACT section 4: a KNOWLEDGE.md in the mechanics or the memory is short enough to be read whole."""
+    for path, size in oversized(knowledge_files(root)):
+        errors.append(f"{shown(root, path)}: {size:,} characters, over the {LIMIT:,} a host shows whole; keep the "
+                      "knowledge by subject under knowledge/ and make this file its index (CONTRACT section 4)")
+
+
 def oversized(paths: list[Path], limit: int = LIMIT) -> list[tuple[Path, int]]:
     out = []
     for path in paths:
@@ -221,11 +254,12 @@ def oversized(paths: list[Path], limit: int = LIMIT) -> list[tuple[Path, int]]:
 
 
 def cmd_check(args: argparse.Namespace) -> int:
-    paths = [Path(p) for p in args.paths] or state_files(args.root)
+    paths = [Path(p) for p in args.paths] or (knowledge_files(args.root) if args.knowledge else state_files(args.root))
     over = oversized(paths, args.limit)
     for path, size in over:  # largest first: the one that costs a reader most
         print(f"{size:>9,}  {path}")
-    print(f"{len(over)} of {len(paths)} state files are over {args.limit:,} characters")
+    kind = "knowledge" if args.knowledge else "state"
+    print(f"{len(over)} of {len(paths)} {kind} files are over {args.limit:,} characters")
     return 1 if over else 0
 
 
@@ -252,6 +286,7 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("check")
     p.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[4])
     p.add_argument("--limit", type=int, default=LIMIT)
+    p.add_argument("--knowledge", action="store_true", help="check KNOWLEDGE.md files instead of STATE.md files")
     p.add_argument("paths", nargs="*")
     p.set_defaults(run=cmd_check)
     args = parser.parse_args(argv)

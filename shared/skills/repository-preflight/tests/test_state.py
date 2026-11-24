@@ -163,6 +163,30 @@ class StateTest(unittest.TestCase):
         assert run("history", str(path), "--keep", "1")[0] == 2
         assert path.read_text(encoding="utf-8") == FRONT and not (tmp_path / state.HISTORY).exists()
 
+    def test_the_size_validators_name_what_is_too_long_and_nothing_else(self):
+        root = Path(self.tmp.name)
+        node = root / "memory" / "projects" / "long"
+        node.mkdir(parents=True)
+        (node / "STATE.md").write_text("x" * (state.LIMIT + 1), encoding="utf-8")
+        (node / "KNOWLEDGE.md").write_text("y" * state.LIMIT, encoding="utf-8")
+        (root / "memory" / "tasks").mkdir()
+        (root / "memory" / "tasks" / "STATE.md").write_text("x" * (state.LIMIT * 2), encoding="utf-8")
+        errors: list[str] = []
+        state.validate_state_sizes(root, errors)
+        self.assertEqual(len(errors), 1)
+        self.assertTrue(errors[0].startswith("/memory/projects/long/STATE.md: 28,001 characters"))
+        self.assertIn("state.py history", errors[0])
+        errors = []
+        state.validate_knowledge_sizes(root, errors)
+        self.assertEqual(errors, [])
+        (node / "KNOWLEDGE.md").write_text("y" * (state.LIMIT + 5), encoding="utf-8")
+        state.validate_knowledge_sizes(root, errors)
+        self.assertEqual(len(errors), 1)
+        self.assertTrue(errors[0].startswith("/memory/projects/long/KNOWLEDGE.md: 28,005 characters"))
+        code, out = run("check", "--knowledge", "--root", str(root))
+        self.assertEqual(code, 1)
+        self.assertIn("1 of 1 knowledge files", out)
+
 
 if __name__ == "__main__":
     unittest.main()
