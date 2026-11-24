@@ -429,18 +429,46 @@ def commit_regenerated(repos: list[tuple[str, Path, Path]]) -> None:
             print(f"{repo_name}: regenerated files committed")
 
 
+def not_ready(root: Path, copy: Path) -> str | None:
+    """Why a finish of this copy cannot start, or None: no copy there, or uncommitted changes in it."""
+    repos = session_repos(root, copy)
+    if not repos:
+        return f"no session copy at {copy}"
+    for repo_name, _, path in repos:
+        if git(path, "status", "--porcelain").stdout.strip():
+            return f"{repo_name}: uncommitted changes in {path}; commit or discard them first"
+    return None
+
+
+def finish_in_background(root: Path, name: str, folder: Path, keep: bool) -> int:
+    """`finish --background`: refuse at once what can be refused at once, then start the ordinary
+    finish as a job of its own (background.py) and return, so the reply does not wait for the
+    merge, the checks and the pushes. A failure is reported by the per-prompt hook."""
+    import background
+    problem = not_ready(root, folder / name)
+    if problem:
+        print(problem)
+        return 1
+    command = [sys.executable, str(Path(__file__).resolve()), "--root", str(root), "finish", name,
+               "--sessions", str(folder)] + (["--keep"] if keep else [])
+    try:
+        record = background.start(root, "finish", name, command, root)
+    except (OSError, RuntimeError, ValueError) as error:
+        print(f"finish not started: {error}")
+        return 1
+    print(f"finish of {name} started in the background: merge, checks and pushes run on; a failure is "
+          f"reported at the next prompt. Do not commit in the copy until it has ended. Record: {record}")
+    return 0
+
+
 def cmd_finish(root: Path, name: str, folder: Path, keep: bool, preflight: bool) -> int:
     copy = folder / name
     branch = f"session/{name}"
-    repos = session_repos(root, copy)
-    if not repos:
-        print(f"no session copy at {copy}")
+    problem = not_ready(root, copy)
+    if problem:
+        print(problem)
         return 1
-    for repo_name, _, path in repos:
-        dirty = git(path, "status", "--porcelain").stdout.strip()
-        if dirty:
-            print(f"{repo_name}: uncommitted changes in {path}; commit or discard them first")
-            return 1
+    repos = session_repos(root, copy)
     refresh(copy)
     commit_regenerated(repos)
     base = {repo_name: base_ref(repo) for repo_name, repo, _ in repos}
@@ -535,6 +563,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--sessions", type=Path, default=None)
     p.add_argument("--keep", action="store_true", help="merge and push, but keep the copy for more work")
     p.add_argument("--no-preflight", action="store_true", help=argparse.SUPPRESS)
+    p.add_argument("--background", action="store_true",
+                   help="start the finish as a job of its own and return at once (background.py)")
     sub.add_parser("list")
     args = parser.parse_args(argv)
     try:
@@ -548,6 +578,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "start":
         return cmd_start(root, args.name, sessions_folder(root, args.sessions))
     if args.command == "finish":
+        if args.background:
+            return finish_in_background(root, args.name, sessions_folder(root, args.sessions), args.keep)
         return cmd_finish(root, args.name, sessions_folder(root, args.sessions), args.keep, not args.no_preflight)
     return cmd_list(root)
 

@@ -268,6 +268,10 @@ def pre_commit(repo: Path) -> int:
     if refusal:
         print(refusal, file=sys.stderr)
         return 1
+    busy = finish_running(repo)
+    if busy:
+        print(busy, file=sys.stderr)
+        return 1
     layer = layer_of(repo, root)
     check = subprocess.run([sys.executable, str(root / "shared/skills/repository-preflight/scripts/preflight.py"),
                             "--root", str(root), "--layer", layer], cwd=root, capture_output=True, text=True,
@@ -277,6 +281,26 @@ def pre_commit(repo: Path) -> int:
               + check.stdout[-3000:], file=sys.stderr)
         return 1
     return 0
+
+
+def finish_running(repo: Path) -> str | None:
+    """A commit in a session copy whose finish runs in the background is refused: the finish is
+    merging `main` into that copy, and a commit made beside it would be left out of the merge or
+    collide with it. The finish's own commits carry BRAIN_BACKGROUND_JOB and pass."""
+    import background
+    if os.environ.get(background.JOB_ENV):
+        return None
+    branch = git(repo, "rev-parse", "--abbrev-ref", "HEAD").strip()
+    if not branch.startswith("session/"):
+        return None
+    common = git(repo, "rev-parse", "--path-format=absolute", "--git-common-dir").strip()
+    shared = brain_root_above(Path(common).parent) if common else None
+    name = branch.removeprefix("session/")
+    if shared is None or not background.running(shared, "finish", name):
+        return None
+    return (f"pre-commit: the finish of session copy {name} is still running in the background and is merging "
+            "into this copy.\nCommit again when it has ended: python "
+            "shared/skills/repository-preflight/scripts/background.py list")
 
 
 def brain_root_above(start: Path) -> Path | None:
@@ -398,7 +422,8 @@ CONTEXT_CHECK_EVENT = {
     "git": None,
     "command": "shared/skills/repository-preflight/scripts/hooks.py context-check",
     "note": "silent below the threshold; at or above it, one instruction per 50 000 further tokens to finish the "
-            "step, write the checkpoint and end the reply with the handover prompt (SMART-RULE-0019)",
+            "step, write the checkpoint and end the reply with the handover prompt (SMART-RULE-0019); the same "
+            "command reports a background job that failed or is still running (background.py), silent otherwise",
 }
 
 
@@ -723,7 +748,10 @@ def main(argv: list[str]) -> int:
     elif command == "post-compact":
         return guarded("post-compact", lambda: post_compact(*hook_input()))
     elif command == "context-check":
-        return guarded("context-check", lambda: context_check(hook_input()[0]))
+        # The per-prompt hook carries two things, each guarded on its own: the context warning, and
+        # what became of work left running after an earlier reply (background.py).
+        guarded("context-check", lambda: context_check(hook_input()[0]))
+        return guarded("background-report", lambda: __import__("background").report(ROOT))
     else:
         print(__doc__)
         return 2

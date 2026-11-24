@@ -146,9 +146,18 @@ after the upstream proposal's window has closed stops at the preflight and pushe
 
 ```bash
 python shared/skills/repository-preflight/scripts/session.py start <name>
-python shared/skills/repository-preflight/scripts/session.py finish <name> [--keep]
+python shared/skills/repository-preflight/scripts/session.py finish <name> [--keep] [--background]
 python shared/skills/repository-preflight/scripts/session.py list
+python shared/skills/repository-preflight/scripts/background.py list
 ```
+
+- `finish --background` refuses at once what it can refuse at once (no copy, uncommitted
+  changes), starts the same finish as a process of its own and returns (`scripts/background.py`).
+  The job's record and output are in `/temp/background/` of the shared checkout. The per-prompt
+  hook (`hooks.py context-check`) reports a job that failed, once, with the end of its output, and
+  names one that is still running; a job that ended well says nothing. While it runs, the
+  pre-commit hook refuses a commit in that copy. An agent uses it only where a rule allows the
+  reply to go out before the push (`PROPOSAL-answer-first-deliver-after`, proposed 24 November 2026).
 
 - `start` makes `<sessions folder>/<name>/`: a worktree of the mechanics on branch
   `session/<name>` from the latest `origin`, with `library/` and `memory/` inside it as worktrees
