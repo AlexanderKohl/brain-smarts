@@ -159,6 +159,10 @@ python shared/skills/repository-preflight/scripts/background.py list
   pre-commit hook refuses a commit in that copy. An agent uses it only where a rule allows the
   reply to go out before the push (`PROPOSAL-answer-first-deliver-after`, proposed 24 November 2026).
 
+- `start` also prints one line, beginning `waiting:`, for every other session copy whose commits
+  have waited more than twelve hours to reach `main`, with the command that merges and pushes
+  them: the work a closed or archived thread left behind is found by the next one that starts.
+
 - `start` makes `<sessions folder>/<name>/`: a worktree of the mechanics on branch
   `session/<name>` from the latest `origin`, with `library/` and `memory/` inside it as worktrees
   of those repositories on the same branch. The sessions folder is `<brain root>-sessions` beside

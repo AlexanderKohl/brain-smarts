@@ -398,6 +398,29 @@ class SessionTests(unittest.TestCase):
         self.assertIn("| alpha | memory | 1 | 0 |", out)
         self.assertIn("| alpha | mechanics | 0 | 0 |", out)
 
+    def test_start_names_the_committed_work_another_thread_left_unpushed(self):
+        copy = self.start("left")
+        write(copy / "memory" / "left.md", "committed, never merged\n")
+        with mock.patch.dict(os.environ, {"GIT_COMMITTER_DATE": "2020-01-01T09:00:00"}):
+            commit_all(copy / "memory", "left behind when the thread was archived")
+        write(copy / "library" / "fresh.md", "of this hour\n")
+        commit_all(copy / "library", "still being worked on")
+        fresh = self.start("fresh")
+        write(fresh / "memory" / "now.md", "a minute old\n")
+        commit_all(fresh / "memory", "work of this hour")
+        code, out = cli("--root", str(self.shared), "start", "next", "--sessions", str(self.sessions))
+        self.assertEqual(code, 0, out)
+        self.assertIn("waiting: session copy left holds 2 commit(s) not on origin, the oldest of 2020-01-01 09:00", out)
+        self.assertIn("session.py finish left --keep", out)
+        self.assertNotIn("session copy fresh", out)              # an hour-old commit is not waiting yet
+        self.assertEqual(session.waiting(self.shared, self.sessions, skip="left"), [])
+        self.assertEqual(len(session.waiting(self.shared, self.sessions, hours=0)), 2)
+        gone = session.waiting(self.shared, self.base / "nowhere")
+        self.assertIn("waiting: branch session/left holds 2 commit(s)", gone[0])
+        self.assertIn("has no session copy; tell the owner", gone[0])
+        self.assertEqual(self.finish("left", "--keep")[0], 0)   # once merged, nothing waits
+        self.assertEqual(session.waiting(self.shared, self.sessions), [])
+
 
 class ChildOutputTests(unittest.TestCase):
     """A helper script's output reaches session.py intact, whatever encoding the child writes."""

@@ -29,7 +29,8 @@ copy for the next unit of work.
 as above, so the merge happens in the copy and the shared checkout only fast-forwards.
 
 `list` shows every session copy, its age and the commits not yet in `main`, so work left by a
-session that ended is found and finished rather than lost.
+session that ended is found and finished rather than lost. `start` names, in one line each, every
+other session copy whose commits have waited more than twelve hours to reach `main` (`waiting`).
 
 It never force-pushes, never rebases, never removes a worktree with unmerged commits or uncommitted
 changes, and never merges inside the shared checkout. Exit code 0 on success, 1 when something needs attention.
@@ -56,6 +57,7 @@ NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,59}$")
 NESTED = ("library", "memory")   # nested repositories, in the order they are made
 ATTEMPTS = 3                     # merge-check-push rounds before a refused push is reported
 REFUSED = ("[rejected]", "non-fast-forward", "fetch first")   # git's words for "origin moved on"
+WAITING_HOURS = 12               # committed work older than this and not in main is named by `start`
 
 # Generated files a merge may conflict on, per repository: the pattern and the command that
 # rebuilds them, run from the session root. A conflict in any other file stops `finish`. Every
@@ -185,6 +187,8 @@ def cmd_start(root: Path, name: str, folder: Path, start_at: dict[str, str] | No
     subprocess.run([sys.executable, str(copy / "shared/skills/repository-preflight/scripts/hooks.py"),
                     "install"], cwd=copy, capture_output=True)
     print(f"session copy: {copy}")
+    for line in waiting(root, folder, skip=name):          # work a thread left when it stopped
+        print(line)
     # CONTRACT §1: the escalation from a scoped to a full bootstrap happens here, before the first write.
     print("before the first write, do the full bootstrap (CONTRACT §1): read /CORE.md, /CORE-RULES.md, /memory/OWNER.md, "
           "/memory/RULES.md and node RULES.md files down to the active node, then its README.md and STATE.md")
@@ -525,6 +529,45 @@ def merge_diverged(root: Path, repo_name: str, repo: Path) -> tuple[bool, str, l
         if code == 0:
             code = cmd_finish(root, name, folder, keep=False, preflight=True)
     return code == 0, str(folder / name), [line for line in out.getvalue().splitlines() if line]
+
+
+def waiting(root: Path, folder: Path, hours: float | None = None, skip: str | None = None) -> list[str]:
+    """One line per session branch whose commits have waited more than `hours` to reach `main`.
+
+    A thread that is closed, archived or handed over has no moment of its own at which to push
+    (SMART-RULE-0009), so the next session that starts finds what it left: `start` prints these
+    lines. The age is that of the oldest commit not in `main`; a branch is named once, with its
+    commits in all three repositories counted together. A commit counts when its change is not in
+    `main` (`git cherry`): a merge of `origin` into the branch, and a branch of an older history
+    whose every change `main` already holds, are not waiting. Read-only; one Git call per
+    repository when nothing waits."""
+    limit = (WAITING_HOURS if hours is None else hours) * 3600
+    now = datetime.datetime.now().timestamp()
+    found: dict[str, list[int]] = {}
+    for _, repo in repositories(root):
+        base = base_ref(repo)
+        ahead = git(repo, "for-each-ref", f"--format=%(refname:short) %(ahead-behind:{base})", "refs/heads/session/")
+        if ahead.returncode == 0:
+            branches = [row.split()[0] for row in ahead.stdout.splitlines() if row.split()[1:2] not in ([], ["0"])]
+        else:                                              # a Git older than 2.41: ask about every branch
+            branches = git(repo, "for-each-ref", "--format=%(refname:short)", "refs/heads/session/").stdout.split()
+        for branch in branches:
+            own = [row[2:] for row in git(repo, "cherry", base, branch).stdout.splitlines() if row.startswith("+ ")]
+            if own:
+                times = git(repo, "log", "--no-walk", "--format=%ct", *own).stdout.split()
+                found.setdefault(branch.removeprefix("session/"), []).extend(int(t) for t in times)
+    lines = []
+    for name, times in sorted(found.items()):
+        if name == skip or now - min(times) <= limit:
+            continue
+        oldest = datetime.datetime.fromtimestamp(min(times)).strftime("%Y-%m-%d %H:%M")
+        held = f"holds {len(times)} commit(s) not on origin, the oldest of {oldest} (SMART-RULE-0009)"
+        if (folder / name).is_dir():
+            lines.append(f"waiting: session copy {name} {held}; merge and push them: python "
+                         f"shared/skills/repository-preflight/scripts/session.py finish {name} --keep")
+        else:
+            lines.append(f"waiting: branch session/{name} {held} and has no session copy; tell the owner")
+    return lines
 
 
 def cmd_list(root: Path) -> int:
