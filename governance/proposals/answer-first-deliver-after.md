@@ -7,13 +7,15 @@ contract: /CONTRACT.md
 status: proposed
 owner: brain-owner
 created: 2026-11-24T11:42:01+10:00
-updated: 2026-11-24T13:09:35+10:00
+updated: 2026-11-24T13:22:15+10:00
 rule_id: SMART-RULE-0009
 previous_contract_version: 3.3.0
 new_contract_version: 3.3.0
 target_files:
   - /RULES.md
   - /CORE-RULES.md
+  - /shared/skills/repository-preflight/scripts/core.py
+  - /shared/skills/repository-preflight/SKILL.md
 ---
 
 # The reply does not wait for the merge and the push
@@ -182,3 +184,63 @@ Restore the three bullets to their current wording and regenerate the core files
 - The repository preflight on the amended `/RULES.md` and the regenerated core files.
 - Not provable by a test: that every host passes the per-prompt hook's text to the model. Claude
   Code desktop was seen to do so on 23 November 2026.
+
+## Amendment of 2026-11-24T13:22:15+10:00: the core file's limit
+
+The owner accepted this proposal as revised on 24 November 2026 at 13:18 (+10:00), answering "I
+accept" to "Do you accept PROPOSAL-answer-first-deliver-after as revised?". Applying it showed a
+consequence this proposal had not disclosed, so nothing was applied (CONTRACT §13.2, last
+paragraph) and this amendment is put to the owner.
+
+**What was found.** `SMART-RULE-0009` and `SMART-RULE-0014` are rules that always apply, so their
+text is copied into `/CORE-RULES.md`. With the accepted wording that file is 29,244 characters.
+The validator fails a core file longer than 28,000 (`LIMIT` in `scripts/core.py`), and the file
+was at 27,214 before. The limit exists because a host replaces a long shell output with a short
+preview: measured on 30 September 2026, 29,000 characters were shown whole and 31,000 were cut,
+and some agents read the core through a shell although the contract says to use the file-reading
+tool. The shortest wording that keeps the accepted meaning still comes to about 28,100, so
+shortening alone does not fit.
+
+**Measured on 24 November 2026.** The 29,244-character file, printed through the shell of Claude
+Code desktop, arrived whole, to its last line.
+
+**Proposed in addition (recommended).** The limit becomes 29,500 characters. The accepted wording
+stays word for word.
+
+`/shared/skills/repository-preflight/scripts/core.py`, current:
+
+```python
+# Claude Code showed 29,000 characters of a shell output whole and cut 31,000 (TASK-2026-0003, 30 September 2026).
+LIMIT = 28_000
+```
+
+Proposed:
+
+```python
+# Claude Code showed 29,000 characters of a shell output whole and cut 31,000 (TASK-2026-0003, 30 September 2026);
+# Claude Code desktop showed 29,244 whole on 24 November 2026 (PROPOSAL-answer-first-deliver-after).
+LIMIT = 29_500
+```
+
+`/shared/skills/repository-preflight/SKILL.md`, *Failure behaviour*, the bullet **the core is
+current**: "or when either is longer than 28,000 characters" becomes "or when either is longer
+than 29,500 characters". Nothing else in that bullet changes.
+
+**Consequence and risk.** The room between the core file and the point where a host cuts a shell
+output shrinks from about 2,000 characters to about 500. An agent that reads the core with the
+file-reading tool, as the contract says, is not affected. `/CORE-RULES.md` is then 256 characters
+under its limit, so the next rule that always applies will not fit unless the core is made
+shorter first; a task for that is created when this is accepted.
+
+**Other ways, not recommended.**
+
+1. Move a rule out of the rules that always apply, so its text leaves the core.
+   `SMART-RULE-0027` (*Every list has a deliberate order*) frees 1,331 characters and leaves 87
+   to spare; `SMART-RULE-0034` (*Start from the latest*) frees 2,775. Either is then read only
+   in the situation its row names, and is followed less reliably.
+2. Keep one line of each new bullet in `SMART-RULE-0009` and move the rest into the repository
+   preflight skill. The core then fits with about 200 characters to spare, and the wording the
+   owner accepted has to be written and accepted again.
+
+**Rollback.** Restore `LIMIT = 28_000` and the sentence in the skill, and take the wording of this
+proposal out of `/RULES.md`.
