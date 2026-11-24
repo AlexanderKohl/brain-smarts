@@ -4,10 +4,13 @@ title: One answer where two rules disagreed
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: proposed
+status: implemented
 owner: brain-owner
+accepted_by: brain-owner
+accepted_at: 2026-11-24T16:50:23+10:00
+implemented_at: 2026-11-24T16:51:31+10:00
 created: 2026-11-24T14:41:50+10:00
-updated: 2026-11-24T14:41:50+10:00
+updated: 2026-11-24T16:51:31+10:00
 previous_contract_version: 3.3.0
 new_contract_version: 3.3.0
 target_files:
