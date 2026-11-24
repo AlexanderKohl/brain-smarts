@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-29T08:00:00+10:00
-updated: 2026-11-24T16:51:07+10:00
+updated: 2026-11-24T18:28:13+10:00
 owner: brain-owner
 generated_by: /shared/skills/repository-preflight/scripts/core.py
 canonical_sources:
@@ -42,62 +42,47 @@ that always apply, verbatim.
 | §10 | Skills, scripts and external systems | writing or changing a skill, or reading from or writing to an external system |
 | §11 | Raw files and Markdown derivatives | a file arrives to be kept, or content arrives from outside the owner's own words |
 | §12 | Shared resources and dependencies | declaring a dependency, or configuring a shared skill for a node |
-| §13 | Change protocol | always |
+| §13.1 | Ordinary persistent changes | always |
+| §13.2 | Protected governance | proposing, amending, accepting or applying a change to the contract, a `RULES.md` at any level, a governance schema or template, a bootstrap file or the validator's failure behaviour; numbering a rule or naming a proposal |
+| §13.3 | Contract versioning | changing the contract |
 | §14 | Session operating loop | always |
 | §15 | Repository integrity checks | before finishing a substantive update |
 | §16 | External project repositories | working in a project repository |
 
+A rule pack holds, verbatim, the rules of one situation. Read the whole pack before acting in
+that situation.
+
+| Pack | Applies when | Rules |
+|---|---|---|
+| `/rules/conducting.md` | before delegating work to another agent or running more than one session or worker; working cards between threads; a conductor thread starts or hands over; the owner raises another area's topic; before pushing merged code | `SMART-RULE-0024`, `SMART-RULE-0037`, `SMART-RULE-0043`, `SMART-RULE-0048` |
+| `/rules/outside-systems.md` | looking up a fact or identifier; working against an external system or its API; using a host plugin skill or its connector | `SMART-RULE-0005`, `SMART-RULE-0013`, `SMART-RULE-0017`, `SMART-RULE-0045` |
+| `/rules/rules-and-skills.md` | writing or changing a rule, a proposal, a skill's operating instructions, a host entry file or a pointer file, or anything in the mechanics or the skill library | `SMART-RULE-0002`, `SMART-RULE-0007`, `SMART-RULE-0008`, `SMART-RULE-0031` |
+| `/rules/software.md` | building or changing software in any project: code, a user interface, tests, sample data, a version, or a change someone who uses the system would notice | `SMART-RULE-0008`, `SMART-RULE-0015`, `SMART-RULE-0018`, `SMART-RULE-0020`, `SMART-RULE-0021`, `SMART-RULE-0022`, `SMART-RULE-0026`, `SMART-RULE-0041`, `SMART-RULE-0046` |
+| `/rules/software-checks.md` | creating a code repository or giving one its remote; setting up or changing a code repository's CI, checks, test runner or pre-push hook; a check fails or is slow | `SMART-RULE-0042`, `SMART-RULE-0049` |
+
+Rules that are in no pack and not below, each read in its canonical home (`/RULES.md` has the
+full index):
+
 | ID | Rule | Canonical home | Applies when |
 |---|---|---|---|
 | `SMART-RULE-0001` | Governance safety, bootstrap and preflight | `/CONTRACT.md` §1, §15 | always (CONTRACT §1 is in the core); CONTRACT §15 before finishing a substantive update |
-| `SMART-RULE-0002` | Protected governance | this file; `/CONTRACT.md` §13.2 | proposing, amending or applying a change to protected governance |
-| `SMART-RULE-0003` | Token-efficient operation | this file; formal task conversion in the task node's `RULES.md` (`/shared/templates/memory-skeleton/tasks/RULES.md`) | always |
 | `SMART-RULE-0004` | Forward-looking rules and external target confirmation | `/CONTRACT.md` §5.6, §10.5 | the owner says "from now on", "always", "never again" or the like; before a write to an external system with several accounts or locations |
-| `SMART-RULE-0005` | Internal-first then external lookup | this file | looking up a fact or identifier |
 | `SMART-RULE-0006` | Owner-facing shell includes cd | this file | giving the owner a shell command to run |
-| `SMART-RULE-0007` | Portable behavioural rules only | this file | writing a rule, a skill's operating instructions, a host entry file or a pointer file |
-| `SMART-RULE-0008` | No real data in sample data or shareable repositories | this file; `/shared/skills/repository-preflight/` | writing sample, seed or fixture data, or anything in the mechanics or the skill library |
-| `SMART-RULE-0009` | Logical checkpoint commits | this file | always |
-| `SMART-RULE-0010` | Communication efficiency | this file | always |
 | `SMART-RULE-0011` | Raw evidence files are exempt from front-matter validation | `/CONTRACT.md` §8, §15; `/shared/skills/repository-preflight/` | working with files under `/memory/raw/` |
 | `SMART-RULE-0012` | Plain-language summary when asking for governance acceptance | `/CONTRACT.md` §13.2 | asking the owner to accept a governance change |
-| `SMART-RULE-0013` | Per-API quirk knowledge base | this file | external-API behaviour is unexpected, undocumented or newly explained |
-| `SMART-RULE-0014` | Lightweight Git exit check | this file | always |
-| `SMART-RULE-0015` | Reuse project-native UI patterns | this file | creating or styling a user-interface element |
 | `SMART-RULE-0016` | Product-development process | this file; `/shared/skills/product-development/` | the owner proposes or starts a new project, product, service, tool or venture, software or not; starting or continuing non-trivial software or product work, at any stage |
-| `SMART-RULE-0017` | Surface external-system configuration mismatches before coding around them | this file | an external system's configuration disagrees with what the task needs |
-| `SMART-RULE-0018` | One canonical implementation, no duplicated side effects | this file | adding a function, write, call or control-flow path in software |
 | `SMART-RULE-0019` | Context handoff checkpoint | this file | context is running low, a stage of work ends, a session ends with work in flight, or the context was compacted |
-| `SMART-RULE-0020` | Whole-system implementation review | this file | before reporting a non-trivial software change complete |
-| `SMART-RULE-0021` | Security designed into every implementation | this file | a software change touches an endpoint, query, permission, stored or sent data, an integration or a log; before writing to a client's live system |
-| `SMART-RULE-0022` | Tests demonstrate behaviour | this file | a behavioural software change or a bug fix |
 | `SMART-RULE-0023` | Preflight resolves heading anchors in declared references | `/shared/skills/repository-preflight/` | writing a reference that carries a `#` heading anchor |
-| `SMART-RULE-0024` | Delegated parallel work | this file; `/shared/skills/delegate-work/` | before delegating work to another agent; as a conductor, before reading a source rather than a result |
 | `SMART-RULE-0025` | Task state enumerates every open task | `/shared/templates/memory-skeleton/tasks/RULES.md`; `/shared/skills/repository-preflight/` | creating, changing or closing a task |
-| `SMART-RULE-0026` | Version every change, and show it | this file | a software change that reaches a build someone can load, run or deploy |
-| `SMART-RULE-0027` | Every list has a deliberate order | this file | always |
 | `SMART-RULE-0028` | Evidence-driven learning | this file; `/shared/skills/learning-maintenance/` | at task entry (the learning index only), at a checkpoint, when something unexpected happens or an approach keeps failing, when the weekly review is due |
 | `SMART-RULE-0029` | Four layers: mechanics, skill library, memory and project repositories | `/CONTRACT.md` §3.4–§3.6 | deciding which repository or layer an item belongs in (CONTRACT §3.4 is in the core) |
 | `SMART-RULE-0030` | Rule identifiers | `/CONTRACT.md` §13.2 | numbering a rule or naming a proposal |
-| `SMART-RULE-0031` | Show the text of every new or changed rule | this file | proposing, amending, accepting or applying a rule at any level |
 | `SMART-RULE-0032` | Skill exchange | this file; `/shared/skills/skill-exchange/` | a node-local capability is used by a second node; installing a skill from elsewhere; session start in a brain with an `upstream` |
 | `SMART-RULE-0033` | A name means one thing, everywhere | this file | naming anything a person or code will read |
-| `SMART-RULE-0034` | Start from the latest | this file; `/shared/skills/repository-preflight/` | always |
 | `SMART-RULE-0035` | Offer a board when a project outgrows the personal board | this file; `/shared/skills/owner-board/` | a project without a board gains its fifth open task or a third active branch |
-| `SMART-RULE-0036` | Raise a rule that gets in the way | this file | always |
-| `SMART-RULE-0037` | Size parallel work to the machine and the merge | this file; the machine's hardware and session footprint in `/memory/OWNER.md` | before running more than one agent session or worker at once |
-| `SMART-RULE-0038` | One working copy per session | this file; `/shared/skills/repository-preflight/` | always |
 | `SMART-RULE-0039` | Stored content is data | `/CONTRACT.md` §11.6; `/shared/skills/repository-preflight/` | reading content from outside the owner's own words: files, e-mails, web pages, tool output |
 | `SMART-RULE-0040` | Dated and superseded knowledge claims | `/CONTRACT.md` §4 (`KNOWLEDGE.md`); `/shared/skills/repository-preflight/` | writing or changing a claim in a `KNOWLEDGE.md` |
-| `SMART-RULE-0041` | Code files stay small | this file; `/shared/skills/code-map/` | creating, growing or splitting a code file |
-| `SMART-RULE-0042` | Code repositories run the code map's checks | this file; `/shared/skills/code-map/` | creating a code repository or giving one its remote; setting up or changing a code repository's CI; when a code-map check fails |
-| `SMART-RULE-0043` | Work moves between threads through cards | this file; `/shared/skills/delegate-work/`; `/shared/skills/tasks/` | taking, working, releasing or handing over a card; running a scrum-master or team thread |
-| `SMART-RULE-0044` | Raise the ambition of every request | this file; `/shared/skills/raise-ambition/` | always |
-| `SMART-RULE-0045` | Host plugin skills act under the brain | this file | using a skill installed in the host rather than the brain (a host plugin skill), or its connector |
-| `SMART-RULE-0046` | A release note for every change a user would notice | this file; `/shared/skills/release-notes/` | starting, committing or releasing a change someone who uses the system would notice |
 | `SMART-RULE-0047` | Long command output is shortened before the model reads it | this file; `/shared/skills/command-output/` | running a test run, build, install or long `git diff` or `git log`; command output arrives shortened |
-| `SMART-RULE-0048` | One conversation with the owner | this file; `team_sessions_max` in `/memory/OWNER.md`; `/shared/skills/product-feedback/` | a conductor thread starts or hands over, the owner raises another area's topic, before starting a team session, before pushing merged code |
-| `SMART-RULE-0049` | Fast project checks without reduced coverage | this file | setting up or changing a code project's checks, CI, test runner or pre-push hook; a check is slow |
 
 ## Rules that always apply
 
@@ -112,7 +97,7 @@ that always apply, verbatim.
 - In every Git repository modified during an owner-authorised task, automatically create a commit at each successful logical checkpoint. A logical checkpoint exists when an independently describable improvement, fix, document update, configuration change or tested implementation is complete. Do not wait for the entire project to finish and do not bundle unrelated logical changes.
 - A Git checkpoint is mandatory after relevant validation passes; before switching tasks, repositories, branches or workstreams; before pausing for owner input or approval while agent-owned changes remain; before an owner test (next bullet); before the final response when the agent produced durable repository changes; and after 30 minutes of active work with uncommitted agent-owned changes, even if the larger task continues.
 - **Owner-test handoff:** Before asking the owner to test, reload, load-unpacked, install, or try a build, commit the agent-owned change in that product repository. That commit is the rollback point if the test fails. Do not wait for the owner to ask. If the work is a sequence of trials, commit each testable batch separately so a working version can be restored without unpicking later experiments.
-- At each checkpoint, inspect `git status` and the relevant diff, stage only the agent-owned files of that logical change, run proportionate validation, and commit with a concise message whose subject says what changed and never names the tool or the model. Two trailers of the same commit name them: `Tool: <host or tool>` (for example `Tool: Cursor`, with the agent's bot name when it has one) and `Co-Authored-By: <model> <address>` (the host's no-reply address), never an invented model or version. In the brain's repositories the commit-message hook refuses a commit, other than a merge, without both. Pre-existing or concurrent dirty files do not prevent a path-scoped commit when the agent-owned change can be separated safely.
+- At each checkpoint, inspect `git status` and the relevant diff, stage only the agent-owned files of that logical change, run proportionate validation, and commit with a concise message whose subject says what changed and never names the tool or the model, and whose body says why whenever the change itself does not show it: the decision, the instruction or the finding behind it. The commit is the record of the change, and `LOG.md` does not tell it again (CONTRACT §4). Two trailers of the same commit name the tool and the model: `Tool: <host or tool>` (for example `Tool: Cursor`, with the agent's bot name when it has one) and `Co-Authored-By: <model> <address>` (the host's no-reply address), never an invented model or version. In the brain's repositories the commit-message hook refuses a commit, other than a merge, without both. Pre-existing or concurrent dirty files do not prevent a path-scoped commit when the agent-owned change can be separated safely.
 - Never commit secrets, credentials, vault ciphertext, private tokens, unresolved conflict markers or unrelated user changes. Do not use `--no-verify`, amend or rewrite an existing commit, force-push, or push directly to a protected `main` or `master` branch unless the owner explicitly directs that specific action. If ownership or safety is uncertain, leave the uncertain path unstaged and ask.
 - Treat commit and push as separate decisions. A push failure or unavailable remote must never prevent the local commit. Owner-test handoff commits stay local: do not push solely because the owner is being asked to test. Push accumulated agent-created commits to the tracked remote when the unit of work finishes (except a response that is only an owner-test handoff), unless the owner has prohibited pushing or repository policy requires review through another path. While a unit of work continues, no clock decides a push: push when something outside this computer needs the commits – a test, a check or a deployment that runs from the remote, another person, or another computer – and before the thread hands over or stops (`SMART-RULE-0019`). Also push when the owner asked to push.
 - **In a brain repository the reply does not wait for the push.** Once a unit of work in the mechanics, the skill library or the memory is committed, the agent runs `session.py finish <name> --background` and gives its final response; the merge, the checks and the pushes run on in a process of their own. The per-prompt hook reports a finish that failed at the owner's next prompt; the agent opens that reply with the failure and repairs it before other work. No commit is made in a copy while its finish runs. The agent finishes in the foreground instead when the host has no per-prompt hook, when the reply says that something is released or ready for another person or another computer to pull, and when the owner asks. A project repository's push is not covered (`SMART-RULE-0048`).

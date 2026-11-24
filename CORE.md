@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-29T08:00:00+10:00
-updated: 2026-11-24T16:51:07+10:00
+updated: 2026-11-24T18:28:13+10:00
 owner: brain-owner
 generated_by: /shared/skills/repository-preflight/scripts/core.py
 canonical_sources:
@@ -35,7 +35,7 @@ Every AI agent, script or person working anywhere in the brain must:
    - **Scoped bootstrap** (allowed only for answer-only / read-only fact retrieval with no durable writes): read what the answer needs – injected host context, a file already read in this session, or targeted reads of known paths – and nothing else. Research beyond the brain's own files, and work the owner asks to run in parallel or hand to workers, is not answer-only: it takes the full bootstrap first, because `SMART-RULE-0024` decides how it runs. Nor is a proposal to start a new project, product or venture: it takes the full bootstrap first, because `SMART-RULE-0016` decides how it starts.
    - **Full bootstrap** (required before the first creation, change or deletion of brain content, a governance change, use of a skill with side effects, or when applicable policy is unclear): read `/CORE.md` and `/CORE-RULES.md`, then the owner profile `/memory/OWNER.md` and the owner-layer rules `/memory/RULES.md`, then inherited node `RULES.md` files down to the active node, then the active node's `README.md`, `STATE.md` and relevant dependencies before acting. The two files are generated from this contract and `/RULES.md`: `/CORE.md` holds, verbatim, the sections of this contract that always apply; `/CORE-RULES.md` holds the tables that say when every other section and rule applies, and, verbatim, the rules that always apply. Each is short enough for a host to show whole; read them, and every bootstrap file, with the host's file-reading tool (for example Read), not a shell command such as `cat`: a shell may show only the start of a long file.
    - **Worker bootstrap** (allowed only for a worker executing a delegation packet under `SMART-RULE-0024`): read the worker brief the packet names, the packet itself, and the `RULES.md` of each node the packet's write paths touch. The worker writes only inside the packet's write paths, never commits, and escalates by a blocked result. The conductor that wrote the packet has completed the full bootstrap, validates the result before it is integrated, and remains accountable for routing, tasks, logs, state and commits. A worker that must act outside its packet escalates instead of bootstrapping further.
-   - **Read by situation.** Before acting in a situation named under `Applies when` in those tables, read that section of this contract, or that rule in its canonical home, in full. When it is unclear whether a row applies, read it.
+   - **Read by situation.** Before acting in a situation named under `Applies when` in those tables, read what the row names, in full: that section of this contract, that rule in its canonical home, or the rule pack – a file generated from `/RULES.md` that holds, verbatim, the rules of one situation. When it is unclear whether a row applies, read it.
    - **Escalation.** A turn that began scoped escalates to full bootstrap the moment it is about to write, take a side effect, use a credential or meet policy doubt: before that first action, never after it. A write to a brain repository begins with `session.py start` (`SMART-RULE-0038`), which prints the full-bootstrap reading list, so every agent in every host meets the escalation at the same step.
 5. Stop and report the problem if the contract cannot be found or read, or if competing location hints identify different contracts.
 6. When `/memory/` is absent, work only on the mechanics layer and say so; do not create owner content anywhere else to compensate. A fresh memory is set up from `/shared/templates/memory-skeleton/`.
@@ -156,7 +156,7 @@ Something currently true that has changed or may change later.
 
 Update the relevant `STATE.md`.
 
-Create a `LOG.md` entry when the change is significant, explains a decision or is needed for traceability.
+Create a `LOG.md` entry when the change is a decision, or when no commit records it and it is significant or needed for traceability (section 4).
 
 ### 5.4 Task
 
@@ -209,8 +209,6 @@ Information mentioned during one project may belong elsewhere.
 
 Do not store information in the active node merely because that is where it was mentioned.
 
-## 13. Change protocol
-
 ### 13.1 Ordinary persistent changes
 
 Before modifying persistent files:
@@ -235,76 +233,6 @@ When uncertain:
 
 - label the item as unverified, provisional or incomplete
 - do not store inference as immutable knowledge
-
-### 13.2 Protected governance
-
-Protected governance is rule and contract wording:
-
-- `/CONTRACT.md`
-- every active `RULES.md`, including the owner layer `/memory/RULES.md` and node rules in memory and in project repositories
-- governance schemas and templates that define the wording of a rule or a proposal
-- bootstrap instructions that determine how agents locate or load the contract and inherited rules
-- the statement of what the repository preflight validator enforces: the *Failure behaviour* section of its skill
-
-The validator's code, tests and fixtures, the rest of its skill, and README files are not protected governance; they change as ordinary persistent changes (section 13.1). Code that changes what the validator accepts or refuses changes the rule it enforces, so the *Failure behaviour* section changes with it, under this section.
-
-A substantive or semantic change to protected governance must not become active until the owner explicitly accepts an identified proposal or the exact displayed diff. Acceptance covers that change, not later changes to the same file: each substantive change needs its own. One standing acceptance is allowed: an owner who turns `follow_upstream` on (`SMART-RULE-0032`) accepts each protected-governance change to the mechanics and the skill library that the upstream maintainer has already accepted on upstream `main`, for each upstream merge made while the setting is on. It covers nothing made locally, on another branch or offered upstream, and ends when the owner turns the setting off. Every change it admits is recorded in `/memory/governance/upstream-merges.md` and reported to the owner in the first reply. A change that only rewrites the `updated` stamp, line endings or the dash style is not substantive.
-
-Before requesting acceptance, present:
-
-1. a stable proposal ID
-2. a plain-language summary of the changes (what will be different for the owner and agents), stated before or alongside the exact diffs
-3. the current and proposed wording or exact diff
-4. the reason for the change
-5. the affected scope and expected behavioural consequences
-6. risks, conflicts and migration requirements
-7. a rollback method
-8. the planned validation
-
-Ask one direct acceptance question. Silence, lack of objection, approval of adjacent work, or general encouragement does not constitute acceptance. Acceptance must unambiguously identify the proposal or exact change set.
-
-An agent may create or revise a proposal without activating it. A protected-governance change is checked for an accepted proposal where it becomes active: on `main` and in the branches that merge into it. On a `proposal/*` branch whose open proposal lists the file in `target_files`, preflight reports it as a warning, so a proposal's exact diff can be committed before the owner decides on it. Store proposals outside the inherited rule path, in the layer whose governance they change:
-
-- a change to the contract, `/RULES.md`, shared governance schemas or templates, bootstrap files or the preflight validator: `/governance/proposals/` in the mechanics repository while it is under review, offered upstream as a pull request when it should reach everyone who uses the mechanics. The mechanics repository keeps no decision history: the owner's record of accepting and applying the change is kept in `/memory/governance/proposals/`
-- a change to `/memory/RULES.md` or a node `RULES.md` in memory: `/memory/governance/proposals/`
-- a change to a node `RULES.md` inside a project repository: that repository's `brain/proposals/`
-
-A proposal that changes several layers is stored once, in the highest layer it touches, and lists every target in `target_files`.
-
-When the change is a small additive or clarifying amendment to an existing numbered rule, keep that rule's identifier. Revise the original proposal record (or add an amendment section to it) and present that same identifier for acceptance. Give a new identifier only to a distinct new rule. Do not supersede a live rule with a new number merely because the wording grew by a sentence or a tighter constraint.
-
-#### Rule identifiers
-
-Every accepted rule has one identifier that names its layer and its number within that layer:
-
-- `SMART-RULE-NNNN`: a rule whose canonical home is in the mechanics repository – this contract, `/RULES.md`, or a shared skill or template under `/shared/`. `/RULES.md` indexes every `SMART-RULE` identifier, including those whose wording lives elsewhere.
-- `MEMORY-RULE-NNNN`: a rule in the owner layer, `/memory/RULES.md`.
-- `<PROJECT>-RULE-NNNN`: a rule in a node's `RULES.md`, where `<PROJECT>` is the node's folder name in upper case (for example `EXAMPLE-PROJECT-RULE-0001` for `/memory/projects/example-project/RULES.md`). A rule inherited by several nodes keeps the prefix of the node that defines it.
-
-Numbers have four digits, start at `0001` in each layer and are never reused, not even after a rule is retired. A newly accepted rule takes the next number in its layer: one more than the highest identifier already used in that layer's rule file (for the mechanics, the index in `/RULES.md`).
-
-A proposal carries no rule number. Until the owner accepts it, it is named `PROPOSAL-<slug>`, its file is `<slug>.md` in the proposals folder of its layer, and that is its `id`. The number is assigned at acceptance and recorded in the proposal's `rule_id` field; the proposal keeps its own `id` and file name. Historical records – logs, proposal files, completed tasks, notes – keep the identifiers they were written with and are not rewritten.
-
-After acceptance:
-
-1. apply only the accepted change set
-2. record the accepter and acceptance time
-3. update `contract_version` when contract behaviour changes
-4. run the repository preflight validator
-5. record implementation and validation results
-6. report the exact files changed, effective version, migrations and unresolved issues
-
-If implementation reveals a material consequence not disclosed in the accepted proposal, stop and request acceptance of a revised proposal before continuing.
-
-### 13.3 Contract versioning
-
-Use semantic versioning for `contract_version`:
-
-- patch: clarification with no intended behavioural change
-- minor: additive or meaningfully changed behaviour that remains compatible with existing content
-- major: breaking governance or repository-behaviour change requiring coordinated migration
-
-Every accepted contract change must identify its previous and new contract versions. Do not use `schema_version` as a substitute for behavioural contract versioning.
 
 ## 14. Session operating loop
 
