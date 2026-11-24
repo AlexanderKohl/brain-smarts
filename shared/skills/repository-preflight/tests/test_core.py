@@ -111,5 +111,60 @@ class CoreTest(unittest.TestCase):
         self.assertEqual(core.main(["check", "--root", str(root)]), 0)
 
 
+PACKED = RULES.replace(
+    "| `SMART-RULE-0002` | Second | this file | writing a widget |",
+    "| `SMART-RULE-0002` | Second | this file | writing a widget |\n"
+    "| `SMART-RULE-0003` | Third | this file | testing a widget |\n"
+    "| `SMART-RULE-0004` | Fourth | `/CONTRACT.md` §2 | a rare case |\n"
+    "| `SMART-RULE-0005` | Fifth | this file | painting |\n\n"
+    "| Pack | Applies when | Rules |\n|---|---|---|\n"
+    "| `/rules/widgets.md` | making a widget | `SMART-RULE-0002`, `SMART-RULE-0003` |"
+) + "\n## SMART-RULE-0003 – Third\n\n- Test the widget.\n\n## SMART-RULE-0005 – Fifth\n\n- Paint it.\n"
+
+
+class PackTest(unittest.TestCase):
+    def test_a_pack_holds_its_rules_verbatim_and_the_core_lists_the_pack_instead_of_them(self):
+        self.assertEqual(core.problems(PACKED), [])
+        parts = core.render(brain(PACKED))
+        self.assertEqual(list(parts), ["CORE.md", "CORE-RULES.md", "rules/widgets.md"])
+        pack, second = parts["rules/widgets.md"], parts["CORE-RULES.md"]
+        self.assertIn("Read the whole file before: making a widget.", pack)
+        self.assertIn("## SMART-RULE-0002 – Second\n\n- Do the second thing when writing a widget.\n\n"
+                      "## SMART-RULE-0003 – Third\n\n- Test the widget.", pack)
+        self.assertIn("| `SMART-RULE-0003` | Third | this file | testing a widget |", pack)
+        self.assertNotIn("Paint it", pack)
+        self.assertIn("| `/rules/widgets.md` | making a widget | `SMART-RULE-0002`, `SMART-RULE-0003` |", second)
+        # a rule in a pack, or whose text is in the core, has no row of its own there; the others keep theirs
+        self.assertNotIn("| `SMART-RULE-0002` |", second)
+        self.assertNotIn("| `SMART-RULE-0001` |", second)
+        self.assertIn("| `SMART-RULE-0004` | Fourth |", second)
+        self.assertIn("| `SMART-RULE-0005` | Fifth | this file | painting |", second)
+        self.assertIn("- Always do the first thing.", second)
+
+    def test_a_pack_that_names_a_wrong_rule_fails(self):
+        wrong = PACKED.replace("`SMART-RULE-0002`, `SMART-RULE-0003` |",
+                               "`SMART-RULE-0001`, `SMART-RULE-0004`, `SMART-RULE-0009` |")
+        self.assertEqual(core.problems(wrong), [
+            "/RULES.md: pack /rules/widgets.md names SMART-RULE-0001, which always applies and is in the core",
+            "/RULES.md: pack /rules/widgets.md names SMART-RULE-0004, whose text is not in this file",
+            "/RULES.md: pack /rules/widgets.md names SMART-RULE-0009, which the index does not list"])
+        self.assertEqual(core.problems(PACKED.replace(", `SMART-RULE-0003` |", " |")),
+                         ["/RULES.md: pack /rules/widgets.md names fewer than two rules; a single rule keeps its own row"])
+
+    def test_build_writes_the_pack_and_check_fails_a_stale_or_a_leftover_one(self):
+        root = brain(PACKED)
+        self.assertEqual(core.main(["build", "--root", str(root)]), 0)
+        self.assertEqual(core.main(["check", "--root", str(root)]), 0)
+        errors = []
+        preflight.validate_core(root, errors)
+        self.assertEqual(errors, [])
+        (root / "RULES.md").write_text(PACKED.replace("Test the widget", "Test every widget"), encoding="utf-8")
+        preflight.validate_core(root, errors)
+        self.assertEqual(errors, ["/rules/widgets.md: out of date with /CONTRACT.md and /RULES.md; run core.py build"])
+        (root / "RULES.md").write_text(PACKED, encoding="utf-8")
+        (root / "rules" / "old.md").write_text("left behind", encoding="utf-8")
+        self.assertEqual(core.main(["check", "--root", str(root)]), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

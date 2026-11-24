@@ -6,6 +6,12 @@ read the rest, and, verbatim, the rules whose `Applies when` is `always`. Each p
 LIMIT characters: a host shortens longer tool output (Claude Code shows about 2 KB of a longer
 shell output), so an agent would read only the start of a longer file.
 
+When /RULES.md has a rule-pack table (`| Pack | Applies when | Rules |`), each row names a third kind
+of generated file: a rule pack, /rules/<name>.md, which holds, verbatim, the rules of one situation,
+so an agent entering that situation reads one short file instead of finding each rule in /RULES.md.
+/CORE-RULES.md then lists the packs, and a rule's own row only when its text is in neither the core
+nor a pack. Without that table nothing changes.
+
   python shared/skills/repository-preflight/scripts/core.py build   write both parts
   python shared/skills/repository-preflight/scripts/core.py check   exit 1 when a part is stale or too long
 """
@@ -21,6 +27,7 @@ PARTS = ("CORE.md", "CORE-RULES.md")
 LIMIT = 28_000
 RULE_ROW = re.compile(r"^\| `(SMART-RULE-\d{4})` \|(.*)\|$")
 SECTION_ROW = re.compile(r"^\| §(\d+(?:\.\d+)?) \|(.*)\|$")
+PACK_ROW = re.compile(r"^\| `/(rules/[a-z0-9-]+\.md)` \|(.*)\|$")
 HEADING = re.compile(r"^(#{2,3}) (\d+(?:\.\d+)?)[. ]")
 UPDATED = re.compile(r"^updated: (\S+)$", re.MULTILINE)
 
@@ -45,6 +52,20 @@ def tables(rules: str) -> tuple[list[str], list[str], list[tuple[str, str]], lis
             section_lines.append(line)
             section_rows.append((match.group(1), cells(match.group(2))[-1]))
     return rule_lines, section_lines, rule_rows, section_rows
+
+
+def packs(rules: str) -> tuple[list[str], list[tuple[str, str, list[str]]]]:
+    """The rule-pack table as written, and (file, applies when, rule ids) for each row."""
+    lines, rows = [], []
+    source = rules.splitlines()
+    for i, line in enumerate(source):
+        if line.startswith("| Pack | Applies when |"):
+            lines = [line, source[i + 1]]
+        elif match := PACK_ROW.match(line):
+            lines.append(line)
+            when, listed = cells(match.group(2))[:2]
+            rows.append((match.group(1), when, re.findall(r"SMART-RULE-\d{4}", listed)))
+    return lines, rows
 
 
 def contract_section(contract: str, number: str) -> str:
@@ -82,6 +103,19 @@ def problems(rules: str) -> list[str]:
     for heading in re.findall(r"^## (SMART-RULE-\d{4})\b", rules, re.MULTILINE):
         if heading not in listed:
             found.append(f"/RULES.md: {heading} has a heading but no index row")
+    when_of = dict(rule_rows)
+    for name, when, ids in packs(rules)[1]:
+        if not when:
+            found.append(f"/RULES.md: pack /{name} has no Applies when")
+        if len(ids) < 2:
+            found.append(f"/RULES.md: pack /{name} names fewer than two rules; a single rule keeps its own row")
+        for rule_id in ids:
+            if rule_id not in when_of:
+                found.append(f"/RULES.md: pack /{name} names {rule_id}, which the index does not list")
+            elif rule_section(rules, rule_id) is None:
+                found.append(f"/RULES.md: pack /{name} names {rule_id}, whose text is not in this file")
+            elif when_of[rule_id].startswith("always"):
+                found.append(f"/RULES.md: pack /{name} names {rule_id}, which always applies and is in the core")
     return found
 
 
@@ -94,12 +128,19 @@ def front(id_: str, title: str, updated: str) -> list[str]:
 
 
 def render(root: Path) -> dict[str, str]:
-    """Both parts of the core, by file name."""
+    """Both parts of the core, and every rule pack, by file name."""
     contract = (root / "CONTRACT.md").read_text(encoding="utf-8").replace("\r\n", "\n")
     rules = (root / "RULES.md").read_text(encoding="utf-8").replace("\r\n", "\n")
     rule_lines, section_lines, rule_rows, section_rows = tables(rules)
     updated = max(UPDATED.search(text).group(1) for text in (contract, rules))
     always = lambda when: when.startswith("always")
+    pack_lines, pack_rows = packs(rules)
+    header, row_of = rule_lines[:2], {RULE_ROW.match(line).group(1): line for line in rule_lines[2:]}
+    if pack_rows:
+        # A rule's own row is listed only when its text is in neither the core nor a pack.
+        elsewhere = {key for key, when in rule_rows if always(when) and rule_section(rules, key)}
+        elsewhere |= {rule_id for _, _, ids in pack_rows for rule_id in ids}
+        rule_lines = header + [line for key, line in row_of.items() if key not in elsewhere]
     first = front("brain-core", "Brain Core", updated) + [
         "# Brain Core", "",
         "Generated from `/CONTRACT.md` and `/RULES.md` by `core.py build`; never edit it here. It is the",
@@ -116,18 +157,46 @@ def render(root: Path) -> dict[str, str]:
         "second of the two files a writing session reads first (CONTRACT §1), after `/CORE.md`: the tables",
         "that say when to read every other contract section and rule in its canonical home, and the rules",
         "that always apply, verbatim.", "",
-        "## When to read the rest", "", *section_lines, "", *rule_lines, "",
-        "## Rules that always apply", ""]
+        "## When to read the rest", "", *section_lines, ""]
+    if pack_rows:
+        second += ["A rule pack holds, verbatim, the rules of one situation. Read the whole pack before acting in",
+                   "that situation.", "", *pack_lines, "",
+                   "Rules that are in no pack and not below, each read in its canonical home (`/RULES.md` has the",
+                   "full index):", ""]
+    second += [*rule_lines, "", "## Rules that always apply", ""]
     for key, when in rule_rows:
         body = rule_section(rules, key) if always(when) else None
         if body:
             second += [body, ""]
-    return {PARTS[0]: "\n".join(first).rstrip() + "\n", PARTS[1]: "\n".join(second).rstrip() + "\n"}
+    parts = {PARTS[0]: "\n".join(first).rstrip() + "\n", PARTS[1]: "\n".join(second).rstrip() + "\n"}
+    for name, when, ids in pack_rows:
+        stem = Path(name).stem
+        text = front(f"brain-rules-{stem}", f"Rule pack: {stem}", updated) + [
+            f"# Rule pack: {stem}", "",
+            "Generated from `/RULES.md` by `core.py build`; never edit it here. It holds, verbatim, the rules of one",
+            "situation, so that they are read together. Each rule's canonical home stays `/RULES.md`.", "",
+            f"Read the whole file before: {when}.", "", *header,
+            *[row_of[rule_id] for rule_id in ids if rule_id in row_of], ""]
+        for rule_id in ids:
+            body = rule_section(rules, rule_id)
+            if body:
+                text += [body, ""]
+        parts[name] = "\n".join(text).rstrip() + "\n"
+    return parts
+
+
+def leftovers(root: Path, parts: dict[str, str]) -> list[str]:
+    """Pack files no row of the pack table generates any more."""
+    folder = root / "rules"
+    if not folder.is_dir():
+        return []
+    return [f"/rules/{path.name}: no row of the pack table in /RULES.md generates it; delete it"
+            for path in sorted(folder.glob("*.md")) if f"rules/{path.name}" not in parts]
 
 
 def size_problems(parts: dict[str, str]) -> list[str]:
     return [f"/{name}: {len(text):,} characters, over the {LIMIT:,} a host shows whole; move a section or rule "
-            "out of `always`, or split the core further" for name, text in parts.items() if len(text) > LIMIT]
+            "out of `always`, split the core further, or split the pack" for name, text in parts.items() if len(text) > LIMIT]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -138,10 +207,11 @@ def main(argv: list[str] | None = None) -> int:
     rules = (args.root / "RULES.md").read_text(encoding="utf-8")
     found = problems(rules)
     parts = render(args.root)
-    found += size_problems(parts)
+    found += size_problems(parts) + leftovers(args.root, parts)
     for name, text in parts.items():
         target = args.root / name
         if args.action == "build":
+            target.parent.mkdir(exist_ok=True)
             target.write_text(text, encoding="utf-8", newline="\n")
             print(f"wrote {target} ({len(text):,} characters)")
         elif not target.is_file() or target.read_text(encoding="utf-8").replace("\r\n", "\n") != text:
