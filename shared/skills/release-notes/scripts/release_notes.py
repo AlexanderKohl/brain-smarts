@@ -365,7 +365,9 @@ def unnoted(cfg: Config, project: dict, notes: list[dict], dealt: set | None = N
     if project["kind"] != "git":
         return []
     repo = cfg.repo(project)
-    args = ["log", "--no-merges", "--format=%h%x1f%an%x1f%ad%x1f%s%x1f%b%x1e", "--date=short",
+    # Each record carries the commit's file names (--name-only), so no commit is asked for them
+    # with a `git show` of its own: 900 such calls took a minute on every board build.
+    args = ["log", "--no-merges", "--format=%x1e%h%x1f%an%x1f%ad%x1f%s%x1f%b%x1f", "--date=short", "--name-only",
             ref(project, "production") + ".." + ref(project, "development")]
     if project.get("since"):
         args.insert(2, "--since=" + project["since"])
@@ -375,15 +377,15 @@ def unnoted(cfg: Config, project: dict, notes: list[dict], dealt: set | None = N
     skip |= set(dealt or ())
     out = []
     for rec in git(repo, *args).split("\x1e"):
-        parts = rec.strip("\n").split("\x1f")
-        if len(parts) < 5:
+        parts = rec.split("\x1f")
+        if len(parts) < 6:
             continue
-        h, author, date, subject, body = parts
+        h, author, date, subject, body, names = parts[:6]
         if any(h.startswith(c) or c.startswith(h) for c in claimed + list(skip)) or subject.strip() in skip_subjects:
             continue
         if any(t in slugs for t in TRAILER.findall(body)):
             continue
-        files = [f for f in git(repo, "show", "--name-only", "--format=", h).splitlines() if f.strip()]
+        files = [f for f in names.splitlines() if f.strip()]
         if files and all(f.startswith("release-notes/") for f in files):
             continue
         out.append({"hash": h, "author": author, "date": date, "subject": subject})

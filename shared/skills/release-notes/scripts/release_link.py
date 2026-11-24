@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 
 
 def version_key(version: str) -> tuple:
@@ -23,21 +24,61 @@ def named_by(repo, git, ref: str, trailer: re.Pattern, since: str | None = None)
     args = ["log", "--reverse", "--format=%h%x1f%B%x1e", ref]
     if since:
         args.insert(2, "--since=" + since)
-    out: dict[str, list[tuple[str, str | None]]] = {}
+    naming: list[tuple[str, list[str]]] = []
     for rec in git(repo, *args).split("\x1e"):
         if "\x1f" not in rec:
             continue
         h, body = rec.strip("\n").split("\x1f", 1)
         slugs = trailer.findall(body)
-        if not slugs:
-            continue
-        try:
-            version = json.loads(git(repo, "show", f"{h}:package.json")).get("version")
-        except Exception:  # noqa: BLE001 - no package.json at that commit, or not JSON: no version
-            version = None
+        if slugs:
+            naming.append((h, slugs))
+    versions = versions_at(repo, git, [h for h, _ in naming])
+    out: dict[str, list[tuple[str, str | None]]] = {}
+    for h, slugs in naming:
         for slug in slugs:
-            out.setdefault(slug, []).append((h, version))
+            out.setdefault(slug, []).append((h, versions[h]))
     return out
+
+
+def version_in(text: str) -> str | None:
+    """The `version` of a package.json's text; None when it is not JSON or holds none."""
+    try:
+        return json.loads(text).get("version")
+    except Exception:  # noqa: BLE001 - not JSON, or not an object: no version
+        return None
+
+
+def versions_at(repo, git, hashes: list[str]) -> dict[str, str | None]:
+    """commit -> the version in its package.json, None when it has none. One `git cat-file
+    --batch` answers for every commit: a `git show` per commit took 90 seconds on a project with
+    1,400 commits that name a note. When the batch cannot be read, each commit is asked on its own."""
+    try:
+        done = subprocess.run(["git", "-C", str(repo), "cat-file", "--batch"], capture_output=True,
+                              input="".join(f"{h}:package.json\n" for h in hashes).encode("utf-8"))
+        if done.returncode != 0:
+            raise OSError(done.stderr.decode("utf-8", "replace"))
+        found: dict[str, str | None] = {}
+        data, at = done.stdout, 0
+        for h in hashes:
+            end = data.index(b"\n", at)
+            header, at = data[at:end].split(b" "), end + 1
+            if len(header) != 3 or not header[2].isdigit():     # "<name> missing", or ambiguous
+                found[h] = None
+                continue
+            content, at = data[at:at + int(header[2])], at + int(header[2]) + 1
+            try:
+                found[h] = version_in(content.decode("utf-8")) if header[1] == b"blob" else None
+            except UnicodeDecodeError:
+                found[h] = None
+        return found
+    except (OSError, ValueError):
+        found = {}
+        for h in hashes:
+            try:
+                found[h] = version_in(git(repo, "show", f"{h}:package.json"))
+            except Exception:  # noqa: BLE001 - no package.json at that commit: no version
+                found[h] = None
+        return found
 
 
 def link(notes: list[dict], named: dict[str, list[tuple[str, str | None]]], write_note, dry_run: bool = False) -> list[str]:
