@@ -4,11 +4,11 @@ title: Portable AI Brain Contract
 type: contract
 status: active
 schema_version: 0.2
-contract_version: 3.3.0
+contract_version: 3.6.0
 contract: /CONTRACT.md
 canonical: true
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-11-22T12:47:34+10:00
+updated: 2026-11-24T18:28:13+10:00
 owner: brain-owner
 ---
 
@@ -27,7 +27,7 @@ Every AI agent, script or person working anywhere in the brain must:
    - **Scoped bootstrap** (allowed only for answer-only / read-only fact retrieval with no durable writes): read what the answer needs – injected host context, a file already read in this session, or targeted reads of known paths – and nothing else. Research beyond the brain's own files, and work the owner asks to run in parallel or hand to workers, is not answer-only: it takes the full bootstrap first, because `SMART-RULE-0024` decides how it runs. Nor is a proposal to start a new project, product or venture: it takes the full bootstrap first, because `SMART-RULE-0016` decides how it starts.
    - **Full bootstrap** (required before the first creation, change or deletion of brain content, a governance change, use of a skill with side effects, or when applicable policy is unclear): read `/CORE.md` and `/CORE-RULES.md`, then the owner profile `/memory/OWNER.md` and the owner-layer rules `/memory/RULES.md`, then inherited node `RULES.md` files down to the active node, then the active node's `README.md`, `STATE.md` and relevant dependencies before acting. The two files are generated from this contract and `/RULES.md`: `/CORE.md` holds, verbatim, the sections of this contract that always apply; `/CORE-RULES.md` holds the tables that say when every other section and rule applies, and, verbatim, the rules that always apply. Each is short enough for a host to show whole; read them, and every bootstrap file, with the host's file-reading tool (for example Read), not a shell command such as `cat`: a shell may show only the start of a long file.
    - **Worker bootstrap** (allowed only for a worker executing a delegation packet under `SMART-RULE-0024`): read the worker brief the packet names, the packet itself, and the `RULES.md` of each node the packet's write paths touch. The worker writes only inside the packet's write paths, never commits, and escalates by a blocked result. The conductor that wrote the packet has completed the full bootstrap, validates the result before it is integrated, and remains accountable for routing, tasks, logs, state and commits. A worker that must act outside its packet escalates instead of bootstrapping further.
-   - **Read by situation.** Before acting in a situation named under `Applies when` in those tables, read that section of this contract, or that rule in its canonical home, in full. When it is unclear whether a row applies, read it.
+   - **Read by situation.** Before acting in a situation named under `Applies when` in those tables, read what the row names, in full: that section of this contract, that rule in its canonical home, or the rule pack – a file generated from `/RULES.md` that holds, verbatim, the rules of one situation. When it is unclear whether a row applies, read it.
    - **Escalation.** A turn that began scoped escalates to full bootstrap the moment it is about to write, take a side effect, use a credential or meet policy doubt: before that first action, never after it. A write to a brain repository begins with `session.py start` (`SMART-RULE-0038`), which prints the full-bootstrap reading list, so every agent in every host meets the escalation at the same step.
 5. Stop and report the problem if the contract cannot be found or read, or if competing location hints identify different contracts.
 6. When `/memory/` is absent, work only on the mechanics layer and say so; do not create owner content anywhere else to compensate. A fresh memory is set up from `/shared/templates/memory-skeleton/`.
@@ -91,6 +91,7 @@ RULES.md
 STATE.md
 LOG.md
 KNOWLEDGE.md
+knowledge/
 tasks/
 skills/
 data/
@@ -235,11 +236,15 @@ Records significant events, actions and decisions in chronological order.
 
 Begin each event group with an ISO 8601 timestamp heading. Append new entries. Do not rewrite historical entries except to correct an identified error, and record the correction.
 
+A change a commit made is recorded by the commit: its message says what changed and why (`SMART-RULE-0009`), and the log does not tell it again. The log holds what no commit holds: a decision and the owner's words behind it, what was ruled out and the evidence that ruled it out, a measurement, an event outside the repository such as a deployment or an approval, and a correction to what an earlier commit message said. An entry that belongs to a commit names it by its short hash.
+
 ### `KNOWLEDGE.md`
 
 Contains durable facts, principles, definitions and established understanding owned by the node.
 
 Do not use it for temporary instructions, current status or unverified claims.
+
+A node whose knowledge outgrows one readable file keeps it by subject: each subject has a file under `knowledge/`, and `KNOWLEDGE.md` becomes the index – one line per subject file, saying what it holds – together with the facts that fit no subject. A subject file is knowledge like `KNOWLEDGE.md` itself: everything this section and section 11.6 say of `KNOWLEDGE.md` holds for it, and an agent reads it when its subject is the work's. `KNOWLEDGE.md` is at most 28,000 characters, so that a host shows it whole.
 
 A claim that can change carries the date it was true as of, and may carry a date to check it by:
 `(as of 2026-09-20)` or `(as of 2026-09-20; review by 2026-12-31)`. When a claim is replaced, the
@@ -300,7 +305,7 @@ Something currently true that has changed or may change later.
 
 Update the relevant `STATE.md`.
 
-Create a `LOG.md` entry when the change is significant, explains a decision or is needed for traceability.
+Create a `LOG.md` entry when the change is a decision, or when no commit records it and it is significant or needed for traceability (section 4).
 
 ### 5.4 Task
 
@@ -938,13 +943,13 @@ Before finishing a substantive update, verify:
 - raw source derivatives reference an existing raw path
 - shared resources are linked rather than copied
 - project state reflects material completed work
-- significant changes are logged
+- significant changes are recorded: by their commit, and in the log what no commit holds (section 4)
 - no credentials were stored
 - every README.md lists and accurately summarises each immediate child folder
 - protected governance changes have an accepted proposal
 - the active `contract_version` is recorded in the repository manifest of each brain repository changed (`/repository-manifest.json`, `/library/repository-manifest.json` and `/memory/repository-manifest.json`)
 - no personal data has entered the mechanics repository or the skill library (section 3.4)
-- `/CORE.md` and `/CORE-RULES.md` are current with this contract and `/RULES.md` (`core.py check`)
+- `/CORE.md`, `/CORE-RULES.md` and the rule packs under `/rules/` are current with this contract and `/RULES.md` (`core.py check`)
 - the repository preflight validator passes
 - every separable, validated, agent-owned durable change has been committed at the required logical checkpoint
 - the final report identifies each resulting commit and push status, or gives the exact permitted reason no commit was created

@@ -4,12 +4,15 @@ title: Contract §13.2 is read when governance changes, not by every session
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: proposed
+status: implemented
+accepted_by: brain-owner
+accepted_at: 2026-11-24T18:27:28+10:00
+implemented_at: 2026-11-24T18:28:43+10:00
 owner: brain-owner
 created: 2026-11-24T17:32:22+10:00
-updated: 2026-11-24T18:22:16+10:00
-previous_contract_version: 3.3.0
-new_contract_version: 3.3.0
+updated: 2026-11-24T18:28:43+10:00
+previous_contract_version: 3.4.0
+new_contract_version: 3.4.0
 target_files:
   - /CORE-RULES.md
   - /CORE.md
@@ -72,3 +75,9 @@ Restore the one row; `core.py build` puts §13 back in the core.
 ## Planned validation
 
 Measured on a copy with `core.py build`. After acceptance: the wording by script, `core.py build`, the full preflight.
+
+## Outcome
+
+Accepted by the owner on 24 November 2026 together with the five other proposals of that day, and
+applied word for word by script. The contract was 3.4.0 before this proposal and is 3.4.0 after it;
+after all six it is 3.6.0. The validator's tests and the full preflight passed on the result.

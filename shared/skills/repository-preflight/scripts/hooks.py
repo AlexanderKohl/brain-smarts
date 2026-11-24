@@ -583,8 +583,9 @@ def post_compact(payload: dict, note: str | None = None, root: Path | None = Non
         lines.append(f"Hook input: {note}.")
     lines += [
         "A compaction is a missed checkpoint under SMART-RULE-0019.",
-        "Before anything else: re-read /CONTRACT.md, /RULES.md, /memory/RULES.md and the `## Handover` section "
-        "of the owning node's STATE.md; write the handover checkpoint and commit. Start no new worker until then.",
+        "Before anything else: re-read /CORE.md, /CORE-RULES.md, /memory/RULES.md, your own entry under `## Handover` "
+        "of the owning node's STATE.md and every rule your work in flight falls under; write the handover "
+        "checkpoint and commit. Start no new worker until then.",
         "Then run: " + CHECKPOINT_DONE.format(session=session),
         "Compaction markers present (oldest first): " + ("none" if not present else ""),
     ]

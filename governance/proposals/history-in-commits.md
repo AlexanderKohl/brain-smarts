@@ -4,12 +4,15 @@ title: History lives in the commit: the log holds only what no commit holds
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: proposed
+status: implemented
+accepted_by: brain-owner
+accepted_at: 2026-11-24T18:27:28+10:00
+implemented_at: 2026-11-24T18:28:43+10:00
 owner: brain-owner
 created: 2026-11-24T18:22:16+10:00
-updated: 2026-11-24T18:22:16+10:00
-previous_contract_version: 3.3.0
-new_contract_version: 3.4.0
+updated: 2026-11-24T18:28:43+10:00
+previous_contract_version: 3.5.0
+new_contract_version: 3.6.0
 target_files:
   - /CONTRACT.md
   - /CORE-RULES.md
@@ -159,3 +162,9 @@ Restore the passages of the three rules and of the contract, and the version. Ta
 ## Planned validation
 
 `state.py since` and its test are on `main`. After acceptance: the wording by script, the tag line in the release command with the release-notes tests, `core.py build`, the manifests, the full preflight.
+
+## Outcome
+
+Accepted by the owner on 24 November 2026 together with the five other proposals of that day, and
+applied word for word by script. The contract was 3.5.0 before this proposal and is 3.6.0 after it;
+after all six it is 3.6.0. The validator's tests and the full preflight passed on the result.

@@ -105,7 +105,7 @@ class PostCompactTest(unittest.TestCase):
             self.assertRegex(text, r"compacted at \S+ \(session s-0009\); its summary was prepared at "
                                    r"2026-01-02T10:00:00\+10:00\.")
             self.assertIn("missed checkpoint under SMART-RULE-0019", text)
-            for item in ("/CONTRACT.md", "/RULES.md", "/memory/RULES.md", "`## Handover`", "STATE.md",
+            for item in ("/CORE.md", "/CORE-RULES.md", "/memory/RULES.md", "`## Handover`", "STATE.md",
                          "write the handover checkpoint and commit", "Start no new worker",
                          "python shared/skills/delegate-work/scripts/delegation.py checkpoint-done --session s-0009"):
                 self.assertIn(item, text)

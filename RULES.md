@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-11-24T16:51:07+10:00
+updated: 2026-11-24T18:28:13+10:00
 owner: brain-owner
 ---
 
@@ -74,10 +74,25 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 | `SMART-RULE-0049` | Fast project checks without reduced coverage | this file | setting up or changing a code project's checks, CI, test runner or pre-push hook; a check is slow |
 
 `Applies when` says when an agent reads a rule's full text: `always` rules are in `/CORE-RULES.md`,
-which every writing session reads first with `/CORE.md` (CONTRACT §1); any other rule is read, in its
-canonical home, before acting in the situation named. Both files are generated from this file and
-`/CONTRACT.md` by `shared/skills/repository-preflight/scripts/core.py`, and the preflight fails when
-either is stale or too long for a host to show whole, or when a row here has no `Applies when`.
+which every writing session reads first with `/CORE.md` (CONTRACT §1); any other rule is read before
+acting in the situation named, in its rule pack when it has one and otherwise in its canonical home.
+The core files and the packs are generated from this file and `/CONTRACT.md` by
+`shared/skills/repository-preflight/scripts/core.py`, and the preflight fails when one of them is
+stale or too long for a host to show whole, or when a row here has no `Applies when`.
+
+Rule packs, in alphabetical order. A pack is a generated file that holds, verbatim, the rules of one
+situation, so that an agent entering the situation reads one short file instead of finding each rule
+here. A rule's wording still lives only in this file (`SMART-RULE-0007`); a rule may be in more than
+one pack; and `/CORE-RULES.md` lists a rule's own row only when its text is in neither the core nor a
+pack.
+
+| Pack | Applies when | Rules |
+|---|---|---|
+| `/rules/conducting.md` | before delegating work to another agent or running more than one session or worker; working cards between threads; a conductor thread starts or hands over; the owner raises another area's topic; before pushing merged code | `SMART-RULE-0024`, `SMART-RULE-0037`, `SMART-RULE-0043`, `SMART-RULE-0048` |
+| `/rules/outside-systems.md` | looking up a fact or identifier; working against an external system or its API; using a host plugin skill or its connector | `SMART-RULE-0005`, `SMART-RULE-0013`, `SMART-RULE-0017`, `SMART-RULE-0045` |
+| `/rules/rules-and-skills.md` | writing or changing a rule, a proposal, a skill's operating instructions, a host entry file or a pointer file, or anything in the mechanics or the skill library | `SMART-RULE-0002`, `SMART-RULE-0007`, `SMART-RULE-0008`, `SMART-RULE-0031` |
+| `/rules/software.md` | building or changing software in any project: code, a user interface, tests, sample data, a version, or a change someone who uses the system would notice | `SMART-RULE-0008`, `SMART-RULE-0015`, `SMART-RULE-0018`, `SMART-RULE-0020`, `SMART-RULE-0021`, `SMART-RULE-0022`, `SMART-RULE-0026`, `SMART-RULE-0041`, `SMART-RULE-0046` |
+| `/rules/software-checks.md` | creating a code repository or giving one its remote; setting up or changing a code repository's CI, checks, test runner or pre-push hook; a check fails or is slow | `SMART-RULE-0042`, `SMART-RULE-0049` |
 
 Contract sections and when to read them, in section order:
 
@@ -100,7 +115,9 @@ Contract sections and when to read them, in section order:
 | §10 | Skills, scripts and external systems | writing or changing a skill, or reading from or writing to an external system |
 | §11 | Raw files and Markdown derivatives | a file arrives to be kept, or content arrives from outside the owner's own words |
 | §12 | Shared resources and dependencies | declaring a dependency, or configuring a shared skill for a node |
-| §13 | Change protocol | always |
+| §13.1 | Ordinary persistent changes | always |
+| §13.2 | Protected governance | proposing, amending, accepting or applying a change to the contract, a `RULES.md` at any level, a governance schema or template, a bootstrap file or the validator's failure behaviour; numbering a rule or naming a proposal |
+| §13.3 | Contract versioning | changing the contract |
 | §14 | Session operating loop | always |
 | §15 | Repository integrity checks | before finishing a substantive update |
 | §16 | External project repositories | working in a project repository |
@@ -124,7 +141,7 @@ Contract sections and when to read them, in section order:
 - In every Git repository modified during an owner-authorised task, automatically create a commit at each successful logical checkpoint. A logical checkpoint exists when an independently describable improvement, fix, document update, configuration change or tested implementation is complete. Do not wait for the entire project to finish and do not bundle unrelated logical changes.
 - A Git checkpoint is mandatory after relevant validation passes; before switching tasks, repositories, branches or workstreams; before pausing for owner input or approval while agent-owned changes remain; before an owner test (next bullet); before the final response when the agent produced durable repository changes; and after 30 minutes of active work with uncommitted agent-owned changes, even if the larger task continues.
 - **Owner-test handoff:** Before asking the owner to test, reload, load-unpacked, install, or try a build, commit the agent-owned change in that product repository. That commit is the rollback point if the test fails. Do not wait for the owner to ask. If the work is a sequence of trials, commit each testable batch separately so a working version can be restored without unpicking later experiments.
-- At each checkpoint, inspect `git status` and the relevant diff, stage only the agent-owned files of that logical change, run proportionate validation, and commit with a concise message whose subject says what changed and never names the tool or the model. Two trailers of the same commit name them: `Tool: <host or tool>` (for example `Tool: Cursor`, with the agent's bot name when it has one) and `Co-Authored-By: <model> <address>` (the host's no-reply address), never an invented model or version. In the brain's repositories the commit-message hook refuses a commit, other than a merge, without both. Pre-existing or concurrent dirty files do not prevent a path-scoped commit when the agent-owned change can be separated safely.
+- At each checkpoint, inspect `git status` and the relevant diff, stage only the agent-owned files of that logical change, run proportionate validation, and commit with a concise message whose subject says what changed and never names the tool or the model, and whose body says why whenever the change itself does not show it: the decision, the instruction or the finding behind it. The commit is the record of the change, and `LOG.md` does not tell it again (CONTRACT §4). Two trailers of the same commit name the tool and the model: `Tool: <host or tool>` (for example `Tool: Cursor`, with the agent's bot name when it has one) and `Co-Authored-By: <model> <address>` (the host's no-reply address), never an invented model or version. In the brain's repositories the commit-message hook refuses a commit, other than a merge, without both. Pre-existing or concurrent dirty files do not prevent a path-scoped commit when the agent-owned change can be separated safely.
 - Never commit secrets, credentials, vault ciphertext, private tokens, unresolved conflict markers or unrelated user changes. Do not use `--no-verify`, amend or rewrite an existing commit, force-push, or push directly to a protected `main` or `master` branch unless the owner explicitly directs that specific action. If ownership or safety is uncertain, leave the uncertain path unstaged and ask.
 - Treat commit and push as separate decisions. A push failure or unavailable remote must never prevent the local commit. Owner-test handoff commits stay local: do not push solely because the owner is being asked to test. Push accumulated agent-created commits to the tracked remote when the unit of work finishes (except a response that is only an owner-test handoff), unless the owner has prohibited pushing or repository policy requires review through another path. While a unit of work continues, no clock decides a push: push when something outside this computer needs the commits – a test, a check or a deployment that runs from the remote, another person, or another computer – and before the thread hands over or stops (`SMART-RULE-0019`). Also push when the owner asked to push.
 - **In a brain repository the reply does not wait for the push.** Once a unit of work in the mechanics, the skill library or the memory is committed, the agent runs `session.py finish <name> --background` and gives its final response; the merge, the checks and the pushes run on in a process of their own. The per-prompt hook reports a finish that failed at the owner's next prompt; the agent opens that reply with the failure and repairs it before other work. No commit is made in a copy while its finish runs. The agent finishes in the foreground instead when the host has no per-prompt hook, when the reply says that something is released or ready for another person or another computer to pull, and when the owner asks. A project repository's push is not covered (`SMART-RULE-0048`).
@@ -259,10 +276,11 @@ Contract sections and when to read them, in section order:
   threshold; only the owner can override it, for a named run or packet, and the override and
   its reason are recorded in the run.
 - **An automatic compaction of the conductor's context is a missed checkpoint.** The host hook
-  marks it; dispatching stays closed until the conductor has re-read `/CONTRACT.md`,
-  `/RULES.md`, `/memory/RULES.md` and the owning node's `## Handover`, written the checkpoint,
-  committed, and cleared the marker (`delegation.py checkpoint-done`). The conductor tells the
-  owner in its next reply that a compaction happened.
+  marks it; dispatching stays closed until the conductor has re-read `/CORE.md`,
+  `/CORE-RULES.md`, `/memory/RULES.md`, its own entry under the owning node's `## Handover` and
+  every rule its work in flight falls under (`Applies when`), written the checkpoint, committed,
+  and cleared the marker (`delegation.py checkpoint-done`). The conductor tells the owner in its
+  next reply that a compaction happened.
 - On a host that cannot report the context size, the conductor passes `--context-unknown`
   with the reason, and drains at its first compaction or after its fourth run in the thread,
   whichever comes first.
@@ -271,8 +289,9 @@ Contract sections and when to read them, in section order:
 - A checkpoint updates, in the owning node: `STATE.md` with the current position, what is in
   flight, what is uncommitted and where, and the exact next action; `KNOWLEDGE.md` with durable
   facts a later session could not re-derive cheaply – especially external-system behaviour
-  established by experiment; `LOG.md` with what happened and why; and the task's store
-  (CONTRACT §9) for anything outstanding.
+  established by experiment; `LOG.md` with what no commit holds (CONTRACT §4); and the task's
+  store (CONTRACT §9) for anything outstanding. It does not list the commits, versions and merges
+  since the last checkpoint: Git holds them, and `state.py since` prints them when they are wanted.
 - Record **open questions with enough context to act on them**, not just their titles: what is
   unknown, what was already tried, and what would settle it.
 - Record **negative findings**. What was ruled out, and the evidence that ruled it out, is as
@@ -281,7 +300,8 @@ Contract sections and when to read them, in section order:
   uncommitted work lives when it is outside this repository.
 - A checkpoint must not present unfinished work as finished. Report the actual state, including
   failures, blocked steps and anything skipped.
-- A checkpoint ends with **one handover prompt** for the next thread, and it is a pointer, not a summary: the bootstrap files to read, the owning node's `STATE.md` whose `## Handover` section holds the position, and the single next action. Ten lines at most; nothing in it that a file already says. Everything the successor needs – runs and workers with their packets, branches and pending results, builds and where the owner loaded them, owner steps outstanding, decisions still open, the reminder that a worker's completion notice reaches only the thread that launched it – lives under `## Handover` in the owning node's `STATE.md` (and, for work spanning nodes, one line per other node pointing at its own `## Handover`), written before the prompt and kept current at every checkpoint. Write the prompt under `## Handover prompt` in the same `STATE.md`. Give it in the reply when the thread is handing over to a new one: after a compaction, when the host's context warning fires, at the drain threshold, or when the owner asks. A reply after a checkpoint the thread carries on from says only that the checkpoint is written. The live conductors are named in the `## Handover` of `/memory/projects/brain-development/STATE.md`, and a new thread that finds one asks the owner which thread continues (`SMART-RULE-0048`).
+- **A state file holds the position, not its history.** Under `## Handover` each live thread has one entry, and it is short: where things stand, what is in flight, what is uncommitted and where, and the next action. A new checkpoint replaces the thread's previous entry, and the entry of a thread that has ended leaves the section; what is replaced or removed moves, unchanged, to `STATE-HISTORY.md` beside the state file (`state.py history`). Detail that only the thread continuing the work needs goes in `HANDOVER-<thread>.md` beside the state file, named by a line in the entry (`state.py detail`). No bootstrap names either file: an agent reads the history only when it needs what happened earlier, and a handover file only when it continues that thread. What happened and why is in the commits and in `LOG.md`, and is not told again in the entry. A `STATE.md` is at most 28,000 characters, so that a host shows it whole: the repository preflight fails on a longer one in the memory and the mechanics, and `state.py check` names one in a project repository, whose own checks may adopt the limit.
+- A checkpoint ends with **one handover prompt** for the next thread, and it is a pointer, not a summary: the bootstrap files to read, the owning node's `STATE.md` whose `## Handover` section holds the position, and the single next action. Ten lines at most; nothing in it that a file already says. Everything the successor needs – runs and workers with their packets, branches and pending results, builds and where the owner loaded them, owner steps outstanding, decisions still open, the reminder that a worker's completion notice reaches only the thread that launched it – lives in the thread's entry under `## Handover` in the owning node's `STATE.md`, or in the handover file that entry names (and, for work spanning nodes, one line per other node pointing at its own `## Handover`), written before the prompt and kept current at every checkpoint. Write the prompt under `## Handover prompt` in the same `STATE.md`. Give it in the reply when the thread is handing over to a new one: after a compaction, when the host's context warning fires, at the drain threshold, or when the owner asks. A reply after a checkpoint the thread carries on from says only that the checkpoint is written. The live conductors are named in the `## Handover` of `/memory/projects/brain-development/STATE.md`, and a new thread that finds one asks the owner which thread continues (`SMART-RULE-0048`).
 - The active-conductor question is not required for at most one bounded, read-only learning or public-research worker per thread under SMART-RULE-0028, within SMART-RULE-0024’s delegation budget. Workers use no credentials, take no external side effects and write only their separate result artifacts. This exception grants no product-editing, merging or canonical-integration authority.
 - Finish with the Git exit check under `SMART-RULE-0014`, so the handoff and the tree agree.
 
@@ -709,6 +729,7 @@ Contract sections and when to read them, in section order:
 - Every note starts as `visibility: undecided`. Only the owner moves a note to `announce`, `hold`
   or `internal`. At release, only `announce` notes are published to the team; `undecided` and
   `hold` notes carry forward to the next release; `internal` notes are recorded and never sent.
+- **A release is recorded once.** The notes moved into `released/<version>/`, with the `release.json` beside them, are the record of what a release contained and which environment it reached when. The commit released to production carries an annotated tag `v<version>`, so Git itself shows what is in production. `STATE.md`, `LOG.md` and a handover entry name the version and do not list what it contained.
 - A production release is a merge to the repository's production branch, or the platform
   equivalent the owner layer or the project's rules name.
 

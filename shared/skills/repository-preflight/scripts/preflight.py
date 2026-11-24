@@ -350,6 +350,7 @@ def validate_core(root: Path, errors: list[str]) -> None:
         errors.append(f"/{core.PARTS[0]}: {exc}")
         return
     errors.extend(core.size_problems(parts))
+    errors.extend(core.leftovers(root, parts))
     for name, text in parts.items():
         target = root / name
         if not target.is_file() or target.read_text(encoding="utf-8").replace("\r\n", "\n") != text:
@@ -375,12 +376,16 @@ def run(root: Path, writing: bool) -> Result:
     from checks_b import validate_knowledge_provenance, validate_knowledge_review_dates, validate_pointer_files
     from checks_b import validate_learning_views
     validate_pointer_files(root, result.errors)
-    validate_knowledge_provenance(root, result.errors)
-    validate_knowledge_review_dates(root, result.errors)
+    validate_knowledge_provenance(root, result.errors, subjects=True)
+    validate_knowledge_review_dates(root, result.errors, subjects=True)
+    from state import validate_knowledge_sizes
+    validate_knowledge_sizes(root, result.errors)
     validate_learning_views(root, result.errors)
     from file_sizes import validate_file_sizes
     validate_file_sizes(root, result.errors)
     validate_core(root, result.errors)
+    from state import validate_state_sizes
+    validate_state_sizes(root, result.errors)
     validate_manifest(root, result, writing)
     if writing:
         write_manifests(root, result)

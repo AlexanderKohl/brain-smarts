@@ -4,12 +4,15 @@ title: Knowledge by subject: a node's knowledge file becomes an index when it ou
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: proposed
+status: implemented
+accepted_by: brain-owner
+accepted_at: 2026-11-24T18:27:28+10:00
+implemented_at: 2026-11-24T18:28:43+10:00
 owner: brain-owner
 created: 2026-11-24T17:32:22+10:00
-updated: 2026-11-24T18:22:16+10:00
-previous_contract_version: 3.3.0
-new_contract_version: 3.4.0
+updated: 2026-11-24T18:28:43+10:00
+previous_contract_version: 3.4.0
+new_contract_version: 3.5.0
 target_files:
   - /CONTRACT.md
   - /CORE-RULES.md
@@ -114,3 +117,9 @@ Restore the two contract passages and the version, and remove the failure line a
 ## Planned validation
 
 After acceptance: the wording by script, the validator change with tests for a past review date and a missing evidence status in a subject file, the manifests, the full preflight.
+
+## Outcome
+
+Accepted by the owner on 24 November 2026 together with the five other proposals of that day, and
+applied word for word by script. The contract was 3.4.0 before this proposal and is 3.5.0 after it;
+after all six it is 3.6.0. The validator's tests and the full preflight passed on the result.
