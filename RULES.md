@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-11-23T14:38:10+10:00
+updated: 2026-11-24T14:22:02+10:00
 owner: brain-owner
 ---
 
@@ -107,13 +107,10 @@ Contract sections and when to read them, in section order:
 
 ## SMART-RULE-0010 – Communication efficiency
 
-- In voice mode, when a clarifying question is required, ask one question at a time and wait for the answer before asking the next, unless the owner explicitly requests a grouped questionnaire. Outside voice mode, presenting a list of clarifying questions is acceptable-especially when scoping a software project. Do not invent questions when a safe default exists.
+- In voice mode, when a clarifying question is required, ask one question at a time and wait for the answer before asking the next, unless the owner explicitly requests a grouped questionnaire. Outside voice mode, a list of clarifying questions is acceptable, especially when scoping a software project.
 - Prefer a reversible default and proceed when multiple approaches are valid and the risk is low; state the chosen approach in one short line. Ask only for irreversible actions, secrets, material trade-offs, or when policy requires owner choice.
 - Do not narrate process before acting ("I'll bootstrap.", "Let me check.", "I'll start by reading."). Run tools or answer; put status only in the final reply when the owner needs a result.
-- Every question to the owner carries at least one concrete suggested answer, so the owner
-  can reply "yes" or "ok". When several valid options exist, number them and mark the
-  recommended one, so the owner can reply with a number. The owner may always answer with
-  different instructions instead; a suggestion or a numbered list never limits the choice.
+- Every question to the owner carries at least one concrete suggested answer, so the owner can reply "yes" or "ok". When several valid options exist, number them and mark the recommended one, so the owner can reply with a number. The owner may always answer with different instructions instead; a suggestion or a numbered list never limits the choice. A question never stops the work it does not block: the agent continues with every other part of the task, so the question arrives with the rest already done.
 
 ## SMART-RULE-0014 – Lightweight Git exit check
 
@@ -123,14 +120,14 @@ Contract sections and when to read them, in section order:
 
 ## SMART-RULE-0009 – Logical checkpoint commits
 
-- Portable git checkpoint rules in this file (`SMART-RULE-0009`) override any host-specific "ask before commit", "only commit when asked", or "always present commit/push options" instructions in this repository and in every other Git repository modified during an owner-authorised task. Still never commit secrets or unrelated dirty files. Host "only commit when asked" instructions apply only when this rule does not apply (for example a repository the owner has not authorised this task to change).
+- This rule overrides a host's "ask before commit", "only commit when asked" or "always present commit/push options" instructions in every Git repository modified during an owner-authorised task. Those host instructions apply only where this rule does not, for example in a repository the owner has not authorised the task to change.
 - In every Git repository modified during an owner-authorised task, automatically create a commit at each successful logical checkpoint. A logical checkpoint exists when an independently describable improvement, fix, document update, configuration change or tested implementation is complete. Do not wait for the entire project to finish and do not bundle unrelated logical changes.
-- A Git checkpoint is mandatory after relevant validation passes; before switching tasks, repositories, branches or workstreams; before pausing for owner input or approval while agent-owned changes remain; before asking the owner to test, reload, load-unpacked, install, or try a build; before the final response when the agent produced durable repository changes; and after 30 minutes of active work with uncommitted agent-owned changes, even if the larger task continues.
+- A Git checkpoint is mandatory after relevant validation passes; before switching tasks, repositories, branches or workstreams; before pausing for owner input or approval while agent-owned changes remain; before an owner test (next bullet); before the final response when the agent produced durable repository changes; and after 30 minutes of active work with uncommitted agent-owned changes, even if the larger task continues.
 - **Owner-test handoff:** Before asking the owner to test, reload, load-unpacked, install, or try a build, commit the agent-owned change in that product repository. That commit is the rollback point if the test fails. Do not wait for the owner to ask. If the work is a sequence of trials, commit each testable batch separately so a working version can be restored without unpicking later experiments.
-- At each checkpoint, inspect `git status` and the relevant diff, stage only agent-owned files that belong to that logical change, check that no secret or unrelated change is included, run proportionate validation, and commit with a concise message whose subject says what changed and never names the tool or the model. Two trailers of the same commit name them: `Tool: <host or tool>` (for example `Tool: Claude Code desktop` or `Tool: Cursor`, with the agent's bot name when it has one) and `Co-Authored-By: <model> <address>` (for example `Co-Authored-By: Claude Opus 5.5 <the host's no-reply address>`). In the brain's repositories the commit-message hook refuses a commit, other than a merge, without both. Do not invent a model or version. Pre-existing or concurrent dirty files do not prevent a path-scoped commit when the agent-owned change can be separated safely.
+- At each checkpoint, inspect `git status` and the relevant diff, stage only the agent-owned files of that logical change, run proportionate validation, and commit with a concise message whose subject says what changed and never names the tool or the model. Two trailers of the same commit name them: `Tool: <host or tool>` (for example `Tool: Cursor`, with the agent's bot name when it has one) and `Co-Authored-By: <model> <address>` (the host's no-reply address), never an invented model or version. In the brain's repositories the commit-message hook refuses a commit, other than a merge, without both. Pre-existing or concurrent dirty files do not prevent a path-scoped commit when the agent-owned change can be separated safely.
 - Never commit secrets, credentials, vault ciphertext, private tokens, unresolved conflict markers or unrelated user changes. Do not use `--no-verify`, amend or rewrite an existing commit, force-push, or push directly to a protected `main` or `master` branch unless the owner explicitly directs that specific action. If ownership or safety is uncertain, leave the uncertain path unstaged and ask.
 - Treat commit and push as separate decisions. A push failure or unavailable remote must never prevent the local commit. Owner-test handoff commits stay local: do not push solely because the owner is being asked to test. Push accumulated agent-created commits to the tracked remote when the unit of work finishes and before the final response (except a response that is only an owner-test handoff), or after 30 minutes since the last successful push while work continues, unless the owner has prohibited pushing or repository policy requires review through another path. Also push when the owner asked to push.
-- Never silently finish with committable agent-owned changes. In the final response, report the commit hash and push status for each modified repository, or state `No commit` with the specific reason. Valid reasons include: no durable change, no Git repository, the owner explicitly prohibited committing, validation or a hook failed, a merge/rebase/conflict is active, required Git identity or permission is unavailable, or the change cannot be separated safely from uncertain or unrelated files.
+- Never silently finish with committable agent-owned changes. The permitted reasons for no commit are: no durable change, no Git repository, the owner explicitly prohibited committing, validation or a hook failed, a merge/rebase/conflict is active, required Git identity or permission is unavailable, or the change cannot be separated safely from uncertain or unrelated files. The reply reports the commit, or the reason, as `SMART-RULE-0014` says.
 
 ## SMART-RULE-0003 – Token-efficient operation
 
@@ -163,9 +160,7 @@ Contract sections and when to read them, in section order:
 
 ## SMART-RULE-0002 / CONTRACT §13.2 – Protected governance
 
-- Do not activate a protected governance change without the owner's explicit acceptance under Contract section 13.2.
-- Report accepted governance changes with their proposal ID, exact changed files, effective contract version and validation result.
-- Small additive or clarifying changes to an existing numbered rule amend that rule in place and keep its ID. Give a new identifier only to a distinct new rule, not to a tweak, extra sentence or tighter constraint on an existing one; it takes the next number in its layer when the owner accepts it (CONTRACT §13.2, *Rule identifiers*). Record the amendment on the original proposal record; do not supersede a live rule with a new number.
+- CONTRACT §13.2 governs every change to protected governance. The report of an accepted change names its proposal ID, the exact files changed, the effective contract version and the validation result.
 
 ## SMART-RULE-0005 – Internal-first then external lookup
 
@@ -177,19 +172,18 @@ Contract sections and when to read them, in section order:
 ## SMART-RULE-0013 – Per-API quirk knowledge base
 
 - Every `<system>-access` skill owns a `knowledge/` folder beside its `SKILL.md`, holding one small file per confirmed or hypothesised piece of non-obvious external-API behaviour for that system. Scaffold it (empty, plus one `_CONVENTION.md` copied from `/shared/templates/api-knowledge-convention.template.md`) whenever a new `<system>-access` skill is created. If a quirk worth logging is found for a system with no shared skill yet, create the minimal skill folder and its `knowledge/` scaffold first rather than leaving the finding without a canonical home.
-- Before diagnosing unexpected, undocumented or previously-surprising behaviour from an external API, search that system's `knowledge/` folder first - by filename convention (for example `Glob "business--*"` for one object type, `Glob "*--textbox-list--*"` for one field type across objects) and by frontmatter (`Grep` for `object_type:`, `field_type:`, `endpoint:` or `status:`) - before re-investigating from scratch. Treat a `refuted` entry as a warning against repeating that exact hypothesis; treat a `deprecated` entry as a pointer to its `superseded_by` replacement, not as current fact.
-- After a fix or investigation resolves genuinely unexpected or undocumented external-API behaviour, write one entry under that system's `knowledge/` folder, copied from `/shared/templates/api-knowledge-entry.template.md`, named `<object_type>--<field_or_topic>--<short-slug>.md`, with `system`, `object_type`, `field_type`, `endpoint`, `status` and `source_refs` set. Do not create an entry for routine work that reveals nothing unexpected about the external API - this store is for quirks and workarounds, not a general changelog.
+- Before diagnosing unexpected, undocumented or previously-surprising behaviour from an external API, search that system's `knowledge/` folder first, by filename and by front matter as its `_CONVENTION.md` shows, before re-investigating from scratch. Treat a `refuted` entry as a warning against repeating that exact hypothesis; treat a `deprecated` entry as a pointer to its `superseded_by` replacement, not as current fact.
+- After a fix or investigation resolves genuinely unexpected or undocumented external-API behaviour, write one entry under that system's `knowledge/` folder, copied from `/shared/templates/api-knowledge-entry.template.md` and named as the convention says, with `system`, `object_type`, `field_type`, `endpoint`, `status` and `source_refs` set. Routine work that reveals nothing unexpected about the external API gets no entry: the store holds quirks and workarounds, not a changelog.
 - Set a new entry's `status` to `pending` when the fix it documents relies on a hypothesis not yet independently confirmed; set `confirmed` only once a live probe or observed real subsequent use corroborates it. When later evidence contradicts a `pending` or `confirmed` entry, do not delete it: set `status: refuted` for a wrong hypothesis or `status: deprecated` for behaviour that has genuinely changed, add a one-line note of what changed and when, and set `superseded_by` or leave it for the correcting entry to backlink via `refuted_by` once one exists.
 - Promote, refute or deprecate an existing entry opportunistically - the next time work touches that same quirk and turns up corroborating or contradicting evidence - rather than deferring it to a scheduled review that does not otherwise exist in this repository.
 
 ## SMART-RULE-0006 – Owner-facing shell includes cd
 
-- Whenever giving the owner shell commands to run, always include an explicit `cd` (or equivalent) to the brain root named as `brain_root` in `/memory/OWNER.md` (or the active absolute working directory if the command must run elsewhere, such as the memory checkout or a project repository) before the command, so the owner does not have to locate the correct folder.
+- A shell command given to the owner starts with an explicit `cd` (or equivalent) to the folder it must run in: the brain root named as `brain_root` in `/memory/OWNER.md`, or the absolute working directory when it runs elsewhere, such as the memory checkout or a project repository.
 
 ## SMART-RULE-0007 – Portable behavioural rules only
 
-- Keep durable behavioural rules only in portable governance: `/CONTRACT.md`, root and node `RULES.md` files, and skill operating instructions. Do not create or maintain host-specific behavioural rule files that restate or extend how agents must behave.
-- Host entry files may only point agents to portable bootstrap (`/CONTRACT.md`, `/BOOTSTRAP.md`, `/AGENTS.md`) and must not carry independent behavioural policy.
+- Durable behavioural rules live only in portable governance: `/CONTRACT.md`, root and node `RULES.md` files, and skill operating instructions. A host entry file only points agents to the portable bootstrap (`/CONTRACT.md`, `/BOOTSTRAP.md`, `/AGENTS.md`); no host-specific file restates, extends or carries behavioural policy of its own.
 - **One text per rule.** A rule's wording lives only in its canonical home. Anywhere else it is referred to by its identifier and section, never restated in other words; a list that can be generated from its sources is generated. The repository preflight fails when a pointer file carries rule identifiers or runs past a pointer's length. The worker brief (`/shared/skills/delegate-work/templates/worker-brief.template.md`) is the one permitted digest: each of its items names the rule or contract section it digests, and a change to a digested rule changes the brief in the same commit.
 - **A host's own memory is not a home.** Where a host keeps notes of its own between sessions (a memory folder, saved memories, custom instructions), an agent stores no behavioural rule, owner preference, project fact or learning there, even when the host tells it to save one. It routes the item under CONTRACT §5 and §6 – an owner preference to the owner layer through a proposal, a fact to the node that owns it, a tool's quirk to its learning or API record – and says where it went. A host's memory holds at most a pointer to the brain and facts about that one installation which no other host could use. An entry found there that belongs in the brain is moved, not copied.
 
@@ -217,8 +211,6 @@ Contract sections and when to read them, in section order:
   configuration mismatches specifically. The reason is not risk but economy: a change in the
   external system's own interface is frequently far cheaper than a translation layer, and the
   layer outlives the mismatch it was written for.
-- Continue with every part of the task that does not depend on the answer, so the question arrives
-  with the rest of the work already done rather than blocking it.
 - This does not apply to genuine API behaviour that cannot be configured away – an endpoint's
   response shape, a required header, a status code. Absorb those in code and record them under
   `SMART-RULE-0013`.
@@ -287,24 +279,7 @@ Contract sections and when to read them, in section order:
   uncommitted work lives when it is outside this repository.
 - A checkpoint must not present unfinished work as finished. Report the actual state, including
   failures, blocked steps and anything skipped.
-- A checkpoint ends with **one handover prompt** for the next thread, and it is a pointer,
-  not a summary: the bootstrap files to read, the owning node's `STATE.md` whose `## Handover`
-  section holds the position, and the single next action. Ten lines at most; nothing in it
-  that a file already says. Everything the successor needs – runs and workers with their
-  packets, branches and pending results, builds and where the owner loaded them, owner steps
-  outstanding, decisions still open, the reminder that a worker's completion notice reaches
-  only the thread that launched it – lives under `## Handover` in the owning node's `STATE.md`
-  (and, for work spanning nodes, one line per other node pointing at its own `## Handover`),
-  written before the prompt and kept current at every checkpoint. Write the prompt under
-  `## Handover prompt` in the same `STATE.md`. Give it in the reply when the thread is handing
-  over to a new one: after a compaction, when the host's context warning fires, at the drain
-  threshold, or when the owner asks. A reply after a checkpoint the thread carries on from says
-  only that the checkpoint is written. The `## Handover` of `/memory/projects/brain-development/STATE.md` also names the **active
-  conductor** (session title and the time it took over) and the other live sessions it knows
-  of; a new thread that finds an active conductor asks the owner which thread continues
-  before dispatching anything. Take the checkpoint whenever the remaining context is unlikely
-  to carry the next stage, and at any natural handover where a fresh thread would work more
-  efficiently.
+- A checkpoint ends with **one handover prompt** for the next thread, and it is a pointer, not a summary: the bootstrap files to read, the owning node's `STATE.md` whose `## Handover` section holds the position, and the single next action. Ten lines at most; nothing in it that a file already says. Everything the successor needs – runs and workers with their packets, branches and pending results, builds and where the owner loaded them, owner steps outstanding, decisions still open, the reminder that a worker's completion notice reaches only the thread that launched it – lives under `## Handover` in the owning node's `STATE.md` (and, for work spanning nodes, one line per other node pointing at its own `## Handover`), written before the prompt and kept current at every checkpoint. Write the prompt under `## Handover prompt` in the same `STATE.md`. Give it in the reply when the thread is handing over to a new one: after a compaction, when the host's context warning fires, at the drain threshold, or when the owner asks. A reply after a checkpoint the thread carries on from says only that the checkpoint is written. The live conductors are named in the `## Handover` of `/memory/projects/brain-development/STATE.md`, and a new thread that finds one asks the owner which thread continues (`SMART-RULE-0048`).
 - The active-conductor question is not required for at most one bounded, read-only learning or public-research worker per thread under SMART-RULE-0028, within SMART-RULE-0024’s delegation budget. Workers use no credentials, take no external side effects and write only their separate result artifacts. This exception grants no product-editing, merging or canonical-integration authority.
 - Finish with the Git exit check under `SMART-RULE-0014`, so the handoff and the tree agree.
 
@@ -387,7 +362,6 @@ Contract sections and when to read them, in section order:
   behaviour and outputs, not on private structure or call sequences.
 - Do not report an existing green suite as evidence for new or changed behaviour unless a test
   actually asserts that behaviour. State what the tests prove and what they do not.
-- Fixture and sample data remain subject to `SMART-RULE-0008`: entirely fictional.
 - Proportion applies. Clearly non-material changes as defined in `SMART-RULE-0016` need no new
   test; a behavioural change always does.
 - **Run it for real before trusting the tests.** When a change has more than one process, or meets
@@ -471,13 +445,10 @@ Contract sections and when to read them, in section order:
     works the same way without action by someone: stored data needs a migration or is read
     differently, an interface that others call or read changes its shape or meaning, or a
     procedure a person follows changes its steps. Bumping the first number resets the other
-    two. While a product is still in development its version stays below `1.0.0`, and a
-    breaking change there bumps the **middle** number instead: nothing outside the team
-    depends on it yet, so the first number would say nothing a reader could use. `1.0.0` is
-    set once, deliberately, when the owner declares the product released, and from that
-    version on the first number follows the test above. A breaking change before `1.0.0` is
-    still named as breaking in its commit message and in the node's `LOG.md`, so the history
-    says what changed even where the number does not.
+    two. Until the owner declares the product released, its version stays below `1.0.0` and
+    a breaking change bumps the **middle** number instead; it is still named as breaking in
+    its commit message and in the node's `LOG.md`. `1.0.0` is set once, deliberately, and
+    from that version on the first number follows the test above.
   - **Middle number, feature.** A person can see or do something they could not before, or
     something visible behaves differently on purpose without breaking what depended on it: a
     new view, a new setting, a new record kind, a changed layout. Resets the last number.
@@ -500,17 +471,8 @@ Contract sections and when to read them, in section order:
 
 ## SMART-RULE-0027 – Every list has a deliberate order
 
-- Every list a person reads is put in an order chosen for that reader, never left in the
-  order it was produced: the options of a dropdown, the rows of a table, the sections of a
-  report, the findings of a check, the bullets of a reply, the entries of an index. Insertion
-  order, capture order, map order and API order are not orders; they are accidents.
-- The default is alphabetical by the label the reader sees, with numbers inside labels
-  compared as numbers, so `1.2` precedes `1.10`. Another order replaces it only when the
-  reader is better served by it, and the code or the document says so in a comment or a
-  line: by time when the reader follows a sequence, by severity or priority when they act
-  on the worst first, by frequency or size when the largest matters most, by a fixed
-  domain order when one exists, such as the stages of a pipeline. The chosen order holds
-  across renders and captures, so two views of the same data list it the same way.
+- Every list a person reads is in an order chosen for that reader, never the order it was produced in: a dropdown's options, a table's rows, a report's sections, a check's findings, a reply's bullets, an index's entries. Insertion, capture, map and API order are accidents, not orders.
+- The default is alphabetical by the label the reader sees, with numbers inside labels compared as numbers, so `1.2` precedes `1.10`. Another order replaces it only when it serves the reader better, and the code or the document says so in a line: time for a sequence, severity or priority when the worst is acted on first, frequency or size when the largest matters most, a fixed domain order such as the stages of a pipeline. The chosen order holds across renders and captures, so two views of the same data agree.
 - A list shows what the reader can use. Items that cannot be used from that list, such as a
   draft where only published items act, are left out or set apart under their own label,
   and the code says which.
@@ -545,7 +507,7 @@ Contract sections and when to read them, in section order:
 - **Notice and suggest.** When a node-local capability is used or copied by a second node, holds no owner data once its configuration is moved out, or wraps a system other owners use, record it as a promotion candidate and suggest promoting it to a library skill at the next natural checkpoint. Procedure: `/shared/skills/skill-exchange/`.
 - **Clean before it leaves memory.** Nothing moves from `/memory/` to a shareable repository (the mechanics or the skill library), or from a shareable repository to any other repository, until the personal-data check reports no hits (`SMART-RULE-0008`, CONTRACT §3.4).
 - **Offer, never push.** A contribution to an upstream repository is a pull request from the owner's own repository, carrying a proposal file without a rule number, the personal-data check's result and passing tests, opened only after the owner says yes to that contribution. Whether it is taken is the upstream maintainer's decision; every other decision in the owner's brain is the owner's (CONTRACT §3.6).
-- **Follow upstream, or hear it.** The owner's setting `follow_upstream` in `/memory/skills/skill-exchange/config/settings.json`, asked once at `/SETUP.md` step B4, decides how upstream reaches the brain. When it is on, at session start the agent fetches `upstream` and merges `upstream/main` into the mechanics and the skill library the way `SMART-RULE-0034` merges `origin`: a merge commit, never a rebase or a forced push; a conflicting hand-written file stops the merge and is put to the owner; the merged result passes the repository preflight before it is pushed to `origin`. The setting is the owner's standing acceptance of protected-governance changes the upstream maintainer has already accepted on upstream `main` (CONTRACT §13.2); each merge that brings one is recorded in `/memory/governance/upstream-merges.md` (upstream commit, files changed, contract version before and after) and reported in the first reply. When it is off or absent, at session start when a check is due (default every seven days) the agent fetches `upstream` and tells the owner what changed in their `active_skills`, the core skills, governance and new skills; merging is the owner's decision, and an upstream change to protected governance is presented as a proposal (CONTRACT §13.2).
+- **Follow upstream, or hear it.** The owner's setting `follow_upstream` in `/memory/skills/skill-exchange/config/settings.json`, asked once at `/SETUP.md` step B4, decides how upstream reaches the brain. When it is on, at session start the agent fetches `upstream` and merges `upstream/main` into the mechanics and the skill library the way `SMART-RULE-0034` merges `origin`, and pushes the checked result to `origin`. The setting is the owner's standing acceptance under CONTRACT §13.2; each merge that brings a protected-governance change is recorded in `/memory/governance/upstream-merges.md` (upstream commit, files changed, contract version before and after) and reported in the first reply. When it is off or absent, at session start when a check is due (default every seven days) the agent fetches `upstream` and tells the owner what changed in their `active_skills`, the core skills, governance and new skills; merging is the owner's decision, and an upstream change to protected governance is presented as a proposal (CONTRACT §13.2).
 - **Record provenance.** A skill installed from another brain or library is read in full before it runs, and its source repository and commit are recorded in `/memory/skills/installed.json`.
 - **Suggest at checkpoints, once.** Suggestions are batched at natural checkpoints (session start, end of a unit of work, the weekly review), numbered with a recommendation, capped, and not repeated after a decline unless new evidence arrives. The owner may set them to weekly or off. A security fix to a skill the owner uses is the one exception and is reported at the next response.
 
@@ -559,16 +521,13 @@ Contract sections and when to read them, in section order:
 ## SMART-RULE-0034 – Start from the latest
 
 - At the start of a session, before reading state or changing anything, bring every brain repository on this computer up to date with its `origin`: the mechanics, the skill library and the memory, and a project repository before working in it. Fetch; when the local branch is only behind, fast-forward it. `python shared/skills/repository-preflight/scripts/sync.py` does this for all of them (`--also <repo>` for a project repository).
-- **Diverged history between agents is routine, not an owner decision.** When a brain repository – the mechanics, the skill library or the memory – has commits of its own that `origin` does not, and `origin` has commits it does not (the history has diverged), and no tracked file has uncommitted changes, the agent merges `origin` into it without asking: a merge commit, never a rebase of commits already made, a reset or a forced push. A generated file that conflicts (a board, an index, a task list) is taken from `origin` and rebuilt by its generator; an append-only log keeps both entries. The merged result passes the repository preflight before it is pushed. `sync.py` does this for the shared checkout by merging in a session copy of its own and then fast-forwarding the shared checkout, which is never merged into (`SMART-RULE-0038`); `session.py finish` does it for a session copy.
-- **A refused push is the same case.** When a push is refused because `origin` has moved on, the agent fetches, merges, runs the preflight and pushes again, up to three attempts in all, then stops and reports. `session.py finish` does this itself.
+- **Diverged history and a refused push are routine, not an owner decision.** When a brain repository – the mechanics, the skill library or the memory – and its `origin` each have commits the other lacks, and no tracked file has uncommitted changes, the agent merges `origin` into it without asking: a merge commit, never a rebase of commits already made, a reset or a forced push. A generated file that conflicts (a board, an index, a task list) is taken from `origin` and rebuilt by its generator; an append-only log keeps both entries. The merged result passes the repository preflight before it is pushed. A push refused because `origin` has moved on is the same case: fetch, merge, check and push again, up to three attempts in all, then stop and report. `sync.py` does the merge for the shared checkout, in a session copy of its own, so that the shared checkout is only ever fast-forwarded (`SMART-RULE-0038`); `session.py finish` does the merge and the repeated push for a session copy.
 - **The agent stops and asks the owner only when:**
   - a hand-written file conflicts: it reports the file, both sides and a suggested resolution, and leaves the merge unfinished in the session copy, never in the shared checkout;
   - the repository preflight fails on the merged result: it reports the errors and pushes nothing;
   - tracked files have uncommitted changes that are not its own: it changes nothing in that repository and tells the owner what differs before starting work there. Its own uncommitted work it commits first, then merges or fast-forwards as above.
-- Never rewrite history or force a push to make a pull or a push work.
 - **A project repository keeps its own merge routine.** The merging above covers the brain repositories only. In a project repository `sync.py` reports divergence and changes nothing; the merge routine in the project's own rules applies, and without one the agent tells the owner what differs before starting work there.
 - A computer that cannot reach `origin` says so, and works on only after the owner agrees.
-- Push at the end of each unit of work (`SMART-RULE-0009`), so the next computer starts from it.
 
 ## SMART-RULE-0035 – Offer a board when a project outgrows the personal board
 
@@ -581,7 +540,6 @@ Contract sections and when to read them, in section order:
 
 - When a rule blocks work that serves the owner's goals, or two rules conflict, the agent stops and puts it to the owner: the rule, what it blocks, the options and a recommendation. It never works around a rule quietly, in words or in code; changing what a validator accepts is changing a rule.
 - Rules exist to support good outcomes. A rule that hinders them is changed deliberately, through a proposal the owner accepts (CONTRACT §13.2), not bent case by case.
-- Continue with every part of the task the question does not block, so it arrives with the rest of the work done.
 
 ## SMART-RULE-0037 – Size parallel work to the machine and the merge
 
@@ -609,27 +567,11 @@ Contract sections and when to read them, in section order:
 - Claim work, not files. What a session is doing is recorded on the task it serves, never as a
   lock or a list of files. Overlap between sessions is found when their work is merged, where Git
   shows it as a conflict.
-- Merge back at every unit of work (`SMART-RULE-0009`): bring the branch up to date with
-  `origin/main`, resolve any conflict, validate, push to `main`, and fast-forward the shared
-  checkout. `session.py finish` does this and removes the worktrees once their branches are
-  merged. A conflict is reconciled, never overwritten: a generated file (a board, an index, a
-  task list) is taken from `main` and rebuilt by its generator; an append-only log keeps both
-  entries; any other conflict whose right resolution is not obvious from the two changes goes to
-  the owner.
+- Merge back at every unit of work (`SMART-RULE-0009`): bring the branch up to date with `origin/main`, resolve any conflict, validate, push to `main`, and fast-forward the shared checkout. `session.py finish` does this and removes the worktrees once their branches are merged. A conflict is reconciled as `SMART-RULE-0034` says, never overwritten; one whose right resolution is not obvious from the two changes goes to the owner.
 - The shared checkout holds only merged work. It is where the owner reads and runs things, it is
   fast-forwarded under `SMART-RULE-0034`, and no session leaves uncommitted changes in it.
-- A session's delegated workers share its copy and branch by default. Each packet names the paths
-  its worker may change (`writes: paths`); the conductor keeps them disjoint across the run and
-  keeps shared files – logs, state, task lists, indexes, version fields, build output – for
-  itself. Only the conductor stages and commits. A worker gets its own worktree, branched from the
-  session's branch and merged back by the conductor, only when its work cannot be kept apart: it
-  builds code or runs tests that write outside its own paths, it must change a file another
-  worker also changes, or it is one of several alternative attempts. Unit tests that read and
-  write only inside the worker's own paths (and their caches) run in the session copy.
-- The pre-commit hook refuses a commit on `main` in a repository's own working tree – the
-  shared checkout – and names the command that makes a session copy. Session copies are linked
-  worktrees on their own branches, so their commits pass; so do a `proposal/*` branch and any
-  other branch.
+- A session's delegated workers share its copy and branch by default. `SMART-RULE-0024` says which paths a worker may change, that only the conductor stages and commits, and when a worker gets a worktree of its own.
+- The pre-commit hook refuses a commit on `main` in the shared checkout and names the command that makes a session copy. A commit in a session copy, on a `proposal/*` branch or on any other branch passes.
 - A host that cannot work in a separate folder says so at the start, works in the shared
   checkout with `BRAIN_SHARED_CHECKOUT=1` set for its commits, re-reads each file immediately
   before changing it, and stages only its own paths. The owner uses the same variable for a
@@ -708,12 +650,7 @@ Contract sections and when to read them, in section order:
 
 ## SMART-RULE-0044 – Raise the ambition of every request
 
-- At the intake of every request, the agent applies `/shared/skills/raise-ambition/`: it names
-  the outcome behind the request and checks whether a bigger version would serve the user better
-  – one that reaches higher (an outcome kept true, not a task done once), deeper (an expert's
-  methods and a harder, measurable target) or wider (other fields and roles, including an
-  adversarial reviewer). The user is the person whose request it is: the owner, or a
-  collaborator working in a shared project.
+- At the intake of every request, the agent applies `/shared/skills/raise-ambition/`: it names the outcome behind the request and checks whether a bigger version – higher, deeper or wider, as the skill defines them – would serve the user better. The user is the person whose request it is: the owner, or a collaborator working in a shared project.
 - When a bigger version would serve the user better, the agent's clarifying question offers it
   as option 1, marked recommended, with what it would take; the request as asked is option 2.
   When no question is otherwise needed, the agent does what was asked and adds one line naming
@@ -721,13 +658,7 @@ Contract sections and when to read them, in section order:
 - The agent never widens the work without the user's yes, does not repeat a bigger version the
   user declined for the same request, and keeps the suggestion to a few lines. Safety, cost,
   side-effect and governance rules are unchanged.
-- When a request starts a project, or leaves the design open, and the goals or the values behind
-  it are uncertain or could be read in more than one way, the agent asks about those before it
-  designs: what the work is for, whom it serves, and what matters more when two aims conflict.
-  It does not ask how the goals should be achieved; that is the agent's to work out. Each
-  question carries a suggested answer (`SMART-RULE-0010`), and the questions arrive with every
-  part of the work they do not block already done. A task whose outcome is already spelled out
-  gets no such questions.
+- When a request starts a project, or leaves the design open, and the goals or the values behind it are uncertain or could be read in more than one way, the agent asks about those before it designs: what the work is for, whom it serves, and what matters more when two aims conflict. It does not ask how the goals should be achieved; that is the agent's to work out. A task whose outcome is already spelled out gets no such questions.
 
 ## SMART-RULE-0045 – Host plugin skills act under the brain
 
@@ -746,12 +677,7 @@ Contract sections and when to read them, in section order:
   `/memory/tasks/`. Messages are drafted, never sent without the owner's approval, and a plugin
   connector's write to an outside system needs the confirmed target of CONTRACT §10.5 like any
   other.
-- **Learnings flow into the brain.** Using a plugin skill is ordinary evidence under
-  `SMART-RULE-0028`. At the next natural checkpoint the agent records, in the owning subject's
-  knowledge store or `data/learnings/`: what the plugin produced that proved useful or wrong, the
-  owner's corrections to its output and the preference behind them, durable decisions it helped
-  reach, and failures or limits met. Each record names the host and plugin skill that produced the
-  output. Routine use that teaches nothing needs no record.
+- **Learnings flow into the brain.** Using a plugin skill is ordinary evidence under `SMART-RULE-0028`: what the plugin produced that proved useful or wrong, the owner's corrections to its output and the preference behind them, durable decisions it helped reach, and failures or limits met. Each record names the host and plugin skill that produced the output.
 - A plugin pattern that proves useful more than once is a candidate brain skill, suggested for
   promotion under `SMART-RULE-0032`, so the capability becomes portable to hosts that lack the
   plugin.
@@ -761,10 +687,7 @@ Contract sections and when to read them, in section order:
 
 ## SMART-RULE-0046 – A release note for every change a user would notice
 
-- A release note records one change that someone who uses the system – staff, customers, or a
-  colleague working in a platform the brain builds in – would see, do, receive or need to watch for
-  differently. It is written from their side, in their words, with no code terms. Commits and
-  their messages stay the developer's record and are not release notes.
+- A release note records one change that someone who uses the system – the team, customers, or a colleague working in a platform the brain builds in – would see, do, receive or need to watch for differently. It is written from their side, in their words, with no code terms. Commits and their messages stay the developer's record and are not release notes.
 - One note per user-visible outcome, never per commit. The agent opens the note when the work
   starts and names it in each commit that belongs to it (`Release-note: <slug>` trailer). A later
   commit that changes what a note says updates the note in the same commit. Refactors, tests,
@@ -847,20 +770,3 @@ Contract sections and when to read them, in section order:
 - **A failed test is rerun once, alone, and stays named.** A check that runs before integration (a pre-push hook or CI) runs each failed test once more, on its own, after every other step has finished, so nothing else competes with it for the machine. A test that passes then counts as passed and is named in the check's output; one that fails again fails the check. Only the failed tests rerun, never the whole suite, and never more than once. A step with more failures than a small limit the project sets (5 unless it chooses another) is not rerun: that many failures is a fault. Each rerun is recorded outside the repository's tracked files, and the check warns when the same test has needed a rerun in 3 of its last 20 runs; such a test is reported to the owner and fixed, never left to the rerun.
 - **Rolling push.** A conductor that merges several workers' branches pushes as soon as a merge is ready and no push is running. While a push's check runs, nothing is merged into the branch being pushed. Branches that finish during a push are merged when it returns and go out together in the next push. No push waits for a batch to be complete, and none is held back to save a check or a deployment.
 
-## Contract restatements
-
-These restatements of `/CONTRACT.md` keep no separate rule identifier. Find the canonical wording in the contract section named here.
-
-- Use repository-root paths in metadata and cross-references. (CONTRACT §8 / §12)
-- Use one canonical home for every durable item. (CONTRACT §3.3)
-- Prefer links and dependencies over copies. (CONTRACT §3.3 / §12)
-- Keep metadata minimal, explicit and useful. (CONTRACT §8.4)
-- Preserve raw files unchanged. (CONTRACT §11.1)
-- Create Markdown source records for raw files. (CONTRACT §11.2)
-- Treat the task stores of CONTRACT §9 – every node's `tasks/` and `/memory/tasks/` – as the canonical task system. (CONTRACT §9)
-- Use shared skills for reusable capabilities. (CONTRACT §10.1)
-- Keep project-specific configuration inside the project, and owner-wide skill configuration in `/memory/skills/<skill>/`. (CONTRACT §3.5 / §10.1)
-- Keep personal data out of the mechanics repository; it belongs in `/memory/`. (CONTRACT §3.4)
-- Record meaningful state changes and decisions. (CONTRACT §4 / §5)
-- Use ISO 8601 timestamps with seconds and an explicit timezone for `created`, `updated`, and log entry headings; never use date-only values for them. (CONTRACT §8.2)
-- Do not store secrets in the repository. (CONTRACT §10.3)
