@@ -155,6 +155,26 @@ def scan(files: list[Path], terms: list[str], *, base: Path | None = None,
     parts = ([f"(?-i:{alternatives(names)})"] if names else []) + ([alternatives(others)] if others else [])
     word = re.compile("|".join(parts), re.I) if parts else None
     patterns = {k: re.compile(v, re.I) for k, v in PATTERNS.items()}
+    # The terms alone, without the checks on what stands either side of them: a text that holds
+    # none of them cannot hold an owner term, and this search is many times faster than `word`.
+    loose = re.compile("|".join(re.escape(t) for t in names + others), re.I) if parts else None
+    # Faster still, and exact when every term is plain ASCII: a lower-cased substring test. Four
+    # characters outside ASCII match an ASCII letter when case is ignored (dotted and dotless i,
+    # long s, the Kelvin sign); a text that holds one of them takes the regular expression.
+    plain = [t.lower() for t in names + others] if all(t.isascii() for t in names + others) else None
+    folds_to_ascii = "İıſK"
+
+    def may_hold_term(text: str) -> bool:
+        if loose is None:
+            return False
+        if plain is None or any(c in text for c in folds_to_ascii):
+            return loose.search(text) is not None
+        lowered = text.lower()
+        return any(t in lowered for t in plain)
+    # A character each pattern cannot match without; a pattern not named here is always tried.
+    needed = {kind: (lambda text: True) for kind in patterns}
+    needed["email"] = lambda text: "@" in text
+    needed["absolute-path"] = lambda text: ":\\" in text or "/home/" in text or "/Users/" in text
     hits: list[tuple[str, int, str, str]] = []
     for f in files:
         if f.suffix.lower() not in TEXT_SUFFIXES:
@@ -166,6 +186,12 @@ def scan(files: list[Path], terms: list[str], *, base: Path | None = None,
         try:
             text = f.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):
+            continue
+        # Most files hold no hit at all: one search of the whole text settles that before the
+        # line-by-line pass. No pattern can match across a line break or needs one to match, so a
+        # file with a hit on some line always has one here too.
+        if not may_hold_term(text) and not any(
+                r.search(text) for kind, r in patterns.items() if needed[kind](text)):
             continue
         for number, line in enumerate(text.splitlines(), start=1):
             found = [("owner-term", m.group(0)) for m in word.finditer(line)] if word else []

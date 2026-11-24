@@ -195,13 +195,18 @@ def markdown_paths(root: Path) -> list[Path]:
     """Markdown files to validate: not raw evidence in a raw store (P24), not tool state, not the
     scratch folder and not anything else Git ignores in the repository that holds it."""
     is_raw = raw_store_skipper(root)
-    candidates = [
-        path
-        for path in root.rglob("*.md")
-        if not any(part in IGNORED_DIRS for part in path.relative_to(root).parts)
-        and path.relative_to(root).parts[0] != SCRATCH_DIR
-        and not is_raw(path)
-    ]
+    candidates = []
+    # Skipped folders are never entered: walking a worktree or a dependency folder only to discard
+    # every file in it took a third of the run.
+    for folder, subfolders, files in os.walk(root):
+        top = Path(folder) == root
+        subfolders[:] = [name for name in subfolders
+                         if name not in IGNORED_DIRS and not (top and name == SCRATCH_DIR)]
+        for name in files:
+            if os.path.normcase(name).endswith(".md") and name not in IGNORED_DIRS:
+                path = Path(folder, name)
+                if not is_raw(path):
+                    candidates.append(path)
     ignored = ignored_paths(root, candidates)
     return sorted(path for path in candidates if path not in ignored)
 
