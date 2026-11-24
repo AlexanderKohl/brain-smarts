@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-29T08:00:00+10:00
-updated: 2026-11-23T14:38:10+10:00
+updated: 2026-11-24T14:22:02+10:00
 owner: brain-owner
 generated_by: /shared/skills/repository-preflight/scripts/core.py
 canonical_sources:
@@ -108,24 +108,21 @@ that always apply, verbatim.
 
 ## SMART-RULE-0009 – Logical checkpoint commits
 
-- Portable git checkpoint rules in this file (`SMART-RULE-0009`) override any host-specific "ask before commit", "only commit when asked", or "always present commit/push options" instructions in this repository and in every other Git repository modified during an owner-authorised task. Still never commit secrets or unrelated dirty files. Host "only commit when asked" instructions apply only when this rule does not apply (for example a repository the owner has not authorised this task to change).
+- This rule overrides a host's "ask before commit", "only commit when asked" or "always present commit/push options" instructions in every Git repository modified during an owner-authorised task. Those host instructions apply only where this rule does not, for example in a repository the owner has not authorised the task to change.
 - In every Git repository modified during an owner-authorised task, automatically create a commit at each successful logical checkpoint. A logical checkpoint exists when an independently describable improvement, fix, document update, configuration change or tested implementation is complete. Do not wait for the entire project to finish and do not bundle unrelated logical changes.
-- A Git checkpoint is mandatory after relevant validation passes; before switching tasks, repositories, branches or workstreams; before pausing for owner input or approval while agent-owned changes remain; before asking the owner to test, reload, load-unpacked, install, or try a build; before the final response when the agent produced durable repository changes; and after 30 minutes of active work with uncommitted agent-owned changes, even if the larger task continues.
+- A Git checkpoint is mandatory after relevant validation passes; before switching tasks, repositories, branches or workstreams; before pausing for owner input or approval while agent-owned changes remain; before an owner test (next bullet); before the final response when the agent produced durable repository changes; and after 30 minutes of active work with uncommitted agent-owned changes, even if the larger task continues.
 - **Owner-test handoff:** Before asking the owner to test, reload, load-unpacked, install, or try a build, commit the agent-owned change in that product repository. That commit is the rollback point if the test fails. Do not wait for the owner to ask. If the work is a sequence of trials, commit each testable batch separately so a working version can be restored without unpicking later experiments.
-- At each checkpoint, inspect `git status` and the relevant diff, stage only agent-owned files that belong to that logical change, check that no secret or unrelated change is included, run proportionate validation, and commit with a concise message whose subject says what changed and never names the tool or the model. Two trailers of the same commit name them: `Tool: <host or tool>` (for example `Tool: Claude Code desktop` or `Tool: Cursor`, with the agent's bot name when it has one) and `Co-Authored-By: <model> <address>` (for example `Co-Authored-By: Claude Opus 5.5 <the host's no-reply address>`). In the brain's repositories the commit-message hook refuses a commit, other than a merge, without both. Do not invent a model or version. Pre-existing or concurrent dirty files do not prevent a path-scoped commit when the agent-owned change can be separated safely.
+- At each checkpoint, inspect `git status` and the relevant diff, stage only the agent-owned files of that logical change, run proportionate validation, and commit with a concise message whose subject says what changed and never names the tool or the model. Two trailers of the same commit name them: `Tool: <host or tool>` (for example `Tool: Cursor`, with the agent's bot name when it has one) and `Co-Authored-By: <model> <address>` (the host's no-reply address), never an invented model or version. In the brain's repositories the commit-message hook refuses a commit, other than a merge, without both. Pre-existing or concurrent dirty files do not prevent a path-scoped commit when the agent-owned change can be separated safely.
 - Never commit secrets, credentials, vault ciphertext, private tokens, unresolved conflict markers or unrelated user changes. Do not use `--no-verify`, amend or rewrite an existing commit, force-push, or push directly to a protected `main` or `master` branch unless the owner explicitly directs that specific action. If ownership or safety is uncertain, leave the uncertain path unstaged and ask.
 - Treat commit and push as separate decisions. A push failure or unavailable remote must never prevent the local commit. Owner-test handoff commits stay local: do not push solely because the owner is being asked to test. Push accumulated agent-created commits to the tracked remote when the unit of work finishes and before the final response (except a response that is only an owner-test handoff), or after 30 minutes since the last successful push while work continues, unless the owner has prohibited pushing or repository policy requires review through another path. Also push when the owner asked to push.
-- Never silently finish with committable agent-owned changes. In the final response, report the commit hash and push status for each modified repository, or state `No commit` with the specific reason. Valid reasons include: no durable change, no Git repository, the owner explicitly prohibited committing, validation or a hook failed, a merge/rebase/conflict is active, required Git identity or permission is unavailable, or the change cannot be separated safely from uncertain or unrelated files.
+- Never silently finish with committable agent-owned changes. The permitted reasons for no commit are: no durable change, no Git repository, the owner explicitly prohibited committing, validation or a hook failed, a merge/rebase/conflict is active, required Git identity or permission is unavailable, or the change cannot be separated safely from uncertain or unrelated files. The reply reports the commit, or the reason, as `SMART-RULE-0014` says.
 
 ## SMART-RULE-0010 – Communication efficiency
 
-- In voice mode, when a clarifying question is required, ask one question at a time and wait for the answer before asking the next, unless the owner explicitly requests a grouped questionnaire. Outside voice mode, presenting a list of clarifying questions is acceptable-especially when scoping a software project. Do not invent questions when a safe default exists.
+- In voice mode, when a clarifying question is required, ask one question at a time and wait for the answer before asking the next, unless the owner explicitly requests a grouped questionnaire. Outside voice mode, a list of clarifying questions is acceptable, especially when scoping a software project.
 - Prefer a reversible default and proceed when multiple approaches are valid and the risk is low; state the chosen approach in one short line. Ask only for irreversible actions, secrets, material trade-offs, or when policy requires owner choice.
 - Do not narrate process before acting ("I'll bootstrap.", "Let me check.", "I'll start by reading."). Run tools or answer; put status only in the final reply when the owner needs a result.
-- Every question to the owner carries at least one concrete suggested answer, so the owner
-  can reply "yes" or "ok". When several valid options exist, number them and mark the
-  recommended one, so the owner can reply with a number. The owner may always answer with
-  different instructions instead; a suggestion or a numbered list never limits the choice.
+- Every question to the owner carries at least one concrete suggested answer, so the owner can reply "yes" or "ok". When several valid options exist, number them and mark the recommended one, so the owner can reply with a number. The owner may always answer with different instructions instead; a suggestion or a numbered list never limits the choice. A question never stops the work it does not block: the agent continues with every other part of the task, so the question arrives with the rest already done.
 
 ## SMART-RULE-0014 – Lightweight Git exit check
 
@@ -135,17 +132,8 @@ that always apply, verbatim.
 
 ## SMART-RULE-0027 – Every list has a deliberate order
 
-- Every list a person reads is put in an order chosen for that reader, never left in the
-  order it was produced: the options of a dropdown, the rows of a table, the sections of a
-  report, the findings of a check, the bullets of a reply, the entries of an index. Insertion
-  order, capture order, map order and API order are not orders; they are accidents.
-- The default is alphabetical by the label the reader sees, with numbers inside labels
-  compared as numbers, so `1.2` precedes `1.10`. Another order replaces it only when the
-  reader is better served by it, and the code or the document says so in a comment or a
-  line: by time when the reader follows a sequence, by severity or priority when they act
-  on the worst first, by frequency or size when the largest matters most, by a fixed
-  domain order when one exists, such as the stages of a pipeline. The chosen order holds
-  across renders and captures, so two views of the same data list it the same way.
+- Every list a person reads is in an order chosen for that reader, never the order it was produced in: a dropdown's options, a table's rows, a report's sections, a check's findings, a reply's bullets, an index's entries. Insertion, capture, map and API order are accidents, not orders.
+- The default is alphabetical by the label the reader sees, with numbers inside labels compared as numbers, so `1.2` precedes `1.10`. Another order replaces it only when it serves the reader better, and the code or the document says so in a line: time for a sequence, severity or priority when the worst is acted on first, frequency or size when the largest matters most, a fixed domain order such as the stages of a pipeline. The chosen order holds across renders and captures, so two views of the same data agree.
 - A list shows what the reader can use. Items that cannot be used from that list, such as a
   draft where only published items act, are left out or set apart under their own label,
   and the code says which.
@@ -155,22 +143,18 @@ that always apply, verbatim.
 ## SMART-RULE-0034 – Start from the latest
 
 - At the start of a session, before reading state or changing anything, bring every brain repository on this computer up to date with its `origin`: the mechanics, the skill library and the memory, and a project repository before working in it. Fetch; when the local branch is only behind, fast-forward it. `python shared/skills/repository-preflight/scripts/sync.py` does this for all of them (`--also <repo>` for a project repository).
-- **Diverged history between agents is routine, not an owner decision.** When a brain repository – the mechanics, the skill library or the memory – has commits of its own that `origin` does not, and `origin` has commits it does not (the history has diverged), and no tracked file has uncommitted changes, the agent merges `origin` into it without asking: a merge commit, never a rebase of commits already made, a reset or a forced push. A generated file that conflicts (a board, an index, a task list) is taken from `origin` and rebuilt by its generator; an append-only log keeps both entries. The merged result passes the repository preflight before it is pushed. `sync.py` does this for the shared checkout by merging in a session copy of its own and then fast-forwarding the shared checkout, which is never merged into (`SMART-RULE-0038`); `session.py finish` does it for a session copy.
-- **A refused push is the same case.** When a push is refused because `origin` has moved on, the agent fetches, merges, runs the preflight and pushes again, up to three attempts in all, then stops and reports. `session.py finish` does this itself.
+- **Diverged history and a refused push are routine, not an owner decision.** When a brain repository – the mechanics, the skill library or the memory – and its `origin` each have commits the other lacks, and no tracked file has uncommitted changes, the agent merges `origin` into it without asking: a merge commit, never a rebase of commits already made, a reset or a forced push. A generated file that conflicts (a board, an index, a task list) is taken from `origin` and rebuilt by its generator; an append-only log keeps both entries. The merged result passes the repository preflight before it is pushed. A push refused because `origin` has moved on is the same case: fetch, merge, check and push again, up to three attempts in all, then stop and report. `sync.py` does the merge for the shared checkout, in a session copy of its own, so that the shared checkout is only ever fast-forwarded (`SMART-RULE-0038`); `session.py finish` does the merge and the repeated push for a session copy.
 - **The agent stops and asks the owner only when:**
   - a hand-written file conflicts: it reports the file, both sides and a suggested resolution, and leaves the merge unfinished in the session copy, never in the shared checkout;
   - the repository preflight fails on the merged result: it reports the errors and pushes nothing;
   - tracked files have uncommitted changes that are not its own: it changes nothing in that repository and tells the owner what differs before starting work there. Its own uncommitted work it commits first, then merges or fast-forwards as above.
-- Never rewrite history or force a push to make a pull or a push work.
 - **A project repository keeps its own merge routine.** The merging above covers the brain repositories only. In a project repository `sync.py` reports divergence and changes nothing; the merge routine in the project's own rules applies, and without one the agent tells the owner what differs before starting work there.
 - A computer that cannot reach `origin` says so, and works on only after the owner agrees.
-- Push at the end of each unit of work (`SMART-RULE-0009`), so the next computer starts from it.
 
 ## SMART-RULE-0036 – Raise a rule that gets in the way
 
 - When a rule blocks work that serves the owner's goals, or two rules conflict, the agent stops and puts it to the owner: the rule, what it blocks, the options and a recommendation. It never works around a rule quietly, in words or in code; changing what a validator accepts is changing a rule.
 - Rules exist to support good outcomes. A rule that hinders them is changed deliberately, through a proposal the owner accepts (CONTRACT §13.2), not bent case by case.
-- Continue with every part of the task the question does not block, so it arrives with the rest of the work done.
 
 ## SMART-RULE-0038 – One working copy per session
 
@@ -188,27 +172,11 @@ that always apply, verbatim.
 - Claim work, not files. What a session is doing is recorded on the task it serves, never as a
   lock or a list of files. Overlap between sessions is found when their work is merged, where Git
   shows it as a conflict.
-- Merge back at every unit of work (`SMART-RULE-0009`): bring the branch up to date with
-  `origin/main`, resolve any conflict, validate, push to `main`, and fast-forward the shared
-  checkout. `session.py finish` does this and removes the worktrees once their branches are
-  merged. A conflict is reconciled, never overwritten: a generated file (a board, an index, a
-  task list) is taken from `main` and rebuilt by its generator; an append-only log keeps both
-  entries; any other conflict whose right resolution is not obvious from the two changes goes to
-  the owner.
+- Merge back at every unit of work (`SMART-RULE-0009`): bring the branch up to date with `origin/main`, resolve any conflict, validate, push to `main`, and fast-forward the shared checkout. `session.py finish` does this and removes the worktrees once their branches are merged. A conflict is reconciled as `SMART-RULE-0034` says, never overwritten; one whose right resolution is not obvious from the two changes goes to the owner.
 - The shared checkout holds only merged work. It is where the owner reads and runs things, it is
   fast-forwarded under `SMART-RULE-0034`, and no session leaves uncommitted changes in it.
-- A session's delegated workers share its copy and branch by default. Each packet names the paths
-  its worker may change (`writes: paths`); the conductor keeps them disjoint across the run and
-  keeps shared files – logs, state, task lists, indexes, version fields, build output – for
-  itself. Only the conductor stages and commits. A worker gets its own worktree, branched from the
-  session's branch and merged back by the conductor, only when its work cannot be kept apart: it
-  builds code or runs tests that write outside its own paths, it must change a file another
-  worker also changes, or it is one of several alternative attempts. Unit tests that read and
-  write only inside the worker's own paths (and their caches) run in the session copy.
-- The pre-commit hook refuses a commit on `main` in a repository's own working tree – the
-  shared checkout – and names the command that makes a session copy. Session copies are linked
-  worktrees on their own branches, so their commits pass; so do a `proposal/*` branch and any
-  other branch.
+- A session's delegated workers share its copy and branch by default. `SMART-RULE-0024` says which paths a worker may change, that only the conductor stages and commits, and when a worker gets a worktree of its own.
+- The pre-commit hook refuses a commit on `main` in the shared checkout and names the command that makes a session copy. A commit in a session copy, on a `proposal/*` branch or on any other branch passes.
 - A host that cannot work in a separate folder says so at the start, works in the shared
   checkout with `BRAIN_SHARED_CHECKOUT=1` set for its commits, re-reads each file immediately
   before changing it, and stages only its own paths. The owner uses the same variable for a
@@ -216,12 +184,7 @@ that always apply, verbatim.
 
 ## SMART-RULE-0044 – Raise the ambition of every request
 
-- At the intake of every request, the agent applies `/shared/skills/raise-ambition/`: it names
-  the outcome behind the request and checks whether a bigger version would serve the user better
-  – one that reaches higher (an outcome kept true, not a task done once), deeper (an expert's
-  methods and a harder, measurable target) or wider (other fields and roles, including an
-  adversarial reviewer). The user is the person whose request it is: the owner, or a
-  collaborator working in a shared project.
+- At the intake of every request, the agent applies `/shared/skills/raise-ambition/`: it names the outcome behind the request and checks whether a bigger version – higher, deeper or wider, as the skill defines them – would serve the user better. The user is the person whose request it is: the owner, or a collaborator working in a shared project.
 - When a bigger version would serve the user better, the agent's clarifying question offers it
   as option 1, marked recommended, with what it would take; the request as asked is option 2.
   When no question is otherwise needed, the agent does what was asked and adds one line naming
@@ -229,10 +192,4 @@ that always apply, verbatim.
 - The agent never widens the work without the user's yes, does not repeat a bigger version the
   user declined for the same request, and keeps the suggestion to a few lines. Safety, cost,
   side-effect and governance rules are unchanged.
-- When a request starts a project, or leaves the design open, and the goals or the values behind
-  it are uncertain or could be read in more than one way, the agent asks about those before it
-  designs: what the work is for, whom it serves, and what matters more when two aims conflict.
-  It does not ask how the goals should be achieved; that is the agent's to work out. Each
-  question carries a suggested answer (`SMART-RULE-0010`), and the questions arrive with every
-  part of the work they do not block already done. A task whose outcome is already spelled out
-  gets no such questions.
+- When a request starts a project, or leaves the design open, and the goals or the values behind it are uncertain or could be read in more than one way, the agent asks about those before it designs: what the work is for, whom it serves, and what matters more when two aims conflict. It does not ask how the goals should be achieved; that is the agent's to work out. A task whose outcome is already spelled out gets no such questions.
