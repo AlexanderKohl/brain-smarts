@@ -4,17 +4,19 @@ title: The reply does not wait for the merge and the push of a brain repository
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: proposed
+status: implemented
 owner: brain-owner
+accepted_by: brain-owner
+accepted_at: 2026-11-24T13:18:07+10:00
+implemented_at: 2026-11-24T14:23:24+10:00
 created: 2026-11-24T11:42:01+10:00
-updated: 2026-11-24T13:22:15+10:00
+updated: 2026-11-24T14:23:24+10:00
 rule_id: SMART-RULE-0009
 previous_contract_version: 3.3.0
 new_contract_version: 3.3.0
 target_files:
   - /RULES.md
   - /CORE-RULES.md
-  - /shared/skills/repository-preflight/scripts/core.py
   - /shared/skills/repository-preflight/SKILL.md
 ---
 
@@ -244,3 +246,17 @@ shorter first; a task for that is created when this is accepted.
 
 **Rollback.** Restore `LIMIT = 28_000` and the sentence in the skill, and take the wording of this
 proposal out of `/RULES.md`.
+
+## Outcome of 2026-11-24T14:23:24+10:00: applied without the amendment
+
+The amendment above was not needed and is withdrawn; the limit of a core file stays at 28,000
+characters and `scripts/core.py` is unchanged. The owner did not answer the amendment. He asked
+for a review of `/RULES.md` instead and accepted it the same day (`PROPOSAL-shorter-rules`, 34
+changes), which took the core rules file from 27,140 to 25,150 characters. The consequence that
+had stopped this proposal no longer exists, so the wording the owner accepted at 13:18 was
+applied word for word on top of that review: the seventh bullet of `SMART-RULE-0009` and the two
+bullets after it, the push state in `SMART-RULE-0014`, and the sentence in the bullet *Merge
+back at every unit of work* of `SMART-RULE-0038` (that bullet had been shortened by the review;
+the sentence stands where this proposal puts it, after "once their branches are merged."). The
+core rules file is then under its limit; its size is in the acceptance record in the memory.
+`session.py start` now prints the command for a waiting copy with `--background`.

@@ -156,12 +156,13 @@ python shared/skills/repository-preflight/scripts/background.py list
   The job's record and output are in `/temp/background/` of the shared checkout. The per-prompt
   hook (`hooks.py context-check`) reports a job that failed, once, with the end of its output, and
   names one that is still running; a job that ended well says nothing. While it runs, the
-  pre-commit hook refuses a commit in that copy. An agent uses it only where a rule allows the
-  reply to go out before the push (`PROPOSAL-answer-first-deliver-after`, proposed 24 November 2026).
+  pre-commit hook refuses a commit in that copy. `SMART-RULE-0009` says when an agent uses it and
+  when it finishes in the foreground instead.
 
 - `start` also prints one line, beginning `waiting:`, for every other session copy whose commits
   have waited more than twelve hours to reach `main`, with the command that merges and pushes
-  them: the work a closed or archived thread left behind is found by the next one that starts.
+  them: the work a closed or archived thread left behind is found by the next one that starts,
+  which runs that command without asking the owner (`SMART-RULE-0009`).
 
 - `start` makes `<sessions folder>/<name>/`: a worktree of the mechanics on branch
   `session/<name>` from the latest `origin`, with `library/` and `memory/` inside it as worktrees

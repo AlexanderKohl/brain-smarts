@@ -536,7 +536,7 @@ def waiting(root: Path, folder: Path, hours: float | None = None, skip: str | No
 
     A thread that is closed, archived or handed over has no moment of its own at which to push
     (SMART-RULE-0009), so the next session that starts finds what it left: `start` prints these
-    lines. The age is that of the oldest commit not in `main`; a branch is named once, with its
+    lines, and the agent that reads them runs the command each one names. The age is that of the oldest commit not in `main`; a branch is named once, with its
     commits in all three repositories counted together. A commit counts when its change is not in
     `main` (`git cherry`): a merge of `origin` into the branch, and a branch of an older history
     whose every change `main` already holds, are not waiting. Read-only; one Git call per
@@ -564,7 +564,7 @@ def waiting(root: Path, folder: Path, hours: float | None = None, skip: str | No
         held = f"holds {len(times)} commit(s) not on origin, the oldest of {oldest} (SMART-RULE-0009)"
         if (folder / name).is_dir():
             lines.append(f"waiting: session copy {name} {held}; merge and push them: python "
-                         f"shared/skills/repository-preflight/scripts/session.py finish {name} --keep")
+                         f"shared/skills/repository-preflight/scripts/session.py finish {name} --keep --background")
         else:
             lines.append(f"waiting: branch session/{name} {held} and has no session copy; tell the owner")
     return lines
