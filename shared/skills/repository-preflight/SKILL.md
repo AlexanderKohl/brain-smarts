@@ -243,6 +243,7 @@ python shared/skills/repository-preflight/scripts/state.py list <STATE.md>
 python shared/skills/repository-preflight/scripts/state.py history <STATE.md> --keep 1,3
 python shared/skills/repository-preflight/scripts/state.py detail <STATE.md> --entry 1 --name <thread>
 python shared/skills/repository-preflight/scripts/state.py check [--knowledge] [paths]
+python shared/skills/repository-preflight/scripts/state.py since <STATE.md> [--from <date or commit>] [--repo <repository>]
 ```
 
 - `list` numbers the entries under `## Handover` with their sizes. An entry is a `### ` heading and
@@ -255,6 +256,10 @@ python shared/skills/repository-preflight/scripts/state.py check [--knowledge] [
 - `check` names every node `STATE.md` (or, with `--knowledge`, every `KNOWLEDGE.md`) in the mechanics
   and the memory that is longer than 28,000 characters, largest first, and exits 1 when there is
   one. Given paths, it checks those files instead, which is how a project repository's are checked.
+- `since` prints the commits made since the file last changed (or since `--from`), newest first, each
+  with the release note it names: what happened since the last checkpoint is in Git, so a checkpoint
+  does not have to tell it again. `--repo` reads another repository, for a node whose work is
+  committed elsewhere.
 
 ## Outputs
 

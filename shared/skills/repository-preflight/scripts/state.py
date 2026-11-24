@@ -14,6 +14,7 @@ it needs what happened earlier. Nothing is rewritten and nothing is deleted.
                                                      first line and a pointer in the state file
     state.py check [--root <brain root>] [paths]     name every STATE.md longer than the limit; exit 1
     state.py check --knowledge [paths]               the same for KNOWLEDGE.md files
+    state.py since <file> [--from WHEN] [--repo DIR] what Git recorded since the file last changed
 
 An entry is a `### ` heading and what follows it; in a section without such headings it is a
 paragraph that opens in bold (`**Checkpoint of ...`) after a blank line, and what follows it.
@@ -23,6 +24,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -263,6 +265,37 @@ def cmd_check(args: argparse.Namespace) -> int:
     return 1 if over else 0
 
 
+def git(repo: Path, *args: str) -> str:
+    done = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if done.returncode != 0:
+        raise ValueError(done.stderr.strip() or "git " + " ".join(args) + " failed")
+    return done.stdout
+
+
+def cmd_since(args: argparse.Namespace) -> int:
+    """What happened since the last checkpoint is in Git, so no checkpoint has to tell it again: the
+    commits made since the file last changed (or since --from, a date or a commit), newest first."""
+    home = args.file.resolve().parent
+    last = git(home, "log", "-1", "--format=%H %cI", "--", args.file.resolve().name).split()
+    if not args.since and not last:
+        raise ValueError(f"{args.file} has no commit yet; give --from")
+    repo = Path(git(args.repo or home, "rev-parse", "--show-toplevel").strip())
+    start = args.since or last[1]
+    if args.since:
+        is_commit = subprocess.run(["git", "-C", str(repo), "rev-parse", "--verify", "--quiet", start + "^{commit}"],
+                                   capture_output=True).returncode == 0
+        span = [start + "..HEAD"] if is_commit else ["--since=" + start]
+    else:  # after the file's own last commit, exactly, when it is in the repository being read
+        span = ["--since=" + start] if args.repo else [last[0] + "..HEAD"]
+    rows = [row.split("\x1f") for row in git(repo, "log", *span, "--no-merges",
+                                             "--format=%h%x1f%cs%x1f%s%x1f%(trailers:key=Release-note,valueonly,separator=%x2C)"
+                                             ).splitlines() if row]
+    print(f"{len(rows)} commits in {repo.name} since {start}" + ("" if len(rows) <= args.limit else f"; the newest {args.limit}:"))
+    for short, day, subject, note in rows[:args.limit]:
+        print(f"{short}  {day}  {subject}" + (f"  [note: {note.strip()}]" if note.strip() else ""))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
@@ -289,6 +322,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--knowledge", action="store_true", help="check KNOWLEDGE.md files instead of STATE.md files")
     p.add_argument("paths", nargs="*")
     p.set_defaults(run=cmd_check)
+    p = sub.add_parser("since")
+    p.add_argument("file", type=Path, help="a tracked file, usually a STATE.md")
+    p.add_argument("--from", dest="since", help="a date, a timestamp or a commit; the file's last commit when absent")
+    p.add_argument("--repo", type=Path, help="another repository to read, for a node whose work is committed elsewhere")
+    p.add_argument("--limit", type=int, default=100)
+    p.set_defaults(run=cmd_since)
     args = parser.parse_args(argv)
     try:
         return args.run(args)

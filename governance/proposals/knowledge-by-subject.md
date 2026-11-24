@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 status: proposed
 owner: brain-owner
 created: 2026-11-24T17:32:22+10:00
-updated: 2026-11-24T17:32:22+10:00
+updated: 2026-11-24T18:22:16+10:00
 previous_contract_version: 3.3.0
 new_contract_version: 3.4.0
 target_files:
@@ -20,7 +20,7 @@ target_files:
 # Knowledge by subject: a node's knowledge file becomes an index when it outgrows one file
 
 Read `/CONTRACT.md` first. This proposal amends CONTRACT §3.1 and §4, and the validator's *Failure behaviour*; every rule keeps its identifier
-(CONTRACT §13.2). The contract changes and takes the next minor version at acceptance: 3.4.0, or the one after it if another contract change of the same day is accepted first (CONTRACT §13.3). It is one of five proposals of 24 November 2026 that came out of
+(CONTRACT §13.2). The contract changes and takes the next minor version at acceptance: 3.4.0, or the one after it if another contract change of the same day is accepted first (CONTRACT §13.3). It is one of six proposals of 24 November 2026 that came out of
 measuring what a session reads before it works; each can be accepted or refused alone.
 
 ## Plain-language summary
@@ -91,7 +91,7 @@ Why: The knowledge checks follow the knowledge into its subject files, and the l
 
 ## Measured
 
-- `/CORE.md` and `/CORE-RULES.md` together, read first by every writing session: 52,231 characters today, 52,231 with this proposal alone, 43,068 with all five of 24 November.
+- `/CORE.md` and `/CORE-RULES.md` together, read first by every writing session: 52,231 characters today, 52,231 with this proposal alone, 43,341 with all six of 24 November.
 
 ## Reason
 

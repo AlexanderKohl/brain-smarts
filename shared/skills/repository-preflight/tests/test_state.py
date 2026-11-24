@@ -187,6 +187,35 @@ class StateTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("1 of 1 knowledge files", out)
 
+    def test_since_prints_the_commits_made_after_the_file_last_changed(self):
+        import os
+        import subprocess
+        repo = Path(self.tmp.name) / "repo"
+        repo.mkdir()
+
+        def commit(message: str, when: str, *lines: str) -> None:
+            env = dict(os.environ, GIT_AUTHOR_DATE=when, GIT_COMMITTER_DATE=when)
+            subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q",
+                            "-m", message, *[arg for line in lines for arg in ("-m", line)]], check=True, capture_output=True, env=env)
+
+        subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True, capture_output=True)
+        (repo / "STATE.md").write_text("position one\n", encoding="utf-8")
+        commit("State: checkpoint", "2026-01-01T09:00:00+10:00")
+        (repo / "a.txt").write_text("a\n", encoding="utf-8")
+        commit("Add the first thing", "2026-01-02T09:00:00+10:00", "Release-note: first-thing")
+        (repo / "b.txt").write_text("b\n", encoding="utf-8")
+        commit("Fix the second thing", "2026-01-03T09:00:00+10:00")
+        code, out = run("since", str(repo / "STATE.md"))
+        self.assertEqual(code, 0)
+        lines = out.splitlines()
+        self.assertTrue(lines[0].startswith("2 commits in repo since 2026-01-01T09:00:00+10:00"))
+        self.assertIn("Fix the second thing", lines[1])
+        self.assertIn("Add the first thing  [note: first-thing]", lines[2])
+        self.assertNotIn("State: checkpoint", out)
+        code, out = run("since", str(repo / "STATE.md"), "--from", "2026-01-02T12:00:00+10:00")
+        self.assertTrue(out.startswith("1 commits in repo since 2026-01-02T12:00:00+10:00"))
+
 
 if __name__ == "__main__":
     unittest.main()

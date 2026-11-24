@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 status: proposed
 owner: brain-owner
 created: 2026-11-24T17:32:22+10:00
-updated: 2026-11-24T17:32:22+10:00
+updated: 2026-11-24T18:22:16+10:00
 previous_contract_version: 3.3.0
 new_contract_version: 3.3.0
 target_files:
@@ -19,7 +19,7 @@ target_files:
 # Contract §13.2 is read when governance changes, not by every session
 
 Read `/CONTRACT.md` first. This proposal amends the contract-section table in `/RULES.md`; every rule keeps its identifier
-(CONTRACT §13.2). The contract is not changed. It is one of five proposals of 24 November 2026 that came out of
+(CONTRACT §13.2). The contract is not changed. It is one of six proposals of 24 November 2026 that came out of
 measuring what a session reads before it works; each can be accepted or refused alone.
 
 ## Plain-language summary
@@ -50,7 +50,7 @@ Why: The generator already takes sub-sections (§3.1 to §3.6 have rows of their
 
 ## Measured
 
-- `/CORE.md` and `/CORE-RULES.md` together, read first by every writing session: 52,231 characters today, 45,977 with this proposal alone, 43,068 with all five of 24 November.
+- `/CORE.md` and `/CORE-RULES.md` together, read first by every writing session: 52,231 characters today, 45,977 with this proposal alone, 43,341 with all six of 24 November.
 
 ## Reason
 

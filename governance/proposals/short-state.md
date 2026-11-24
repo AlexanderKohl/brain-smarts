@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 status: proposed
 owner: brain-owner
 created: 2026-11-24T17:32:22+10:00
-updated: 2026-11-24T17:32:22+10:00
+updated: 2026-11-24T18:22:16+10:00
 previous_contract_version: 3.3.0
 new_contract_version: 3.3.0
 target_files:
@@ -20,7 +20,7 @@ target_files:
 # A state file holds the position, not its history
 
 Read `/CONTRACT.md` first. This proposal amends `SMART-RULE-0019` and the validator's *Failure behaviour*; every rule keeps its identifier
-(CONTRACT §13.2). The contract is not changed. It is one of five proposals of 24 November 2026 that came out of
+(CONTRACT §13.2). The contract is not changed. It is one of six proposals of 24 November 2026 that came out of
 measuring what a session reads before it works; each can be accepted or refused alone.
 
 ## Plain-language summary
@@ -66,7 +66,7 @@ Current:
 
 Proposed:
 
-> - **A state file holds the position, not its history.** Under `## Handover` each live thread has one entry, and it is short: where things stand, what is in flight, what is uncommitted and where, and the next action. A new checkpoint replaces the thread's previous entry, and the entry of a thread that has ended leaves the section; what is replaced or removed moves, unchanged, to `STATE-HISTORY.md` beside the state file (`state.py history`). Detail that only the thread continuing the work needs goes in `HANDOVER-<thread>.md` beside the state file, named by a line in the entry (`state.py detail`). No bootstrap names either file: an agent reads the history only when it needs what happened earlier, and a handover file only when it continues that thread. What happened and why belongs in `LOG.md` and is not told again in the entry. A `STATE.md` is at most 28,000 characters, so that a host shows it whole: the repository preflight fails on a longer one in the memory and the mechanics, and `state.py check` names one in a project repository, whose own checks may adopt the limit.
+> - **A state file holds the position, not its history.** Under `## Handover` each live thread has one entry, and it is short: where things stand, what is in flight, what is uncommitted and where, and the next action. A new checkpoint replaces the thread's previous entry, and the entry of a thread that has ended leaves the section; what is replaced or removed moves, unchanged, to `STATE-HISTORY.md` beside the state file (`state.py history`). Detail that only the thread continuing the work needs goes in `HANDOVER-<thread>.md` beside the state file, named by a line in the entry (`state.py detail`). No bootstrap names either file: an agent reads the history only when it needs what happened earlier, and a handover file only when it continues that thread. What happened and why is in the commits and in `LOG.md`, and is not told again in the entry. A `STATE.md` is at most 28,000 characters, so that a host shows it whole: the repository preflight fails on a longer one in the memory and the mechanics, and `state.py check` names one in a project repository, whose own checks may adopt the limit.
 
 Why: CONTRACT §4 says a state file replaces superseded state, but the checkpoint rule only ever said what to add. This bullet says where the old entry goes, where long detail goes, who reads each file, and sets the size a host shows whole as the limit.
 
@@ -96,7 +96,7 @@ Why: The limit is only kept if something checks it. The statement of what the va
 
 ## Measured
 
-- `/CORE.md` and `/CORE-RULES.md` together, read first by every writing session: 52,231 characters today, 52,231 with this proposal alone, 43,068 with all five of 24 November.
+- `/CORE.md` and `/CORE-RULES.md` together, read first by every writing session: 52,231 characters today, 52,231 with this proposal alone, 43,341 with all six of 24 November.
 
 ## Reason
 
