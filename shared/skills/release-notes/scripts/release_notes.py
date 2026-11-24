@@ -473,6 +473,9 @@ def release(cfg: Config, project: dict, version: str, env: str, date: str | None
         for b in broken:
             report.append("skipped %s: does not parse (%s) - run release_notes.py fix" % (b["slug"], b["error"]))
         report.append("release %s %s to %s dated %s" % (project["id"], version, env, date))
+    if env == "production" and project["kind"] == "git":
+        report.append('tag the released commit (SMART-RULE-0046): git tag -a v%s %s -m "Release %s"; git push origin v%s'
+                      % (version, ref(project, "production"), version, version))
     report += retire_cards(cfg, project, version, env, dry_run)
     return report
 

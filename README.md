@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 node_type: system
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-11-03T10:03:18+10:00
+updated: 2026-11-24T18:28:13+10:00
 owner: brain-owner
 ---
 
@@ -181,6 +181,10 @@ The skill library: a **separate repository**, checked out here and listed in thi
 ##### `memory/`
 
 The owner's memory: a **separate repository**, checked out here and listed in this repository's `.gitignore`. Never commit anything under it to this repository. It holds the owner profile, owner-layer rules, tasks, projects, contacts, raw files, sources, outbox, boards and the brain-wide state, log and knowledge. When absent, agents work on the mechanics only (see [`/SETUP.md`](SETUP.md) step B4 to create one).
+
+##### `rules/`
+
+Generated rule packs: each file holds, verbatim, the rules of one situation from `/RULES.md`, so that they are read together. Written by `shared/skills/repository-preflight/scripts/core.py build` and never edited here; the canonical text of every rule stays in `/RULES.md`.
 
 ##### `shared/`
 
