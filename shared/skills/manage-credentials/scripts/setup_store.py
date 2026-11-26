@@ -368,8 +368,15 @@ def main(argv: list[str] | None = None, setup: Setup | None = None) -> int:
     parser.add_argument("--join", metavar="TEAM_REPOSITORY_URL", help="the team repository in the invitation message")
     parser.add_argument("--fingerprint", help="the team fingerprint (asked for when not given)")
     parser.add_argument("--no-sync", action="store_true", help="do not bring the brain up to date first")
+    parser.add_argument("--version", action="store_true", help="print the skill's version and stop")
+    parser.add_argument("--verbose", action="store_true", help="with --version: the commit, branch and changes")
     args = parser.parse_args(argv)
+    import skill_version
+    if args.version:
+        print(skill_version.identity(args.verbose))
+        return 0
     setup = setup or Setup(_brain_root())
+    setup.say(f"Secrets store setup, {skill_version.identity()}")
     started, errors = setup.clock(), (SetupError, team_github.GitHubError)
     try:
         if not args.no_sync:

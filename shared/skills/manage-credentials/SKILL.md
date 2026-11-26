@@ -9,9 +9,10 @@ metadata:
   contract: /CONTRACT.md
   status: active
   scope: shared
+  version: 0.1.0
   project_ref: /memory/projects/credential-management
   created: 2026-08-04T16:11:53+10:00
-  updated: 2026-11-26T17:08:00+10:00
+  updated: 2026-11-26T19:54:00+10:00
 ---
 
 # Credential Management
@@ -617,6 +618,18 @@ This authenticates with the current passphrase, then re-encrypts the vault with 
 - Do not merge vault files. If two devices write independently, choose the authoritative complete copy.
 - Per-login interactive unlock into the Vault Agent is the approved workstation model. Unattended unlock after reboot requires a separately accepted design.
 - The vault file data lock is short-lived around each read/write; it is not a session lease. Agent singleton state lives under `%USERPROFILE%\.portable-ai-brain\vault-agent\`.
+
+## Version
+
+The skill's version is `metadata.version` above, and nowhere else (`SMART-RULE-0026`); it stays below
+1.0.0 until the owner declares the skill released. `python scripts/skill_version.py` prints it, and
+`--verbose` adds the commit, the branch and whether the checkout has changes; `brain_secrets.py
+--version` and `setup_store.py --version` print the same, and `setup_store.py` names it first, so a
+person reports which version they ran. Every change to a file of the skill raises the version in the
+same commit (a fix the last number, a new command or behaviour the middle one, a change people must
+act on the middle one too while below 1.0.0, named as breaking in the commit), then `python
+scripts/skill_version.py --record` writes the version and the files' fingerprint into
+`VERSION-LEDGER.json`; `tests/test_skill_version.py` fails while the two disagree.
 
 ## Outputs
 

@@ -2,6 +2,7 @@
 """Command line of the synced secrets store (design synced-secrets-repository.md, sections 8 and 9).
 
   brain_secrets.py init | status | list [--group G] | recovery-package [--team]
+  brain_secrets.py --version [--verbose]         the skill's version (and commit, branch)
   brain_secrets.py restore [--team] --package FILE --target EMPTY_FOLDER [--fingerprint F]
                                                   recovery words typed in the masked window
   brain_secrets.py replace-signin ENTRY [--field F] [--group G] [--even-if-working]
@@ -341,6 +342,11 @@ def main(argv=None, store_factory=None, team_factory=None, ask=None, confirm=Non
         from portable_vault import CredentialError
     except ImportError:  # pragma: no cover - the vault ships beside this script
         CredentialError = SecretStoreError
+    words = sys.argv[1:] if argv is None else list(argv)
+    if "--version" in words:  # SMART-RULE-0026: the build identity, before a subcommand is required
+        import skill_version
+        print(skill_version.identity("--verbose" in words))
+        return 0
     args = _parser().parse_args(argv)
     if args.command == "restore":  # no configured store: the target folder is the whole store
         return _restore(args, ask, (SecretStoreError, CredentialError))

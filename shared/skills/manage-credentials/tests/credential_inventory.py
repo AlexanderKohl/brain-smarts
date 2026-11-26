@@ -155,7 +155,8 @@ FORMS: dict[str, frozenset[tuple[str, str]]] = {
         ("vault_credentials.py", "_put_entry_window"), ("vault_credentials.py", "main"), ("vaultctl.py", "main"),
         # the invitation's message (the team fingerprint, a public name of the trust root) and progress lines
         ("brain_secrets.py", "_add_computer"), ("brain_secrets.py", "_invite"), ("secret_store/invite.py", "invite_member"),
-        ("secret_store/invite.py", "join_team"), ("setup_store.py", "Setup.__init__"), ("setup_store.py", "main")}),
+        ("secret_store/invite.py", "join_team"), ("setup_store.py", "Setup.__init__"), ("setup_store.py", "main"),
+        ("skill_version.py", "main")}),  # the skill's version, commit and branch
     # input(): a typed confirmation (an entry name, a write id), never a value; setup_store.py takes the
     # pasted team fingerprint, which is public
     "input": frozenset({("brain_secrets.py", "_delete"), ("brain_secrets.py", "_unfinished"), ("vault_credentials.py", "main"),
@@ -175,7 +176,8 @@ FORMS: dict[str, frozenset[tuple[str, str]]] = {
         ("secret_store/repo.py", "SecretRepo._set_state"), ("secret_store/repo.py", "SecretRepo._stage"),
         ("secret_store/repo.py", "SecretRepo.clone_or_open"), ("secret_store/repo.py", "repo_lock"),
         ("secret_store/store.py", "SecretStore._save_pin"), ("secret_store/store_ops.py", "write_marker"),
-        ("setup_store.py", "Setup.mark_vault_left"),  # a record that a joined computer's old vault stays
+        ("setup_store.py", "Setup.mark_vault_left"),
+        ("skill_version.py", "record"),  # VERSION-LEDGER.json: a version and a hash of the skill's files  # a record that a joined computer's old vault stays
         ("setup_store.py", "Setup.set_config"),  # the store's configuration: a switch, a login and an address
         ("secret_store/store_ops.py", "write_upkeep_error"), ("token_relay_store.py", "holder_name"),
         ("vault_agent.py", "VaultAgent._acquire_singleton"), ("vault_agent_runtime.py", "log_tray"),
@@ -358,6 +360,7 @@ DIRECT_CALLERS: dict[str, dict[tuple[str, str], str]] = {
 # A string constant equal to an endpoint's name, where it is not that endpoint.
 STRING_EXEMPT: dict[tuple[str, str, str], str] = {
     ("secret_store/repo.py", "<module>", "main"): "the branch name",
+    ("skill_version.py", "identity", "main"): "the branch name, left out of the build identity",
     ("secret_store/store.py", "SecretStore._write", "build"): "a phase name of a typed write",
     ("secret_store/typed_write.py", "_isolated", "build"): "a phase name of a typed write",
     ("vault_agent.py", "build_agent", "VaultAgent"): "its return annotation",
@@ -426,6 +429,7 @@ NO_CREDENTIAL: dict[str, str] = {  # module -> why none does
     "secret_store/policy.py": "public keys, assignments, groups and signatures",
     "secret_store/provider_profiles.py": "field names per provider",
     "secret_store/signing.py": "signatures over documents and sealed objects, with the key object",
+    "skill_version.py": "the skill's version and a hash of its own files; git for the commit and branch",
     "team_github.py": "gh calls with a repository and a login name; gh keeps its own sign-in",
 }
 # What a no-credential module may import from a credential module: (importer, imported) -> names.
@@ -513,6 +517,10 @@ OPERATIONS: dict[str, dict[str, tuple[tuple[str, ...], tuple[str, ...], str | No
                         "steps are other operations' code: init (cli-init), migrate_to_store.py main (migrate) and the "
                         "enrolment request and proof (cli-enrol); tests/test_setup_store.py checks the order and the skips "
                         "with fakes"),
+    },
+    "skill_version.py": {
+        "(the command)": (_NONE, _NONE, None, "no credential: the version, the commit and branch, or the ledger "
+                          "recorded; tests/test_skill_version.py runs it"),
     },
     "vaultctl.py": {
         # the store-backed agent's own pairs come with each command; it loads its keys at its first one
