@@ -84,10 +84,13 @@ class Setup:
         import migrate_to_store
         return migrate_to_store.main(argv)
 
-    def stores(self) -> tuple[Any, Any]:
+    def stores(self, force_on: bool = False) -> tuple[Any, Any]:
+        """The two stores of this brain's configuration; force_on reads them even while an unfinished run
+        has the store switched off (its person and addresses are still in the configuration)."""
         from secret_store.store import SecretStore
         from secret_store.team import TeamStore
-        return SecretStore(brain_root=self.root), TeamStore(brain_root=self.root)
+        on = {"enabled": True} if force_on else {}
+        return SecretStore(brain_root=self.root, **on), TeamStore(brain_root=self.root, **on)
 
     # -- helpers ----------------------------------------------------------------------------------
     @contextmanager
@@ -146,7 +149,10 @@ class Setup:
             record = json.loads(records[-1].read_text("utf-8"))
         except (OSError, ValueError):
             return False
-        return isinstance(record, dict) and record.get("unverified_signins") == []
+        # The vault changed after the record (a rollback restores into it; the old vault was used again):
+        # what the record says is no longer the whole story.
+        return (isinstance(record, dict) and record.get("unverified_signins") == []
+                and records[-1].stat().st_mtime >= vault.stat().st_mtime)
 
     # -- the steps --------------------------------------------------------------------------------
     def sync(self) -> None:
@@ -220,8 +226,8 @@ class Setup:
     def own_store_ready(self) -> bool:
         """This computer is enrolled in the person's store. A checkpoint alone is not enough: a computer
         that requested enrolment has pulled (and saved a checkpoint) before it was approved."""
-        personal, _team = self.stores()
-        if not personal.checkpoint_path.exists():
+        personal, _team = self.stores(force_on=True)
+        if not personal.checkpoint_path.exists() or not personal.config["person"]:
             return False
         from secret_store import SecretStoreError
         try:
@@ -264,10 +270,10 @@ class Setup:
                     raise SetupError("no fingerprint was given; nothing was requested")
             else:
                 fingerprint = None
+            if self.vault().exists():
+                self.mark_vault_left()  # before enrolment can finish: a stop after it never moves the old vault
             invite.join_team(personal, fingerprint, invite._show(invite.OWN_WORDS, False),
                              say=lambda text: self.say("    " + text))
-            if self.vault().exists():
-                self.mark_vault_left()
 
     def mark_vault_left(self) -> None:
         """A computer that joined an existing store never copies its own old vault over it (that copy may
@@ -282,7 +288,13 @@ class Setup:
 
     def move_entries(self) -> None:
         personal, _team = self.stores()
-        again = bool(personal.open().list_entries())  # only a migration has written it: the agent is on the old vault
+        opened = personal.open()
+        again = bool(opened.list_entries())
+        if again and set(opened.policy.computers) != {(opened.config["person"], opened.config["computer"])}:
+            # Another computer can have changed those entries since; the old vault's copies must not win.
+            raise SetupError("the store already holds entries, and another computer is in it: setup does not copy "
+                             "this computer's old vault over them. Run migrate_to_store.py yourself, after checking "
+                             "which copy of each entry is the current one (see 'The cut-over' in the skill)")
         with self.step("Moving the old vault's entries into the store"
                        + (" (again, over the copies an earlier run left)" if again else "")):
             for argv in (["--dry-run"], ["--replace"] if again else []):

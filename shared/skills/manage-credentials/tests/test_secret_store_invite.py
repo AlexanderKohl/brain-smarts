@@ -245,8 +245,8 @@ class MemberTest(InviteCase):
             if "id" not in rid:
                 found = invite.open_request(self.admin, "bob", clock.now)
                 if found:
-                    rid["id"] = found
-                    enrol.answer(self.admin, found, clock.now)
+                    rid["id"] = found[0]
+                    enrol.answer(self.admin, found[0], clock.now)
             elif (self.admin.clone / "requests" / f"{rid['id']}.proof.json").exists():
                 enrol.approve(self.admin, rid["id"], display, clock.now)
                 invite._admit(self.admin, "bob", ["ops"], self.said.append)

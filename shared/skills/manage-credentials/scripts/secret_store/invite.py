@@ -53,8 +53,9 @@ def _read(store, rid: str, part: str = "") -> Any:
         return None
 
 
-def open_request(store, login: str, now: float) -> str | None:
-    """The newest request from login that is well formed, unexpired and not yet answered."""
+def open_request(store, login: str, now: float) -> tuple[str, str] | None:
+    """The newest request from login that is well formed, unexpired and not yet answered: its id and
+    the hash of the request as checked here, which the answer and the approval are then bound to."""
     folder = store.clone / "requests"
     found = []
     for path in folder.glob("*.json") if folder.is_dir() else []:
@@ -68,8 +69,8 @@ def open_request(store, login: str, now: float) -> str | None:
             enrol.check_request(request, store.policy.repository, now)
         except SecretStoreError:
             continue
-        found.append((request["expires"], rid))
-    return max(found)[1] if found else None
+        found.append((request["expires"], rid, object_hash(request)))
+    return max(found)[1:] if found else None
 
 
 def groups_of(store, login: str) -> list[str]:
@@ -100,9 +101,9 @@ def invite_member(store, login: str, groups: list[str], display: Callable | None
     while True:
         now = clock()
         if rid is None:
-            rid = open_request(store, login, now)
-            if rid is not None:
-                chosen = object_hash(_read(store, rid))
+            chosen = open_request(store, login, now)
+            if chosen is not None:
+                rid, chosen = chosen
                 enrol.answer(store, rid, now)
                 if (enrol._load_pending(store, rid) or {}).get("request") != chosen:
                     # The request changed between choosing it and answering it (answer pulls again):
@@ -121,7 +122,7 @@ def invite_member(store, login: str, groups: list[str], display: Callable | None
             elif _request_path(store, rid, ".proof").exists():
                 say(f"The words window is open: compare it with the six words {login} sends you.")
                 try:
-                    enrol.approve(store, rid, display, now)
+                    enrol.approve(store, rid, display, clock=clock)
                 except SecretStoreError as error:
                     say(f"Not enrolled: {error}.")
                     if enrol._load_pending(store, rid) is None:  # the attempt has ended

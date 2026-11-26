@@ -217,11 +217,11 @@ def answer(store, rid: str, now: float | None = None) -> None:
 
 
 def approve(store, rid: str, display: Callable[[str, list[str]], bool] | None = None,
-            now: float | None = None) -> None:
+            now: float | None = None, clock: Callable[[], float] | None = None) -> None:
     """Approver: verify the proof, compare the six words, then one commit enrolling the computer. The
     expiry is checked again once the words window closes, so a comparison that ran past it enrols
     nothing."""
-    clock = time.time if now is None else (lambda: now)
+    clock = clock or (time.time if now is None else (lambda: now))
     now = clock()
     paths = _paths(rid)
     store.open()

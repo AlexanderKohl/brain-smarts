@@ -112,7 +112,7 @@ class FakeSetup(setup_store.Setup):
         self.log.append(("migrate", tuple(argv)))
         return self.codes.pop(0)
 
-    def stores(self):
+    def stores(self, force_on=False):
         return self.personal, self.team
 
     def vault(self):
@@ -264,7 +264,9 @@ class RecoveryTests(SetupCase):
         os.utime(path, (1755501000 + age, 1755501000 + age))
 
     def test_only_a_clean_newest_record_of_this_vault_counts_as_migrated(self):
+        import os
         setup = FakeSetup(self.root, old_vault=True)
+        os.utime(setup.vault(), (1755501000, 1755501000))
         migrated = lambda: setup_store.Setup.migrated(setup)  # noqa: E731 - the real check, not the fake's
         self.assertFalse(migrated())
         self.record(setup, "other-20260101-000000", [], 1)  # another vault's record
@@ -273,6 +275,8 @@ class RecoveryTests(SetupCase):
         self.assertFalse(migrated())
         self.record(setup, "credentials-20260102-000000", [], 3)
         self.assertTrue(migrated())
+        os.utime(setup.vault(), (1755501000 + 9, 1755501000 + 9))  # a rollback restored into the vault
+        self.assertFalse(migrated())
 
     def test_copies_left_by_an_earlier_run_are_replaced(self):
         unlocked = {"backend": "vault", "unlocked": True}
@@ -309,6 +313,38 @@ class RecoveryTests(SetupCase):
         self.assertEqual(setup.personal.inits, 0)
         self.assertTrue(setup_store.Setup.migrated(setup))  # a later run does not move the old vault either
         self.assertTrue(any("add-computer" in line for line in setup.lines))
+
+    def test_copies_in_a_store_another_computer_uses_are_never_replaced(self):
+        unlocked = {"backend": "vault", "unlocked": True}
+        setup = FakeSetup(self.root, statuses=[unlocked], old_vault=True, github=FakeGitHub())
+        setup.personal.enrol()
+        setup.personal.policy.computers.add(("alex-example", "laptop"))
+        setup.personal.entries = ["Example API"]
+        self.assertEqual(setup_store.main(["--no-sync"], setup), 1)
+        self.assertIn("another computer is in it", self.err.getvalue())
+        self.assertFalse(any(e[0] == "migrate" for e in setup.log))
+
+    def test_a_join_stopped_half_way_never_moves_the_old_vault_later(self):
+        from secret_store import SecretStoreError
+        patcher = mock.patch.object(invite, "join_team", side_effect=SecretStoreError("stopped"))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        setup = FakeSetup(self.root, old_vault=True, github=FakeGitHub(personal="used"))
+        self.assertEqual(setup_store.main(["--no-sync"], setup), 1)
+        self.assertTrue(setup_store.Setup.migrated(setup))  # decided before enrolment could finish
+        setup.personal.enrol()  # the approval had gone through after all
+        again = FakeSetup(self.root, statuses=[STORE], old_vault=True, github=FakeGitHub(personal="used"))
+        again.personal = setup.personal
+        again.migrated = lambda: setup_store.Setup.migrated(again)
+        self.assertEqual(setup_store.main(["--no-sync"], again), 0, self.err.getvalue())
+        self.assertFalse(any(e[0] == "migrate" for e in again.log))
+
+    def test_enrolment_is_judged_with_the_store_switched_off_too(self):
+        setup = setup_store.Setup(self.root)
+        with mock.patch("secret_store.store.SecretStore") as personal, mock.patch("secret_store.team.TeamStore"):
+            personal.return_value.checkpoint_path.exists.return_value = False
+            setup.own_store_ready()
+        self.assertEqual(personal.call_args.kwargs.get("enabled"), True)
 
     def test_an_empty_clone_left_by_an_earlier_run_is_removed_before_init(self):
         setup = FakeSetup(self.root, statuses=[None, None, STORE], github=FakeGitHub())
