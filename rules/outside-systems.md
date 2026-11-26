@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-29T08:00:00+10:00
-updated: 2026-11-24T18:28:13+10:00
+updated: 2026-11-26T14:35:03+10:00
 owner: brain-owner
 generated_by: /shared/skills/repository-preflight/scripts/core.py
 canonical_sources:
@@ -16,10 +16,84 @@ canonical_sources:
 
 # Rule pack: outside-systems
 
-Generated from `/RULES.md` by `core.py build`; never edit it here. It holds, verbatim, the rules of one
-situation, so that they are read together. Each rule's canonical home stays `/RULES.md`.
+Generated from `/CONTRACT.md` and `/RULES.md` by `core.py build`; never edit it here. It holds, verbatim,
+the contract sections and the rules of one situation, so that they are read together. A section's
+canonical home stays `/CONTRACT.md`, and a rule's `/RULES.md`.
 
-Read the whole file before: looking up a fact or identifier; working against an external system or its API; using a host plugin skill or its connector.
+Read the whole file before: looking up a fact or identifier; reading from or writing to an external system or its API; using a credential; using a host plugin skill or its connector.
+
+## 10. Skills, scripts and external systems
+
+A skill may include:
+
+- operating instructions
+- prompts
+- executable scripts
+- API clients
+- connectors
+- data transformations
+- validation logic
+- automation workflows
+
+A skill may retrieve or update data in external systems such as Xero or GoHighLevel.
+
+### 10.1 Skill placement
+
+Keep a skill local when it contains project-specific logic or permissions.
+
+Place it in the skill library (`/library/skills/`) when multiple nodes can use the general capability, and in `/shared/skills/` only when the brain itself depends on it (section 3.4).
+
+Separate:
+
+- capability, stored in the shared skill
+- project configuration, stored in the project, or for owner-wide configuration in `/memory/skills/<skill>/` (section 3.5)
+- credentials, stored in a secure external mechanism
+- results, stored or referenced by the requesting node
+
+### 10.2 Skill specification
+
+Every `SKILL.md` must define:
+
+- purpose
+- allowed operations
+- required inputs
+- data sources
+- scripts or commands
+- outputs
+- permissions
+- failure behaviour
+- logging behaviour
+- state, knowledge and task update behaviour
+
+### 10.3 Credentials
+
+Never store secrets, passwords, API keys, access tokens or private certificates in Markdown or committed scripts.
+
+Reference environment variables, secret managers or approved authentication flows.
+
+### 10.4 External data
+
+Data retrieved through a skill must record:
+
+- source system
+- retrieval time
+- relevant account, organisation or location
+- query or scope
+- whether the data is live, cached or partial
+- any transformation applied
+
+Do not represent retrieved data as complete when coverage is partial or uncertain.
+
+### 10.5 External target confirmation
+
+Before any write or other side-effecting operation against an external system that has multiple accounts, organisations, companies, locations or subaccounts:
+
+1. Ask the owner which specific target applies for this operation, or obtain an explicit confirmation of the named target, before proceeding.
+2. Identify the target at the precision the system requires (for HighLevel: company and subaccount/location; for other systems: the equivalent account or organisation scope).
+3. Do not infer the target solely from recent chat context, the most recently used account, a project default, or an earlier session without a current confirmation for this operation.
+4. Stop and ask when the target is missing, ambiguous or conflicts with another candidate.
+
+Read-only discovery that lists available targets does not require prior target confirmation. Using a discovered target for a write or other side effect does.
 
 | ID | Rule | Canonical home | Applies when |
 |---|---|---|---|

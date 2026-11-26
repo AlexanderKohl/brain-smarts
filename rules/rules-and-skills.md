@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-29T08:00:00+10:00
-updated: 2026-11-24T18:28:13+10:00
+updated: 2026-11-26T14:35:03+10:00
 owner: brain-owner
 generated_by: /shared/skills/repository-preflight/scripts/core.py
 canonical_sources:
@@ -16,10 +16,154 @@ canonical_sources:
 
 # Rule pack: rules-and-skills
 
-Generated from `/RULES.md` by `core.py build`; never edit it here. It holds, verbatim, the rules of one
-situation, so that they are read together. Each rule's canonical home stays `/RULES.md`.
+Generated from `/CONTRACT.md` and `/RULES.md` by `core.py build`; never edit it here. It holds, verbatim,
+the contract sections and the rules of one situation, so that they are read together. A section's
+canonical home stays `/CONTRACT.md`, and a rule's `/RULES.md`.
 
-Read the whole file before: writing or changing a rule, a proposal, a skill's operating instructions, a host entry file or a pointer file, or anything in the mechanics or the skill library.
+Read the whole file before: writing or changing the contract, a rule, a proposal, a governance template, a bootstrap file, a skill or its operating instructions, a host entry file or a pointer file, or anything in the mechanics or the skill library; accepting or applying such a change; numbering a rule or naming a proposal.
+
+## 10. Skills, scripts and external systems
+
+A skill may include:
+
+- operating instructions
+- prompts
+- executable scripts
+- API clients
+- connectors
+- data transformations
+- validation logic
+- automation workflows
+
+A skill may retrieve or update data in external systems such as Xero or GoHighLevel.
+
+### 10.1 Skill placement
+
+Keep a skill local when it contains project-specific logic or permissions.
+
+Place it in the skill library (`/library/skills/`) when multiple nodes can use the general capability, and in `/shared/skills/` only when the brain itself depends on it (section 3.4).
+
+Separate:
+
+- capability, stored in the shared skill
+- project configuration, stored in the project, or for owner-wide configuration in `/memory/skills/<skill>/` (section 3.5)
+- credentials, stored in a secure external mechanism
+- results, stored or referenced by the requesting node
+
+### 10.2 Skill specification
+
+Every `SKILL.md` must define:
+
+- purpose
+- allowed operations
+- required inputs
+- data sources
+- scripts or commands
+- outputs
+- permissions
+- failure behaviour
+- logging behaviour
+- state, knowledge and task update behaviour
+
+### 10.3 Credentials
+
+Never store secrets, passwords, API keys, access tokens or private certificates in Markdown or committed scripts.
+
+Reference environment variables, secret managers or approved authentication flows.
+
+### 10.4 External data
+
+Data retrieved through a skill must record:
+
+- source system
+- retrieval time
+- relevant account, organisation or location
+- query or scope
+- whether the data is live, cached or partial
+- any transformation applied
+
+Do not represent retrieved data as complete when coverage is partial or uncertain.
+
+### 10.5 External target confirmation
+
+Before any write or other side-effecting operation against an external system that has multiple accounts, organisations, companies, locations or subaccounts:
+
+1. Ask the owner which specific target applies for this operation, or obtain an explicit confirmation of the named target, before proceeding.
+2. Identify the target at the precision the system requires (for HighLevel: company and subaccount/location; for other systems: the equivalent account or organisation scope).
+3. Do not infer the target solely from recent chat context, the most recently used account, a project default, or an earlier session without a current confirmation for this operation.
+4. Stop and ask when the target is missing, ambiguous or conflicts with another candidate.
+
+Read-only discovery that lists available targets does not require prior target confirmation. Using a discovered target for a write or other side effect does.
+
+### 13.2 Protected governance
+
+Protected governance is rule and contract wording:
+
+- `/CONTRACT.md`
+- every active `RULES.md`, including the owner layer `/memory/RULES.md` and node rules in memory and in project repositories
+- governance schemas and templates that define the wording of a rule or a proposal
+- bootstrap instructions that determine how agents locate or load the contract and inherited rules
+- the statement of what the repository preflight validator enforces: the *Failure behaviour* section of its skill
+
+The validator's code, tests and fixtures, the rest of its skill, and README files are not protected governance; they change as ordinary persistent changes (section 13.1). Code that changes what the validator accepts or refuses changes the rule it enforces, so the *Failure behaviour* section changes with it, under this section.
+
+A substantive or semantic change to protected governance must not become active until the owner explicitly accepts an identified proposal or the exact displayed diff. Acceptance covers that change, not later changes to the same file: each substantive change needs its own. One standing acceptance is allowed: an owner who turns `follow_upstream` on (`SMART-RULE-0032`) accepts each protected-governance change to the mechanics and the skill library that the upstream maintainer has already accepted on upstream `main`, for each upstream merge made while the setting is on. It covers nothing made locally, on another branch or offered upstream, and ends when the owner turns the setting off. Every change it admits is recorded in `/memory/governance/upstream-merges.md` and reported to the owner in the first reply. A change that only rewrites the `updated` stamp, line endings or the dash style is not substantive.
+
+Before requesting acceptance, present:
+
+1. a stable proposal ID
+2. a plain-language summary of the changes (what will be different for the owner and agents), stated before or alongside the exact diffs
+3. the current and proposed wording or exact diff
+4. the reason for the change
+5. the affected scope and expected behavioural consequences
+6. risks, conflicts and migration requirements
+7. a rollback method
+8. the planned validation
+
+Ask one direct acceptance question. Silence, lack of objection, approval of adjacent work, or general encouragement does not constitute acceptance. Acceptance must unambiguously identify the proposal or exact change set.
+
+An agent may create or revise a proposal without activating it. A protected-governance change is checked for an accepted proposal where it becomes active: on `main` and in the branches that merge into it. On a `proposal/*` branch whose open proposal lists the file in `target_files`, preflight reports it as a warning, so a proposal's exact diff can be committed before the owner decides on it. Store proposals outside the inherited rule path, in the layer whose governance they change:
+
+- a change to the contract, `/RULES.md`, shared governance schemas or templates, bootstrap files or the preflight validator: `/governance/proposals/` in the mechanics repository while it is under review, offered upstream as a pull request when it should reach everyone who uses the mechanics. The mechanics repository keeps no decision history: the owner's record of accepting and applying the change is kept in `/memory/governance/proposals/`
+- a change to `/memory/RULES.md` or a node `RULES.md` in memory: `/memory/governance/proposals/`
+- a change to a node `RULES.md` inside a project repository: that repository's `brain/proposals/`
+
+A proposal that changes several layers is stored once, in the highest layer it touches, and lists every target in `target_files`.
+
+When the change is a small additive or clarifying amendment to an existing numbered rule, keep that rule's identifier. Revise the original proposal record (or add an amendment section to it) and present that same identifier for acceptance. Give a new identifier only to a distinct new rule. Do not supersede a live rule with a new number merely because the wording grew by a sentence or a tighter constraint.
+
+#### Rule identifiers
+
+Every accepted rule has one identifier that names its layer and its number within that layer:
+
+- `SMART-RULE-NNNN`: a rule whose canonical home is in the mechanics repository – this contract, `/RULES.md`, or a shared skill or template under `/shared/`. `/RULES.md` indexes every `SMART-RULE` identifier, including those whose wording lives elsewhere.
+- `MEMORY-RULE-NNNN`: a rule in the owner layer, `/memory/RULES.md`.
+- `<PROJECT>-RULE-NNNN`: a rule in a node's `RULES.md`, where `<PROJECT>` is the node's folder name in upper case (for example `EXAMPLE-PROJECT-RULE-0001` for `/memory/projects/example-project/RULES.md`). A rule inherited by several nodes keeps the prefix of the node that defines it.
+
+Numbers have four digits, start at `0001` in each layer and are never reused, not even after a rule is retired. A newly accepted rule takes the next number in its layer: one more than the highest identifier already used in that layer's rule file (for the mechanics, the index in `/RULES.md`).
+
+A proposal carries no rule number. Until the owner accepts it, it is named `PROPOSAL-<slug>`, its file is `<slug>.md` in the proposals folder of its layer, and that is its `id`. The number is assigned at acceptance and recorded in the proposal's `rule_id` field; the proposal keeps its own `id` and file name. Historical records – logs, proposal files, completed tasks, notes – keep the identifiers they were written with and are not rewritten.
+
+After acceptance:
+
+1. apply only the accepted change set
+2. record the accepter and acceptance time
+3. update `contract_version` when contract behaviour changes
+4. run the repository preflight validator
+5. record implementation and validation results
+6. report the exact files changed, effective version, migrations and unresolved issues
+
+If implementation reveals a material consequence not disclosed in the accepted proposal, stop and request acceptance of a revised proposal before continuing.
+
+### 13.3 Contract versioning
+
+Use semantic versioning for `contract_version`:
+
+- patch: clarification with no intended behavioural change
+- minor: additive or meaningfully changed behaviour that remains compatible with existing content
+- major: breaking governance or repository-behaviour change requiring coordinated migration
+
+Every accepted contract change must identify its previous and new contract versions. Do not use `schema_version` as a substitute for behavioural contract versioning.
 
 | ID | Rule | Canonical home | Applies when |
 |---|---|---|---|
