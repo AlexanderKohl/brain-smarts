@@ -278,12 +278,13 @@ class RecoveryTests(SetupCase):
         os.utime(setup.vault(), (1755501000 + 9, 1755501000 + 9))  # a rollback restored into the vault
         self.assertFalse(migrated())
 
-    def test_copies_left_by_an_earlier_run_are_replaced(self):
+    def test_copies_left_by_an_earlier_run_are_never_replaced_by_setup(self):
         unlocked = {"backend": "vault", "unlocked": True}
-        setup = FakeSetup(self.root, statuses=[unlocked, unlocked, None, None, STORE], old_vault=True, github=FakeGitHub())
+        setup = FakeSetup(self.root, statuses=[unlocked], old_vault=True, github=FakeGitHub())
         setup.personal.entries = ["Example API"]  # an earlier run copied one entry, then stopped
-        self.assertEqual(setup_store.main(["--no-sync"], setup), 0, self.err.getvalue())
-        self.assertIn(("migrate", ("--replace",)), setup.log)
+        self.assertEqual(setup_store.main(["--no-sync"], setup), 1)
+        self.assertIn("does not copy the old vault over them", self.err.getvalue())
+        self.assertFalse(any(e[0] == "migrate" for e in setup.log))
 
     def test_a_locked_agent_with_the_store_switched_on_is_unlocked_with_the_store_off(self):
         locked, unlocked = {"backend": "vault", "unlocked": False}, {"backend": "vault", "unlocked": True}
@@ -314,15 +315,20 @@ class RecoveryTests(SetupCase):
         self.assertTrue(setup_store.Setup.migrated(setup))  # a later run does not move the old vault either
         self.assertTrue(any("add-computer" in line for line in setup.lines))
 
-    def test_copies_in_a_store_another_computer_uses_are_never_replaced(self):
-        unlocked = {"backend": "vault", "unlocked": True}
-        setup = FakeSetup(self.root, statuses=[unlocked], old_vault=True, github=FakeGitHub())
+    def test_a_store_that_cannot_be_read_stops_instead_of_skipping_the_migration(self):
+        from secret_store import SecretStoreError
+        setup = FakeSetup(self.root, old_vault=True, github=FakeGitHub(personal="used"))
         setup.personal.enrol()
-        setup.personal.policy.computers.add(("alex-example", "laptop"))
-        setup.personal.entries = ["Example API"]
+        setup.personal.open = mock.Mock(side_effect=SecretStoreError("the network is down"))
         self.assertEqual(setup_store.main(["--no-sync"], setup), 1)
-        self.assertIn("another computer is in it", self.err.getvalue())
-        self.assertFalse(any(e[0] == "migrate" for e in setup.log))
+        self.assertIn("could not be read", self.err.getvalue())
+
+    def test_a_joined_computer_keeps_its_old_vault_after_the_vault_changes(self):
+        import os
+        setup = FakeSetup(self.root, old_vault=True)
+        setup.mark_vault_left()
+        os.utime(setup.vault(), (1955501000, 1955501000))  # edited long after joining
+        self.assertTrue(setup_store.Setup.migrated(setup))
 
     def test_a_join_stopped_half_way_never_moves_the_old_vault_later(self):
         from secret_store import SecretStoreError

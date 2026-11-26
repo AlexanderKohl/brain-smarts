@@ -141,6 +141,8 @@ class Setup:
         """The newest migration record of this vault names no sign-in it could not move. A record is
         written even by a run that failed its read-back (exit 4), so its presence alone is not enough."""
         vault = self.vault()
+        if (vault.parent / "migration-backups" / f"{vault.stem}-joined.migration.json").exists():
+            return True  # this computer joined a store made elsewhere: its old vault is never moved
         records = sorted((vault.parent / "migration-backups").glob(f"{vault.stem}-*.migration.json"),
                          key=lambda path: path.stat().st_mtime)
         if not records:
@@ -232,8 +234,8 @@ class Setup:
         from secret_store import SecretStoreError
         try:
             opened = personal.open()
-        except SecretStoreError:
-            return False
+        except SecretStoreError as error:  # never read as "not enrolled": that would skip the migration
+            raise SetupError(f"your store could not be read ({error}); run this command again") from None
         return (personal.config["person"], personal.config["computer"]) in opened.policy.computers
 
     def joins_existing_store(self, person: str) -> bool:
@@ -288,16 +290,15 @@ class Setup:
 
     def move_entries(self) -> None:
         personal, _team = self.stores()
-        opened = personal.open()
-        again = bool(opened.list_entries())
-        if again and set(opened.policy.computers) != {(opened.config["person"], opened.config["computer"])}:
-            # Another computer can have changed those entries since; the old vault's copies must not win.
-            raise SetupError("the store already holds entries, and another computer is in it: setup does not copy "
-                             "this computer's old vault over them. Run migrate_to_store.py yourself, after checking "
-                             "which copy of each entry is the current one (see 'The cut-over' in the skill)")
-        with self.step("Moving the old vault's entries into the store"
-                       + (" (again, over the copies an earlier run left)" if again else "")):
-            for argv in (["--dry-run"], ["--replace"] if again else []):
+        if personal.open().list_entries():
+            # An earlier run stopped part-way through, or the store was written since. Setup never copies the
+            # old vault over entries already there: which copy is current is the person's call.
+            raise SetupError("the store already holds entries, so setup does not copy the old vault over them. "
+                             "Check which copy of each entry is current, then run migrate_to_store.py --replace "
+                             "yourself, or run setup again once the store holds only what you want kept "
+                             "(see 'The cut-over' in the credential skill)")
+        with self.step("Moving the old vault's entries into the store"):
+            for argv in (["--dry-run"], []):
                 code = self.migrate(argv)
                 if code != 0:
                     raise SetupError(f"the migration stopped (code {code}; see the lines above). Nothing more "

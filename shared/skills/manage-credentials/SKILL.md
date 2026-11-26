@@ -484,8 +484,9 @@ pasted from the administrator's message, requests enrolment, shows the six words
 waits until the administrator has enrolled and admitted the computer. Each step says how long it took,
 and a step already done is skipped, so the command is simply run again after an interruption: the
 migration counts as done only when the newest record of this vault names no sign-in it could not move
-and is newer than the vault, and a run that stopped half-way is repeated with `--replace` over the
-copies it left, but only while this computer is the store's only one; otherwise setup stops and says so.
+and is newer than the vault. Setup never copies the old vault over entries the store already holds:
+after a migration that stopped part-way it stops and says so, and the person decides which copy of
+each entry is current before running `migrate_to_store.py --replace` themselves.
 
 A person's second computer finds their store already made on GitHub. Setup then adds the computer to
 it instead of creating one: on a computer that already has the store the person runs `python
