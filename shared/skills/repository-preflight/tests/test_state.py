@@ -217,5 +217,160 @@ class StateTest(unittest.TestCase):
         self.assertTrue(out.startswith("1 commits in repo since 2026-01-02T12:00:00+10:00"))
 
 
+class BulletEntriesTest(unittest.TestCase):
+    def test_top_level_bullets_that_open_in_bold_are_entries(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "STATE.md"
+            path.write_text(FRONT + "## Handover\n\n- **Day three:** newest\n  - a detail of day three\n- **Day two:** older\n\n"
+                            "  A paragraph of day two.\n\n- **Day one:** oldest\n\n## Handover prompt\n\nRead it.\n",
+                            encoding="utf-8", newline="\n")
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                code = state.main(["history", str(path), "--keep", "1", "--now", "2026-02-01T09:00:00+10:00"])
+            self.assertEqual(code, 0, out.getvalue())
+            text = path.read_text(encoding="utf-8")
+            history = (Path(tmp) / "STATE-HISTORY.md").read_text(encoding="utf-8")
+            self.assertIn("- **Day three:** newest\n  - a detail of day three\n", text)
+            self.assertNotIn("Day two", text)
+            self.assertIn("- **Day two:** older\n\n  A paragraph of day two.\n\n- **Day one:** oldest\n", history)
+            self.assertIn("## Handover prompt\n\nRead it.\n", text)
+
+
+KNOWLEDGE = """---
+id: example-knowledge
+title: Example Knowledge
+type: knowledge
+schema_version: 0.2
+contract: /CONTRACT.md
+status: active
+created: 2026-01-01T09:00:00+10:00
+updated: 2026-01-02T09:00:00+10:00
+owner: brain-owner
+---
+
+# Example Knowledge
+
+Read `/CONTRACT.md` first.
+
+## Terms
+
+- A term.
+
+## Terms for every product
+
+- Longer terms.
+
+### A part of the longer terms
+
+- Detail.
+
+## Prices
+
+```text
+## not a heading
+```
+
+- A price.
+
+## Who we serve
+
+- People.
+"""
+
+
+class SubjectsTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.dir = Path(self.tmp.name)
+        self.knowledge = self.dir / "KNOWLEDGE.md"
+        self.knowledge.write_text(KNOWLEDGE, encoding="utf-8", newline="\n")
+        self.plan = self.dir / "plan.json"
+
+    def run_state(self, *argv: str) -> tuple[int, str]:
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = state.main(list(argv))
+        return code, out.getvalue() + err.getvalue()
+
+    def plan_of(self, *subjects: tuple[str, list[str]]) -> None:
+        import json
+        self.plan.write_text(json.dumps({"subjects": [
+            {"name": name, "title": name.title(), "holds": f"what {name} holds", "sections": heads}
+            for name, heads in subjects]}), encoding="utf-8")
+
+    def test_sections_move_unchanged_and_the_index_lists_them(self) -> None:
+        self.plan_of(("terms", ["Terms", "Terms for every product"]), ("prices", ["Prices"]))
+        code, out = self.run_state("subjects", str(self.knowledge), "--plan", str(self.plan), "--now", "2026-02-01T09:00:00+10:00")
+        self.assertEqual(code, 0, out)
+        index = self.knowledge.read_text(encoding="utf-8")
+        terms = (self.dir / "knowledge" / "terms.md").read_text(encoding="utf-8")
+        prices = (self.dir / "knowledge" / "prices.md").read_text(encoding="utf-8")
+        self.assertIn("## Terms\n\n- A term.\n\n## Terms for every product\n\n- Longer terms.\n\n### A part of the longer terms\n\n- Detail.\n", terms)
+        self.assertIn("## Prices\n\n```text\n## not a heading\n```\n\n- A price.\n", prices)
+        self.assertIn("id: example-knowledge-terms\n", terms)
+        self.assertIn("type: knowledge\n", terms)
+        self.assertNotIn("- A term.", index)
+        self.assertNotIn("- A price.", index)
+        self.assertIn("## Who we serve\n\n- People.\n", index)
+        self.assertLess(index.index("- `knowledge/prices.md` – what prices holds"), index.index("- `knowledge/terms.md` – what terms holds"))
+        self.assertLess(index.index("## Subjects"), index.index("## Who we serve"))
+        self.assertIn("updated: 2026-02-01T09:00:00+10:00", index)
+        self.assertIn("name it in the node's README.md", out)
+
+    def test_a_second_run_adds_to_the_subject_file_and_the_list(self) -> None:
+        self.plan_of(("terms", ["Terms"]))
+        self.run_state("subjects", str(self.knowledge), "--plan", str(self.plan))
+        self.plan_of(("terms", ["Terms for every product"]), ("people", ["Who we serve"]))
+        code, out = self.run_state("subjects", str(self.knowledge), "--plan", str(self.plan))
+        self.assertEqual(code, 0, out)
+        terms = (self.dir / "knowledge" / "terms.md").read_text(encoding="utf-8")
+        index = self.knowledge.read_text(encoding="utf-8")
+        self.assertEqual(terms.count("# Terms\n"), 2)  # the title and the first section
+        self.assertIn("- A term.\n\n## Terms for every product\n", terms)
+        self.assertEqual(index.count("## Subjects"), 1)
+        self.assertEqual(index.count("- `knowledge/"), 2)
+
+    def test_an_unclear_name_changes_nothing(self) -> None:
+        for heads in (["Term"], ["Nothing headed so"], ["Terms for every product", "A part of the longer terms"]):
+            self.plan_of(("terms", heads))
+            code, out = self.run_state("subjects", str(self.knowledge), "--plan", str(self.plan))
+            self.assertEqual(code, 2, out)
+            self.assertEqual(self.knowledge.read_text(encoding="utf-8"), KNOWLEDGE)
+            self.assertFalse((self.dir / "knowledge").exists())
+
+    def test_a_dry_run_changes_nothing(self) -> None:
+        self.plan_of(("terms", ["Terms"]))
+        code, out = self.run_state("subjects", str(self.knowledge), "--plan", str(self.plan), "--dry-run")
+        self.assertEqual(code, 0, out)
+        self.assertIn("would write terms.md", out)
+        self.assertEqual(self.knowledge.read_text(encoding="utf-8"), KNOWLEDGE)
+
+    def test_a_state_file_keeps_a_line_and_the_knowledge_file_lists_the_subject(self) -> None:
+        path = self.dir / "STATE.md"
+        path.write_text(HEADED.replace("## Handover\n", "## What works today\n\n### The list sorts\n\n- by name\n\n### The page prints\n\n- on A4\n\n## Handover\n", 1), encoding="utf-8", newline="\n")
+        self.plan_of(("behaviour", ["The list sorts", "The page prints"]))
+        code, out = self.run_state("subjects", str(path), "--plan", str(self.plan), "--now", "2026-02-01T09:00:00+10:00")
+        self.assertEqual(code, 0, out)
+        text = path.read_text(encoding="utf-8")
+        self.assertIn("## What works today\n\nKept as knowledge since 2026-02-01, moved unchanged: `knowledge/behaviour.md` beside this file – what behaviour holds.\n\n## Handover\n", text)
+        self.assertIn("### The list sorts\n\n- by name\n\n### The page prints\n\n- on A4\n", (self.dir / "knowledge" / "behaviour.md").read_text(encoding="utf-8"))
+        self.assertIn("- `knowledge/behaviour.md` – what behaviour holds", self.knowledge.read_text(encoding="utf-8"))
+
+    def test_a_section_that_is_history_moves_whole(self) -> None:
+        path = self.dir / "STATE.md"
+        path.write_text(HEADED.replace("## Handover\n", "## Earlier snapshots (historical)\n\n### August\n\n- then\n\n## Handover\n", 1), encoding="utf-8", newline="\n")
+        code, out = self.run_state("history", str(path), "--section", "Earlier snapshots", "--now", "2026-02-01T09:00:00+10:00")
+        self.assertEqual(code, 0, out)
+        text = path.read_text(encoding="utf-8")
+        history = (self.dir / "STATE-HISTORY.md").read_text(encoding="utf-8")
+        self.assertNotIn("Earlier snapshots", text)
+        self.assertIn("## Earlier snapshots (historical)\n\n### August\n\n- then\n", history)
+        self.assertIn("### Thread one, third checkpoint", text)
+        self.assertIn(state.POINTER, text)
+        code, out = self.run_state("history", str(path), "--section", "Handover")
+        self.assertEqual(code, 2, out)
+
+
 if __name__ == "__main__":
     unittest.main()

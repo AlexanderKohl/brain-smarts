@@ -10,19 +10,34 @@ it needs what happened earlier. Nothing is rewritten and nothing is deleted.
     state.py history <STATE.md> --keep 1,4           move every entry but these to STATE-HISTORY.md
     state.py history <STATE.md> --move 5-41          move these entries
     state.py history <STATE.md> --move-matching TEXT move the entries whose first line contains TEXT
+    state.py history <STATE.md> --section HEADING    move a whole section that is history, anywhere in the
+                                                     file (repeat the option for several)
     state.py detail <STATE.md> --entry 1 --name N    move one entry's body to HANDOVER-<N>.md, keep its
                                                      first line and a pointer in the state file
+    state.py subjects <file.md> --plan <plan.json>   move whole sections into subject files under
+                                                     knowledge/ and list them in KNOWLEDGE.md (CONTRACT §4)
     state.py check [--root <brain root>] [paths]     name every STATE.md longer than the limit; exit 1
     state.py check --knowledge [paths]               the same for KNOWLEDGE.md files
     state.py since <file> [--from WHEN] [--repo DIR] what Git recorded since the file last changed
 
 An entry is a `### ` heading and what follows it; in a section without such headings it is a
-paragraph that opens in bold (`**Checkpoint of ...`) after a blank line, and what follows it.
+paragraph that opens in bold (`**Checkpoint of ...`) after a blank line, and what follows it; in a
+section with neither, a top-level bullet that opens in bold (`- **24 November: ...`).
+
+A section is a `## ` or `### ` heading and everything down to the next heading of its level or
+above. It is named by its heading's text, or by the start of it when no other heading starts so.
+
+`subjects` reads a plan: `{"subjects": [{"name": "pricing", "title": "Pricing", "holds": "how a
+quote is priced", "sections": ["Price lists", "Margins"]}]}`. Each subject's sections move,
+unchanged, to `knowledge/<name>.md` beside the file, and `KNOWLEDGE.md` beside it gains the line that
+says what the subject file holds. The file may be the `KNOWLEDGE.md` itself, or a `STATE.md` whose
+sections are durable facts; a state file keeps a line naming where they went.
 """
 from __future__ import annotations
 
 import argparse
 import datetime
+import json
 import re
 import subprocess
 import sys
@@ -79,11 +94,57 @@ class Handover:
             # a bold opening on the section's first line, or after a blank line
             starts = [h.start() for h in re.finditer(r"^\*\*", body, flags=re.M)
                       if not body[:h.start()].strip() or re.search(r"\n[ \t]*\n\Z", body[:h.start()])]
+        if not starts:
+            # a list of checkpoints: top-level bullets that open in bold
+            starts = [h.start() for h in re.finditer(r"^- \*\*", body, flags=re.M)]
         self.opening = body[:starts[0]] if starts else body
         self.entries = [body[a:b] for a, b in zip(starts, starts[1:] + [len(body)])]
 
     def text(self) -> str:
         return self.before + self.heading + self.opening + "".join(self.entries) + self.after
+
+
+def sections(text: str) -> list[tuple[int, str, int, int]]:
+    """Every `## ` and `### ` section outside a code fence: (level, heading text, start, end)."""
+    heads: list[tuple[int, str, int]] = []
+    fenced, offset = False, 0
+    for line in text.splitlines(keepends=True):
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+        elif not fenced:
+            m = re.match(r"(#{2,3}) (.*)", line)
+            if m:
+                heads.append((len(m.group(1)), m.group(2).strip(), offset))
+        offset += len(line)
+    out = []
+    for i, (level, title, start) in enumerate(heads):
+        end = next((st for lv, _, st in heads[i + 1:] if lv <= level), len(text))
+        out.append((level, title, start, end))
+    return out
+
+
+def find_sections(text: str, names: list[str]) -> list[tuple[int, str, int, int]]:
+    """The sections these names mean, in the order given. A name is a heading's whole text, or the
+    start of exactly one heading. No section may lie inside another one named."""
+    known = sections(text)
+    chosen = []
+    for name in names:
+        hits = [x for x in known if x[1] == name] or [x for x in known if x[1].startswith(name)]
+        if len(hits) != 1:
+            raise ValueError(f"{len(hits)} sections are headed {name!r}; name exactly one")
+        chosen.append(hits[0])
+    ordered = sorted(chosen, key=lambda x: x[2])
+    for a, b in zip(ordered, ordered[1:]):
+        if b[2] < a[3]:
+            raise ValueError(f"{b[1]!r} lies inside {a[1]!r}, or is named twice; name one of them once")
+    return chosen
+
+
+def cut(text: str, spans: list[tuple[int, int, str]]) -> str:
+    """The text without these (start, end) spans; each span's third item is put in its place."""
+    for start, end, instead in sorted(spans, reverse=True):
+        text = text[:start] + instead + text[end:]
+    return text
 
 
 def first_line(entry: str) -> str:
@@ -127,7 +188,34 @@ def cmd_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_history_sections(args: argparse.Namespace) -> int:
+    text, crlf = read(args.state)
+    found = find_sections(text, args.section)
+    if any(title == SECTION[3:] and level == 2 for level, title, _, _ in found):
+        raise ValueError(f"`{SECTION}` itself stays; move its entries with --keep or --move")
+    when = args.now or now()
+    moved = [text[start:end] for _, _, start, end in sorted(found, key=lambda x: x[2])]
+    rest = cut(text, [(start, end, "") for _, _, start, end in found])
+    assert len(rest) + sum(len(m) for m in moved) == len(text)
+    if POINTER not in rest:
+        rest = rest.rstrip("\n") + "\n\n" + POINTER + "\n"
+    history = args.state.with_name(HISTORY)
+    if history.exists():
+        old, history_crlf = read(history)
+        old = stamp(old, when).rstrip("\n") + "\n"
+    else:
+        old, history_crlf = history_header(text, when), crlf
+    block = f"\n## Moved from the state file at {when}\n\n" + "".join(moved).rstrip("\n") + "\n"
+    write(history, old + block, history_crlf)
+    write(args.state, stamp(rest, when), crlf)
+    print(f"moved {len(moved)} sections ({sum(len(m) for m in moved):,} characters) to {history}")
+    print(f"{args.state}: {len(text):,} -> {len(rest):,} characters" + ("" if len(rest) <= LIMIT else f"; still over {LIMIT:,}"))
+    return 0
+
+
 def cmd_history(args: argparse.Namespace) -> int:
+    if args.section:
+        return cmd_history_sections(args)
     text, crlf = read(args.state)
     section = Handover(text)
     count = len(section.entries)
@@ -193,6 +281,105 @@ def cmd_detail(args: argparse.Namespace) -> int:
                               "continues this work.\n\n")
     write(args.state, stamp(section.text(), when), crlf)
     print(f"moved {len(body):,} characters to {target}; {args.state} is now {len(section.text()):,} characters")
+    return 0
+
+
+SUBJECTS = "## Subjects"
+SUBJECTS_INTRO = ("This node keeps its knowledge by subject (CONTRACT §4). Read a subject file when its subject is the "
+                  "work's. A new fact goes into its subject file; one that fits no subject goes into this file, "
+                  "below the list. A reference elsewhere that names a section of this file by its heading means "
+                  "that heading in a subject file.")
+
+
+def subject_header(index_text: str, name: str, title: str, holds: str, when: str) -> str:
+    meta = front(index_text)
+    lines = ["---", f"id: {meta.get('id', 'knowledge')}-{name}", f"title: {meta.get('title', 'Knowledge')} – {title}",
+             "type: knowledge", f"schema_version: {meta.get('schema_version', '0.2')}", "contract: /CONTRACT.md"]
+    if "status" in meta:
+        lines.append(f"status: {meta['status']}")
+    lines += [f"created: {when}", f"updated: {when}"]
+    if "owner" in meta:
+        lines.append(f"owner: {meta['owner']}")
+    lines += ["---", "", f"# {title}", "", "Read `/CONTRACT.md` first.", "",
+              f"One subject of this node's knowledge (CONTRACT §4): {holds}. `KNOWLEDGE.md` one folder up lists the "
+              "subject files.", "", ""]
+    return "\n".join(lines)
+
+
+def with_index(index_text: str, lines: dict[str, str]) -> str:
+    """The index file with these subject lines in its `## Subjects` list, in alphabetical order."""
+    row = re.compile(r"^- `knowledge/([a-z0-9-]+)\.md` – (.*)$", flags=re.M)
+    known = sections(index_text)
+    old = next((x for x in known if x[0] == 2 and x[1] == SUBJECTS[3:]), None)
+    merged = dict(row.findall(index_text[old[2]:old[3]])) if old else {}
+    merged.update(lines)
+    block = (SUBJECTS + "\n\n" + SUBJECTS_INTRO + "\n\n"
+             + "".join(f"- `knowledge/{name}.md` – {holds}\n" for name, holds in sorted(merged.items())) + "\n")
+    if old:
+        return index_text[:old[2]] + block + index_text[old[3]:]
+    first = next((x[2] for x in known if x[0] == 2), None)
+    if first is None:
+        return index_text.rstrip("\n") + "\n\n" + block
+    return index_text[:first] + block + index_text[first:]
+
+
+def cmd_subjects(args: argparse.Namespace) -> int:
+    text, crlf = read(args.file)
+    index = args.file.with_name("KNOWLEDGE.md")
+    if not index.exists():
+        raise ValueError(f"{index} does not exist; a node's subject files are listed in its KNOWLEDGE.md")
+    is_index = args.file.resolve() == index.resolve()
+    plan = json.loads(args.plan.read_text(encoding="utf-8"))["subjects"]
+    for subject in plan:
+        if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", subject["name"]):
+            raise ValueError(f"{subject['name']!r}: a subject's name takes lower-case letters, digits and hyphens")
+        if not subject["sections"]:
+            raise ValueError(f"{subject['name']}: no sections named")
+    names = [name for subject in plan for name in subject["sections"]]
+    found = find_sections(text, names)
+    if any(title == SUBJECTS[3:] and level == 2 for level, title, _, _ in found):
+        raise ValueError(f"`{SUBJECTS}` is the list of subject files and stays")
+    when = args.now or now()
+    index_text, index_crlf = (text, crlf) if is_index else read(index)
+    folder = args.file.with_name("knowledge")
+    made_folder = not folder.exists()
+    spans, lines, position, report = [], {}, 0, []
+    for subject in plan:
+        mine = found[position:position + len(subject["sections"])]
+        position += len(mine)
+        body = "".join(text[start:end].rstrip("\n") + "\n\n" for _, _, start, end in mine).rstrip("\n") + "\n"
+        target = folder / f"{subject['name']}.md"
+        if target.exists():
+            old, target_crlf = read(target)
+            new = stamp(old, when).rstrip("\n") + "\n\n" + body
+        else:
+            target_crlf = crlf
+            new = subject_header(index_text, subject["name"], subject["title"], subject["holds"], when) + body
+        note = "" if is_index else (f"Kept as knowledge since {when[:10]}, moved unchanged: `knowledge/{subject['name']}.md` "
+                                    f"beside this file – {subject['holds']}.\n\n")
+        first = min(start for _, _, start, _ in mine)
+        spans += [(start, end, note if start == first else "") for _, _, start, end in mine]
+        lines[subject["name"]] = subject["holds"]
+        report.append((target, new, target_crlf, sum(end - start for _, _, start, end in mine)))
+    rest = cut(text, spans)
+    if args.dry_run:
+        for target, new, _, moved in report:
+            print(f"would write {target.name}: {len(new):,} characters ({moved:,} moved)")
+        after = len(with_index(rest, lines)) if is_index else len(rest)
+        print(f"{args.file}: {len(text):,} -> {after:,} characters" + ("" if after <= LIMIT else f"; still over {LIMIT:,}"))
+        return 0
+    folder.mkdir(exist_ok=True)
+    for target, new, target_crlf, moved in report:
+        write(target, new, target_crlf)
+        print(f"{target}: {len(new):,} characters ({moved:,} moved)" + ("" if len(new) <= LIMIT else f"; longer than {LIMIT:,}"))
+    if is_index:
+        rest = with_index(rest, lines)
+    else:
+        write(index, stamp(with_index(index_text, lines), when), index_crlf)
+    write(args.file, stamp(rest, when), crlf)
+    print(f"{args.file}: {len(text):,} -> {len(rest):,} characters" + ("" if len(rest) <= LIMIT else f"; still over {LIMIT:,}"))
+    if made_folder:
+        print(f"new folder {folder}: name it in the node's README.md (CONTRACT §4)")
     return 0
 
 
@@ -308,8 +495,15 @@ def main(argv: list[str] | None = None) -> int:
     which.add_argument("--keep")
     which.add_argument("--move")
     which.add_argument("--move-matching")
+    which.add_argument("--section", action="append", help="a whole section's heading; repeat for several")
     p.add_argument("--now", help="timestamp to record; the clock when absent")
     p.set_defaults(run=cmd_history)
+    p = sub.add_parser("subjects")
+    p.add_argument("file", type=Path, help="a KNOWLEDGE.md, or a STATE.md whose sections are durable facts")
+    p.add_argument("--plan", type=Path, required=True, help="JSON: which sections go to which subject file")
+    p.add_argument("--now")
+    p.add_argument("--dry-run", action="store_true", help="print the sizes that would result and change nothing")
+    p.set_defaults(run=cmd_subjects)
     p = sub.add_parser("detail")
     p.add_argument("state", type=Path)
     p.add_argument("--entry", type=int, required=True)
@@ -331,7 +525,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.run(args)
-    except (ValueError, OSError) as exc:
+    except (ValueError, OSError, KeyError) as exc:
         print(f"state.py: {exc}", file=sys.stderr)
         return 2
 

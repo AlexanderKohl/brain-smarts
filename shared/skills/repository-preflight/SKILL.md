@@ -241,16 +241,30 @@ checkpoint superseded out of it, unchanged, so that no agent reads a long file t
 ```bash
 python shared/skills/repository-preflight/scripts/state.py list <STATE.md>
 python shared/skills/repository-preflight/scripts/state.py history <STATE.md> --keep 1,3
+python shared/skills/repository-preflight/scripts/state.py history <STATE.md> --section "<heading>"
 python shared/skills/repository-preflight/scripts/state.py detail <STATE.md> --entry 1 --name <thread>
+python shared/skills/repository-preflight/scripts/state.py subjects <KNOWLEDGE.md or STATE.md> --plan <plan.json> [--dry-run]
 python shared/skills/repository-preflight/scripts/state.py check [--knowledge] [paths]
 python shared/skills/repository-preflight/scripts/state.py since <STATE.md> [--from <date or commit>] [--repo <repository>]
 ```
 
 - `list` numbers the entries under `## Handover` with their sizes. An entry is a `### ` heading and
-  what follows it, or, in a section without such headings, a paragraph that opens in bold.
+  what follows it; in a section without such headings, a paragraph that opens in bold; in a section
+  with neither, a top-level bullet that opens in bold.
 - `history` moves the entries not kept (`--keep`), or those named (`--move`, `--move-matching`), to
   `STATE-HISTORY.md` beside the state file, appended under the time of the move, and leaves one line
-  in the section saying where they went. Nothing is rewritten and nothing is deleted.
+  in the section saying where they went. Nothing is rewritten and nothing is deleted. With
+  `--section` it moves a whole `## ` or `### ` section that is history, from anywhere in the file;
+  repeat the option for several.
+- `subjects` keeps a node's knowledge by subject (CONTRACT §4). The plan names, for each subject, a
+  file name, a title, one line saying what the file holds, and the headings of the sections that
+  belong to it: `{"subjects": [{"name": "pricing", "title": "Pricing", "holds": "how a quote is
+  priced", "sections": ["Price lists", "Margins"]}]}`. Each section moves unchanged to
+  `knowledge/<name>.md` beside the file, and `KNOWLEDGE.md` gains a `## Subjects` list with one line
+  per subject file. A section is named by its heading's whole text, or by the start of it when no
+  other heading starts so; an unclear name changes nothing. Given a `STATE.md`, it moves sections that
+  are durable facts and leaves a line saying where they went. A new `knowledge/` folder is then named
+  in the node's `README.md` by hand.
 - `detail` moves one entry's body to `HANDOVER-<thread>.md` beside the state file and leaves the
   entry's first line with a pointer to it.
 - `check` names every node `STATE.md` (or, with `--knowledge`, every `KNOWLEDGE.md`) in the mechanics
