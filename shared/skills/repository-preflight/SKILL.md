@@ -275,6 +275,44 @@ python shared/skills/repository-preflight/scripts/state.py since <STATE.md> [--f
   does not have to tell it again. `--repo` reads another repository, for a node whose work is
   committed elsewhere.
 
+## Weekly cleanup
+
+What piles up between sessions is cleared once a week, not checked at every commit. `scripts/cleanup.py`
+prints the report, and the agent that meets the weekly reminder naming it clears what it lists:
+
+```bash
+python shared/skills/repository-preflight/scripts/cleanup.py [--no-fetch]
+python shared/skills/repository-preflight/scripts/cleanup.py --fix branches
+```
+
+It is a report and never a gate: it exits 0 and fails no commit or push. Its sections, in the order
+the work is done:
+
+- **Long files:** every `STATE.md` and `KNOWLEDGE.md` over 28,000 characters, or within a tenth of it,
+  in the mechanics, the memory and the working branch of each project repository. Cleared with
+  `state.py` (above). The preflight fails on a long file in the mechanics and the memory only; a
+  project repository's files are kept short here.
+- **Stale handovers:** a project repository with commits this week whose handover entry is more than
+  14 days older than its latest commit. The thread that works there writes its checkpoint.
+- **Session copies:** copies idle for 2 days or more. One whose work is all on `main` is removed with
+  `session.py finish <name>`; one that still holds commits or uncommitted files is looked at first.
+- **Merged branches:** session branches already merged into `main`, local and remote. `--fix branches`
+  deletes the local ones that no working copy uses; Git refuses a branch that is not merged.
+- **Project working copies and branches:** extra working copies of a project repository that are
+  merged into its working branch and clean, and its merged remote branches.
+- **Project folders:** a project folder far behind its remote, or behind it with uncommitted files.
+  The task list and the preflight read that folder, so they read old records until it is current.
+- **Inbox:** files waiting in `/memory/inbox`.
+- **Warnings:** the preflight's warnings counted by kind, with one example each.
+- **Leftovers:** compaction markers older than 48 hours, and background jobs recorded as failed.
+- **Commit reasons:** the share of the week's hand-written commits whose body gives a reason
+  (`SMART-RULE-0009`). A figure to watch; nothing to clear.
+
+The agent clears what is its own to clear and safe to undo, and puts the rest to the owner as one
+numbered list with a suggested answer each (`SMART-RULE-0010`): another thread's uncommitted files, a
+remote branch another person made, and anything in a project repository that a live thread is
+working in are never removed without the owner's word.
+
 ## Outputs
 
 - pass or fail result
