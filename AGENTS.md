@@ -6,15 +6,15 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-08-06T11:10:00+10:00
-updated: 2026-11-22T12:47:34+10:00
+updated: 2026-11-26T15:48:16+10:00
 owner: brain-owner
 ---
 
 # Agent entry point
 
-**Start here:** [`/BOOTSTRAP.md`](./BOOTSTRAP.md) – choose the bootstrap tier first; a session that will write, research beyond the brain's own files, start a new project, or run work in parallel or through workers reads [`/CORE.md`](./CORE.md) and [`/CORE-RULES.md`](./CORE-RULES.md), with the host's file-reading tool (for example Read), not a shell command such as `cat`: a shell may show only the start of a long file.
+**Start here:** [`/BOOTSTRAP.md`](./BOOTSTRAP.md) – choose the bootstrap tier first; a session that will write, research beyond the brain's own files, start a new project, or run work in parallel or through workers reads [`/CONTRACT-CORE.md`](./CONTRACT-CORE.md) and [`/RULES-CORE.md`](./RULES-CORE.md), with the host's file-reading tool (for example Read), not a shell command such as `cat`: a shell may show only the start of a long file.
 
-The canonical rules are [`/CONTRACT.md`](./CONTRACT.md) and [`/RULES.md`](./RULES.md); `/CORE.md` and `/CORE-RULES.md` are generated from them.
+The canonical rules are [`/CONTRACT.md`](./CONTRACT.md) and [`/RULES.md`](./RULES.md); `/CONTRACT-CORE.md` and `/RULES-CORE.md` are generated from them.
 
 Then:
 
