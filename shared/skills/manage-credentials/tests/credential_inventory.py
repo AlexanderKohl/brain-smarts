@@ -13,7 +13,7 @@ from __future__ import annotations
 EXTERNAL_MODULES = frozenset({
     "PIL", "__future__", "argparse", "atexit", "base64", "binascii", "contextlib", "copy", "cryptography",
     "ctypes", "dataclasses", "datetime", "errno", "fcntl", "functools", "getpass", "hashlib", "hmac", "http",
-    "json", "keyring", "math", "msvcrt", "multiprocessing", "os", "pathlib", "pystray", "re", "secrets", "shutil",
+    "importlib", "json", "keyring", "math", "msvcrt", "multiprocessing", "os", "pathlib", "pystray", "re", "secrets", "shutil",
     "socket", "ssl", "stat", "struct", "subprocess", "sys", "tempfile", "threading", "time", "tkinter", "types",
     "typing", "urllib", "warnings",
 })
@@ -152,9 +152,14 @@ FORMS: dict[str, frozenset[tuple[str, str]]] = {
         ("token_relay.py", "main"), ("token_relay_store.py", "RelayedStore._warn"),
         ("vault_agent.py", "VaultAgent._serve_with_listener"), ("vault_agent.py", "_diagnose.write"),
         ("vault_agent.py", "main"), ("vault_credentials.py", "_cancelled"),
-        ("vault_credentials.py", "_put_entry_window"), ("vault_credentials.py", "main"), ("vaultctl.py", "main")}),
-    # input(): a typed confirmation (an entry name, a write id), never a value
-    "input": frozenset({("brain_secrets.py", "_delete"), ("brain_secrets.py", "_unfinished"), ("vault_credentials.py", "main")}),
+        ("vault_credentials.py", "_put_entry_window"), ("vault_credentials.py", "main"), ("vaultctl.py", "main"),
+        # the invitation's message (the team fingerprint, a public name of the trust root) and progress lines
+        ("brain_secrets.py", "_invite"), ("secret_store/invite.py", "invite_member"),
+        ("secret_store/invite.py", "join_team"), ("setup_store.py", "Setup.__init__"), ("setup_store.py", "main")}),
+    # input(): a typed confirmation (an entry name, a write id), never a value; setup_store.py takes the
+    # pasted team fingerprint, which is public
+    "input": frozenset({("brain_secrets.py", "_delete"), ("brain_secrets.py", "_unfinished"), ("vault_credentials.py", "main"),
+                        ("setup_store.py", "Setup.__init__")}),
     # sys.stdin.read: a value piped in (vault_credentials.py put --stdin)
     "stdin-read": frozenset({("vault_credentials.py", "_secret_value")}),
     # os.environ[...] =, del, update, pop, setdefault, clear, os.putenv, os.unsetenv
@@ -170,6 +175,7 @@ FORMS: dict[str, frozenset[tuple[str, str]]] = {
         ("secret_store/repo.py", "SecretRepo._set_state"), ("secret_store/repo.py", "SecretRepo._stage"),
         ("secret_store/repo.py", "SecretRepo.clone_or_open"), ("secret_store/repo.py", "repo_lock"),
         ("secret_store/store.py", "SecretStore._save_pin"), ("secret_store/store_ops.py", "write_marker"),
+        ("setup_store.py", "Setup.set_config"),  # the store's configuration: a switch, a login and an address
         ("secret_store/store_ops.py", "write_upkeep_error"), ("token_relay_store.py", "holder_name"),
         ("vault_agent.py", "VaultAgent._acquire_singleton"), ("vault_agent_runtime.py", "log_tray"),
         ("vault_agent_runtime.py", "write_state")}),
@@ -364,6 +370,9 @@ CREDENTIAL: dict[str, str] = {  # module -> what passes through it in the clear
     "portable_vault.py": "the whole old vault (decrypt, encrypt); sign-in records through the agent (BrokerOAuthStore); "
                          "the session passphrase (PortableVaultJsonStore)",
     "secret_window.py": "typed secrets and passphrases; the recovery words shown",
+    "setup_store.py": "no value of its own: it writes the store's configuration and starts the steps; listed here "
+                      "because it drives init (the recovery words in their window), the migration and the team "
+                      "enrolment (the stricter class)",
     "token_endpoint.py": "the refresh token or code sent; the token answer",
     "token_relay.py": "the relay key (read, stored, printed by key-export); the token seeded",
     "token_relay_backend.py": "the token record encrypted and decrypted",
@@ -385,6 +394,9 @@ CREDENTIAL: dict[str, str] = {  # module -> what passes through it in the clear
     "secret_store/enrol.py": "new private keys; every object re-keyed at approval; the challenge",
     "secret_store/envelope.py": "the payload sealed and opened",
     "secret_store/handover.py": "the grant re-sealed to the new refresher; every object re-keyed",
+    "secret_store/invite.py": "no value of its own: it reads enrolment files (public keys and hashes) and waits; listed "
+                              "here because invite_member and join_team reach enrol's answer, prove and approve (every "
+                              "object re-keyed) and team.admit (the stricter class)",
     "secret_store/hpke.py": "data keys and the challenge: the cipher's seal and open",
     "secret_store/journal.py": "refresh records with the provider's answer",
     "secret_store/keys.py": "this computer's private keys, generated, stored and loaded",
@@ -413,6 +425,7 @@ NO_CREDENTIAL: dict[str, str] = {  # module -> why none does
     "secret_store/policy.py": "public keys, assignments, groups and signatures",
     "secret_store/provider_profiles.py": "field names per provider",
     "secret_store/signing.py": "signatures over documents and sealed objects, with the key object",
+    "team_github.py": "gh calls with a repository and a login name; gh keeps its own sign-in",
 }
 # What a no-credential module may import from a credential module: (importer, imported) -> names.
 # A whole-module import ("from . import canonical") is allowed only with the attributes it uses.
@@ -464,6 +477,9 @@ OPERATIONS: dict[str, dict[str, tuple[tuple[str, ...], tuple[str, ...], str | No
         "enrol-approve": (_POLICY_WRITE, _NONE, "cli-enrol", "the challenge sealed, then every object re-keyed"),
         "team-init": (("keychain-read", "words", "recovery-keys", "keygen", "keychain-write", "package", "hpke-seal"),
                       _NONE, "cli-team", "as init, for the team repository"),
+        "invite": (_POLICY_WRITE, _NONE, None, "needs gh and a second computer answering through the team repository; "
+                   "its writes are enrol-approve's (the challenge sealed, every object re-keyed) and team-admit's, run "
+                   "by the scenarios cli-enrol and cli-team, and tests/test_secret_store_invite.py runs both ends"),
         "team-admit": (_POLICY_WRITE, _NONE, "cli-team", "objects whose readers change are re-keyed"),
         "team-groups": (_POLICY_WRITE, _NONE, "cli-team", "objects whose readers change are re-keyed"),
         "team-remove": (_POLICY_WRITE, _NONE, "cli-team", "every object the removed computer could read is re-keyed"),
@@ -485,6 +501,14 @@ OPERATIONS: dict[str, dict[str, tuple[tuple[str, ...], tuple[str, ...], str | No
                     "the old vault through the agent; every entry into the store; the scrub"),
         "rollback": (_AGENT + ("vault-load", "vault-write") + _STORE_READ, _NONE, "rollback",
                      "static values read from the store and restored through the agent"),
+    },
+    "setup_store.py": {
+        "(the command)": (("words", "recovery-keys", "keygen", "keychain-write", "keychain-read", "package", "hpke-seal",
+                         "hpke-open") + _AGENT, _NONE, None,
+                        "needs gh, a desktop for the tray and the words windows, and a live Vault Agent; its credential "
+                        "steps are other operations' code: init (cli-init), migrate_to_store.py main (migrate) and the "
+                        "enrolment request and proof (cli-enrol); tests/test_setup_store.py checks the order and the skips "
+                        "with fakes"),
     },
     "vaultctl.py": {
         # the store-backed agent's own pairs come with each command; it loads its keys at its first one

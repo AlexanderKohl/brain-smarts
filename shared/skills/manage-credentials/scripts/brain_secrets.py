@@ -16,6 +16,9 @@
   brain_secrets.py enrol-request [--team] --request ID        new computer: answer the challenge, show words
   brain_secrets.py enrol-approve [--team] --request ID        approver: answer, later compare words and approve
   brain_secrets.py team-init --owner ORG_OR_LOGIN
+  brain_secrets.py invite --login L --group G [--group G ...]
+                                                  administrator: GitHub invitation, then wait for L's computer
+                                                  (setup_store.py --join), compare words, enrol and admit
   brain_secrets.py team-admit --login L --group G [--group G ...]
   brain_secrets.py team-groups --login L --group G [...]  |  team-groups --create G [--create G ...]
   brain_secrets.py team-remove --login L [--computer C]
@@ -80,6 +83,9 @@ def _parser() -> argparse.ArgumentParser:
     approve.add_argument("--team", action="store_true")
     approve.add_argument("--request", required=True)
     sub.add_parser("team-init", help="create the team repository").add_argument("--owner", required=True)
+    invite = sub.add_parser("invite", help="administrator: invite a person, then enrol and admit their computer")
+    invite.add_argument("--login", required=True, help="their GitHub username")
+    invite.add_argument("--group", action="append", required=True)
     admit = sub.add_parser("team-admit", help="admit an enrolled person to their first groups")
     admit.add_argument("--login", required=True)
     admit.add_argument("--group", action="append", required=True)
@@ -282,6 +288,32 @@ def _unfinished(store, apply_id, discard_id, confirm) -> int:
     return 0
 
 
+def _invite(store, member: str, groups: list[str], display, github=None, wait=None) -> int:
+    """Administrator: check, invite on GitHub, print the message to send, then wait for the member's
+    computer (setup_store.py --join), compare the words, enrol and admit."""
+    from secret_store import invite
+    import team_github
+    github = github or team_github
+    opened = store.open()
+    invite.check_can_invite(opened, groups)
+    url = opened._remote_url()
+    try:
+        github.invite(github.repository_of(url), member)
+    except github.GitHubError as error:
+        print(f"Secrets store: {error}", file=sys.stderr)
+        return 1
+    print(f"{member} is invited to the team repository on GitHub.\n")
+    print(f"Send {member} this message (a message app is fine; nothing in it is secret):\n")
+    print(f"  Team fingerprint: {opened._pinned}")
+    print("  In your brain folder run:")
+    print(f"  python shared\\skills\\manage-credentials\\scripts\\setup_store.py --join {url}\n")
+    print("This window waits for their computer; leave it open. Their six words come back to you by message.")
+    computer = invite.invite_member(opened, member, groups, display,
+                                    **({"wait": wait} if wait is not None else {}))
+    print(f"Done: {member}/{computer} can read the entries of {', '.join(invite.groups_of(opened, member))}.")
+    return 0
+
+
 def main(argv=None, store_factory=None, team_factory=None, ask=None, confirm=None, display=None) -> int:
     from secret_store import SecretStoreError, enrol, handover
     from secret_store import team as team_ops
@@ -294,7 +326,8 @@ def main(argv=None, store_factory=None, team_factory=None, ask=None, confirm=Non
     if args.command == "restore":  # no configured store: the target folder is the whole store
         return _restore(args, ask, (SecretStoreError, CredentialError))
     group = getattr(args, "group", None) if args.command in _GROUPED else None
-    use_team = bool(getattr(args, "team", False) or group or args.command.startswith("team-"))
+    use_team = bool(getattr(args, "team", False) or group or args.command.startswith("team-")
+                    or args.command == "invite")
     store = (team_factory or team_ops.TeamStore)() if use_team else (store_factory or SecretStore)()
     try:
         if args.command == "status":
@@ -364,6 +397,8 @@ def main(argv=None, store_factory=None, team_factory=None, ask=None, confirm=Non
             print("The team secrets store is set up.")
             print("Team trust root fingerprint (compare it on screen when a member joins):")
             print(store.init_team(args.owner))
+        elif args.command == "invite":
+            return _invite(store, args.login, args.group, display)
         elif args.command == "team-admit":
             team_ops.admit(store.open(), args.login, args.group)
             print(f"Admitted {args.login} to " + ", ".join(args.group) + ".")

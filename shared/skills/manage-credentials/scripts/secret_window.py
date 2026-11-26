@@ -246,10 +246,15 @@ def show_recovery_words(words: list[str]) -> bool:
     return bool(confirmed)
 
 
-def show_words(title: str, words: list[str]) -> bool:
+COMPARE_WORDS = ("Compare these six words with the words on the other computer's screen. "
+                 "They are shown only here, never in the chat.")
+
+
+def show_words(title: str, words: list[str], intro: str = COMPARE_WORDS, compare: bool = True) -> bool:
     """Show the six enrolment words on this screen only: never printed, logged or returned. True
-    when the person presses "They match" after comparing them with the other computer's screen;
-    False on "They differ", Esc or close."""
+    when the person presses "They match" after comparing them with the other computer's words;
+    False on "They differ", Esc or close. With compare False (the new computer, whose person sends
+    the words on by hand) there is one button, "Done", and the result is True."""
     tkinter, root = _tk()
     matched: list[bool] = []
     try:
@@ -257,12 +262,7 @@ def show_words(title: str, words: list[str]) -> bool:
         root.resizable(False, False)
         frame = tkinter.Frame(root, padx=16, pady=12)
         frame.pack(fill="both", expand=True)
-        tkinter.Label(
-            frame,
-            text="Compare these six words with the words on the other computer's screen. "
-            "They are shown only here, never in the chat.",
-            justify="left", wraplength=420,
-        ).pack(anchor="w", pady=(0, 8))
+        tkinter.Label(frame, text=intro, justify="left", wraplength=420).pack(anchor="w", pady=(0, 8))
         tkinter.Label(frame, text="  ".join(words), font=("Courier", 14, "bold")).pack(pady=(0, 10))
         buttons = tkinter.Frame(frame)
         buttons.pack(anchor="e")
@@ -274,10 +274,14 @@ def show_words(title: str, words: list[str]) -> bool:
         def differ(_event=None) -> None:
             root.destroy()
 
-        tkinter.Button(buttons, text="They match", width=12, command=match).pack(side="left", padx=4)
-        tkinter.Button(buttons, text="They differ", width=12, command=differ).pack(side="left")
-        root.bind("<Escape>", differ)
-        root.protocol("WM_DELETE_WINDOW", differ)
+        if compare:
+            tkinter.Button(buttons, text="They match", width=12, command=match).pack(side="left", padx=4)
+            tkinter.Button(buttons, text="They differ", width=12, command=differ).pack(side="left")
+        else:
+            tkinter.Button(buttons, text="Done", width=12, command=match).pack(side="left")
+        close = differ if compare else match
+        root.bind("<Escape>", close)
+        root.protocol("WM_DELETE_WINDOW", close)
         root.attributes("-topmost", True)
         root.lift()
         root.focus_force()

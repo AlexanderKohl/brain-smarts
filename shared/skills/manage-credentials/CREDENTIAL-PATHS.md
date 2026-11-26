@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-11-21T14:31:20+10:00
-updated: 2026-11-24T07:29:20+10:00
+updated: 2026-11-26T17:08:00+10:00
 ---
 
 # Credential paths
@@ -161,6 +161,8 @@ e start or configure the agent. `mc/` is this skill's `scripts/`, `lib/` the ski
 | 50 | `mc/token_endpoint.py` `post_token` | c | not sent, refused and uncertain decided by fact; https only; never retried | – | OK |
 | 51 | `mc/migration_lock.py` | b (lock file) | exclusive; an absent, dead, old or malformed lock refuses | – | OK |
 | 52 | `brain_secrets.py replace-signin` | b, d | the refresher that is an administrator; a refresher that is not an administrator changes nothing and gets the step, `delete --entry E --field F` by an administrator (exit 3), and is refused with `--even-if-working`; an administrator that is not the refresher is refused, naming `delete --field`; settings kept in an encrypted hand-over file; one commit retires both ids; a failed push changes nothing; the old refresher discards its record of the retired grant | – | OK |
+| 54 | `brain_secrets.py invite`, `secret_store/invite.py` `invite_member` | b, d | an administrator's computer: `team_github.py` invites the login with write permission, the command prints the team fingerprint (public) and waits; it answers only a well-formed, unexpired request from that login, compares the six words in the window (`enrol.approve`), then admits through `team.admit`; a second computer of a member keeps its groups; no write of its own beyond enrol's and team's | same | OK |
+| 55 | `mc/setup_store.py`, `secret_store/invite.py` `join_team` | a, b, d, e | the cut-over's steps in order, each skipped when done: the agent started on the old vault (its own passphrase window), the store switched on, `init` (words window), `migrate_to_store.py` main, then with `--join` the GitHub invitation accepted, `team_repo_url` written, the pasted fingerprint pinned, the enrolment requested and proved (`enrol.request`, `enrol.prove`), and the agent restarted after the person quits it; never the rehearsal; prints names, steps and times only | same | OK |
 | 53 | `brain_secrets.py unfinished [--team] [--apply ID \| --discard ID]`, `secret_store/pending.py`, `secret_store/typed_write.py` | a, b | one pending-write record per typed write (`put`, the agent's `set_text` and `set_json` of a static or grant field), encrypted to this computer's key beside the journal; a typed value whatever its field is called; a provider's token answer never enters a record (an authorisation, the migration, `save_settings` and a refresh make none); listed by write id, entry and time, never a value; replayed only while every base identity holds, held otherwise; `--apply` writes through the normal store path; `--discard` removes a record after its id is typed; a damaged record, one of another repository or one without field kinds is never applied; nothing is read from or sent to the vault | same | OK |
 
 Tests: rows 1 to 11 and 29 to 31 in `tests/test_secret_store_*.py`; rows 13 to 28 in `test_secret_store_round8.py`
@@ -168,7 +170,9 @@ and `test_secret_store_round9.py`, and row 15 also in `test_secret_store_rollbac
 `test_secret_store_replace_signin.py` and `test_secret_store_replace_team.py`; rows 30 and 50 in
 `test_token_endpoint.py`; row 53 in `test_secret_store_typed_write.py` (the pending-write records and their replay)
 and `test_secret_store_two_processes.py` (two processes on one clone); rows 35 to 47 in
-`test_secret_store_connectors.py` and each library skill's own tests.
+`test_secret_store_connectors.py` and each library skill's own tests; row 54 and `join_team` in
+`test_secret_store_invite.py` (both ends against one team repository), row 55 in `test_setup_store.py` (the order
+and the skips, with fakes).
 
 ## Inside the store
 
@@ -189,7 +193,7 @@ whether a Python string, a dictionary or the canonical bytes before encryption o
 
 Every external module the scripts import, and nothing else, is one of: `PIL`, `__future__`, `argparse`, `atexit`,
 `base64`, `binascii`, `contextlib`, `copy`, `cryptography`, `ctypes`, `dataclasses`, `datetime`, `errno`, `fcntl`,
-`functools`, `getpass`, `hashlib`, `hmac`, `http`, `json`, `keyring`, `math`, `msvcrt`, `multiprocessing`, `os`,
+`functools`, `getpass`, `hashlib`, `hmac`, `http`, `importlib` (`setup_store.py`: installed package versions, read through `importlib.metadata`), `json`, `keyring`, `math`, `msvcrt`, `multiprocessing`, `os`,
 `pathlib`, `pystray`, `re`, `secrets`, `shutil`, `socket`, `ssl`, `stat`, `struct`, `subprocess`, `sys`,
 `tempfile`, `threading`, `time`, `tkinter`, `types`, `typing`, `urllib`, `warnings`. An import of any other fails
 the test (`logging` and every HTTP client library among them).
@@ -241,11 +245,11 @@ longer uses the form.
 
 | Form | Allowed in |
 |---|---|
-| the terminal: `print`, or a reference to `sys.stdout` or `sys.stderr` (names, presence and fingerprints only, except the two sinks `vaultctl.py` `main` and `token_relay.py` `main` below) | `brain_secrets.py` `_delete`, `_recovery_package`, `_restore`, `_unfinished`, `main`; `migrate_to_store.py` `_say` (the default output of `migrate` and `rollback`: the progress lines and the summary, flushed at once; names only), `main`; `token_relay.py` `_seed`, `_status`, `main`; `token_relay_store.py` `RelayedStore._warn`; `vault_agent.py` `VaultAgent._serve_with_listener`, `_diagnose.write` (in a bounded daemon thread, best effort, only when standard error exists: why a rewrite could not be proved private, or why the agent ends its process), `main`; `vault_credentials.py` `_cancelled`, `_put_entry_window`, `main`; `vaultctl.py` `main` |
-| `input()`: a typed confirmation (an entry name, a write id), never a value | `brain_secrets.py` `_delete`, `_unfinished`; `vault_credentials.py` `main` |
+| the terminal: `print`, or a reference to `sys.stdout` or `sys.stderr` (names, presence and fingerprints only, except the two sinks `vaultctl.py` `main` and `token_relay.py` `main` below) | `brain_secrets.py` `_delete`, `_recovery_package`, `_restore`, `_unfinished`, `main`; `migrate_to_store.py` `_say` (the default output of `migrate` and `rollback`: the progress lines and the summary, flushed at once; names only), `main`; `token_relay.py` `_seed`, `_status`, `main`; `token_relay_store.py` `RelayedStore._warn`; `vault_agent.py` `VaultAgent._serve_with_listener`, `_diagnose.write` (in a bounded daemon thread, best effort, only when standard error exists: why a rewrite could not be proved private, or why the agent ends its process), `main`; `vault_credentials.py` `_cancelled`, `_put_entry_window`, `main`; `vaultctl.py` `main`; `brain_secrets.py` `_invite`, `secret_store/invite.py` `invite_member`, `join_team`, `setup_store.py` `Setup.__init__`, `main` (the invitation's message with the team fingerprint, a public name of the trust root, and progress lines) |
+| `input()`: a typed confirmation (an entry name, a write id), never a value | `brain_secrets.py` `_delete`, `_unfinished`; `vault_credentials.py` `main`; `setup_store.py` `Setup.__init__` (the pasted team fingerprint, which is public) |
 | `sys.stdin.read`: a value piped in | `vault_credentials.py` `_secret_value` (put --stdin) |
 | an environment write: `os.environ[...] =`, `del`, `update`, `pop`, `setdefault`, `clear`, `os.putenv`, `os.unsetenv` | `token_relay.py` `main` (PORTABLE_VAULT_PATH, a path) |
-| a file write: `open` or `Path.open` in a writing mode, `os.fdopen`, `write_text`, `write_bytes`, `os.replace`, `os.rename`, `tempfile.mkstemp`, `NamedTemporaryFile`, `shutil.copyfile`, `copy`, `copy2`, `copytree`, `move` | `migrate_to_store.py` `_backup`, `_migrate`; `migration_lock.py` `MigrationLock._create`; `portable_vault.py` `PortableVault._write_unlocked`, `write_migration_marker`; `secret_store/checkpoint.py` `save`; `secret_store/enrol.py` `_save_pending`; `secret_store/fileio.py` `locked`, `write_durable`; `secret_store/recovery_package.py` `_write_atomic`, `restore`; `secret_store/repo.py` `SecretRepo._set_state`, `SecretRepo._stage`, `SecretRepo.clone_or_open`, `repo_lock`; `secret_store/store.py` `SecretStore._save_pin`; `secret_store/store_ops.py` `write_marker`, `write_upkeep_error`; `token_relay_store.py` `holder_name`; `vault_agent.py` `VaultAgent._acquire_singleton`; `vault_agent_runtime.py` `log_tray`, `write_state` |
+| a file write: `open` or `Path.open` in a writing mode, `os.fdopen`, `write_text`, `write_bytes`, `os.replace`, `os.rename`, `tempfile.mkstemp`, `NamedTemporaryFile`, `shutil.copyfile`, `copy`, `copy2`, `copytree`, `move` | `migrate_to_store.py` `_backup`, `_migrate`; `migration_lock.py` `MigrationLock._create`; `portable_vault.py` `PortableVault._write_unlocked`, `write_migration_marker`; `secret_store/checkpoint.py` `save`; `secret_store/enrol.py` `_save_pending`; `secret_store/fileio.py` `locked`, `write_durable`; `secret_store/recovery_package.py` `_write_atomic`, `restore`; `secret_store/repo.py` `SecretRepo._set_state`, `SecretRepo._stage`, `SecretRepo.clone_or_open`, `repo_lock`; `secret_store/store.py` `SecretStore._save_pin`; `secret_store/store_ops.py` `write_marker`, `write_upkeep_error`; `token_relay_store.py` `holder_name`; `vault_agent.py` `VaultAgent._acquire_singleton`; `vault_agent_runtime.py` `log_tray`, `write_state`; `setup_store.py` `Setup.set_config` (the store's configuration: a switch, a login and an address) |
 | reflection: `eval`, `exec`, `__import__`, `compile`, `globals`, `locals`, `vars`; `getattr`, `setattr` or `delattr` with a name that is not a literal | `secret_store/store_ops.py` `store_status` (getattr over a tuple of two literal attribute names) |
 | the string `PORTABLE_VAULT_PASSPHRASE`: read from the environment, or removed from a child's | `portable_vault.py` `PortableVaultJsonStore.__init__`; `vault_credentials.py` `_passphrase`, `_credential_environment`; `vaultctl.py` `_mapped_environment` |
 
@@ -352,6 +356,7 @@ the agent's own pairs are recorded under the command too. The ids are those of t
 | | `enrol-request` | keychain-read, keygen, keychain-write, hpke-open, package, hpke-seal | | cli-enrol | `--fingerprint` makes keys, a signed request and the computer's first package; `--request` opens the challenge |
 | | `enrol-approve` | keychain-read, open, hpke-open, seal, hpke-seal, package | | cli-enrol | the challenge sealed, then every object re-keyed |
 | | `team-init` | keychain-read, words, recovery-keys, keygen, keychain-write, package, hpke-seal | | cli-team | as init, for the team repository |
+| | `invite` | keychain-read, open, hpke-open, seal, hpke-seal, package | | none | needs `gh` and a second computer answering through the team repository; its writes are enrol-approve's and team-admit's, run by cli-enrol and cli-team, and `tests/test_secret_store_invite.py` runs both ends |
 | | `team-admit`, `team-groups` | keychain-read, open, hpke-open, seal, hpke-seal, package | | cli-team | objects whose readers change are re-keyed |
 | | `team-remove` | keychain-read, open, hpke-open, seal, hpke-seal, package | | cli-team | every object the removed computer could read is re-keyed |
 | | `handover-release` | keychain-read, open, hpke-open, seal, hpke-seal | | cli-handover | the grant re-sealed to the new refresher |
@@ -361,6 +366,7 @@ the agent's own pairs are recorded under the command too. The ids are those of t
 | | `unfinished` | keychain-read, open, hpke-open, seal, hpke-seal | package | cli-unfinished | list and `--discard` read records; `--apply` writes through the normal path, and a record that adds an entry changes the policy |
 | `migrate_to_store.py` | `migrate` | agent-client, agent-state-read, agent-connect, agent-pipe, vault-load, vault-write, keychain-read, open, hpke-open, seal, hpke-seal, package | | migrate | the old vault through the agent; every entry into the store; the scrub |
 | | `rollback` | agent-client, agent-state-read, agent-connect, agent-pipe, vault-load, vault-write, keychain-read, open, hpke-open | | rollback | static values read from the store and restored through the agent: `vault_restore_static`, then `vault_restore_marked_static` for fields under a migrated sign-in's name, then the marker cleared only when every restore succeeded |
+| `setup_store.py` | `(the command)` | words, recovery-keys, keygen, keychain-write, keychain-read, package, hpke-seal, hpke-open, agent-client, agent-state-read, agent-connect, agent-pipe | | none | needs `gh`, a desktop for the tray and the words windows, and a live Vault Agent; its credential steps are other operations' code: init (cli-init), `migrate_to_store.py` main (migrate) and the enrolment request and proof (cli-enrol); `tests/test_setup_store.py` checks the order and the skips with fakes |
 | `vaultctl.py` | `status` | agent-client, agent-state-read, agent-connect, agent-pipe, vaultctl-main, keychain-read | open, hpke-open | vaultctl | status only; `main` is the sink function for every command; the agent loads its keys at its first operation and opens a hand-over file or pending record to name it |
 | | `unlock` | vaultctl-prompt, agent-client, agent-state-read, agent-connect, agent-pipe, vaultctl-main, vault-load | | vaultctl | the passphrase, checked by the agent against the vault |
 | | `lock` | agent-client, agent-state-read, agent-connect, agent-pipe, vaultctl-main | | vaultctl | no credential |
@@ -413,6 +419,7 @@ Through these a credential passes in the clear:
 | `migrate_to_store.py` | every old-vault value read through the agent and copied into the store; the store's static values sent back to the agent at rollback |
 | `portable_vault.py` | the whole old vault (decrypt, encrypt); sign-in records through the agent (`BrokerOAuthStore`); the session passphrase (`PortableVaultJsonStore`) |
 | `secret_window.py` | typed secrets and passphrases; the recovery words shown |
+| `setup_store.py` | no value of its own: it writes the store's configuration and starts the steps; listed here because it drives init (the recovery words in their window), the migration and the team enrolment (the stricter class) |
 | `token_endpoint.py` | the refresh token or code sent; the token answer |
 | `token_relay.py` | the relay key (read, stored, printed by key-export); the token seeded |
 | `token_relay_backend.py` | the token record encrypted and decrypted |
@@ -431,6 +438,7 @@ Through these a credential passes in the clear:
 | `secret_store/enrol.py` | new private keys; every object re-keyed at approval; the challenge |
 | `secret_store/envelope.py` | the payload sealed and opened |
 | `secret_store/handover.py` | the grant re-sealed to the new refresher; every object re-keyed |
+| `secret_store/invite.py` | no value of its own: it reads enrolment files (public keys and hashes) and waits; listed here because `invite_member` and `join_team` reach enrol's answer, prove and approve (every object re-keyed) and `team.admit` (the stricter class) |
 | `secret_store/hpke.py` | data keys and the challenge: the cipher's seal and open |
 | `secret_store/journal.py` | refresh records with the provider's answer |
 | `secret_store/keys.py` | this computer's private keys, generated, stored and loaded |
@@ -459,6 +467,7 @@ Through these none does:
 | `secret_store/policy.py` | public keys, assignments, groups and signatures | `canonical.py`: dumps (hashes and endorsement bytes); `hpke.py`: load_public_key; `keys.py`: key_id, raw_public |
 | `secret_store/provider_profiles.py` | field names per provider | none |
 | `secret_store/signing.py` | signatures over documents and sealed objects, with the key object | `canonical.py`: dumps (the bytes signed or verified) |
+| `team_github.py` | `gh` calls with a repository and a login name; `gh` keeps its own sign-in | none |
 
 ### The limit
 

@@ -11,7 +11,7 @@ metadata:
   scope: shared
   project_ref: /memory/projects/credential-management
   created: 2026-08-04T16:11:53+10:00
-  updated: 2026-11-23T15:49:23+10:00
+  updated: 2026-11-26T17:08:00+10:00
 ---
 
 # Credential Management
@@ -472,11 +472,35 @@ With the store on the old vault is closed: no path reads or writes a credential 
   written to a `.upkeep-error` file beside the checkpoint on this computer. The daily due check reads
   that file and reports it; the next timer run retries, and a success clears the file.
 
+### One command per person: setup and invitation
+
+`python setup_store.py [--join TEAM_REPOSITORY_URL]` does the cut-over below on a person's own
+computer, and joins a team store: it brings the brain up to date, installs the requirements, reads the
+person's GitHub login through `gh`, has the Vault Agent unlocked on the old vault (its own passphrase
+window), switches the store on, runs `init` (the recovery words in their window) and the migration,
+and restarts the agent once the person has quit it from its tray icon. With `--join` it also accepts
+the GitHub invitation, adds the team repository to the configuration, takes the team fingerprint
+pasted from the administrator's message, requests enrolment, shows the six words to send back and
+waits until the administrator has enrolled and admitted the computer. Each step says how long it took,
+and a step already done is skipped, so the command is simply run again after an interruption.
+
+On an administrator's computer, `python brain_secrets.py invite --login L --group G` invites the
+person on GitHub, prints the message to send them (the team fingerprint and the `setup_store.py
+--join` command), then waits: it answers their request, shows the six words to compare with the words
+they send back, enrols the computer and admits the person to the groups (a second computer of a
+member keeps its groups). The fingerprint and the six words are not secrets, so a message app carries
+them; the person's passphrase and recovery words never leave their own windows. Both ends must finish
+within the enrolment's ten minutes once the request is written; an expired request is replaced by a
+new one, with new words.
+
+The rehearsal (rehearsal/README.md) is not part of a person's setup: it tests a new version of the
+store's code with throwaway secrets, and whoever changes that code runs it on that commit before the
+first real cut-over with it. A person setting up a computer on code already rehearsed does not.
+
 ### The cut-over
 
-Rehearse the store with throwaway secrets before the cut-over: rehearsal/README.md
-
-The move to the store is one run, not entry by entry, in this order:
+The move to the store is one run, not entry by entry, in this order (`setup_store.py` runs these
+steps):
 
 1. With the store off, start the Vault Agent and unlock it on the old vault.
 2. Switch the store on. Do not restart the agent: it still serves the old vault, for the migration

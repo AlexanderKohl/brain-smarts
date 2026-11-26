@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-11-20T19:22:05+10:00
-updated: 2026-11-21T14:31:20+10:00
+updated: 2026-11-26T17:08:00+10:00
 owner: brain-owner
 ---
 
@@ -123,7 +123,9 @@ python brain_secrets.py enrol-request [--team] --fingerprint F     new computer
 python brain_secrets.py enrol-approve [--team] --request ID        approving computer
 python brain_secrets.py enrol-request [--team] --request ID        new computer, after the answer
 python brain_secrets.py enrol-approve [--team] --request ID        approving computer, to finish
-python brain_secrets.py team-init --owner ORGANISATION
+python brain_secrets.py team-init --owner ORGANISATION_OR_LOGIN
+python brain_secrets.py invite --login L --group G [--group G]   administrator: invite, wait, compare, enrol, admit
+python setup_store.py [--join URL] [--fingerprint F]   a person's computer: the cut-over and joining, in one run
 python brain_secrets.py team-admit --login L --group G [--group G]
 python brain_secrets.py team-groups --create G | --login L --group G
 python brain_secrets.py team-remove --login L [--computer C]
@@ -134,6 +136,10 @@ python brain_secrets.py unfinished [--team] [--apply ID | --discard ID]   pendin
 python migrate_to_store.py --dry-run               names only; then without it, [--replace]
 python migrate_to_store.py rollback [--dry-run]    static secrets back to the old vault
 ```
+
+For a new team member, `invite` on the administrator's computer and `setup_store.py --join` on theirs
+run the team enrolment below by themselves (`secret_store/invite.py`): each waits for the other's file
+in the team repository, so only the fingerprint and the six words travel by hand.
 
 Enrolment: the new computer runs `enrol-request --fingerprint`, the approver runs `enrol-approve`,
 the new computer runs `enrol-request --request`, both screens show six words, and the approver
