@@ -4,10 +4,13 @@ title: Rule packs also hold the contract sections of their situation
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: proposed
+status: implemented
+accepted_by: brain-owner
+accepted_at: 2026-11-26T14:35:03+10:00
+implemented_at: 2026-11-26T14:36:20+10:00
 owner: brain-owner
 created: 2026-11-26T12:20:00+10:00
-updated: 2026-11-26T12:20:00+10:00
+updated: 2026-11-26T14:36:20+10:00
 previous_contract_version: 3.6.0
 new_contract_version: 3.7.0
 target_files:
@@ -16,8 +19,13 @@ target_files:
   - /CORE.md
   - /README.md
   - /RULES.md
+  - /rules/files-and-sources.md
+  - /rules/node-files.md
+  - /rules/nodes.md
   - /rules/outside-systems.md
+  - /rules/project-repositories.md
   - /rules/rules-and-skills.md
+  - /rules/tasks.md
   - /shared/skills/repository-preflight/SKILL.md
 ---
 
@@ -210,3 +218,10 @@ contract returns to 3.6.0.
 - `core.py check` and the full preflight on the result; every generated file under 28,000 characters.
 - A week after acceptance, the same measurement as above: which packs threads read, and whether any
   thread that worked in a project repository or created a task went without its pack.
+
+## Outcome
+
+Accepted by the owner on 26 November 2026 and applied word for word by script. The contract was 3.6.0
+before this proposal and is 3.7.0 after it. The generated files came out at the sizes measured above.
+The six tests named under *Planned validation* are in `tests/test_core_sections.py`; the validator's
+tests and the full preflight passed on the result.

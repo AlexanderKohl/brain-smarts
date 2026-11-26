@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-11-24T18:28:13+10:00
+updated: 2026-11-26T14:35:03+10:00
 owner: brain-owner
 ---
 
@@ -80,19 +80,26 @@ The core files and the packs are generated from this file and `/CONTRACT.md` by
 `shared/skills/repository-preflight/scripts/core.py`, and the preflight fails when one of them is
 stale or too long for a host to show whole, or when a row here has no `Applies when`.
 
-Rule packs, in alphabetical order. A pack is a generated file that holds, verbatim, the rules of one
-situation, so that an agent entering the situation reads one short file instead of finding each rule
-here. A rule's wording still lives only in this file (`SMART-RULE-0007`); a rule may be in more than
-one pack; and `/CORE-RULES.md` lists a rule's own row only when its text is in neither the core nor a
-pack.
+Rule packs, in alphabetical order. A pack is a generated file that holds, verbatim, the contract
+sections and the rules of one situation, so that an agent entering the situation reads one short file
+instead of finding each section in `/CONTRACT.md` and each rule here. A section's wording still lives
+only in `/CONTRACT.md` and a rule's only in this file (`SMART-RULE-0007`); a section or a rule may be
+in more than one pack; `/CORE-RULES.md` lists a rule's own row only when its text is in neither the
+core nor a pack; and a contract section that a pack holds is read there, so its row in
+`/CORE-RULES.md` names the pack.
 
-| Pack | Applies when | Rules |
+| Pack | Applies when | Contract sections and rules |
 |---|---|---|
 | `/rules/conducting.md` | before delegating work to another agent or running more than one session or worker; working cards between threads; a conductor thread starts or hands over; the owner raises another area's topic; before pushing merged code | `SMART-RULE-0024`, `SMART-RULE-0037`, `SMART-RULE-0043`, `SMART-RULE-0048` |
-| `/rules/outside-systems.md` | looking up a fact or identifier; working against an external system or its API; using a host plugin skill or its connector | `SMART-RULE-0005`, `SMART-RULE-0013`, `SMART-RULE-0017`, `SMART-RULE-0045` |
-| `/rules/rules-and-skills.md` | writing or changing a rule, a proposal, a skill's operating instructions, a host entry file or a pointer file, or anything in the mechanics or the skill library | `SMART-RULE-0002`, `SMART-RULE-0007`, `SMART-RULE-0008`, `SMART-RULE-0031` |
-| `/rules/software.md` | building or changing software in any project: code, a user interface, tests, sample data, a version, or a change someone who uses the system would notice | `SMART-RULE-0008`, `SMART-RULE-0015`, `SMART-RULE-0018`, `SMART-RULE-0020`, `SMART-RULE-0021`, `SMART-RULE-0022`, `SMART-RULE-0026`, `SMART-RULE-0041`, `SMART-RULE-0046` |
+| `/rules/files-and-sources.md` | a file arrives to be kept, or is taken from the inbox; content arrives from outside the owner's own words: a file, an e-mail, a web page, a tool's output | `§11` |
+| `/rules/node-files.md` | writing a node's `README.md`, `RULES.md`, `STATE.md`, `LOG.md` or `KNOWLEDGE.md`; creating a Markdown file, or changing front matter or a log heading; writing a checkpoint, or the context was compacted; before finishing a substantive update | `§4`, `§8`, `§15`, `SMART-RULE-0019` |
+| `/rules/nodes.md` | creating a node, moving one into its own repository, or deciding where an item belongs; creating a durable item, or copying one; declaring a dependency, or configuring a shared skill for a node | `§3.1`, `§3.2`, `§3.3`, `§7`, `§12` |
+| `/rules/outside-systems.md` | looking up a fact or identifier; reading from or writing to an external system or its API; using a credential; using a host plugin skill or its connector | `§10`, `SMART-RULE-0005`, `SMART-RULE-0013`, `SMART-RULE-0017`, `SMART-RULE-0045` |
+| `/rules/project-repositories.md` | working in a project repository: reading or writing its `brain/` folder, committing or pushing there, or joining one | `§16` |
+| `/rules/rules-and-skills.md` | writing or changing the contract, a rule, a proposal, a governance template, a bootstrap file, a skill or its operating instructions, a host entry file or a pointer file, or anything in the mechanics or the skill library; accepting or applying such a change; numbering a rule or naming a proposal | `§10`, `§13.2`, `§13.3`, `SMART-RULE-0002`, `SMART-RULE-0007`, `SMART-RULE-0008`, `SMART-RULE-0031` |
 | `/rules/software-checks.md` | creating a code repository or giving one its remote; setting up or changing a code repository's CI, checks, test runner or pre-push hook; a check fails or is slow | `SMART-RULE-0042`, `SMART-RULE-0049` |
+| `/rules/software.md` | building or changing software in any project: code, a user interface, tests, sample data, a version, or a change someone who uses the system would notice | `SMART-RULE-0008`, `SMART-RULE-0015`, `SMART-RULE-0018`, `SMART-RULE-0020`, `SMART-RULE-0021`, `SMART-RULE-0022`, `SMART-RULE-0026`, `SMART-RULE-0041`, `SMART-RULE-0046` |
+| `/rules/tasks.md` | creating, changing or closing a task; a project without a board gains its fifth open task or a third active branch | `§9`, `SMART-RULE-0035` |
 
 Contract sections and when to read them, in section order:
 

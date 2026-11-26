@@ -68,6 +68,16 @@ def packs(rules: str) -> tuple[list[str], list[tuple[str, str, list[str]]]]:
     return lines, rows
 
 
+def pack_sections(rules: str) -> dict[str, list[str]]:
+    """The contract sections each row of the pack table names (`§9`), by pack file."""
+    found: dict[str, list[str]] = {}
+    for line in rules.splitlines():
+        if match := PACK_ROW.match(line):
+            listed = cells(match.group(2))[1:2]
+            found[match.group(1)] = re.findall(r"§(\d+(?:\.\d+)?)", listed[0]) if listed else []
+    return found
+
+
 def contract_section(contract: str, number: str) -> str:
     """A section from its heading to the next heading at the same or a higher level."""
     lines = contract.splitlines()
@@ -104,11 +114,17 @@ def problems(rules: str) -> list[str]:
         if heading not in listed:
             found.append(f"/RULES.md: {heading} has a heading but no index row")
     when_of = dict(rule_rows)
+    section_when, sections_of = dict(section_rows), pack_sections(rules)
     for name, when, ids in packs(rules)[1]:
         if not when:
             found.append(f"/RULES.md: pack /{name} has no Applies when")
-        if len(ids) < 2:
+        if len(ids) < 2 and not sections_of.get(name):
             found.append(f"/RULES.md: pack /{name} names fewer than two rules; a single rule keeps its own row")
+        for number in sections_of.get(name, []):
+            if number not in section_when:
+                found.append(f"/RULES.md: pack /{name} names CONTRACT §{number}, which the section table does not list")
+            elif section_when[number].startswith("always"):
+                found.append(f"/RULES.md: pack /{name} names CONTRACT §{number}, which always applies and is in the core")
         for rule_id in ids:
             if rule_id not in when_of:
                 found.append(f"/RULES.md: pack /{name} names {rule_id}, which the index does not list")
@@ -141,6 +157,19 @@ def render(root: Path) -> dict[str, str]:
         elsewhere = {key for key, when in rule_rows if always(when) and rule_section(rules, key)}
         elsewhere |= {rule_id for _, _, ids in pack_rows for rule_id in ids}
         rule_lines = header + [line for key, line in row_of.items() if key not in elsewhere]
+    sections_of = pack_sections(rules)
+    held_in: dict[str, list[str]] = {}
+    for name, numbers in sections_of.items():
+        for number in numbers:
+            held_in.setdefault(number, []).append(name)
+    if held_in:
+        # A section a pack holds is read there: its row names the pack, and the pack's row says when.
+        for i, line in enumerate(section_lines):
+            match = SECTION_ROW.match(line)
+            if match and match.group(1) in held_in:
+                title = cells(match.group(2))[0]
+                where = ", ".join(f"`/{name}`" for name in sorted(held_in[match.group(1)]))
+                section_lines[i] = f"| §{match.group(1)} | {title} | in {where} |"
     first = front("brain-core", "Brain Core", updated) + [
         "# Brain Core", "",
         "Generated from `/CONTRACT.md` and `/RULES.md` by `core.py build`; never edit it here. It is the",
@@ -159,7 +188,8 @@ def render(root: Path) -> dict[str, str]:
         "that always apply, verbatim.", "",
         "## When to read the rest", "", *section_lines, ""]
     if pack_rows:
-        second += ["A rule pack holds, verbatim, the rules of one situation. Read the whole pack before acting in",
+        holds = "the contract sections and the rules" if held_in else "the rules"
+        second += [f"A rule pack holds, verbatim, {holds} of one situation. Read the whole pack before acting in",
                    "that situation.", "", *pack_lines, "",
                    "Rules that are in no pack and not below, each read in its canonical home (`/RULES.md` has the",
                    "full index):", ""]
@@ -171,12 +201,20 @@ def render(root: Path) -> dict[str, str]:
     parts = {PARTS[0]: "\n".join(first).rstrip() + "\n", PARTS[1]: "\n".join(second).rstrip() + "\n"}
     for name, when, ids in pack_rows:
         stem = Path(name).stem
+        numbers = sections_of.get(name, [])
+        if numbers:
+            opening = ["Generated from `/CONTRACT.md` and `/RULES.md` by `core.py build`; never edit it here. It holds, verbatim,",
+                       "the contract sections and the rules of one situation, so that they are read together. A section's",
+                       "canonical home stays `/CONTRACT.md`, and a rule's `/RULES.md`.", ""]
+        else:
+            opening = ["Generated from `/RULES.md` by `core.py build`; never edit it here. It holds, verbatim, the rules of one",
+                       "situation, so that they are read together. Each rule's canonical home stays `/RULES.md`.", ""]
         text = front(f"brain-rules-{stem}", f"Rule pack: {stem}", updated) + [
-            f"# Rule pack: {stem}", "",
-            "Generated from `/RULES.md` by `core.py build`; never edit it here. It holds, verbatim, the rules of one",
-            "situation, so that they are read together. Each rule's canonical home stays `/RULES.md`.", "",
-            f"Read the whole file before: {when}.", "", *header,
-            *[row_of[rule_id] for rule_id in ids if rule_id in row_of], ""]
+            f"# Rule pack: {stem}", "", *opening, f"Read the whole file before: {when}.", ""]
+        for number in numbers:
+            text += [contract_section(contract, number), ""]
+        if ids:
+            text += [*header, *[row_of[rule_id] for rule_id in ids if rule_id in row_of], ""]
         for rule_id in ids:
             body = rule_section(rules, rule_id)
             if body:
