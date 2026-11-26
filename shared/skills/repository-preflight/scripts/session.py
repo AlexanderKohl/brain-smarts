@@ -187,8 +187,18 @@ def cmd_start(root: Path, name: str, folder: Path, start_at: dict[str, str] | No
     subprocess.run([sys.executable, str(copy / "shared/skills/repository-preflight/scripts/hooks.py"),
                     "install"], cwd=copy, capture_output=True)
     print(f"session copy: {copy}")
+    import threads                                          # which thread started the copy: it goes when that thread is archived
+    if git(root, "check-ignore", "-q", f"temp/{threads.RECORDS}/{name}.json").returncode == 0:   # never an untracked file in the shared checkout
+        threads.record_copy(root, name, datetime.datetime.now().astimezone().replace(microsecond=0).isoformat())
     for line in waiting(root, folder, skip=name):          # work a thread left when it stopped
         print(line)
+    try:                                                   # threads the owner may want to archive
+        import cleanup
+        line = cleanup.archive_line(threads.known(), datetime.datetime.now().timestamp())
+        if line:
+            print(line)
+    except Exception:                                      # a host this script cannot read says nothing
+        pass
     # CONTRACT §1: the escalation from a scoped to a full bootstrap happens here, before the first write.
     print("before the first write, do the full bootstrap (CONTRACT §1): read /CORE.md, /CORE-RULES.md, /memory/OWNER.md, "
           "/memory/RULES.md and node RULES.md files down to the active node, then its README.md and STATE.md")
@@ -465,6 +475,20 @@ def finish_in_background(root: Path, name: str, folder: Path, keep: bool) -> int
     return 0
 
 
+def tidy_after_finish(root: Path, name: str) -> None:
+    """Clear what is certainly no longer needed (cleanup.py, `tidy`), so that leftovers do not pile up
+    between the weekly reports. It runs after the pushes and never fails a finish."""
+    try:
+        import cleanup
+        for line in cleanup.tidy(root):
+            print("tidied: " + line)
+        line = cleanup.inbox_line(root)
+        if line:
+            print(line)
+    except Exception as error:                              # a tidy that cannot run changes nothing
+        print(f"tidy skipped: {type(error).__name__}: {error}")
+
+
 def cmd_finish(root: Path, name: str, folder: Path, keep: bool, preflight: bool) -> int:
     copy = folder / name
     branch = f"session/{name}"
@@ -485,6 +509,7 @@ def cmd_finish(root: Path, name: str, folder: Path, keep: bool, preflight: bool)
     for repo_name, repo in repositories(root):
         r = sync.sync_one(repo_name, repo)
         print(f"shared checkout {repo_name}: {r['state']}" + (f" – {r['detail']}" if r["detail"] else ""))
+    tidy_after_finish(root, name)
     if keep:
         print(f"session copy kept: {copy}")
         return 0
@@ -506,6 +531,8 @@ def cmd_finish(root: Path, name: str, folder: Path, keep: bool, preflight: bool)
             copy.rmdir()
         except OSError:
             pass
+        import threads
+        threads.record_path(root, name).unlink(missing_ok=True)
         print(f"session {name} finished and removed")
     return status
 

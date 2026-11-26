@@ -275,18 +275,42 @@ python shared/skills/repository-preflight/scripts/state.py since <STATE.md> [--f
   does not have to tell it again. `--repo` reads another repository, for a node whose work is
   committed elsewhere.
 
-## Weekly cleanup
+## Cleanup: at every finish, and once a week
 
-What piles up between sessions is cleared once a week, not checked at every commit. `scripts/cleanup.py`
-prints the report, and the agent that meets the weekly reminder naming it clears what it lists:
+What threads leave behind is cleared when it is no longer needed, not checked at every commit.
+`scripts/cleanup.py` does both parts, and neither is a gate: it fails no commit or push.
 
 ```bash
-python shared/skills/repository-preflight/scripts/cleanup.py [--no-fetch]
-python shared/skills/repository-preflight/scripts/cleanup.py --fix branches
+python shared/skills/repository-preflight/scripts/cleanup.py [--no-fetch]           # the weekly report
+python shared/skills/repository-preflight/scripts/cleanup.py --fix all              # the report, clearing what every finish clears
+python shared/skills/repository-preflight/scripts/cleanup.py --fix remote-branches --older-than 14
+python shared/skills/repository-preflight/scripts/threads.py list                   # the host's threads: archived or live
 ```
 
-It is a report and never a gate: it exits 0 and fails no commit or push. Its sections, in the order
-the work is done:
+**At every `session.py finish`** the script's `tidy` runs after the pushes, so leftovers do not pile
+up. It removes only what is certainly no longer needed, and loses nothing:
+
+- **A session copy whose thread is archived**, when all its work is on `main` and nothing is
+  uncommitted. `session.py start` notes which thread started a copy (`/temp/sessions/`), and
+  `scripts/threads.py` reads the host's own record of which threads the user has archived. The
+  user archiving a thread is what says it is no longer needed; no age limit guesses it.
+- **The compaction marker of an archived thread.**
+- **An extra working copy of a project repository** that is merged into the working branch, has no
+  uncommitted file and whose HEAD has not moved for 6 hours. A link inside it, such as a shared
+  `node_modules`, is unlinked first and never followed.
+- **A remote branch merged into the working branch** whose last commit this computer's Git user
+  wrote, and whose name has a namespace such as `feature/`. Another author's branch is theirs: their
+  own brain deletes it the same way. A branch without a namespace may be one a deployment follows
+  and is only counted.
+- **A local session branch merged into `main`** that no working copy uses.
+
+The finish also prints one line while files wait in `/memory/inbox`: the thread that took a file
+from there files it (CONTRACT §11) and removes it from the inbox before it moves on. `session.py
+start` prints one line while threads idle for more than 7 days are not archived: the agent says so
+once in its first reply and archives, in the host, those the owner says are done.
+
+**Once a week** the agent that meets the repeating reminder naming the script runs the report and
+clears what it lists. Its sections, in the order the work is done:
 
 - **Long files:** every `STATE.md` and `KNOWLEDGE.md` over 28,000 characters, or within a tenth of it,
   in the mechanics, the memory and the working branch of each project repository. Cleared with
@@ -294,17 +318,18 @@ the work is done:
   project repository's files are kept short here.
 - **Stale handovers:** a project repository with commits this week whose handover entry is more than
   14 days older than its latest commit. The thread that works there writes its checkpoint.
-- **Session copies:** copies idle for 2 days or more. One whose work is all on `main` is removed with
-  `session.py finish <name>`; one that still holds commits or uncommitted files is looked at first.
-- **Merged branches:** session branches already merged into `main`, local and remote. `--fix branches`
-  deletes the local ones that no working copy uses; Git refuses a branch that is not merged.
-- **Project working copies and branches:** extra working copies of a project repository that are
-  merged into its working branch and clean, and its merged remote branches.
+- **Session copies:** copies idle for 2 days or more, or left by an archived thread with work that is
+  not on `main`. Each says whether its thread is archived, live or not known.
+- **Merged session branches, project working copies and remote branches:** what `tidy` would clear,
+  and what it leaves: another author's merged remote branches, by count.
 - **Project folders:** a project folder far behind its remote, or behind it with uncommitted files.
   The task list and the preflight read that folder, so they read old records until it is current.
 - **Inbox:** files waiting in `/memory/inbox`.
+- **Threads to archive:** threads idle for more than 7 days that are not archived. The agent asks the
+  owner which are done and archives those on their yes.
 - **Warnings:** the preflight's warnings counted by kind, with one example each.
-- **Leftovers:** compaction markers older than 48 hours, and background jobs recorded as failed.
+- **Leftovers:** compaction markers of archived threads, markers of threads the host does not know,
+  and background jobs recorded as failed.
 - **Commit reasons:** the share of the week's hand-written commits whose body gives a reason
   (`SMART-RULE-0009`). A figure to watch; nothing to clear.
 
