@@ -194,9 +194,23 @@ def thread_word(root: Path, copy: Path, known: dict | None) -> str:
     return "its thread is archived" if known[thread].archived else "its thread is live"
 
 
+def remove_empty(folder: Path) -> list[str]:
+    """Remove the empty folders a finished copy left behind: a finish run from inside the copy cannot
+    remove the folder it stands in. Only an empty folder goes; the operating system refuses any other."""
+    gone = []
+    for path in sorted(p for p in folder.iterdir() if p.is_dir()) if folder.is_dir() else []:
+        try:
+            path.rmdir()
+            gone.append(path.name)
+        except OSError:
+            pass
+    return gone
+
+
 def tidy_copies(root: Path, known: dict | None) -> list[str]:
     """Remove each session copy whose thread is archived, when all its work is on main and nothing is uncommitted."""
-    lines = []
+    gone = remove_empty(session.sessions_folder(root, None))
+    lines = [f"{len(gone)} empty folder(s) of finished session copies removed"] if gone else []
     for copy in copies(root):
         thread = threads.copy_thread(root, copy.name)
         if known is None or thread is None or thread not in known or not known[thread].archived:
@@ -419,9 +433,10 @@ def remote_branches(root: Path, repos: list, now: float, fix: bool, older_than: 
     lines = []
     for name, checkout, ref, prefix in places:
         own, others = merged_remote(checkout, ref, now, prefix, older_than)
-        if fix and own:
-            lines.append(f"{name}: {delete_remote(checkout, own)} of {len(own)} merged remote branch(es) of this computer's Git "
-                         f"user deleted; {others} of other authors left to them")
+        if fix:
+            if own:
+                lines.append(f"{name}: {delete_remote(checkout, own)} of {len(own)} merged remote branch(es) of this computer's "
+                             f"Git user deleted; {others} of other authors left to them")
         elif own or others:
             lines.append(f"{name}: {len(own)} remote branch(es) merged into {ref} are this computer's Git user's, "
                          f"{others} are other authors'")

@@ -83,6 +83,17 @@ class MarkersTest(unittest.TestCase):
             self.assertEqual(cleanup.tidy_markers(Path(tmp), None), [])
 
 
+class EmptyFoldersTest(unittest.TestCase):
+    def test_only_an_empty_folder_goes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "finished").mkdir()
+            (Path(tmp) / "in-use").mkdir()
+            (Path(tmp) / "in-use" / "note.txt").write_text("kept", encoding="utf-8")
+            self.assertEqual(cleanup.remove_empty(Path(tmp)), ["finished"])
+            self.assertTrue((Path(tmp) / "in-use" / "note.txt").is_file())
+            self.assertEqual(cleanup.remove_empty(Path(tmp) / "no-such-folder"), [])
+
+
 class ArchiveListTest(unittest.TestCase):
     def test_only_live_threads_idle_for_a_week_are_put_to_the_owner(self) -> None:
         now = 1755501000.0 + 30 * 86400
