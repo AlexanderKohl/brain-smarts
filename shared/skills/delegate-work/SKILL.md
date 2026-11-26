@@ -10,7 +10,7 @@ script_paths:
   - /shared/skills/delegate-work/scripts/delegation.py
   - /shared/skills/delegate-work/scripts/results.py
 created: 2026-09-15T07:45:00+10:00
-updated: 2026-11-22T10:50:30+10:00
+updated: 2026-11-26T15:48:16+10:00
 owner: brain-owner
 project_refs:
   - /memory/projects/brain-development
@@ -587,7 +587,7 @@ cannot see.
 
 **Arriving in a thread (the successor):**
 
-1. Read `/CORE.md`, `/CORE-RULES.md`, `/memory/OWNER.md`, `/memory/RULES.md`, then the `## Handover` of
+1. Read `/CONTRACT-CORE.md`, `/RULES-CORE.md`, `/memory/OWNER.md`, `/memory/RULES.md`, then the `## Handover` of
    `/memory/projects/brain-development/STATE.md` and the `## Handover` sections it points to. That is
    the whole bootstrap; do not re-derive the position from logs, transcripts or git.
 2. Check the live facts the Handover cannot promise: `git log -1` on the branches it names,

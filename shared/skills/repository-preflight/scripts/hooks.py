@@ -94,7 +94,7 @@ def layer_of(repo: Path, root: Path) -> str:
 # within a time budget, and name a failed latest CI run (ci_status.py); the host shows the message
 # to the agent.
 BUDGET_SECONDS = 20.0
-PROTECTED = ("CONTRACT.md", "RULES.md", "BOOTSTRAP.md", "CORE.md", "CORE-RULES.md", "AGENTS.md", "CLAUDE.md",
+PROTECTED = ("CONTRACT.md", "RULES.md", "BOOTSTRAP.md", "CONTRACT-CORE.md", "RULES-CORE.md", "CORE.md", "CORE-RULES.md", "AGENTS.md", "CLAUDE.md",
              "governance/", "shared/skills/repository-preflight/")
 HEADER = "Session start (brain hook): pass this to the owner in your first reply."
 
@@ -583,7 +583,7 @@ def post_compact(payload: dict, note: str | None = None, root: Path | None = Non
         lines.append(f"Hook input: {note}.")
     lines += [
         "A compaction is a missed checkpoint under SMART-RULE-0019.",
-        "Before anything else: re-read /CORE.md, /CORE-RULES.md, /memory/RULES.md, your own entry under `## Handover` "
+        "Before anything else: re-read /CONTRACT-CORE.md, /RULES-CORE.md, /memory/RULES.md, your own entry under `## Handover` "
         "of the owning node's STATE.md and every rule your work in flight falls under; write the handover "
         "checkpoint and commit. Start no new worker until then.",
         "Then run: " + CHECKPOINT_DONE.format(session=session),

@@ -200,7 +200,7 @@ def cmd_start(root: Path, name: str, folder: Path, start_at: dict[str, str] | No
     except Exception:                                      # a host this script cannot read says nothing
         pass
     # CONTRACT §1: the escalation from a scoped to a full bootstrap happens here, before the first write.
-    print("before the first write, do the full bootstrap (CONTRACT §1): read /CORE.md, /CORE-RULES.md, /memory/OWNER.md, "
+    print("before the first write, do the full bootstrap (CONTRACT §1): read /CONTRACT-CORE.md, /RULES-CORE.md, /memory/OWNER.md, "
           "/memory/RULES.md and node RULES.md files down to the active node, then its README.md and STATE.md")
     print("work only there; finish with: python shared/skills/repository-preflight/scripts/session.py "
           f"finish {name}")
