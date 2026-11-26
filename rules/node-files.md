@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-29T08:00:00+10:00
-updated: 2026-11-26T14:35:03+10:00
+updated: 2026-11-26T15:48:16+10:00
 owner: brain-owner
 generated_by: /shared/skills/repository-preflight/scripts/core.py
 canonical_sources:
@@ -248,7 +248,7 @@ Before finishing a substantive update, verify:
 - protected governance changes have an accepted proposal
 - the active `contract_version` is recorded in the repository manifest of each brain repository changed (`/repository-manifest.json`, `/library/repository-manifest.json` and `/memory/repository-manifest.json`)
 - no personal data has entered the mechanics repository or the skill library (section 3.4)
-- `/CORE.md`, `/CORE-RULES.md` and the rule packs under `/rules/` are current with this contract and `/RULES.md` (`core.py check`)
+- `/CONTRACT-CORE.md`, `/RULES-CORE.md` and the rule packs under `/rules/` are current with this contract and `/RULES.md` (`core.py check`)
 - the repository preflight validator passes
 - every separable, validated, agent-owned durable change has been committed at the required logical checkpoint
 - the final report identifies each resulting commit and push status, or gives the exact permitted reason no commit was created
@@ -278,8 +278,8 @@ Before finishing a substantive update, verify:
   threshold; only the owner can override it, for a named run or packet, and the override and
   its reason are recorded in the run.
 - **An automatic compaction of the conductor's context is a missed checkpoint.** The host hook
-  marks it; dispatching stays closed until the conductor has re-read `/CORE.md`,
-  `/CORE-RULES.md`, `/memory/RULES.md`, its own entry under the owning node's `## Handover` and
+  marks it; dispatching stays closed until the conductor has re-read `/CONTRACT-CORE.md`,
+  `/RULES-CORE.md`, `/memory/RULES.md`, its own entry under the owning node's `## Handover` and
   every rule its work in flight falls under (`Applies when`), written the checkpoint, committed,
   and cleared the marker (`delegation.py checkpoint-done`). The conductor tells the owner in its
   next reply that a compaction happened.

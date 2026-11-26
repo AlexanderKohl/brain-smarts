@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-09-29T08:00:00+10:00
-updated: 2026-11-26T14:35:03+10:00
+updated: 2026-11-26T15:48:16+10:00
 owner: brain-owner
 generated_by: /shared/skills/repository-preflight/scripts/core.py
 canonical_sources:
