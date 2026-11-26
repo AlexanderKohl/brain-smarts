@@ -20,7 +20,7 @@ class SectionsInPacksTest(unittest.TestCase):
     def test_a_pack_holds_its_section_word_for_word_ahead_of_its_rules(self):
         self.assertEqual(core.problems(SECTIONED), [])
         parts = core.render(brain(SECTIONED))
-        pack, second = parts["rules/widgets.md"], parts["CORE-RULES.md"]
+        pack, second = parts["rules/widgets.md"], parts["RULES-CORE.md"]
         self.assertIn("### 2.1 Sub\n\nAlso rare.", pack)
         self.assertLess(pack.index("### 2.1 Sub"), pack.index("## SMART-RULE-0002"))
         self.assertIn("Generated from `/CONTRACT.md` and `/RULES.md`", pack)
@@ -36,8 +36,8 @@ class SectionsInPacksTest(unittest.TestCase):
     def test_a_pack_without_a_section_reads_as_before(self):
         parts = core.render(brain(PACKED))
         self.assertIn("Generated from `/RULES.md` by `core.py build`", parts["rules/widgets.md"])
-        self.assertIn("| §2.1 | Sub | a rare case |", parts["CORE-RULES.md"])
-        self.assertIn("A rule pack holds, verbatim, the rules of one situation.", parts["CORE-RULES.md"])
+        self.assertIn("| §2.1 | Sub | a rare case |", parts["RULES-CORE.md"])
+        self.assertIn("A rule pack holds, verbatim, the rules of one situation.", parts["RULES-CORE.md"])
 
     def test_a_pack_with_a_section_stands_with_fewer_than_two_rules(self):
         one_rule = SECTIONED.replace("`§2.1`, `SMART-RULE-0002`, `SMART-RULE-0003` |", "`§2.1`, `SMART-RULE-0002` |")

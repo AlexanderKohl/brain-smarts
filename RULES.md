@@ -7,7 +7,7 @@ contract: /CONTRACT.md
 scope: repository
 status: active
 created: 2026-08-04T03:31:56+10:00
-updated: 2026-11-26T14:35:03+10:00
+updated: 2026-11-26T15:48:16+10:00
 owner: brain-owner
 ---
 
@@ -73,8 +73,8 @@ Rules inherit `/CONTRACT.md` -> this file -> `/memory/RULES.md` (the owner layer
 | `SMART-RULE-0048` | One conversation with the owner | this file; `team_sessions_max` in `/memory/OWNER.md`; `/shared/skills/product-feedback/` | a conductor thread starts or hands over, the owner raises another area's topic, before starting a team session, before pushing merged code |
 | `SMART-RULE-0049` | Fast project checks without reduced coverage | this file | setting up or changing a code project's checks, CI, test runner or pre-push hook; a check is slow |
 
-`Applies when` says when an agent reads a rule's full text: `always` rules are in `/CORE-RULES.md`,
-which every writing session reads first with `/CORE.md` (CONTRACT §1); any other rule is read before
+`Applies when` says when an agent reads a rule's full text: `always` rules are in `/RULES-CORE.md`,
+which every writing session reads first with `/CONTRACT-CORE.md` (CONTRACT §1); any other rule is read before
 acting in the situation named, in its rule pack when it has one and otherwise in its canonical home.
 The core files and the packs are generated from this file and `/CONTRACT.md` by
 `shared/skills/repository-preflight/scripts/core.py`, and the preflight fails when one of them is
@@ -84,9 +84,9 @@ Rule packs, in alphabetical order. A pack is a generated file that holds, verbat
 sections and the rules of one situation, so that an agent entering the situation reads one short file
 instead of finding each section in `/CONTRACT.md` and each rule here. A section's wording still lives
 only in `/CONTRACT.md` and a rule's only in this file (`SMART-RULE-0007`); a section or a rule may be
-in more than one pack; `/CORE-RULES.md` lists a rule's own row only when its text is in neither the
+in more than one pack; `/RULES-CORE.md` lists a rule's own row only when its text is in neither the
 core nor a pack; and a contract section that a pack holds is read there, so its row in
-`/CORE-RULES.md` names the pack.
+`/RULES-CORE.md` names the pack.
 
 | Pack | Applies when | Contract sections and rules |
 |---|---|---|
@@ -283,8 +283,8 @@ Contract sections and when to read them, in section order:
   threshold; only the owner can override it, for a named run or packet, and the override and
   its reason are recorded in the run.
 - **An automatic compaction of the conductor's context is a missed checkpoint.** The host hook
-  marks it; dispatching stays closed until the conductor has re-read `/CORE.md`,
-  `/CORE-RULES.md`, `/memory/RULES.md`, its own entry under the owning node's `## Handover` and
+  marks it; dispatching stays closed until the conductor has re-read `/CONTRACT-CORE.md`,
+  `/RULES-CORE.md`, `/memory/RULES.md`, its own entry under the owning node's `## Handover` and
   every rule its work in flight falls under (`Applies when`), written the checkpoint, committed,
   and cleared the marker (`delegation.py checkpoint-done`). The conductor tells the owner in its
   next reply that a compaction happened.

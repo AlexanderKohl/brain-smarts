@@ -1,7 +1,7 @@
 """Build or check the core: what every writing session reads first (CONTRACT §1).
 
-The core is two generated files, never edited. /CORE.md holds, verbatim, the contract sections whose
-`Applies when` in /RULES.md is `always`; /CORE-RULES.md holds the two index tables that say when to
+The core is two generated files, never edited. /CONTRACT-CORE.md holds, verbatim, the contract sections whose
+`Applies when` in /RULES.md is `always`; /RULES-CORE.md holds the two index tables that say when to
 read the rest, and, verbatim, the rules whose `Applies when` is `always`. Each part stays under
 LIMIT characters: a host shortens longer tool output (Claude Code shows about 2 KB of a longer
 shell output), so an agent would read only the start of a longer file.
@@ -9,7 +9,7 @@ shell output), so an agent would read only the start of a longer file.
 When /RULES.md has a rule-pack table (`| Pack | Applies when | Rules |`), each row names a third kind
 of generated file: a rule pack, /rules/<name>.md, which holds, verbatim, the rules of one situation,
 so an agent entering that situation reads one short file instead of finding each rule in /RULES.md.
-/CORE-RULES.md then lists the packs, and a rule's own row only when its text is in neither the core
+/RULES-CORE.md then lists the packs, and a rule's own row only when its text is in neither the core
 nor a pack. Without that table nothing changes.
 
   python shared/skills/repository-preflight/scripts/core.py build   write both parts
@@ -22,7 +22,10 @@ import re
 import sys
 from pathlib import Path
 
-PARTS = ("CORE.md", "CORE-RULES.md")
+PARTS = ("CONTRACT-CORE.md", "RULES-CORE.md")
+# The names the two parts had before contract 3.8.0. Each is kept for one contract version as a short pointer to
+# its new name, for pointer files written before the rename, and goes with the next contract version.
+MOVED = {"CORE.md": PARTS[0], "CORE-RULES.md": PARTS[1]}
 # Claude Code showed 29,000 characters of a shell output whole and cut 31,000 (TASK-2026-0003, 30 September 2026).
 LIMIT = 28_000
 RULE_ROW = re.compile(r"^\| `(SMART-RULE-\d{4})` \|(.*)\|$")
@@ -170,20 +173,20 @@ def render(root: Path) -> dict[str, str]:
                 title = cells(match.group(2))[0]
                 where = ", ".join(f"`/{name}`" for name in sorted(held_in[match.group(1)]))
                 section_lines[i] = f"| §{match.group(1)} | {title} | in {where} |"
-    first = front("brain-core", "Brain Core", updated) + [
-        "# Brain Core", "",
+    first = front("contract-core", "Contract core", updated) + [
+        "# Contract core", "",
         "Generated from `/CONTRACT.md` and `/RULES.md` by `core.py build`; never edit it here. It is the",
         "first of the two files a writing session reads first (CONTRACT §1): the contract sections that",
-        "always apply, verbatim. Then read `/CORE-RULES.md`.", "",
+        "always apply, verbatim. Then read `/RULES-CORE.md`.", "",
         "## Contract sections that always apply", ""]
     for key, when in section_rows:
         if always(when):
             first += [contract_section(contract, key), ""]
-    first += ["Next: read `/CORE-RULES.md`, with the file-reading tool."]
-    second = front("brain-core-rules", "Brain Core: Rules", updated) + [
-        "# Brain Core: Rules", "",
+    first += ["Next: read `/RULES-CORE.md`, with the file-reading tool."]
+    second = front("rules-core", "Rules core", updated) + [
+        "# Rules core", "",
         "Generated from `/CONTRACT.md` and `/RULES.md` by `core.py build`; never edit it here. It is the",
-        "second of the two files a writing session reads first (CONTRACT §1), after `/CORE.md`: the tables",
+        "second of the two files a writing session reads first (CONTRACT §1), after `/CONTRACT-CORE.md`: the tables",
         "that say when to read every other contract section and rule in its canonical home, and the rules",
         "that always apply, verbatim.", "",
         "## When to read the rest", "", *section_lines, ""]
@@ -199,6 +202,12 @@ def render(root: Path) -> dict[str, str]:
         if body:
             second += [body, ""]
     parts = {PARTS[0]: "\n".join(first).rstrip() + "\n", PARTS[1]: "\n".join(second).rstrip() + "\n"}
+    for old, (new, old_id) in zip(MOVED, zip(MOVED.values(), ("brain-core", "brain-core-rules"))):
+        parts[old] = "\n".join(front(old_id, f"Moved to /{new}", updated) + [
+            f"# Moved to `/{new}`", "",
+            f"Read `/{new}` instead, with the file-reading tool. This file was renamed in contract 3.8.0, so that its",
+            "name says which file it is generated from. This pointer is for pointer files written before the rename,",
+            "and goes with the next contract version."]) + "\n"
     for name, when, ids in pack_rows:
         stem = Path(name).stem
         numbers = sections_of.get(name, [])

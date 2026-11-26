@@ -66,10 +66,10 @@ def brain(rules: str = RULES) -> Path:
 class CoreTest(unittest.TestCase):
     def test_core_holds_what_always_applies_and_the_tables(self):
         parts = core.render(brain())
-        self.assertEqual(list(parts), ["CORE.md", "CORE-RULES.md"])
-        first, second = parts["CORE.md"], parts["CORE-RULES.md"]
+        self.assertEqual(list(parts), ["CONTRACT-CORE.md", "RULES-CORE.md", "CORE.md", "CORE-RULES.md"])
+        first, second = parts["CONTRACT-CORE.md"], parts["RULES-CORE.md"]
         self.assertIn("## 1. Authority\n\nAlways read this.\n\n### 1.1 Detail\n\nPart of section 1.", first)
-        self.assertIn("read `/CORE-RULES.md`", first)
+        self.assertIn("read `/RULES-CORE.md`", first)
         self.assertIn("- Always do the first thing.", second)
         self.assertIn("| `SMART-RULE-0002` | Second | this file | writing a widget |", second)
         self.assertIn("| §2.1 | Sub | a rare case |", second)
@@ -80,9 +80,9 @@ class CoreTest(unittest.TestCase):
 
     def test_a_part_longer_than_a_host_shows_whole_fails(self):
         self.assertEqual(core.size_problems(core.render(brain())), [])
-        found = core.size_problems({"CORE.md": "x" * (core.LIMIT + 1), "CORE-RULES.md": "y"})
+        found = core.size_problems({"CONTRACT-CORE.md": "x" * (core.LIMIT + 1), "RULES-CORE.md": "y"})
         self.assertEqual(len(found), 1)
-        self.assertTrue(found[0].startswith("/CORE.md: "))
+        self.assertTrue(found[0].startswith("/CONTRACT-CORE.md: "))
 
     def test_a_row_without_applies_when_fails(self):
         found = core.problems(RULES.replace("| writing a widget |", "|  |"))
@@ -96,7 +96,7 @@ class CoreTest(unittest.TestCase):
         root = brain()
         errors = []
         preflight.validate_core(root, errors)
-        self.assertEqual(len(errors), 2)
+        self.assertEqual(len(errors), 4)        # the two parts and the two pointers at their old names
         self.assertTrue(all("out of date" in error for error in errors))
         self.assertEqual(core.main(["build", "--root", str(root)]), 0)
         errors = []
@@ -104,7 +104,7 @@ class CoreTest(unittest.TestCase):
         self.assertEqual(errors, [])
         (root / "RULES.md").write_text(RULES.replace("Always do", "Always, always do"), encoding="utf-8")
         preflight.validate_core(root, errors)
-        self.assertEqual(errors, ["/CORE-RULES.md: out of date with /CONTRACT.md and /RULES.md; run core.py build"])
+        self.assertEqual(errors, ["/RULES-CORE.md: out of date with /CONTRACT.md and /RULES.md; run core.py build"])
 
     def test_the_real_core_is_current(self):
         root = Path(__file__).resolve().parents[4]
@@ -126,8 +126,8 @@ class PackTest(unittest.TestCase):
     def test_a_pack_holds_its_rules_verbatim_and_the_core_lists_the_pack_instead_of_them(self):
         self.assertEqual(core.problems(PACKED), [])
         parts = core.render(brain(PACKED))
-        self.assertEqual(list(parts), ["CORE.md", "CORE-RULES.md", "rules/widgets.md"])
-        pack, second = parts["rules/widgets.md"], parts["CORE-RULES.md"]
+        self.assertEqual(list(parts), ["CONTRACT-CORE.md", "RULES-CORE.md", "CORE.md", "CORE-RULES.md", "rules/widgets.md"])
+        pack, second = parts["rules/widgets.md"], parts["RULES-CORE.md"]
         self.assertIn("Read the whole file before: making a widget.", pack)
         self.assertIn("## SMART-RULE-0002 – Second\n\n- Do the second thing when writing a widget.\n\n"
                       "## SMART-RULE-0003 – Third\n\n- Test the widget.", pack)

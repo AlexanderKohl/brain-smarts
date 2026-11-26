@@ -4,19 +4,24 @@ title: The generated core files are named after their sources
 type: governance_proposal
 schema_version: 0.2
 contract: /CONTRACT.md
-status: proposed
+status: implemented
+accepted_by: brain-owner
+accepted_at: 2026-11-26T16:20:47+10:00
+implemented_at: 2026-11-26T16:21:01+10:00
 owner: brain-owner
 created: 2026-11-26T15:55:00+10:00
-updated: 2026-11-26T15:55:00+10:00
+updated: 2026-11-26T16:21:01+10:00
 previous_contract_version: 3.7.0
 new_contract_version: 3.8.0
 target_files:
   - /AGENTS.md
   - /BOOTSTRAP.md
   - /CLAUDE.md
+  - /CONTRACT-CORE.md
   - /CONTRACT.md
   - /CORE-RULES.md
   - /CORE.md
+  - /RULES-CORE.md
   - /RULES.md
   - /rules/node-files.md
   - /shared/skills/delegate-work/SKILL.md
@@ -167,3 +172,10 @@ to 3.7.0. A user-level pointer file already rewritten is rewritten back, or left
 - `core.py check` and the full preflight on the result; every generated file under 28,000 characters.
 - After the pointers are deleted with the next contract version: a search of the three brain repositories and of the
   host's user-level pointer file for the old names, outside historical records, finds none.
+
+## Outcome
+
+Accepted by the owner on 26 November 2026 and applied as rehearsed. The contract was 3.7.0 before this
+proposal and is 3.8.0 after it. `/CONTRACT-CORE.md` is 19,013 characters and `/RULES-CORE.md` 24,916; the
+two pointers at the old names are about 630 each and go with the next contract version. The validator's
+tests and the full preflight passed on the result.
