@@ -184,7 +184,7 @@ The owner's memory: a **separate repository**, checked out here and listed in th
 
 ##### `rules/`
 
-Generated rule packs: each file holds, verbatim, the rules of one situation from `/RULES.md`, so that they are read together. Written by `shared/skills/repository-preflight/scripts/core.py build` and never edited here; the canonical text of every rule stays in `/RULES.md`.
+Generated rule packs: each file holds, verbatim, the contract sections and the rules of one situation, from `/CONTRACT.md` and `/RULES.md`, so that they are read together. Written by `shared/skills/repository-preflight/scripts/core.py build` and never edited here; the canonical text of every section stays in `/CONTRACT.md` and of every rule in `/RULES.md`.
 
 ##### `shared/`
 

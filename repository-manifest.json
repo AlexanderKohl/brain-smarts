@@ -2,11 +2,11 @@
   "name": "Portable AI Brain – mechanics",
   "layer": "mechanics",
   "created": "2026-08-04T03:31:56+10:00",
-  "updated": "2026-11-24T18:28:51+10:00",
-  "validated_at": "2026-11-24T18:28:51+10:00",
-  "contract_version": "3.6.0",
-  "markdown_files": 179,
-  "unique_ids": 179,
+  "updated": "2026-11-26T14:36:36+10:00",
+  "validated_at": "2026-11-26T14:36:36+10:00",
+  "contract_version": "3.7.0",
+  "markdown_files": 185,
+  "unique_ids": 185,
   "validation_errors": [],
   "validation_warnings": [
     "/shared/skills/manage-credentials/rehearsal/README.md: undocumented immediate folders: tests"
