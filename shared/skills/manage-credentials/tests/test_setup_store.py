@@ -24,8 +24,12 @@ class FakeGitHub:
     GitHubError = setup_store.team_github.GitHubError
     repository_of = staticmethod(setup_store.team_github.repository_of)
 
-    def __init__(self, name="alex-example", writable=True, pending=True):
-        self.name, self.writable, self.pending, self.accepted = name, writable, pending, 0
+    def __init__(self, name="alex-example", writable=True, pending=True, personal="missing"):
+        self.name, self.writable, self.pending, self.accepted, self.personal = name, writable, pending, 0, personal
+
+    def state(self, repository):
+        assert repository == f"{self.name}/brain-secrets"
+        return self.personal
 
     def login(self):
         return self.name
@@ -46,12 +50,18 @@ class FakeStore:
         self.clone = root / name / "clone"
         self.pin_path = root / name / "pin.json"
         self.entries, self.inits = list(entries), 0
+        self.config = {"person": "alex-example", "computer": "desk"}
+        self.policy = mock.Mock(computers=set())
 
     def init_personal(self):
         self.inits += 1
+        self.enrol()
+        return "f" * 64
+
+    def enrol(self):
         self.checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
         self.checkpoint_path.write_text("{}", "utf-8")
-        return "f" * 64
+        self.policy.computers.add(("alex-example", "desk"))
 
     def open(self):
         return self
@@ -66,7 +76,7 @@ class FakeSetup(setup_store.Setup):
     def __init__(self, root, statuses=(None,), old_vault=False, migrated=False, migrate_codes=(0, 0), **kw):
         self.log, self.statuses, self.codes = [], list(statuses), list(migrate_codes)
         self.old_vault, self.done_migration = old_vault, migrated
-        self.personal = FakeStore(root, "personal", ["Example API"])
+        self.personal = FakeStore(root, "personal")
         self.team = FakeStore(root, "team", ["Ops API#oauth_token_json", "Ops API"])
         self.lines, self.now = [], 0.0
         super().__init__(root, say=self.lines.append, ask=lambda _prompt: "ab" * 32, clock=self.clock_now,
@@ -240,6 +250,73 @@ class RunAgainTests(SetupCase):
         self.assertEqual(repository_of("https://github.com/example-owner/x"), "example-owner/x")
         with self.assertRaises(setup_store.team_github.GitHubError):
             repository_of("ssh://github.example/example-owner/x.git")
+
+
+class RecoveryTests(SetupCase):
+    """The review's cases: a run that stopped half-way, and a second computer of the same person."""
+
+    def record(self, setup, name, unverified, age):
+        folder = setup.root / "migration-backups"
+        folder.mkdir(exist_ok=True)
+        path = folder / f"{name}.migration.json"
+        path.write_text(json.dumps({"entries": ["Example API"], "unverified_signins": unverified}), "utf-8")
+        import os
+        os.utime(path, (1755501000 + age, 1755501000 + age))
+
+    def test_only_a_clean_newest_record_of_this_vault_counts_as_migrated(self):
+        setup = FakeSetup(self.root, old_vault=True)
+        migrated = lambda: setup_store.Setup.migrated(setup)  # noqa: E731 - the real check, not the fake's
+        self.assertFalse(migrated())
+        self.record(setup, "other-20260101-000000", [], 1)  # another vault's record
+        self.assertFalse(migrated())
+        self.record(setup, "credentials-20260101-000000", ["Example API#oauth_token_json"], 2)  # exit 4
+        self.assertFalse(migrated())
+        self.record(setup, "credentials-20260102-000000", [], 3)
+        self.assertTrue(migrated())
+
+    def test_copies_left_by_an_earlier_run_are_replaced(self):
+        unlocked = {"backend": "vault", "unlocked": True}
+        setup = FakeSetup(self.root, statuses=[unlocked, unlocked, None, None, STORE], old_vault=True, github=FakeGitHub())
+        setup.personal.entries = ["Example API"]  # an earlier run copied one entry, then stopped
+        self.assertEqual(setup_store.main(["--no-sync"], setup), 0, self.err.getvalue())
+        self.assertIn(("migrate", ("--replace",)), setup.log)
+
+    def test_a_locked_agent_with_the_store_switched_on_is_unlocked_with_the_store_off(self):
+        locked, unlocked = {"backend": "vault", "unlocked": False}, {"backend": "vault", "unlocked": True}
+        setup = FakeSetup(self.root, statuses=[locked, locked, unlocked, unlocked, None, STORE], old_vault=True,
+                          github=FakeGitHub())
+        setup.set_config(enabled=True, person="alex-example")
+        seen = []
+        original = setup.agent_status
+
+        def status():
+            seen.append(setup.config().get("enabled"))
+            return original()
+        setup.agent_status = status
+        self.assertEqual(setup_store.main(["--no-sync"], setup), 0, self.err.getvalue())
+        self.assertFalse(seen[1])  # switched off before the person was asked to unlock
+        self.assertTrue(self.config(setup)["enabled"])
+
+    def test_a_second_computer_joins_its_store_and_leaves_its_old_vault(self):
+        join = self.joined(groups=("personal",))
+        setup = FakeSetup(self.root, statuses=[None, None, STORE], old_vault=True,
+                          github=FakeGitHub(personal="used"))
+        self.assertEqual(setup_store.main(["--no-sync"], setup), 0, self.err.getvalue())
+        self.assertIs(join.call_args.args[0], setup.personal)
+        self.assertEqual(join.call_args.args[1], "ab" * 32)
+        self.assertEqual(self.config(setup)["personal_repo_url"], "https://github.com/alex-example/brain-secrets.git")
+        self.assertFalse(any(e[0] == "migrate" for e in setup.log))
+        self.assertEqual(setup.personal.inits, 0)
+        self.assertTrue(setup_store.Setup.migrated(setup))  # a later run does not move the old vault either
+        self.assertTrue(any("add-computer" in line for line in setup.lines))
+
+    def test_an_empty_clone_left_by_an_earlier_run_is_removed_before_init(self):
+        setup = FakeSetup(self.root, statuses=[None, None, STORE], github=FakeGitHub())
+        (setup.personal.clone / ".git").mkdir(parents=True)
+        with mock.patch("secret_store.team.clone_has_history", return_value=False):
+            self.assertEqual(setup_store.main(["--no-sync"], setup), 0, self.err.getvalue())
+        self.assertFalse(setup.personal.clone.exists())
+        self.assertEqual(setup.personal.inits, 1)
 
 
 if __name__ == "__main__":

@@ -21,14 +21,17 @@ from typing import Any, Callable
 from . import canonical, enrol
 from . import team as team_ops
 from .errors import SecretStoreError
+from .policy import object_hash
 
 POLL = 5.0  # seconds between pulls while waiting for the other computer
 WAIT = 2 * 60 * 60  # how long either end waits in all before it gives up
 
 SEND_WORDS = ("Send these six words to the administrator who invited you (a message is fine: they are "
               "not a secret). Their computer shows the same six words and asks them to compare.")
-CHECK_WORDS = ("Compare these six words with the six words the new member sent you. Press \"They match\" "
-               "only when all six are the same, in the same order.")
+CHECK_WORDS = ("Compare these six words with the six words of the new computer (sent to you, or on its own "
+               "screen). Press \"They match\" only when all six are the same, in the same order.")
+OWN_WORDS = ("Your other computer shows six words too, in its own window. They must be the same, in the same "
+             "order; press \"They match\" there. Press Done here.")
 
 
 def _show(intro: str, compare: bool) -> Callable[[str, list[str]], bool]:
@@ -88,14 +91,27 @@ def invite_member(store, login: str, groups: list[str], display: Callable | None
     display = display or _show(CHECK_WORDS, True)
     store.open()
     check_can_invite(store, groups)
+    unadmitted = sorted(store.policy.doc["people"].get(login, {}).get("computers", {}))
+    if unadmitted and not groups_of(store, login):  # an earlier run stopped between enrolment and admission
+        say(f"{login} has an enrolled computer but no group yet; admitting them now.")
+        _admit(store, login, groups, say)
+        return unadmitted[0]
     deadline, rid = clock() + wait, None
     while True:
         now = clock()
         if rid is None:
             rid = open_request(store, login, now)
             if rid is not None:
+                chosen = object_hash(_read(store, rid))
                 enrol.answer(store, rid, now)
-                say(f"Enrolment request from {login} answered; waiting for their computer to answer back.")
+                if (enrol._load_pending(store, rid) or {}).get("request") != chosen:
+                    # The request changed between choosing it and answering it (answer pulls again):
+                    # the answer may belong to someone else's request, so this attempt is let go.
+                    enrol._end(store, rid)
+                    say("The request changed while it was being answered; waiting for a new one.")
+                    rid = None
+                else:
+                    say(f"Enrolment request from {login} answered; waiting for their computer to answer back.")
         else:
             request = _read(store, rid)
             if request is None or now > request["expires"]:

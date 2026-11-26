@@ -218,8 +218,11 @@ def answer(store, rid: str, now: float | None = None) -> None:
 
 def approve(store, rid: str, display: Callable[[str, list[str]], bool] | None = None,
             now: float | None = None) -> None:
-    """Approver: verify the proof, compare the six words, then one commit enrolling the computer."""
-    now = time.time() if now is None else now
+    """Approver: verify the proof, compare the six words, then one commit enrolling the computer. The
+    expiry is checked again once the words window closes, so a comparison that ran past it enrols
+    nothing."""
+    clock = time.time if now is None else (lambda: now)
+    now = clock()
     paths = _paths(rid)
     store.open()
     pending = _load_pending(store, rid)
@@ -249,6 +252,9 @@ def approve(store, rid: str, display: Callable[[str, list[str]], bool] | None = 
             raise SecretStoreError("three mismatches: the enrolment has ended; start a new request")
         _save_pending(store, rid, pending)
         raise SecretStoreError(f"the words did not match ({pending['mismatches']} of {MAX_MISMATCHES})")
+    if clock() > req["expires"]:
+        _end(store, rid)
+        raise SecretStoreError("the enrolment request expired while the words were compared; start a new one")
     login, computer = req["login"], req["computer"]
 
     def change(doc: dict) -> None:

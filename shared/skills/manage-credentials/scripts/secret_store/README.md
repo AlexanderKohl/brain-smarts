@@ -125,6 +125,7 @@ python brain_secrets.py enrol-request [--team] --request ID        new computer,
 python brain_secrets.py enrol-approve [--team] --request ID        approving computer, to finish
 python brain_secrets.py team-init --owner ORGANISATION_OR_LOGIN
 python brain_secrets.py invite --login L --group G [--group G]   administrator: invite, wait, compare, enrol, admit
+python brain_secrets.py add-computer              one of your computers: enrol your new one in your personal store
 python setup_store.py [--join URL] [--fingerprint F]   a person's computer: the cut-over and joining, in one run
 python brain_secrets.py team-admit --login L --group G [--group G]
 python brain_secrets.py team-groups --create G | --login L --group G

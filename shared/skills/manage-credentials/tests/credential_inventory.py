@@ -154,7 +154,7 @@ FORMS: dict[str, frozenset[tuple[str, str]]] = {
         ("vault_agent.py", "main"), ("vault_credentials.py", "_cancelled"),
         ("vault_credentials.py", "_put_entry_window"), ("vault_credentials.py", "main"), ("vaultctl.py", "main"),
         # the invitation's message (the team fingerprint, a public name of the trust root) and progress lines
-        ("brain_secrets.py", "_invite"), ("secret_store/invite.py", "invite_member"),
+        ("brain_secrets.py", "_add_computer"), ("brain_secrets.py", "_invite"), ("secret_store/invite.py", "invite_member"),
         ("secret_store/invite.py", "join_team"), ("setup_store.py", "Setup.__init__"), ("setup_store.py", "main")}),
     # input(): a typed confirmation (an entry name, a write id), never a value; setup_store.py takes the
     # pasted team fingerprint, which is public
@@ -175,6 +175,7 @@ FORMS: dict[str, frozenset[tuple[str, str]]] = {
         ("secret_store/repo.py", "SecretRepo._set_state"), ("secret_store/repo.py", "SecretRepo._stage"),
         ("secret_store/repo.py", "SecretRepo.clone_or_open"), ("secret_store/repo.py", "repo_lock"),
         ("secret_store/store.py", "SecretStore._save_pin"), ("secret_store/store_ops.py", "write_marker"),
+        ("setup_store.py", "Setup.mark_vault_left"),  # a record that a joined computer's old vault stays
         ("setup_store.py", "Setup.set_config"),  # the store's configuration: a switch, a login and an address
         ("secret_store/store_ops.py", "write_upkeep_error"), ("token_relay_store.py", "holder_name"),
         ("vault_agent.py", "VaultAgent._acquire_singleton"), ("vault_agent_runtime.py", "log_tray"),
@@ -477,6 +478,9 @@ OPERATIONS: dict[str, dict[str, tuple[tuple[str, ...], tuple[str, ...], str | No
         "enrol-approve": (_POLICY_WRITE, _NONE, "cli-enrol", "the challenge sealed, then every object re-keyed"),
         "team-init": (("keychain-read", "words", "recovery-keys", "keygen", "keychain-write", "package", "hpke-seal"),
                       _NONE, "cli-team", "as init, for the team repository"),
+        "add-computer": (_POLICY_WRITE, _NONE, None, "waits for the person's new computer (setup_store.py) through the "
+                         "personal repository; its writes are enrol-approve's, run by the scenario cli-enrol, and "
+                         "tests/test_secret_store_invite.py runs both ends on a personal store"),
         "invite": (_POLICY_WRITE, _NONE, None, "needs gh and a second computer answering through the team repository; "
                    "its writes are enrol-approve's (the challenge sealed, every object re-keyed) and team-admit's, run "
                    "by the scenarios cli-enrol and cli-team, and tests/test_secret_store_invite.py runs both ends"),
@@ -504,7 +508,7 @@ OPERATIONS: dict[str, dict[str, tuple[tuple[str, ...], tuple[str, ...], str | No
     },
     "setup_store.py": {
         "(the command)": (("words", "recovery-keys", "keygen", "keychain-write", "keychain-read", "package", "hpke-seal",
-                         "hpke-open") + _AGENT, _NONE, None,
+                         "hpke-open", "open", "seal", "vault-load", "vault-write") + _AGENT, _NONE, None,
                         "needs gh, a desktop for the tray and the words windows, and a live Vault Agent; its credential "
                         "steps are other operations' code: init (cli-init), migrate_to_store.py main (migrate) and the "
                         "enrolment request and proof (cli-enrol); tests/test_setup_store.py checks the order and the skips "

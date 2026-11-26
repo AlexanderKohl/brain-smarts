@@ -19,6 +19,8 @@
   brain_secrets.py invite --login L --group G [--group G ...]
                                                   administrator: GitHub invitation, then wait for L's computer
                                                   (setup_store.py --join), compare words, enrol and admit
+  brain_secrets.py add-computer                   one of your computers: print the personal fingerprint, then
+                                                  wait for your new computer (setup_store.py), compare, enrol
   brain_secrets.py team-admit --login L --group G [--group G ...]
   brain_secrets.py team-groups --login L --group G [...]  |  team-groups --create G [--create G ...]
   brain_secrets.py team-remove --login L [--computer C]
@@ -86,6 +88,7 @@ def _parser() -> argparse.ArgumentParser:
     invite = sub.add_parser("invite", help="administrator: invite a person, then enrol and admit their computer")
     invite.add_argument("--login", required=True, help="their GitHub username")
     invite.add_argument("--group", action="append", required=True)
+    sub.add_parser("add-computer", help="one of your computers: enrol your new computer in your personal store")
     admit = sub.add_parser("team-admit", help="admit an enrolled person to their first groups")
     admit.add_argument("--login", required=True)
     admit.add_argument("--group", action="append", required=True)
@@ -314,6 +317,22 @@ def _invite(store, member: str, groups: list[str], display, github=None, wait=No
     return 0
 
 
+def _add_computer(store, display, wait=None) -> int:
+    """One of the person's computers: print the personal fingerprint, then wait for the new computer's
+    request (setup_store.py), compare the words and enrol it in the personal store."""
+    from secret_store import invite
+    from secret_store.store_ops import GROUP
+    opened = store.open()
+    person = opened.config["person"]
+    print("On your new computer, in your brain folder, run:")
+    print("  python shared\\skills\\manage-credentials\\scripts\\setup_store.py")
+    print(f"and paste this personal fingerprint when it asks: {opened._pinned}\n")
+    print("This window waits for the new computer; leave it open.")
+    computer = invite.invite_member(opened, person, [GROUP], display, **({"wait": wait} if wait is not None else {}))
+    print(f"Done: {person}/{computer} is enrolled in your personal store.")
+    return 0
+
+
 def main(argv=None, store_factory=None, team_factory=None, ask=None, confirm=None, display=None) -> int:
     from secret_store import SecretStoreError, enrol, handover
     from secret_store import team as team_ops
@@ -399,6 +418,8 @@ def main(argv=None, store_factory=None, team_factory=None, ask=None, confirm=Non
             print(store.init_team(args.owner))
         elif args.command == "invite":
             return _invite(store, args.login, args.group, display)
+        elif args.command == "add-computer":
+            return _add_computer(store, display)
         elif args.command == "team-admit":
             team_ops.admit(store.open(), args.login, args.group)
             print(f"Admitted {args.login} to " + ", ".join(args.group) + ".")

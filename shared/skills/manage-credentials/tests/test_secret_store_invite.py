@@ -158,6 +158,84 @@ class AdministratorTest(InviteCase):
             invite.invite_member(self.admin, "bob", ["ops"], match, wait=60, clock=clock, sleep=clock.sleep)
 
 
+class ReviewTest(InviteCase):
+    """The cases of the build's review: a swapped request, a stop between enrolment and admission, words
+    compared past the expiry, and a person's second computer."""
+
+    def test_a_request_swapped_while_it_is_answered_is_let_go(self):
+        from unittest import mock
+        from secret_store import signing
+        carol = self.enrol_member(self.admin, self.pinned, "carol-pc", "carol", "box")
+        from secret_store import team as team_ops
+        team_ops.admit(self.admin.open(), "carol", ["finance"])
+        bob, made = self.member("bob-pc", "bob", "desk"), {}
+        real_answer = enrol.answer
+
+        def swap_then_answer(store, rid, now=None):
+            # Bob, who can write to the repository, swaps his chosen request for one naming Carol, signed
+            # with his own keys, just before the administrator's answer pulls again.
+            request = invite._read(store, rid)
+            body = {k: v for k, v in request.items() if k != "signature"}
+            forged = signing.sign({**body, "login": "carol", "computer": "box2"}, bob._identity().ed25519)
+            bob._write(lambda: ({f"requests/{rid}.json": forged}, "update"))
+            return real_answer(store, rid, now)
+
+        def play(clock):
+            if clock.ticks == 1:
+                made["rid"] = enrol.request(bob, self.pinned, clock.now)
+
+        clock = Clock(play)
+        with mock.patch.object(enrol, "answer", swap_then_answer):
+            with self.assertRaisesRegex(SecretStoreError, "within 1 minutes"):
+                invite.invite_member(self.admin, "bob", ["ops"], match, say=self.said.append, wait=60,
+                                     clock=clock, sleep=clock.sleep)
+        self.assertTrue(any("changed while it was being answered" in line for line in self.said))
+        policy = self.admin.open().policy
+        self.assertEqual(sorted(c for p, c in policy.computers if p == "carol"), ["box"])
+        self.assertIsNone(enrol._load_pending(self.admin, made["rid"]))
+        self.assertIsNotNone(carol)
+
+    def test_a_stop_between_enrolment_and_admission_is_finished_by_the_next_invite(self):
+        self.enrol_member(self.admin, self.pinned, "bob-pc", "bob", "desk")  # enrolled, never admitted
+        computer = invite.invite_member(self.admin, "bob", ["ops"], match, say=self.said.append, sleep=self.fail)
+        self.assertEqual(computer, "desk")
+        self.assertEqual(invite.groups_of(self.admin.open(), "bob"), ["ops"])
+
+    def test_words_compared_past_the_expiry_enrol_nothing(self):
+        from unittest import mock
+        member = self.member("bob-pc", "bob", "desk")
+        rid = enrol.request(member, self.pinned)
+        enrol.answer(self.admin, rid)
+        enrol.prove(member, rid, display=match)
+        now = [time.time()]
+
+        def slow(_title, _words):
+            now[0] += enrol.LIFETIME + 5  # the person looked away from the window
+            return True
+        with mock.patch.object(enrol.time, "time", lambda: now[0]):
+            with self.assertRaisesRegex(SecretStoreError, "expired while the words were compared"):
+                enrol.approve(self.admin, rid, slow)
+        self.assertNotIn(("bob", "desk"), self.admin.open().policy.computers)
+
+    def test_a_persons_second_computer_joins_their_personal_store(self):
+        from secret_store.store_ops import GROUP
+        first, pinned = self.init()
+        first.open().put_entry("Example API", {"api_key": VALUE})
+        second, rid = self.personal("b", "desktop"), {}
+
+        def play(clock):
+            if clock.ticks == 1:
+                rid["id"] = enrol.request(second, pinned, clock.now)
+            elif clock.ticks == 2:
+                enrol.prove(second, rid["id"], display=match, now=clock.now)
+
+        clock = Clock(play)
+        self.assertEqual(invite.invite_member(first, "tester", [GROUP], match, say=self.said.append,
+                                              clock=clock, sleep=clock.sleep), "desktop")
+        self.assertEqual(self.personal("b", "desktop").open().get_fields("Example API", ["api_key"]),
+                         {"api_key": VALUE})
+
+
 class MemberTest(InviteCase):
     def administrator(self, display=match):
         rid = {}

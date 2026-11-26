@@ -482,7 +482,15 @@ and restarts the agent once the person has quit it from its tray icon. With `--j
 the GitHub invitation, adds the team repository to the configuration, takes the team fingerprint
 pasted from the administrator's message, requests enrolment, shows the six words to send back and
 waits until the administrator has enrolled and admitted the computer. Each step says how long it took,
-and a step already done is skipped, so the command is simply run again after an interruption.
+and a step already done is skipped, so the command is simply run again after an interruption: the
+migration counts as done only when the newest record of this vault names no sign-in it could not move,
+and a run that stopped half-way is repeated with `--replace` over the copies it left.
+
+A person's second computer finds their store already made on GitHub. Setup then adds the computer to
+it instead of creating one: on a computer that already has the store the person runs `python
+brain_secrets.py add-computer`, which prints the personal fingerprint and waits; setup takes the pasted
+fingerprint, requests enrolment, and both screens show the same six words. The second computer's own
+old vault is left as it is and never copied over the store, which may be newer.
 
 On an administrator's computer, `python brain_secrets.py invite --login L --group G` invites the
 person on GitHub, prints the message to send them (the team fingerprint and the `setup_store.py
@@ -490,8 +498,10 @@ person on GitHub, prints the message to send them (the team fingerprint and the 
 they send back, enrols the computer and admits the person to the groups (a second computer of a
 member keeps its groups). The fingerprint and the six words are not secrets, so a message app carries
 them; the person's passphrase and recovery words never leave their own windows. Both ends must finish
-within the enrolment's ten minutes once the request is written; an expired request is replaced by a
-new one, with new words.
+within the enrolment's ten minutes once the request is written, the comparison of the words included;
+an expired request is replaced by a new one, with new words. `invite` answers only the request it chose
+for that login: if the request changes between choosing and answering, the attempt is let go. A run
+stopped between enrolment and admission is finished by running `invite` again.
 
 The rehearsal (rehearsal/README.md) is not part of a person's setup: it tests a new version of the
 store's code with throwaway secrets, and whoever changes that code runs it on that commit before the

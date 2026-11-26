@@ -40,6 +40,14 @@ def login(gh: Callable[..., Any] = _gh) -> str:
     return name
 
 
+def state(repository: str, gh: Callable[..., Any] = _gh) -> str:
+    """"missing", "empty" (no commit yet) or "used"."""
+    result = gh("repo", "view", repository, "--json", "isEmpty", "--jq", ".isEmpty")
+    if result.returncode != 0:
+        return "missing"
+    return "empty" if _out(result) == "true" else "used"
+
+
 def invite(repository: str, member: str, gh: Callable[..., Any] = _gh) -> None:
     """Invite member with write permission; nothing changes when they are a collaborator already."""
     result = gh("api", "-X", "PUT", f"repos/{repository}/collaborators/{member}", "-f", "permission=push")

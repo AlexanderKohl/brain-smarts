@@ -135,7 +135,18 @@ class Setup:
         return default_vault_path()
 
     def migrated(self) -> bool:
-        return any((self.vault().parent / "migration-backups").glob("*.migration.json"))
+        """The newest migration record of this vault names no sign-in it could not move. A record is
+        written even by a run that failed its read-back (exit 4), so its presence alone is not enough."""
+        vault = self.vault()
+        records = sorted((vault.parent / "migration-backups").glob(f"{vault.stem}-*.migration.json"),
+                         key=lambda path: path.stat().st_mtime)
+        if not records:
+            return False
+        try:
+            record = json.loads(records[-1].read_text("utf-8"))
+        except (OSError, ValueError):
+            return False
+        return isinstance(record, dict) and record.get("unverified_signins") == []
 
     # -- the steps --------------------------------------------------------------------------------
     def sync(self) -> None:
@@ -187,9 +198,11 @@ class Setup:
             raise SetupError("the Vault Agent already serves the store, but the old vault was never migrated; "
                              "see 'The cut-over' in the credential skill (SKILL.md) before going on")
         with self.step("Unlocking the old vault in the Vault Agent"):
+            if not (status or {}).get("unlocked") and self.config().get("enabled"):
+                # An earlier run stopped between switching on and moving: the old vault is unlocked, or the
+                # agent started, only with the store off (the cut-over, step 1); switch_on turns it on again.
+                self.set_config(enabled=False)
             if status is None:
-                if self.config().get("enabled"):  # an earlier run stopped between switching on and moving
-                    self.set_config(enabled=False)  # the agent must start on the old vault (the cut-over, step 1)
                 self.start_agent()
                 self.say("    The Vault Agent is starting: type the old vault's passphrase in its window.")
             elif not status.get("unlocked"):
@@ -204,18 +217,75 @@ class Setup:
         with self.step("Switching the store on"):
             self.set_config(enabled=True, person=person)
 
-    def personal_store(self) -> None:
+    def own_store_ready(self) -> bool:
+        """This computer is enrolled in the person's store. A checkpoint alone is not enough: a computer
+        that requested enrolment has pulled (and saved a checkpoint) before it was approved."""
         personal, _team = self.stores()
-        if personal.checkpoint_path.exists() or (personal.clone / ".git").exists():
-            self.skip("Creating your personal store")
+        if not personal.checkpoint_path.exists():
+            return False
+        from secret_store import SecretStoreError
+        try:
+            opened = personal.open()
+        except SecretStoreError:
+            return False
+        return (personal.config["person"], personal.config["computer"]) in opened.policy.computers
+
+    def joins_existing_store(self, person: str) -> bool:
+        """This computer is not in the person's store yet, and the store was made on another computer."""
+        return not self.own_store_ready() and self.github.state(f"{person}/brain-secrets") == "used"
+
+    def personal_store(self, person: str, joining: bool) -> None:
+        personal, _team = self.stores()
+        if self.own_store_ready():
+            self.skip("Your personal store")
             return
+        if joining:
+            self.add_this_computer(f"{person}/brain-secrets")
+            return
+        from secret_store.team import clone_has_history
+        if (personal.clone / ".git").exists() and not clone_has_history(personal.clone):
+            from secret_store.recovery_package import _remove_tree
+            _remove_tree(personal.clone)  # an earlier run stopped after cloning the empty repository
         with self.step("Creating your personal store (write the recovery words down when the window shows them)"):
             fingerprint = personal.init_personal()
             self.say(f"    Personal fingerprint, for your next computer: {fingerprint}")
 
+    def add_this_computer(self, repository: str) -> None:
+        from secret_store import invite
+        if not self.config().get("personal_repo_url"):
+            self.set_config(personal_repo_url=f"https://github.com/{repository}.git")
+        personal, _team = self.stores()
+        with self.step("Adding this computer to your personal store"):
+            if not personal.pin_path.exists():
+                self.say("    On a computer that already has your store, in its brain folder, run:")
+                self.say("    python shared\\skills\\manage-credentials\\scripts\\brain_secrets.py add-computer")
+                fingerprint = self.ask("Paste the personal fingerprint it shows: ").strip()
+                if not fingerprint:
+                    raise SetupError("no fingerprint was given; nothing was requested")
+            else:
+                fingerprint = None
+            invite.join_team(personal, fingerprint, invite._show(invite.OWN_WORDS, False),
+                             say=lambda text: self.say("    " + text))
+            if self.vault().exists():
+                self.mark_vault_left()
+
+    def mark_vault_left(self) -> None:
+        """A computer that joined an existing store never copies its own old vault over it (that copy may
+        be older than the store). A record beside the migration records says so, so that a later run
+        does not move it either."""
+        folder = self.vault().parent / "migration-backups"
+        folder.mkdir(parents=True, exist_ok=True)
+        record = {"joined_existing_store": True, "entries": [], "unverified_signins": [],
+                  "time": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
+        (folder / f"{self.vault().stem}-joined.migration.json").write_text(json.dumps(record, indent=2) + "\n", "utf-8")
+        self.say("    This computer's old vault is left as it is: your store already holds your entries.")
+
     def move_entries(self) -> None:
-        with self.step("Moving the old vault's entries into the store"):
-            for argv in (["--dry-run"], []):
+        personal, _team = self.stores()
+        again = bool(personal.open().list_entries())  # only a migration has written it: the agent is on the old vault
+        with self.step("Moving the old vault's entries into the store"
+                       + (" (again, over the copies an earlier run left)" if again else "")):
+            for argv in (["--dry-run"], ["--replace"] if again else []):
                 code = self.migrate(argv)
                 if code != 0:
                     raise SetupError(f"the migration stopped (code {code}; see the lines above). Nothing more "
@@ -296,11 +366,12 @@ def main(argv: list[str] | None = None, setup: Setup | None = None) -> int:
         from secret_store import SecretStoreError
         errors = (*errors, SecretStoreError, CredentialError)
         person = setup.person()
-        old = setup.vault().exists() and not setup.migrated()
+        joining = setup.joins_existing_store(person)
+        old = not joining and setup.vault().exists() and not setup.migrated()
         if old:
             setup.unlock_old_vault()
         setup.switch_on(person)
-        setup.personal_store()
+        setup.personal_store(person, joining)
         if old:
             setup.move_entries()
         groups = setup.join(args.join, args.fingerprint) if args.join else []
