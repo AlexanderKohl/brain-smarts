@@ -9,7 +9,7 @@ metadata:
   contract: /CONTRACT.md
   status: active
   scope: shared
-  version: 0.2.0
+  version: 0.2.1
   project_ref: /memory/projects/credential-management
   created: 2026-08-04T16:11:53+10:00
   updated: 2026-11-26T19:54:00+10:00
