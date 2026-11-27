@@ -20,7 +20,7 @@ SUPERSESSION_FIELDS = frozenset({"schema", "type", "repository", "grant", "provi
                                  "confirmation", "writer", "signature"})
 _OBJECT_PATH = re.compile(r"objects/([A-Za-z0-9_-]{1,140})\.json")
 _RECORD_PATH = re.compile(r"releases/([A-Za-z0-9_-]{1,140})\.json")
-_REQUEST_PATH = re.compile(r"requests/[0-9a-f]{16}(\.answer|\.proof|\.handover)?\.json")
+_REQUEST_PATH = re.compile(r"requests/[0-9a-f]{16}(\.answer|\.proof|\.handover|\.share)?\.json")
 _MISSING = object()
 
 # Plan section L (Sol round 10, low): a refused commit is named outside this module by one of these
@@ -93,7 +93,8 @@ def split_files(files: Any) -> tuple[dict | None, dict[str, dict], dict[str, dic
         if isinstance(path, str) and _REQUEST_PATH.fullmatch(path):
             # Enrolment exchange (section 8): public keys and challenges only, added or removed;
             # never part of the policy or the checkpoint. enrol.py verifies these files itself; a
-            # .handover file carries a release to the administrator, and accept.py judges it when cited.
+            # .handover file carries a release to the administrator, and accept.py judges it when cited;
+            # a .share file carries one member's login to another (share.py checks it when accepted).
             if value is not None and not isinstance(value, dict):
                 _refuse("a commit file is malformed", "commit-file")
             continue

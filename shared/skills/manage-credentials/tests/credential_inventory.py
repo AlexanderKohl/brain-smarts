@@ -16,7 +16,7 @@ EXTERNAL_MODULES = frozenset({
     "importlib", "json", "keyring", "math", "msvcrt", "multiprocessing", "os", "pathlib", "pystray", "re", "secrets", "shutil",
     "signal",
     "pwd", "socket", "ssl", "stat", "struct", "subprocess", "sys", "tempfile", "threading", "time", "tkinter", "types",
-    "typing", "urllib", "warnings",
+    "typing", "urllib", "warnings", "webbrowser",
 })
 # The modules that can carry data into or out of the process. For each, the skill modules allowed
 # to import it and the exact symbols taken (an alias, a re-export, a bound name and getattr with a
@@ -125,6 +125,22 @@ EXTERNAL_SYMBOLS: dict[tuple[str, str], tuple[str, ...]] = {
     ("urllib.parse", "token_endpoint.py"): ("urlencode", "urlsplit"),
     ("urllib.parse", "token_relay_backend.py"): ("quote",),
     ("urllib.request", "token_endpoint.py"): ("getproxies", "proxy_bypass"),
+    # the team credential relay's side in the brain (team_relay/)
+    (_ED, "team_relay/client.py"): ("Ed25519PrivateKey",),
+    (_ED, "team_relay/document.py"): ("Ed25519PrivateKey",),
+    (_ED, "team_relay/keys.py"): ("Ed25519PrivateKey", "Ed25519PrivateKey.from_private_bytes", "Ed25519PrivateKey.generate",
+                                  "Ed25519PublicKey", "Ed25519PublicKey.from_public_bytes"),
+    (_X, "team_relay/document.py"): ("X25519PublicKey",),
+    (_X, "team_relay/envelope.py"): ("X25519PrivateKey", "X25519PublicKey"),
+    (_X, "team_relay/keygen.py"): ("X25519PrivateKey", "X25519PrivateKey.from_private_bytes", "X25519PrivateKey.generate"),
+    ("subprocess", "team_relay/document.py"): (),  # annotations only: its git goes through child_process.py
+    ("urllib.error", "team_relay/client.py"): ("HTTPError", "URLError"),
+    ("urllib.error", "team_relay/keygen.py"): ("HTTPError", "URLError"),
+    ("urllib.error", "team_relay/revoke.py"): ("HTTPError", "URLError"),
+    ("urllib.parse", "team_relay/revoke.py"): ("urlencode",),
+    ("urllib.request", "team_relay/client.py"): ("Request", "urlopen"),
+    ("urllib.request", "team_relay/keygen.py"): ("Request", "urlopen"),
+    ("urllib.request", "team_relay/revoke.py"): ("urlopen",),
 }
 # Why a no-credential module may hold a data-carrying import: one line per row above whose module
 # is in NO_CREDENTIAL. The test requires a line for each.
@@ -157,11 +173,21 @@ FORMS: dict[str, frozenset[tuple[str, str]]] = {
         # the invitation's message (the team fingerprint, a public name of the trust root) and progress lines
         ("brain_secrets.py", "_add_computer"), ("brain_secrets.py", "_invite"), ("secret_store/invite.py", "invite_member"),
         ("secret_store/invite.py", "join_team"), ("setup_store.py", "Setup.__init__"), ("setup_store.py", "main"),
-        ("skill_version.py", "main")}),  # the skill's version, commit and branch
+        ("skill_version.py", "main"),  # the skill's version, commit and branch
+        # share and the relay commands: entry, credential, field, state, person and computer names, never a value
+        ("brain_secrets.py", "_share"), ("team_relay/commands.py", "main"), ("team_relay/commands.py", "relay_admit"),
+        ("team_relay/commands.py", "relay_connect"), ("team_relay/commands.py", "relay_delete"),
+        ("team_relay/commands.py", "relay_enrol"), ("team_relay/commands.py", "relay_init"),
+        ("team_relay/commands.py", "relay_log"), ("team_relay/commands.py", "relay_put"),
+        ("team_relay/commands.py", "relay_record"), ("team_relay/commands.py", "relay_revoke"),
+        ("team_relay/commands.py", "relay_serve"), ("team_relay/commands.py", "relay_status"),
+        ("team_relay/commands.py", "relay_switch"), ("team_relay/keygen.py", "relay_keygen")}),
     # input(): a typed confirmation (an entry name, a write id), never a value; setup_store.py takes the
     # pasted team fingerprint, which is public
     "input": frozenset({("brain_secrets.py", "_delete"), ("brain_secrets.py", "_unfinished"), ("vault_credentials.py", "main"),
-                        ("setup_store.py", "Setup.__init__")}),
+                        ("setup_store.py", "Setup.__init__"),
+                        # a credential's name typed again before a revocation or a removal at the relay
+                        ("team_relay/commands.py", "relay_delete"), ("team_relay/commands.py", "relay_revoke")}),
     # sys.stdin.read: a value piped in (vault_credentials.py put --stdin)
     "stdin-read": frozenset({("vault_credentials.py", "_secret_value")}),
     # os.environ[...] =, del, update, pop, setdefault, clear, os.putenv, os.unsetenv
@@ -184,7 +210,10 @@ FORMS: dict[str, frozenset[tuple[str, str]]] = {
         ("skill_version.py", "record"),  # VERSION-LEDGER.json: a version and a hash of the skill's files
         ("secret_store/store_ops.py", "write_upkeep_error"), ("token_relay_store.py", "holder_name"),
         ("vault_agent.py", "VaultAgent._acquire_singleton"), ("vault_agent_runtime.py", "log_tray"),
-        ("vault_agent_runtime.py", "write_state")}),
+        ("vault_agent_runtime.py", "write_state"),
+        ("team_relay/commands.py", "relay_enrol"),  # a relay enrolment: a public key, signed
+        ("team_relay/document.py", "write"),  # relay.json: public keys, records and signatures
+        ("team_relay/keygen.py", "relay_keygen")}),  # the relay key's recovery file, sealed to the recovery key
     # eval, exec, __import__, compile, globals, locals, vars; getattr, setattr or delattr with a name that
     # is not a literal
     "reflection": frozenset({("secret_store/store_ops.py", "store_status")}),  # getattr over a tuple of two literals
@@ -247,6 +276,20 @@ ENDPOINTS: dict[str, tuple[str, str, str, str]] = {
     "relay-main": ("token_relay.py", "main", "S", "the terminal (key-export prints the relay key, to a terminal only)"),
     "credentials-main": ("vault_credentials.py", "main", "S", "a child's environment (run, session)"),
     "words-window": ("secret_window.py", "show_recovery_words", "S", "the screen: the recovery words, once"),
+    "relay-keychain-read": ("team_relay/keys.py", "load", "P", "this computer's relay signing key from the keychain"),
+    "relay-keychain-write": ("team_relay/keys.py", "create_relay_key", "PS", "a new relay signing key, made and stored in the "
+                             "keychain"),
+    "relay-seal": ("team_relay/envelope.py", "seal", "S", "a credential's fields sealed to the relay's public key"),
+    "relay-open": ("team_relay/envelope.py", "open_", "P", "a credential's fields opened with the relay's private key: "
+                   "only the relay calls it; the brain's copy keeps the file identical to the relay's"),
+    "relay-key-make": ("team_relay/keygen.py", "relay_keygen", "PS", "the relay's new private key, sealed into its "
+                       "recovery file and handed to set_railway_variable"),
+    "relay-railway": ("team_relay/keygen.py", "set_railway_variable", "S", "the relay's private key sent to Railway's "
+                      "API as the service variable RELAY_PRIVATE_KEY"),
+    "relay-recovery-open": ("team_relay/keygen.py", "open_recovery", "P", "the relay's private key from its recovery "
+                            "file (relay-restore, not built yet)"),
+    "revoke-probe": ("team_relay/revoke.py", "http_status", "S", "an old access token sent to Google's token "
+                     "information endpoint, to show it dead"),
 }
 # Attribute names that reach a primitive or sink through another receiver (self._load_unlocked,
 # store._broker_request): each is unique in the skill and stands for one endpoint.
@@ -266,18 +309,21 @@ LIBRARY_SYMBOLS: dict[str, frozenset[tuple[str, str]]] = {
                           ("secret_store/recovery_package.py", "build"), ("portable_vault.py", "PortableVault._write_unlocked"),
                           ("token_relay_backend.py", "encrypt_token")}),
     "generate_key": frozenset({("secret_store/envelope.py", "seal"), ("secret_store/recovery_package.py", "build")}),
-    "get_password": frozenset({("secret_store/keys.py", "load_private_keys"), ("secret_store/keys.py", "store_private_keys")}),
-    "set_password": frozenset({("secret_store/keys.py", "store_private_keys")}),
+    "get_password": frozenset({("secret_store/keys.py", "load_private_keys"), ("secret_store/keys.py", "store_private_keys"),
+                               ("team_relay/keys.py", "_read")}),
+    "set_password": frozenset({("secret_store/keys.py", "store_private_keys"), ("team_relay/keys.py", "create_relay_key")}),
     "getpass": frozenset({("token_relay.py", "_hidden_input"), ("vault_credentials.py", "_passphrase"),
                           ("vault_credentials.py", "_secret_value"), ("vaultctl.py", "_hidden_passphrase")}),
     "scrypt": frozenset({("portable_vault.py", "_derive_key"), ("portable_vault.py", "PortableVault._write_unlocked")}),
     "derive": frozenset({("secret_store/recovery.py", "_hkdf")}),
     "from_private_bytes": frozenset({("secret_store/keys.py", "load_private_keys"),
                                      ("secret_store/recovery.py", "derive_recovery_keys"),
-                                     ("secret_store/hpke.py", "derive_key_pair")}),  # RFC test vectors; no caller
+                                     ("secret_store/hpke.py", "derive_key_pair"),  # RFC test vectors; no caller
+                                     ("team_relay/keygen.py", "open_recovery"), ("team_relay/keys.py", "load")}),
     "private_bytes": frozenset({("secret_store/keys.py", "raw_private")}),
     "generate": frozenset({("secret_store/keys.py", "generate_key_pairs"), ("secret_store/hpke.py", "load_public_key"),
-                           ("secret_store/hpke.py", "encap")}),  # the last two: ephemeral keys
+                           ("secret_store/hpke.py", "encap"),  # these two: ephemeral keys
+                           ("team_relay/keygen.py", "relay_keygen"), ("team_relay/keys.py", "create_relay_key")}),
     "exchange": frozenset({("secret_store/hpke.py", "_dh")}),
     "Entry": frozenset({("secret_window.py", "_dialog")}),
     "GetWindowTextW": frozenset({("vault_tray.py", "_win_password_dialog.wndproc")}),
@@ -293,8 +339,11 @@ DIRECT_CALLERS: dict[str, dict[tuple[str, str], str]] = {
              ("secret_store/pending.py", "PendingWrites.read"): "a pending-write record, this computer's key only",
              ("secret_store/replace_ops.py", "_open"): "a hand-over file", ("secret_store/replace_ops.py", "discard_retired"):
              "the entry name of each journal record, to find a retired grant's",
-             ("secret_store/store.py", "SecretStore._open_object"): "the store's one reader of an object"},
+             ("secret_store/store.py", "SecretStore._open_object"): "the store's one reader of an object",
+             ("secret_store/share.py", "accept"): "a login shared with this person, opened with this computer's key",
+             ("team_relay/keygen.py", "open_recovery"): "the relay key's recovery file, with the recovery key"},
     "hpke-open": {("secret_store/enrol.py", "prove"): "the challenge sealed to this computer",
+                  ("team_relay/envelope.py", "open_"): "a relay envelope (the relay's own use of the copied file)",
                   ("secret_store/envelope.py", "open_"): "the object's data key",
                   ("secret_store/recovery_package.py", "_open"): "the package's data key"},
     "package-open": {("secret_store/recovery_package.py", "restore"): "restore from a package"},
@@ -302,7 +351,8 @@ DIRECT_CALLERS: dict[str, dict[tuple[str, str], str]] = {
                    ("load", "change_passphrase", "set_fields", "delete_entry", "delete_field")},
     "relay-decrypt": {("token_relay_store.py", "RelayedStore._verified"): "the remote record after its checks"},
     "keychain-read": {("secret_store/store.py", "SecretStore._identity"): "this computer's keys, once per store"},
-    "token-endpoint": {},  # the library connectors call it; nothing under scripts/ does
+    "token-endpoint": {("team_relay/revoke.py", "google_revoke"): "the old refresh token, once, to Google's "
+                       "revocation endpoint before the relay serves its new grant (design 10.1)"},
     "window": {("secret_window.py", "ask_new_passphrase"): "a new passphrase twice",
                ("secret_window.py", "ask_secrets"): "secret fields, and the passphrase when the agent is locked"},
     "prompt-passphrase": {("vault_credentials.py", "_new_passphrase"): "a new passphrase twice",
@@ -347,8 +397,11 @@ DIRECT_CALLERS: dict[str, dict[tuple[str, str], str]] = {
     "seal": {("secret_store/journal.py", "Journal.write"): "a journal record", ("secret_store/oauth_ops.py", "seal_revision"):
              "a sign-in, grant or static revision with an operation id", ("secret_store/pending.py", "PendingWrites.write"):
              "a pending-write record", ("secret_store/replace_ops.py", "_write"): "a hand-over file",
-             ("secret_store/store_ops.py", "seal_object"): "a store object"},
+             ("secret_store/store_ops.py", "seal_object"): "a store object",
+             ("secret_store/share.py", "share.build"): "a shared login, to the other member's computers",
+             ("team_relay/keygen.py", "seal_recovery"): "the relay key, to the personal recovery key"},
     "hpke-seal": {("secret_store/enrol.py", "answer"): "the challenge", ("secret_store/envelope.py", "seal"): "the data key",
+                  ("team_relay/envelope.py", "seal"): "a credential's fields, to the relay's key",
                   ("secret_store/recovery_package.py", "build"): "the package's data key"},
     "package": {("secret_store/store.py", "SecretStore.refresh_recovery_package"): "weekly, or after a policy change"},
     "keychain-write": {("secret_store/enrol.py", "request"): "a new computer", ("secret_store/store.py", "SecretStore.init_personal"):
@@ -360,6 +413,17 @@ DIRECT_CALLERS: dict[str, dict[tuple[str, str], str]] = {
     "relay-main": {("token_relay.py", "<module>"): "the command line"},
     "credentials-main": {("vault_credentials.py", "<module>"): "the command line"},
     "words-window": {("secret_store/store.py", "_default_words_window"): "init and team-init"},
+    "relay-keychain-read": {("team_relay/client.py", "for_this_computer"): "the transport's signing key",
+                            ("team_relay/commands.py", "relay_admit"): "this computer's key, to admit it",
+                            ("team_relay/commands.py", "relay_enrol"): "this computer's key, for its enrolment"},
+    "relay-keychain-write": {("team_relay/commands.py", "relay_admit"): "made when this computer has none",
+                             ("team_relay/commands.py", "relay_enrol"): "made when this computer has none"},
+    "relay-seal": {("team_relay/commands.py", "relay_put"): "typed fields, sealed before they leave this computer"},
+    "relay-open": {},  # the relay opens envelopes; nothing in the brain does
+    "relay-key-make": {("team_relay/commands.py", "main"): "relay-keygen"},
+    "relay-railway": {("team_relay/keygen.py", "relay_keygen"): "the new key, once"},
+    "relay-recovery-open": {},  # relay-restore is not built yet
+    "revoke-probe": {("team_relay/commands.py", "relay_revoke"): "passes it to google_probe for an uncertain revocation"},
 }
 # A string constant equal to an endpoint's name, where it is not that endpoint.
 STRING_EXEMPT: dict[tuple[str, str, str], str] = {
@@ -422,6 +486,19 @@ CREDENTIAL: dict[str, str] = {  # module -> what passes through it in the clear
     "secret_store/store_ops.py": "payloads sealed (build_put, seal_object) and re-keyed (build_policy_change)",
     "secret_store/team.py": "the team recovery words and keys; every object re-keyed at a policy change",
     "secret_store/typed_write.py": "the typed plain and grant values of one write, and its record",
+    "secret_store/share.py": "a shared login's values and kinds, read from the sharer's store, sealed to the other "
+                             "member and opened by them",
+    "team_relay/client.py": "the relay signing key and the store key as objects that sign; requests and answers of "
+                            "provider calls (business data, never a credential of the provider)",
+    "team_relay/commands.py": "typed values from the window (relay-put), sealed before they leave; an old sign-in's "
+                              "refresh and access token read for the revocation (relay-revoke); prints names only",
+    "team_relay/document.py": "no value of its own: public keys, records and signatures; listed here because it signs "
+                              "with the store key object (the stricter class)",
+    "team_relay/envelope.py": "a credential's fields sealed to the relay's key, and opened by the relay",
+    "team_relay/keygen.py": "the relay's private key: made, sealed into its recovery file and sent to Railway",
+    "team_relay/keys.py": "this computer's relay signing key, made, stored and loaded",
+    "team_relay/revoke.py": "an old refresh token sent once to the revocation endpoint; an old access token to the "
+                            "probe",
 }
 NO_CREDENTIAL: dict[str, str] = {  # module -> why none does
     "child_process.py": "starts git and gh without a console window; reads nothing that passes through",
@@ -435,6 +512,7 @@ NO_CREDENTIAL: dict[str, str] = {  # module -> why none does
     "secret_store/signing.py": "signatures over documents and sealed objects, with the key object",
     "skill_version.py": "the skill's version and a hash of its own files; git for the commit and branch",
     "team_github.py": "gh calls with a repository and a login name; gh keeps its own sign-in",
+    "team_relay/__init__.py": "the package's description",
 }
 # What a no-credential module may import from a credential module: (importer, imported) -> names.
 # A whole-module import ("from . import canonical") is allowed only with the attributes it uses.
@@ -505,6 +583,39 @@ OPERATIONS: dict[str, dict[str, tuple[tuple[str, ...], tuple[str, ...], str | No
         "grant-scan": (_STORE_READ, _NONE, "cli-grant-scan", "static payloads opened; names printed"),
         "unfinished": (_STORE_WRITE, ("package",), "cli-unfinished", "list and --discard read records; --apply writes "
                        "through the normal path, and a record that adds an entry changes the policy (package)"),
+        # design team-credential-relay.md 8.6: a member's own login; tests/test_secret_store_share.py runs both with
+        # two members' throwaway stores, which the scenarios' single-person world does not have
+        "share": (_STORE_WRITE, ("package",), None, "needs a second member enrolled in a team store and both members' "
+                  "personal stores; tests/test_secret_store_share.py runs it end to end with throwaway stores"),
+        "share-accept": (_STORE_WRITE, ("package",), None, "needs a share file from a second member in a team store; "
+                         "tests/test_secret_store_share.py runs it end to end with throwaway stores"),
+    },
+    # the team credential relay's commands (team_relay/commands.py): every one talks to the deployed relay or
+    # pushes brain-team-relay, which no scenario has; the stand-in tests are in tests/test_team_relay.py
+    "team_relay/commands.py": {
+        "relay-admit": (("keychain-read", "relay-keychain-read") + _PULL, ("relay-keychain-write",), None,
+                        "needs the deployed relay or a GitHub remote for brain-team-relay; tests/test_team_relay.py drives its logic with the relay replaced by a stand-in; reads an enrolment or this computer's relay key, signs relay.json and pushes it"),
+        "relay-connect": (("keychain-read",) + _PULL, _NONE, None, "needs the deployed relay or a GitHub remote for brain-team-relay; tests/test_team_relay.py drives its logic with the relay replaced by a stand-in; opens the browser at a one-time address; "
+                          "the grant goes from Google to the relay and never to this computer"),
+        "relay-delete": (("keychain-read",) + _PULL, _NONE, None, "needs the deployed relay or a GitHub remote for brain-team-relay; tests/test_team_relay.py drives its logic with the relay replaced by a stand-in; a signed administrator request, no value"),
+        "relay-disable": (("keychain-read",) + _PULL, _NONE, None, "needs the deployed relay or a GitHub remote for brain-team-relay; tests/test_team_relay.py drives its logic with the relay replaced by a stand-in; a signed administrator request, no value"),
+        "relay-enable": (("keychain-read",) + _PULL, _NONE, None, "needs the deployed relay or a GitHub remote for brain-team-relay; tests/test_team_relay.py drives its logic with the relay replaced by a stand-in; a signed administrator request, no value"),
+        "relay-enrol": (("keychain-read", "relay-keychain-read") + _PULL, ("relay-keychain-write",), None,
+                        "needs the deployed relay or a GitHub remote for brain-team-relay; tests/test_team_relay.py drives its logic with the relay replaced by a stand-in; makes this computer's relay key when it has none and writes its signed enrolment"),
+        "relay-init": (("keychain-read",) + _PULL, _NONE, None, "needs the deployed relay or a GitHub remote for brain-team-relay; tests/test_team_relay.py drives its logic with the relay replaced by a stand-in; the first relay.json: public keys only"),
+        "relay-keygen": (("relay-key-make", "relay-railway", "keychain-read", "seal", "hpke-seal") + _PULL, _NONE, None,
+                         "needs the deployed relay or a GitHub remote for brain-team-relay; tests/test_team_relay.py drives its logic with the relay replaced by a stand-in; Railway's API takes the relay's private key; the recovery file is sealed to the "
+                         "personal recovery key"),
+        "relay-log": (("keychain-read",) + _PULL, _NONE, None, "needs the deployed relay or a GitHub remote for brain-team-relay; tests/test_team_relay.py drives its logic with the relay replaced by a stand-in; rows of the use log, never a value"),
+        "relay-put": (("keychain-read", "window", "relay-seal", "hpke-seal") + _PULL, _NONE, None,
+                      "needs the deployed relay or a GitHub remote for brain-team-relay; tests/test_team_relay.py drives its logic with the relay replaced by a stand-in; typed values sealed to the relay's key before they leave"),
+        "relay-record": (("keychain-read",) + _PULL, _NONE, None, "needs the deployed relay or a GitHub remote for brain-team-relay; tests/test_team_relay.py drives its logic with the relay replaced by a stand-in; a credential's record, checked at the relay "
+                         "and pushed; no value"),
+        "relay-revoke": (("keychain-read", "token-endpoint") + _PULL, ("revoke-probe",), None,
+                         "needs the deployed relay or a GitHub remote for brain-team-relay; tests/test_team_relay.py drives its logic with the relay replaced by a stand-in; the old refresh token sent once to Google's revocation endpoint; an uncertain "
+                         "answer is probed with the old access token while it is unexpired"),
+        "relay-serve": (("keychain-read",) + _PULL, _NONE, None, "needs the deployed relay or a GitHub remote for brain-team-relay; tests/test_team_relay.py drives its logic with the relay replaced by a stand-in; a signed administrator request, no value"),
+        "relay-status": (("keychain-read",) + _PULL, _NONE, None, "needs the deployed relay or a GitHub remote for brain-team-relay; tests/test_team_relay.py drives its logic with the relay replaced by a stand-in; names, states and flags, never a value"),
     },
     # agent-pipe below the command lines: the scenarios' stand-in for the agent client answers through
     # the in-process agent's pipe handler, so the agent's own pairs are recorded under the command too

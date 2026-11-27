@@ -30,6 +30,9 @@
   brain_secrets.py supersede --entry E --to PERSON/COMPUTER --confirmation TEXT [--group G]
                                                   administrator, old refresher unreachable
   brain_secrets.py grant-scan [--team]            plain entries holding a grant field (names only)
+  brain_secrets.py share --entry E --with LOGIN   share one of your own logins with another member
+  brain_secrets.py share-accept [--file PATH] [--as NAME]    list the logins shared with you, or take one
+  brain_secrets.py relay-...                      the team credential relay (team_relay/commands.py)
 
 --group selects the team repository. Values are typed only into the masked window and the
 enrolment and recovery words are shown only in a local window, never on the command line or in
@@ -115,6 +118,12 @@ def _parser() -> argparse.ArgumentParser:
     sup.add_argument("--confirmation", required=True, help="how the old grant was revoked at the provider")
     sup.add_argument("--group")
     sub.add_parser("grant-scan", help="plain entries holding a grant field").add_argument("--team", action="store_true")
+    share = sub.add_parser("share", help="share one of your own logins with another member (re-encrypted to them)")
+    share.add_argument("--entry", required=True)
+    share.add_argument("--with", dest="to", required=True, metavar="LOGIN")
+    accept = sub.add_parser("share-accept", help="list the logins shared with you, or take one into your store")
+    accept.add_argument("--file", help="the share's path, as the list names it")
+    accept.add_argument("--as", dest="name", help="store it under this entry name")
     unfinished = sub.add_parser("unfinished", help="pending writes kept on this computer (ids, entries, times)")
     unfinished.add_argument("--team", action="store_true")
     act = unfinished.add_mutually_exclusive_group()
@@ -334,6 +343,31 @@ def _add_computer(store, display, wait=None) -> int:
     return 0
 
 
+def _share(args, team_factory=None, personal_factory=None) -> int:
+    """Design team-credential-relay.md 8.6: a member's own login, shared without an administrator."""
+    from secret_store import SecretStoreError, share
+    from secret_store.store import SecretStore
+    from secret_store.team import TeamStore
+    team, personal = (team_factory or TeamStore)(), (personal_factory or SecretStore)()
+    try:
+        if args.command == "share":
+            from team_relay import document
+            relayed = (document.read(document.clone_path()) or {}).get("credentials", {})
+            path = share.share(team, personal, args.entry, args.to, relayed)
+            print(f"Shared {args.entry} with {args.to} ({path}). It cannot be taken back once read: to end it, "
+                  "change its password at the provider.")
+        elif args.file:
+            print(f"Stored {share.accept(team, personal, args.file, args.name)} in your personal store.")
+        else:
+            found = share.incoming(team)
+            lines = [f"{path}: {doc['entry']} from {doc['from']}" for path, doc in found]
+            print("\n".join(lines) if lines else "Nothing has been shared with you.")
+        return 0
+    except SecretStoreError as error:
+        print(f"Secrets store: {error}", file=sys.stderr)
+        return 1
+
+
 def main(argv=None, store_factory=None, team_factory=None, ask=None, confirm=None, display=None) -> int:
     from secret_store import SecretStoreError, enrol, handover
     from secret_store import team as team_ops
@@ -347,7 +381,12 @@ def main(argv=None, store_factory=None, team_factory=None, ask=None, confirm=Non
         import skill_version
         print(skill_version.identity("--verbose" in words))
         return 0
+    if words and words[0].startswith("relay-"):  # the team credential relay keeps its own commands
+        from team_relay import commands as relay_commands
+        return relay_commands.main(words, ask=ask, confirm=confirm)
     args = _parser().parse_args(argv)
+    if args.command in ("share", "share-accept"):
+        return _share(args)
     if args.command == "restore":  # no configured store: the target folder is the whole store
         return _restore(args, ask, (SecretStoreError, CredentialError))
     group = getattr(args, "group", None) if args.command in _GROUPED else None

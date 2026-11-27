@@ -1,0 +1,45 @@
+{
+  "about": "The files the team credential relay (repository brain-relay) copies from this skill, with the hash of each as copied (line ends as LF). tests/test_relay_copies.py fails when one changes here; change the relay's copy and its VENDORED.json in the same piece of work, then the hash here.",
+  "files": {
+    "secret_store/__init__.py": {
+      "sha256": "0b3043b8ef5bf85385bd5a5c554991d76743743f8b0d4697dbedff7b7f5be338",
+      "part": "whole file"
+    },
+    "secret_store/canonical.py": {
+      "sha256": "fd52be2f169a7d579e040273032be1f43071e4a87af8d0202c3310fffd2a5432",
+      "part": "whole file"
+    },
+    "secret_store/errors.py": {
+      "sha256": "ea63eeade7f009e9fdfa519dfe577dc65e1f05c773262081f0627645edabad2b",
+      "part": "whole file"
+    },
+    "secret_store/hpke.py": {
+      "sha256": "c11ab53d37a3dbc0adceed0c35617ca1cab5b7191e2bc40dbf4fae54d7d58d98",
+      "part": "whole file"
+    },
+    "secret_store/journal.py": {
+      "sha256": "2b712a2437ae3e7b3a2aa5ec7f12ad3a048f81536d23861d7dcb4a3b300f5ae8",
+      "part": "the classes ProviderNotCalled and ProviderRefused"
+    },
+    "secret_store/keys.py": {
+      "sha256": "5ff23d5a123a79e6b5100f709e74e8b5a45bf3665581b07bfff48b79c34f0c4d",
+      "part": "whole file"
+    },
+    "secret_store/policy.py": {
+      "sha256": "1bd57d7fa6194cbce952387cdb70e453226ddd158d4dbf912c3836e787917e2e",
+      "part": "whole file"
+    },
+    "secret_store/signing.py": {
+      "sha256": "1266ac6f505f51cb2f79ffeb3245b6a8c3f1a08498d2e70db89845d79667ef56",
+      "part": "whole file"
+    },
+    "team_relay/envelope.py": {
+      "sha256": "cf6053e2ff1cd94cf759550a0e766d724cc546b06777b2c4cf301370c7418df3",
+      "part": "whole file"
+    },
+    "token_endpoint.py": {
+      "sha256": "21fe2c426e75f9f3b1ec11c520c502f69b02333c7669fe9782a643f8e96508c7",
+      "part": "whole file"
+    }
+  }
+}

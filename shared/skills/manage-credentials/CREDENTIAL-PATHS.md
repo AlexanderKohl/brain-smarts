@@ -6,7 +6,7 @@ schema_version: 0.2
 contract: /CONTRACT.md
 status: active
 created: 2026-11-21T14:31:20+10:00
-updated: 2026-11-26T17:08:00+10:00
+updated: 2026-11-27T17:38:43+10:00
 ---
 
 # Credential paths
@@ -164,8 +164,13 @@ e start or configure the agent. `mc/` is this skill's `scripts/`, `lib/` the ski
 | 54 | `brain_secrets.py invite`, `secret_store/invite.py` `invite_member` | b, d | an administrator's computer: `team_github.py` invites the login with write permission, the command prints the team fingerprint (public) and waits; it answers only a well-formed, unexpired request from that login, compares the six words in the window (`enrol.approve`), then admits through `team.admit`; a second computer of a member keeps its groups; no write of its own beyond enrol's and team's | same | OK |
 | 55 | `mc/setup_store.py`, `secret_store/invite.py` `join_team`, `brain_secrets.py add-computer` | a, b, d, e | the cut-over's steps in order, each skipped when done (the migration counts as done only when the newest record of this vault names no unmoved sign-in and is newer than the vault; setup never runs it over entries the store already holds (it stops and says why), nor with `--replace`; a store that cannot be read stops it instead of counting as not enrolled; a computer that joins a store made elsewhere records, before its enrolment can finish, that its old vault stays as it is): the agent started on the old vault (its own passphrase window), the store switched on, `init` (words window), `migrate_to_store.py` main, then with `--join` the GitHub invitation accepted, `team_repo_url` written, the pasted fingerprint pinned, the enrolment requested and proved (`enrol.request`, `enrol.prove`), and the agent restarted after the person quits it; never the rehearsal; prints names, steps and times only | same | OK |
 | 53 | `brain_secrets.py unfinished [--team] [--apply ID \| --discard ID]`, `secret_store/pending.py`, `secret_store/typed_write.py` | a, b | one pending-write record per typed write (`put`, the agent's `set_text` and `set_json` of a static or grant field), encrypted to this computer's key beside the journal; a typed value whatever its field is called; a provider's token answer never enters a record (an authorisation, the migration, `save_settings` and a refresh make none); listed by write id, entry and time, never a value; replayed only while every base identity holds, held otherwise; `--apply` writes through the normal store path; `--discard` removes a record after its id is typed; a damaged record, one of another repository or one without field kinds is never applied; nothing is read from or sent to the vault | same | OK |
+| 56 | `brain_secrets.py share`, `share-accept`, `secret_store/share.py` | a, b, d | a member's own login (design team-credential-relay.md 8.6): read from the sharer's personal store, sealed to every computer the other member has in the team policy, in a share file of the team repository signed by the sharer's computer key; refused for an entry the relay document names, for oneself, for a member with no computer; accepted only when the file verifies against the policy and is addressed to this person, then written into the personal store under its name (or `--as`) and the file removed; prints entry and person names only; cannot be recalled once read | same | OK |
+| 57 | `team_relay/` relay keys, `relay-enrol`, `relay-admit`, `relay-init`, `relay-record` | a, b, d | the computer's relay signing key in the allowlisted keychain under its own service, never replaced silently; an enrolment is a public key signed by the store key; `relay.json` is signed by a relay administrator of the team policy and checked at the relay (`check`) before it is pushed | same | OK |
+| 58 | `team_relay/` `relay-put`, `relay-connect`, `relay-revoke`, `relay-serve`, `relay-status`, `relay-log`, `relay-disable`, `relay-enable`, `relay-delete`, `relay-keygen` | a, b, c, d | values typed into the masked window are sealed to the relay's key on this computer; a grant goes from the provider to the relay, never here; the old refresh token is sent once to Google's revocation endpoint and an uncertain answer probed with the old access token while it is unexpired; the relay's private key is sealed to the personal recovery key in its recovery file and sent to Railway's API, never printed; administrator requests are signed with the store key | same | OK |
+| 59 | `team_relay/client.py` the relay transport, `lib/google-ads-access` relay mode | a | a connector's call signed with the relay key; no provider credential is sent from or received by this computer; while the relay answers credential-not-serving, the store's copy is still used | same | OK |
 
-Tests: rows 1 to 11 and 29 to 31 in `tests/test_secret_store_*.py`; rows 13 to 28 in `test_secret_store_round8.py`
+Tests: rows 56 in `test_secret_store_share.py`; rows 57 to 59 in `test_team_relay.py` and `google-ads-access`'s
+tests; the copied modules in `test_relay_copies.py`. Rows 1 to 11 and 29 to 31 in `tests/test_secret_store_*.py`; rows 13 to 28 in `test_secret_store_round8.py`
 and `test_secret_store_round9.py`, and row 15 also in `test_secret_store_rollback_static.py`; rows 4, 8 and 52 in `test_secret_store_restore_cli.py`,
 `test_secret_store_replace_signin.py` and `test_secret_store_replace_team.py`; rows 30 and 50 in
 `test_token_endpoint.py`; row 53 in `test_secret_store_typed_write.py` (the pending-write records and their replay)
@@ -471,6 +476,52 @@ Through these none does:
 | `secret_store/signing.py` | signatures over documents and sealed objects, with the key object | `canonical.py`: dumps (the bytes signed or verified) |
 | `skill_version.py` | the skill's version and a hash of its own files; `git` for the commit and branch | none |
 | `team_github.py` | `gh` calls with a repository and a login name; `gh` keeps its own sign-in | none |
+
+### The team credential relay's side
+
+`team_relay/` (design team-credential-relay.md): each computer's relay key, the relay document, the transport,
+the revocation of an old grant, the relay's own key, and the `relay-*` commands of `brain_secrets.py`, which hands
+every word starting `relay-` to `team_relay/commands.py`. `team_relay/envelope.py` is the same file as the relay's
+`relay/envelope.py`; `team_relay/relay-copies.json` pins it and every other module the relay copies.
+
+| Id | Function | Kind | What | Reviewed direct callers |
+|---|---|---|---|---|
+| relay-keychain-read | `team_relay/keys.py` `load` | primitive | this computer's relay signing key | `team_relay/client.py` `for_this_computer`; `team_relay/commands.py` `relay_admit`, `relay_enrol` |
+| relay-keychain-write | `team_relay/keys.py` `create_relay_key` | both | a new relay signing key, made and stored | `team_relay/commands.py` `relay_admit`, `relay_enrol` |
+| relay-seal | `team_relay/envelope.py` `seal` | sink | a credential's fields sealed to the relay's key | `team_relay/commands.py` `relay_put` |
+| relay-open | `team_relay/envelope.py` `open_` | primitive | a credential's fields, opened by the relay only | none in the brain |
+| relay-key-make | `team_relay/keygen.py` `relay_keygen` | both | the relay's new private key | `team_relay/commands.py` `main` |
+| relay-railway | `team_relay/keygen.py` `set_railway_variable` | sink | the relay's private key sent to Railway's API | `team_relay/keygen.py` `relay_keygen` |
+| relay-recovery-open | `team_relay/keygen.py` `open_recovery` | primitive | the relay's private key from its recovery file | none yet (relay-restore is not built) |
+| revoke-probe | `team_relay/revoke.py` `http_status` | sink | an old access token sent to Google's token information endpoint | `team_relay/commands.py` `relay_revoke` |
+
+`team_relay/revoke.py` `google_revoke` is a reviewed caller of token-endpoint, `team_relay/keygen.py`
+`seal_recovery` of seal, `open_recovery` of open, and `secret_store/share.py` `share.build` of seal and `accept` of
+open.
+
+| Operation | Uses | Note |
+|---|---|---|
+| `share`, `share-accept` (`brain_secrets.py`) | keychain-read, open, hpke-open, seal, hpke-seal; may also package | two members' stores: `test_secret_store_share.py` |
+| `relay-enrol`, `relay-admit` | keychain-read, relay-keychain-read, a pull; may also relay-keychain-write | a relay key made when the computer has none |
+| `relay-init`, `relay-record`, `relay-status`, `relay-log`, `relay-disable`, `relay-enable`, `relay-delete`, `relay-serve`, `relay-connect` | keychain-read, a pull | signed administrator requests and relay.json; no value |
+| `relay-put` | keychain-read, window, relay-seal, hpke-seal, a pull | typed values sealed before they leave |
+| `relay-revoke` | keychain-read, token-endpoint, a pull; may also revoke-probe | the old refresh token sent once |
+| `relay-keygen` | relay-key-make, relay-railway, keychain-read, seal, hpke-seal, a pull | the recovery file and Railway's variable |
+
+None has a runtime scenario: each needs the deployed relay or a GitHub remote for brain-team-relay, which the
+scenarios' world does not have; `test_team_relay.py` runs their logic with a stand-in relay.
+
+| Module | What passes through it in the clear |
+|---|---|
+| `secret_store/share.py` | a shared login's values and kinds |
+| `team_relay/__init__.py` | none: the package's description |
+| `team_relay/client.py` | the signing keys as objects; requests and answers of provider calls, never a provider credential |
+| `team_relay/commands.py` | typed values (relay-put), sealed before they leave; an old sign-in's tokens (relay-revoke) |
+| `team_relay/document.py` | none of its own: public keys, records and signatures, signed with the store key object |
+| `team_relay/envelope.py` | a credential's fields, sealed and (at the relay) opened |
+| `team_relay/keygen.py` | the relay's private key |
+| `team_relay/keys.py` | this computer's relay signing key |
+| `team_relay/revoke.py` | an old refresh token and access token |
 
 ### The limit
 

@@ -9,10 +9,10 @@ metadata:
   contract: /CONTRACT.md
   status: active
   scope: shared
-  version: 0.2.1
+  version: 0.3.0
   project_ref: /memory/projects/credential-management
   created: 2026-08-04T16:11:53+10:00
-  updated: 2026-11-26T19:54:00+10:00
+  updated: 2026-11-27T17:38:43+10:00
 ---
 
 # Credential Management
@@ -622,6 +622,52 @@ retried. A failure is one of three sorts:
 | Not sent | the connection, proxy tunnel or TLS handshake failed before any byte of the request | the journal record is removed; the next attempt refreshes normally |
 | Refused | the provider answered HTTP 400 or 401 with an OAuth error body | the record is removed; `invalid_grant` raises the connector's sign-in-needed error, and a browser sign-in is allowed |
 | Uncertain | anything else after the request was written: a time-out, a reset, HTTP 5xx, any other 4xx including 429, an unreadable answer | the record stays `calling` and the sign-in is blocked, never retried with the old token; end it with `replace-signin` |
+
+### Share one of your own logins
+
+A member may share their own login to a provider's web pages (their user on Meta Business Suite, Google
+Ads, HighLevel or a WordPress admin, kept in their personal store) with another member, without an
+administrator:
+
+```powershell
+python shared/skills/manage-credentials/scripts/brain_secrets.py share --entry "Ads login" --with OTHERLOGIN
+```
+
+The entry is sealed to every computer the other member has in the team policy and written as a share
+file of the team repository, signed by the sharer's computer. The other member lists what is waiting
+with `share-accept` and takes one with `share-accept --file PATH [--as NAME]`, which writes it into
+their personal store and removes the file. A shared login cannot be taken back once read: to end it,
+change its password at the provider. An entry the team credential relay holds is refused: the team's
+app credentials are given to a group only by an administrator, through the relay.
+
+## The team credential relay
+
+Shared app credentials (OAuth clients and grants, developer tokens, the Meta System User token, the
+WordPress application passwords) are held by the team credential relay, a small service of the team's
+own (repository `brain-relay`), and used through it, so no member's computer ever holds one. The design
+is the owner's `team-credential-relay.md`; the brain's side is `scripts/team_relay/`.
+
+- Each computer has a relay signing key in the same keychain as its store keys. `relay-enrol` makes it
+  and writes an enrolment (a public key, signed by the computer's store key); an administrator adds it
+  with `relay-admit --enrolment FILE` (or `relay-admit --this-computer` on their own).
+- The relay document `relay.json` lives in the private repository `brain-team-relay`, checked out
+  beside the team store's clone. It names the relay's address and public key, the relay's
+  administrators, each computer's relay key, and each credential's record: the groups that may use it,
+  its hosts, its allowed and denied method-and-path patterns, the ids a path may name, and whether it is
+  relayed. `relay-init` writes the first one; `relay-record --credential C --file RECORD.json` sets a
+  record, checked at the relay before it is pushed.
+- A credential enters only fresh and only at the relay: `relay-put` for fields typed into the masked
+  window (sealed to the relay's key on this computer), `relay-connect` for a browser sign-in at the relay
+  itself. The relay tests it, then `relay-revoke` revokes the old grant at the provider and shows it
+  dead, the store's copy is deleted with `delete --entry E --field F`, and `relay-serve` starts serving.
+  Until then connectors keep using the store's copy; after it, `gads.py connect` and the like refuse.
+- `relay-status`, `relay-log`, `relay-disable`/`relay-enable` (`--credential` or `--person`, at once)
+  and `relay-delete` are the administrator's tools; `relay-keygen` makes the relay's own key, writes its
+  recovery file sealed to the personal recovery key and sets it in Railway.
+
+A connector in relay mode (`google-ads-access` first) passes the method, URL, headers, body and a token
+selector to `team_relay/client.py`; the relay adds the credential and filters the answer. When the relay
+cannot be reached, every relayed call fails at once and names the relay's address.
 
 ## Change the recovery passphrase
 
