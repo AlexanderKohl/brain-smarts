@@ -46,6 +46,8 @@ def _git(clone: Path, *args: str, check: bool = True) -> subprocess.CompletedPro
 def pull(clone: Path) -> None:
     if not (clone / ".git").is_dir():
         raise SecretStoreError(f"brain-team-relay is not checked out at {clone}")
+    if _git(clone, "ls-remote", "--heads", "origin", check=False).stdout.strip() == b"":
+        return  # the repository is still empty: relay-init makes its first commit
     _git(clone, "pull", "--ff-only", "-q")
 
 
