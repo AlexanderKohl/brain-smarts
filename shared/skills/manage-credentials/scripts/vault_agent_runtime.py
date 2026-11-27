@@ -28,7 +28,20 @@ def runtime_base() -> Path:
     """
     if os.name == "nt":
         return Path(os.environ.get("USERPROFILE") or Path.home()) / ".portable-ai-brain" / "vault-agent"
+    if sys.platform == "darwin" and not os.environ.get("XDG_RUNTIME_DIR"):
+        # A sandboxed app is given a home of its own (~/Library/Containers/<app>/Data), where it would never
+        # find the agent that Terminal and the login item started: it uses the user's real home from the
+        # user database. Any other HOME is kept, so a run that sets HOME (the rehearsal) stays contained.
+        import pwd
+
+        home = _outside_the_sandbox(Path(pwd.getpwuid(os.getuid()).pw_dir), Path.home())
+        return home / ".cache" / "PortableAIBrain" / "vault-agent"
     return Path(os.environ.get("XDG_RUNTIME_DIR") or (Path.home() / ".cache")) / "PortableAIBrain" / "vault-agent"
+
+
+def _outside_the_sandbox(real: Any, home: Any) -> Any:
+    """HOME, unless it is a sandboxed app's own home under the real one's Library/Containers."""
+    return real if (real / "Library" / "Containers") in home.parents else home
 
 
 def runtime_dir() -> Path:
@@ -117,10 +130,14 @@ def make_private(path: Path | str) -> None:
     on that descriptor: its file system must be the ext family or tmpfs (fstatfs), where the kernel
     checks the mode and the POSIX access lists; those lists are removed, and any other attribute in
     the system. namespace or with "acl" in its name refuses; then mode 0700 or 0600, owner the
-    effective user, a folder or a regular file as expected. macOS and every other system are refused.
+    effective user, a folder or a regular file as expected. macOS: the same, but the file system must be
+    APFS or HFS+ without "ignore ownership" (fstatfs), and the extended access list (the one `ls -le`
+    shows) is removed and proved gone; an attribute with "acl" in its name refuses. Every other
+    system is refused.
 
     Run for real: Windows (NTFS) and Linux (in WSL: ext4 and tmpfs, a second user id refused after
-    the proof, 9p refused). Limits: the proof covers the folder and the file, not the folder's
+    the proof, 9p refused). macOS: tests/test_state_private_posix.py is to be run on a Mac before the
+    first person joins from one (TASK-alec-2026-0365). Limits: the proof covers the folder and the file, not the folder's
     ancestors (the user's profile, private by the system's default), and a client does not prove the
     file again when it reads it; both are to be looked at again if the runtime folder ever becomes
     configurable. SYSTEM reads through its entry, members of the Administrators group can take
@@ -331,9 +348,11 @@ def _windows_prove(path: Path) -> None:
         _local_free(api, descriptor, path)
 
 
-# POSIX: Linux only, run for real in WSL (ext4, tmpfs, 9p refused); every other system refused (plan R16).
+# POSIX: Linux, run for real in WSL (ext4, tmpfs, 9p refused), and macOS (APFS, HFS+); every other system
+# refused (plan R16, TASK-alec-2026-0365).
 def _posix(path: Path, change: bool) -> None:
-    if not sys.platform.startswith("linux"):
+    mac = sys.platform == "darwin"
+    if not (mac or sys.platform.startswith("linux")):
         raise NotPrivate(path, f"the proof of a private state file has never been run on {sys.platform}, so the "
                                "Vault Agent does not start there")
     try:
@@ -348,13 +367,13 @@ def _posix(path: Path, change: bool) -> None:
     except OSError as exc:
         raise NotPrivate(path, f"it cannot be opened without following a link ({exc.strerror})") from exc
     try:
-        _admitted_file_system(path, descriptor)
+        (_mac_file_system if mac else _admitted_file_system)(path, descriptor)
         if change:
             try:
                 os.fchmod(descriptor, 0o700 if folder else 0o600)
             except OSError as exc:
                 raise NotPrivate(path, f"its mode cannot be set ({exc.strerror})") from exc
-        _linux_lists(path, descriptor, change)
+        (_mac_lists if mac else _linux_lists)(path, descriptor, change)
         info = os.fstat(descriptor)
         if info.st_uid != os.geteuid():
             raise NotPrivate(path, "its owner is not this user")
@@ -437,6 +456,131 @@ def _linux_lists(path: Path, descriptor: int, change: bool) -> None:
         names = _linux_names(path, descriptor)
     for name in names:
         if name.startswith("system.") or "acl" in name.lower():
+            raise NotPrivate(path, f"it carries the attribute {name}, which may grant access its mode does not show")
+
+
+# -- macOS ---------------------------------------------------------------------------------------------
+# File systems on which the kernel checks the owner, the mode and the extended access list: APFS and HFS+,
+# unless mounted with "ignore ownership" (MNT_IGNORE_OWNERSHIP, the default for removable drives).
+_MAC_FILE_SYSTEMS = {"apfs": "APFS", "hfs": "HFS+"}
+_MNT_IGNORE_OWNERSHIP = 0x00200000
+_ACL_TYPE_EXTENDED = 0x00000100
+_ACL_FIRST_ENTRY = 0
+# Attribute names with "acl" in them that grant no access: com.apple.macl is a privacy (TCC) tag.
+_MAC_NOT_ACCESS_LISTS = frozenset({"com.apple.macl"})
+
+
+@functools.lru_cache(maxsize=None)
+def _mac_libc() -> SimpleNamespace:
+    import ctypes
+
+    libc = ctypes.CDLL("/usr/lib/libSystem.B.dylib", use_errno=True)
+    # struct statfs with 64-bit inodes: the plain symbol on Apple silicon, the $INODE64 one on Intel.
+    fstatfs = libc["fstatfs$INODE64"] if os.uname().machine == "x86_64" else libc["fstatfs"]
+    p = ctypes.c_void_p
+    return SimpleNamespace(
+        fstatfs=_bind(fstatfs, ctypes.c_int, ctypes.c_int, p),
+        acl_get_fd_np=_bind(libc.acl_get_fd_np, p, ctypes.c_int, ctypes.c_int),
+        acl_get_entry=_bind(libc.acl_get_entry, ctypes.c_int, p, ctypes.c_int, ctypes.POINTER(p)),
+        acl_init=_bind(libc.acl_init, p, ctypes.c_int),
+        acl_set_fd_np=_bind(libc.acl_set_fd_np, ctypes.c_int, ctypes.c_int, p, ctypes.c_int),
+        acl_free=_bind(libc.acl_free, ctypes.c_int, p),
+        flistxattr=_bind(libc.flistxattr, ctypes.c_ssize_t, ctypes.c_int, p, ctypes.c_size_t, ctypes.c_int),
+    )
+
+
+def _mac_statfs_fields(data: bytes) -> tuple[int, int, str]:
+    """f_bsize, f_flags and f_fstypename of a macOS struct statfs (64-bit inodes): offsets 0, 64 and 72."""
+    import struct
+
+    bsize, = struct.unpack_from("=I", data, 0)
+    flags, = struct.unpack_from("=I", data, 64)
+    name = data[72:88]
+    if b"\0" not in name:
+        raise ValueError("f_fstypename is not terminated")
+    return bsize, flags, name.split(b"\0", 1)[0].decode("ascii", "replace")
+
+
+def _mac_file_system(path: Path, descriptor: int) -> None:
+    import ctypes
+
+    buffer = ctypes.create_string_buffer(4096)  # struct statfs is 2168 bytes
+    if _mac_libc().fstatfs(descriptor, buffer) != 0:
+        raise NotPrivate(path, f"its file system cannot be read (fstatfs error {ctypes.get_errno()})")
+    try:
+        bsize, flags, name = _mac_statfs_fields(buffer.raw)
+    except ValueError as exc:
+        raise NotPrivate(path, f"its file system cannot be read ({exc})") from exc
+    if bsize != os.fstatvfs(descriptor).f_frsize:  # the layout read is not the one this code expects
+        raise NotPrivate(path, "its file system cannot be read (struct statfs has an unexpected layout)")
+    if name not in _MAC_FILE_SYSTEMS:
+        raise NotPrivate(path, f"its file system ({name or 'unnamed'}) cannot be proved private")
+    if flags & _MNT_IGNORE_OWNERSHIP:
+        raise NotPrivate(path, "its volume ignores ownership, so its mode protects nothing")
+
+
+def _mac_acl_entries(path: Path, descriptor: int) -> bool:
+    """True when the extended access list holds at least one entry."""
+    import ctypes
+
+    libc = _mac_libc()
+    ctypes.set_errno(0)
+    acl = libc.acl_get_fd_np(descriptor, _ACL_TYPE_EXTENDED)
+    if not acl:
+        if ctypes.get_errno() == errno.ENOENT:
+            return False
+        raise NotPrivate(path, f"its access list cannot be read (error {ctypes.get_errno()})")
+    try:
+        entry = ctypes.c_void_p()
+        ctypes.set_errno(0)
+        if libc.acl_get_entry(acl, _ACL_FIRST_ENTRY, ctypes.byref(entry)) == 0:
+            return True
+        if ctypes.get_errno() in (0, errno.EINVAL):  # an empty list: no first entry
+            return False
+        raise NotPrivate(path, f"its access list cannot be read (error {ctypes.get_errno()})")
+    finally:
+        libc.acl_free(acl)
+
+
+def _mac_attribute_names(path: Path, descriptor: int) -> list[str]:
+    """The extended attribute names through flistxattr (os.listxattr exists only on Linux)."""
+    import ctypes
+
+    libc = _mac_libc()
+    for _attempt in range(3):  # the list can grow between the two calls
+        size = libc.flistxattr(descriptor, None, 0, 0)
+        if size < 0:
+            raise NotPrivate(path, f"its extended attributes cannot be listed (error {ctypes.get_errno()})")
+        if size == 0:
+            return []
+        buffer = ctypes.create_string_buffer(size)
+        got = libc.flistxattr(descriptor, buffer, size, 0)
+        if got >= 0:
+            return [name.decode("utf-8", "replace") for name in buffer.raw[:got].split(b"\0") if name]
+        if ctypes.get_errno() != errno.ERANGE:
+            raise NotPrivate(path, f"its extended attributes cannot be listed (error {ctypes.get_errno()})")
+    raise NotPrivate(path, "its extended attributes kept changing while they were listed")
+
+
+def _mac_lists(path: Path, descriptor: int, change: bool) -> None:
+    import ctypes
+
+    if _mac_acl_entries(path, descriptor):
+        if not change:
+            raise NotPrivate(path, "it has an access list, which may grant access its mode does not show")
+        libc = _mac_libc()
+        empty = libc.acl_init(0)
+        if not empty:
+            raise NotPrivate(path, f"an empty access list cannot be made (error {ctypes.get_errno()})")
+        try:
+            if libc.acl_set_fd_np(descriptor, empty, _ACL_TYPE_EXTENDED) != 0:
+                raise NotPrivate(path, f"its access list cannot be removed (error {ctypes.get_errno()})")
+        finally:
+            libc.acl_free(empty)
+        if _mac_acl_entries(path, descriptor):
+            raise NotPrivate(path, "its access list is still there after it was removed")
+    for name in _mac_attribute_names(path, descriptor):
+        if "acl" in name.lower() and name not in _MAC_NOT_ACCESS_LISTS:
             raise NotPrivate(path, f"it carries the attribute {name}, which may grant access its mode does not show")
 
 

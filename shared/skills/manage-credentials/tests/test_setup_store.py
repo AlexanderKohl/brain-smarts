@@ -79,6 +79,7 @@ class FakeSetup(setup_store.Setup):
         self.personal = FakeStore(root, "personal")
         self.team = FakeStore(root, "team", ["Ops API#oauth_token_json", "Ops API"])
         self.lines, self.now = [], 0.0
+        kw.setdefault("platform", "win32")  # the tray; test_setup_store_mac.py plays macOS
         super().__init__(root, say=self.lines.append, ask=lambda _prompt: "ab" * 32, clock=self.clock_now,
                          sleep=self.advance, **kw)
 
@@ -107,6 +108,9 @@ class FakeSetup(setup_store.Setup):
 
     def start_agent(self):
         self.log.append(("start_agent", self.config().get("enabled")))
+
+    def has_tk(self):
+        return True
 
     def migrate(self, argv):
         self.log.append(("migrate", tuple(argv)))

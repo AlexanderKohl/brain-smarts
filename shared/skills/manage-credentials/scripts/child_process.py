@@ -13,6 +13,7 @@ import sys
 from typing import Any
 
 NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+DEVNULL, STDOUT = subprocess.DEVNULL, subprocess.STDOUT  # for a caller that may not import subprocess
 
 
 def _flags(options: dict[str, Any]) -> dict[str, Any]:

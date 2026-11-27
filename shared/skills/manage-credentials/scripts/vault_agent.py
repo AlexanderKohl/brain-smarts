@@ -34,6 +34,8 @@ from secret_store.errors import SecretStoreError
 
 # The errors a locked file gives on Windows (EACCES, EDEADLOCK) and on POSIX (EACCES, EAGAIN).
 LOCK_BUSY_ERRNOS = {errno.EACCES, errno.EAGAIN, errno.EDEADLK}
+# The longest socket path accepted: sun_path holds 104 bytes with its terminator on macOS, 108 on Linux.
+SOCKET_PATH_LIMIT = 103 if sys.platform == "darwin" else 107
 # Operations answered in secret_store/broker_backend.py: vault-only ones and the store's refresh ones.
 from secret_store.broker_backend import AGENT_OPS, VAULT_OPS, agent_operation  # noqa: E402
 
@@ -394,6 +396,10 @@ class VaultAgent:
         self._acquire_singleton()
         address = ipc_address()
         if isinstance(address, str) and not address.startswith("\\\\.\\pipe\\"):
+            if len(os.fsencode(address)) > SOCKET_PATH_LIMIT:
+                raise CredentialError(f"Vault Agent cannot listen at {address}: the path is longer than the "
+                                      f"{SOCKET_PATH_LIMIT} bytes a socket's address may have; set XDG_RUNTIME_DIR "
+                                      "to a shorter folder")
             sock = Path(address)
             if sock.exists():
                 sock.unlink()
@@ -737,6 +743,27 @@ def _exit_now(code: int) -> None:
     """End the process at once (the last resort after a failed proof; tests replace it)."""
     os._exit(code)
 
+def _stop_on_terminate(agent: Any) -> None:
+    """On macOS and Linux, where the agent runs without the tray: SIGTERM shuts it down as the tray's Quit
+    does. The shutdown runs in a thread of its own, never inside the handler, which interrupts the main
+    thread that may hold the agent's locks. As after a failed proof, the accept loop is then woken, and
+    the process ends at once when shutdown did not drain or the loop does not end (closing a socket from
+    another thread does not reliably end a blocked accept on macOS)."""
+    if os.name == "nt":
+        return
+    import signal
+
+    address = ipc_address()
+
+    def finish() -> None:
+        agent._after_the_fence(agent.shutdown(), address)
+
+    def stop(_signum: int, _frame: Any) -> None:
+        threading.Thread(target=finish, name="vault-agent-terminate").start()
+
+    signal.signal(signal.SIGTERM, stop)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--vault", help="Override the portable vault path")
@@ -755,6 +782,7 @@ def main() -> int:
         return 2
     try:
         if args.operation == "serve":
+            _stop_on_terminate(agent)
             agent.serve_forever()
             return 0
     except (CredentialError, NotPrivate) as exc:

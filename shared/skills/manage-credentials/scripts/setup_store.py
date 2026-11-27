@@ -9,8 +9,9 @@ command can simply be run again after an interruption. In order:
  2. Install the store's requirements (requirements.txt) that are missing; an installed package keeps
     its version.
  3. Read this computer's GitHub login through gh: the person's name in every store.
- 4. When the old vault has not been migrated: have the Vault Agent running and unlocked on it (the
-    agent's own passphrase window; the passphrase never passes through this command).
+ 4. When the old vault has not been migrated: have the Vault Agent running and unlocked on it (on
+    Windows the tray's own passphrase window; on macOS and Linux, where the agent runs without a tray,
+    vaultctl.py unlock asks in this terminal; the passphrase never passes through this command).
  5. Switch the store on in this brain's configuration.
  6. Create the personal store; its recovery words are shown once, in a local window.
  7. Move the old vault's entries into the store (migrate_to_store.py), the names listed first.
@@ -19,7 +20,8 @@ command can simply be run again after an interruption. In order:
     request enrolment, show the six words to send back, and wait until the administrator's
     computer has enrolled and admitted this one (brain_secrets.py invite).
  9. Restart the Vault Agent when it does not yet serve the store (and, with --join, the team store):
-    the person quits it from its tray icon, and this command starts it again.
+    on Windows the person quits it from its tray icon; on macOS and Linux this command stops it. On
+    macOS a login item (~/Library/LaunchAgents) then starts it at every login.
 
 It never runs the rehearsal (rehearsal/README.md): that tests a new version of the store's code,
 before its first real cut-over, and is the work of whoever changed it. No secret value is printed."""
@@ -42,6 +44,19 @@ import team_github  # noqa: E402
 SCRIPTS = Path(__file__).resolve().parent
 AGENT_WAIT = 15 * 60  # seconds to wait for the person to unlock or quit the Vault Agent
 POLL = 2.0
+LOGIN_ITEM = "com.portableaibrain.vaultagent"
+
+
+def _xml(text: str) -> str:
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _applies(marker: str, platform: str) -> bool:
+    """The one environment marker requirements.txt uses: sys_platform == "..." or != "..."."""
+    found = re.fullmatch(r"""\s*sys_platform\s*(==|!=)\s*["']([^"']+)["']\s*""", marker)
+    if not found:
+        raise SetupError(f"requirements.txt has a marker setup cannot read: {marker.strip()}")
+    return (platform == found.group(2)) == (found.group(1) == "==")
 
 
 class SetupError(RuntimeError):
@@ -53,9 +68,17 @@ class Setup:
 
     def __init__(self, root: Path, say: Callable[[str], None] = print, ask: Callable[[str], str] = input,
                  clock: Callable[[], float] = time.monotonic, sleep: Callable[[float], None] = time.sleep,
-                 github: Any = team_github) -> None:
+                 github: Any = team_github, platform: str = sys.platform) -> None:
         self.root, self.say, self.ask, self.clock, self.sleep, self.github = root, say, ask, clock, sleep, github
+        self.platform = platform  # "win32": the tray; anything else: the agent without a tray
         self.number = 0
+        self.agent_process: Any = None  # the agent this command started without a tray, and its log
+        self.agent_log: Path | None = None
+        self.agent_log_start = 0
+
+    @property
+    def tray(self) -> bool:
+        return self.platform == "win32"
 
     # -- the outside world ------------------------------------------------------------------------
     def run(self, command: list[str]) -> int:
@@ -76,9 +99,86 @@ class Setup:
             return None
 
     def start_agent(self) -> None:
-        pythonw = Path(sys.executable).with_name("pythonw.exe")
-        interpreter = str(pythonw if pythonw.exists() else sys.executable)
-        child_process.popen([interpreter, str(SCRIPTS / "vault_tray.py")], cwd=str(self.root))
+        """Windows: the tray. macOS and Linux: vault_agent.py serve, in a session of its own so that it
+        outlives this terminal; what it prints goes to the tray log beside its state file."""
+        if self.tray:
+            pythonw = Path(sys.executable).with_name("pythonw.exe")
+            interpreter = str(pythonw if pythonw.exists() else sys.executable)
+            child_process.popen([interpreter, str(SCRIPTS / "vault_tray.py")], cwd=str(self.root))
+            return
+        from vault_agent_runtime import tray_log_path
+        self.agent_log = tray_log_path()
+        self.agent_log_start = self.agent_log.stat().st_size if self.agent_log.exists() else 0
+        with self.agent_log.open("ab") as log:
+            self.agent_process = child_process.popen([sys.executable, str(SCRIPTS / "vault_agent.py"), "serve"], cwd=str(self.root),
+                                stdin=child_process.DEVNULL, stdout=log, stderr=child_process.STDOUT,
+                                start_new_session=True)
+
+    def agent_ended(self) -> None:
+        """Stop with the agent's own words when the agent this command started has already ended (a
+        refused start: its output went to the log, not to this terminal)."""
+        process = self.agent_process
+        if process is None or process.poll() is None:
+            return
+        self.agent_process = None
+        said = ""
+        if self.agent_log is not None and self.agent_log.exists():
+            with self.agent_log.open("rb") as log:
+                log.seek(self.agent_log_start)
+                said = log.read().decode("utf-8", "replace").strip()
+        raise SetupError(f"the Vault Agent ended at once (code {process.returncode})"
+                         + (f": {said[-1500:]}" if said else f"; see {self.agent_log}"))
+
+    def agent_up(self) -> bool:
+        self.agent_ended()
+        return self.agent_status() is not None
+
+    def stop_agent(self) -> None:
+        """macOS and Linux: SIGTERM to the agent named in its state file (vault_agent.py shuts down on it),
+        only when that process is a Vault Agent: a state file can outlive its agent, and its pid be reused."""
+        import os
+        import signal
+        from vault_agent_runtime import read_state
+        pid = int((read_state() or {}).get("pid") or 0)
+        if pid <= 0:
+            return
+        shown = child_process.run(["ps", "-ww", "-p", str(pid), "-o", "command="], capture_output=True)
+        if b"vault_agent.py" not in shown.stdout:
+            return
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            pass  # gone already, or not ours to stop
+
+    def unlock_in_terminal(self) -> int:
+        """macOS and Linux: vaultctl.py unlock, with this terminal, so its hidden prompt reads the passphrase."""
+        return child_process.run([sys.executable, str(SCRIPTS / "vaultctl.py"), "unlock"], cwd=str(self.root)).returncode
+
+    def has_tk(self) -> bool:
+        from importlib.util import find_spec
+        return find_spec("_tkinter") is not None  # the compiled part a Python without Tk lacks
+
+    def login_item(self) -> None:
+        """macOS: a launchd login item that starts the agent at every login (the tray's Startup shortcut on
+        Windows). Only written; this command starts the agent itself."""
+        from vault_agent_runtime import tray_log_path
+        log = str(tray_log_path())
+        arguments = "".join(f"\n    <string>{_xml(item)}</string>"
+                            for item in (sys.executable, str(SCRIPTS / "vault_agent.py"), "serve"))
+        plist = (
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
+            '<plist version="1.0">\n<dict>\n'
+            f'  <key>Label</key>\n  <string>{LOGIN_ITEM}</string>\n'
+            f'  <key>ProgramArguments</key>\n  <array>{arguments}\n  </array>\n'
+            f'  <key>WorkingDirectory</key>\n  <string>{_xml(str(self.root))}</string>\n'
+            '  <key>RunAtLoad</key>\n  <true/>\n'
+            f'  <key>StandardOutPath</key>\n  <string>{_xml(log)}</string>\n'
+            f'  <key>StandardErrorPath</key>\n  <string>{_xml(log)}</string>\n'
+            '</dict>\n</plist>\n')
+        path = Path.home() / "Library" / "LaunchAgents" / f"{LOGIN_ITEM}.plist"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(plist, "utf-8")
 
     def migrate(self, argv: list[str]) -> int:
         import migrate_to_store
@@ -170,7 +270,10 @@ class Setup:
         from importlib import metadata
         missing = []
         for line in (SCRIPTS.parent / "requirements.txt").read_text("utf-8").splitlines():
-            requirement = line.split("#")[0].strip()
+            requirement, _semicolon, marker = line.split("#")[0].strip().partition(";")
+            requirement = requirement.strip()
+            if marker and not _applies(marker, self.platform):
+                continue  # the tray's packages, on a computer without the tray
             name = re.split(r"[<>=!~;\[ ]", requirement, maxsplit=1)[0]
             if not name:
                 continue
@@ -181,6 +284,12 @@ class Setup:
         return missing
 
     def requirements(self) -> None:
+        if not self.has_tk():
+            version = f"{sys.version_info.major}.{sys.version_info.minor}"
+            hint = (f"brew install python-tk@{version}" if self.platform == "darwin"
+                    else "install your system's python3-tk package")
+            raise SetupError(f"this Python has no tkinter, which shows the store's words windows; {hint}, "
+                             "then run again")
         missing = self.missing_requirements()
         if not missing:
             self.skip("Installing the store's requirements")
@@ -212,9 +321,15 @@ class Setup:
                 self.set_config(enabled=False)
             if status is None:
                 self.start_agent()
-                self.say("    The Vault Agent is starting: type the old vault's passphrase in its window.")
-            elif not status.get("unlocked"):
+                if self.tray:
+                    self.say("    The Vault Agent is starting: type the old vault's passphrase in its window.")
+            elif not status.get("unlocked") and self.tray:
                 self.say("    Unlock the Vault Agent from its tray icon with the old vault's passphrase.")
+            if not self.tray and not (status or {}).get("unlocked"):
+                self.wait_for(self.agent_up, "the Vault Agent to start", limit=60)
+                self.say("    Type the old vault's passphrase (nothing shows while you type):")
+                if self.unlock_in_terminal() != 0:
+                    raise SetupError("the old vault was not unlocked (see the lines above); run this command again")
             self.wait_for(lambda: bool((self.agent_status() or {}).get("unlocked")), "the Vault Agent to unlock")
 
     def switch_on(self, person: str) -> None:
@@ -266,7 +381,8 @@ class Setup:
         with self.step("Adding this computer to your personal store"):
             if not personal.pin_path.exists():
                 self.say("    On a computer that already has your store, in its brain folder, run:")
-                self.say("    python shared\\skills\\manage-credentials\\scripts\\brain_secrets.py add-computer")
+                self.say("    python " + str(Path("shared", "skills", "manage-credentials", "scripts",
+                                                 "brain_secrets.py")) + " add-computer")
                 fingerprint = self.ask("Paste the personal fingerprint it shows: ").strip()
                 if not fingerprint:
                     raise SetupError("no fingerprint was given; nothing was requested")
@@ -339,11 +455,18 @@ class Setup:
             return
         with self.step("Restarting the Vault Agent on the store"):
             if self.agent_status() is not None:
-                self.say("    Quit the Vault Agent: right-click its icon by the clock and choose Quit. "
-                         "It starts again by itself.")
-                self.wait_for(lambda: self.agent_status() is None, "the Vault Agent to quit")
+                if self.tray:
+                    self.say("    Quit the Vault Agent: right-click its icon by the clock and choose Quit. "
+                             "It starts again by itself.")
+                else:
+                    self.stop_agent()
+                self.wait_for(lambda: self.agent_status() is None, "the Vault Agent to quit",
+                              limit=AGENT_WAIT if self.tray else 60)
+            if self.platform == "darwin":
+                self.login_item()
+                self.say("    The Vault Agent now starts by itself at every login.")
             self.start_agent()
-            self.wait_for(serving, "the Vault Agent to start on the store", limit=120)
+            self.wait_for(lambda: self.agent_up() and serving(), "the Vault Agent to start on the store", limit=120)
 
     def entries(self, groups: list[str]) -> None:
         personal, team = self.stores()

@@ -9,7 +9,7 @@ metadata:
   contract: /CONTRACT.md
   status: active
   scope: shared
-  version: 0.1.0
+  version: 0.2.0
   project_ref: /memory/projects/credential-management
   created: 2026-08-04T16:11:53+10:00
   updated: 2026-11-26T19:54:00+10:00
@@ -206,6 +206,26 @@ pythonw shared\skills\manage-credentials\scripts\vault_tray.py
 Tray menu: Unlock… / Lock / Status… / Quit. After reboot/login the Startup shortcut (and the logon task, when one could be registered) starts the tray app automatically.
 
 A start that finds the agent's lock busy retries for 10 seconds before it concludes another agent is running. When a healthy agent already answers, the second tray ends quietly with no dialog. Every other start failure is shown with its real cause. The tray has no console, so each start, quiet exit and failure is also written to `%USERPROFILE%\.portable-ai-brain\vault-agent\tray.log` (never secret material; the file is cut back once it passes 64 KiB). When the icon is missing after login, read that file first.
+
+### On macOS and Linux
+
+The tray is Windows only. On macOS and Linux the agent runs without it, as `python3
+shared/skills/manage-credentials/scripts/vault_agent.py serve`; `setup_store.py` starts it in a session
+of its own (its output goes to `tray.log` in the runtime folder, `~/.cache/PortableAIBrain/vault-agent`
+unless `XDG_RUNTIME_DIR` is set), unlocks the old vault with `vaultctl.py unlock` in the terminal, and
+stops it with SIGTERM, on which it shuts down as the tray's Quit does. On macOS setup also writes the
+login item `~/Library/LaunchAgents/com.portableaibrain.vaultagent.plist`, which starts the agent at
+every login; on the store it needs no passphrase. The tray's packages (pystray, Pillow) are installed
+on Windows only. The words windows need tkinter: on a Homebrew Python, `brew install python-tk@3.X`
+for its version.
+
+The agent starts only where its runtime folder can be proved private to the user. On macOS that is
+APFS or HFS+ without "ignore ownership" (the default of removable drives); the mode is set to 0700 or
+0600 and the extended access list (`ls -le`) is removed and proved gone. On Linux it is the ext family
+and tmpfs. Every other system refuses. The macOS proof is checked on every system with the C library
+replaced (tests/test_state_private_mac.py); its real calls run on a Mac with `python3
+tests/run_all.py --pattern test_state_private_posix.py`, which is run on a Mac before the first person
+uses the agent there (TASK-alec-2026-0365).
 
 Before prompting for the recovery passphrase, check the tray colour or run `python shared/skills/manage-credentials/scripts/vaultctl.py status`. If already unlocked, reuse that same tray agent and do not prompt again.
 
@@ -477,9 +497,10 @@ With the store on the old vault is closed: no path reads or writes a credential 
 
 `python setup_store.py [--join TEAM_REPOSITORY_URL]` does the cut-over below on a person's own
 computer, and joins a team store: it brings the brain up to date, installs the requirements, reads the
-person's GitHub login through `gh`, has the Vault Agent unlocked on the old vault (its own passphrase
-window), switches the store on, runs `init` (the recovery words in their window) and the migration,
-and restarts the agent once the person has quit it from its tray icon. With `--join` it also accepts
+person's GitHub login through `gh`, has the Vault Agent unlocked on the old vault (the tray's own
+passphrase window on Windows, the terminal on macOS and Linux), switches the store on, runs `init` (the
+recovery words in their window) and the migration, and restarts the agent: on Windows once the person
+has quit it from its tray icon, elsewhere by stopping it itself (see *On macOS and Linux*). With `--join` it also accepts
 the GitHub invitation, adds the team repository to the configuration, takes the team fingerprint
 pasted from the administrator's message, requests enrolment, shows the six words to send back and
 waits until the administrator has enrolled and admitted the computer. Each step says how long it took,

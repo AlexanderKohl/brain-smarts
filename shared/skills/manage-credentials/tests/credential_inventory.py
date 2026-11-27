@@ -14,7 +14,8 @@ EXTERNAL_MODULES = frozenset({
     "PIL", "__future__", "argparse", "atexit", "base64", "binascii", "contextlib", "copy", "cryptography",
     "ctypes", "dataclasses", "datetime", "errno", "fcntl", "functools", "getpass", "hashlib", "hmac", "http",
     "importlib", "json", "keyring", "math", "msvcrt", "multiprocessing", "os", "pathlib", "pystray", "re", "secrets", "shutil",
-    "socket", "ssl", "stat", "struct", "subprocess", "sys", "tempfile", "threading", "time", "tkinter", "types",
+    "signal",
+    "pwd", "socket", "ssl", "stat", "struct", "subprocess", "sys", "tempfile", "threading", "time", "tkinter", "types",
     "typing", "urllib", "warnings",
 })
 # The modules that can carry data into or out of the process. For each, the skill modules allowed
@@ -69,7 +70,7 @@ EXTERNAL_SYMBOLS: dict[tuple[str, str], tuple[str, ...]] = {
                                            "wintypes.DWORD", "wintypes.LPCWSTR"),
     ("ctypes", "vault_agent_runtime.py"): ("CDLL", "POINTER", "Structure", "WinDLL", "byref", "c_int", "c_long", "c_long.from_buffer", "c_ubyte",
                                            "c_ushort", "c_void_p", "c_void_p.from_buffer", "cast",
-                                           "create_string_buffer", "get_errno", "get_last_error", "sizeof", "windll", "windll.kernel32", "windll.kernel32.CloseHandle",
+                                           "c_size_t", "c_ssize_t", "create_string_buffer", "get_errno", "get_last_error", "set_errno", "sizeof", "windll", "windll.kernel32", "windll.kernel32.CloseHandle",
                                            "windll.kernel32.OpenProcess", "wintypes", "wintypes.BOOL",
                                            "wintypes.DWORD", "wintypes.HANDLE", "wintypes.LPCWSTR", "wintypes.LPWSTR",
                                            "wintypes.ULONG", "wintypes.WORD"),
@@ -110,7 +111,7 @@ EXTERNAL_SYMBOLS: dict[tuple[str, str], tuple[str, ...]] = {
     ("socket", "secret_store/store_ops.py"): ("gethostname",),
     ("socket", "token_relay_store.py"): ("gethostname",),
     ("ssl", "token_endpoint.py"): ("create_default_context",),
-    ("subprocess", "child_process.py"): ("CREATE_NO_WINDOW", "Popen", "run"),
+    ("subprocess", "child_process.py"): ("CREATE_NO_WINDOW", "DEVNULL", "Popen", "STDOUT", "run"),
     ("subprocess", "secret_store/repo.py"): ("CompletedProcess", "PIPE"),
     ("subprocess", "secret_store/store.py"): (),  # annotations only: its git and gh go through child_process.py
     ("subprocess", "secret_store/team.py"): (),  # annotations only: its git and gh go through child_process.py
@@ -176,9 +177,11 @@ FORMS: dict[str, frozenset[tuple[str, str]]] = {
         ("secret_store/repo.py", "SecretRepo._set_state"), ("secret_store/repo.py", "SecretRepo._stage"),
         ("secret_store/repo.py", "SecretRepo.clone_or_open"), ("secret_store/repo.py", "repo_lock"),
         ("secret_store/store.py", "SecretStore._save_pin"), ("secret_store/store_ops.py", "write_marker"),
-        ("setup_store.py", "Setup.mark_vault_left"),
-        ("skill_version.py", "record"),  # VERSION-LEDGER.json: a version and a hash of the skill's files  # a record that a joined computer's old vault stays
+        ("setup_store.py", "Setup.mark_vault_left"),  # a record that a joined computer's old vault stays
+        ("setup_store.py", "Setup.login_item"),  # macOS: the launchd item that starts the agent at login
         ("setup_store.py", "Setup.set_config"),  # the store's configuration: a switch, a login and an address
+        ("setup_store.py", "Setup.start_agent"),  # macOS and Linux: the agent's output, appended to the tray log
+        ("skill_version.py", "record"),  # VERSION-LEDGER.json: a version and a hash of the skill's files
         ("secret_store/store_ops.py", "write_upkeep_error"), ("token_relay_store.py", "holder_name"),
         ("vault_agent.py", "VaultAgent._acquire_singleton"), ("vault_agent_runtime.py", "log_tray"),
         ("vault_agent_runtime.py", "write_state")}),
@@ -329,6 +332,7 @@ DIRECT_CALLERS: dict[str, dict[tuple[str, str], str]] = {
                           ("vault_agent.py", "VaultAgent._keep_state"): "again when the file went missing"},
     "agent-state-read": {("vault_broker_client.py", "_connect"): "the client's one read",
                          ("vault_agent.py", "VaultAgent._keep_state"): "compares the file with its own payload",
+                         ("setup_store.py", "Setup.stop_agent"): "the pid only, to stop the agent without a tray",
                          ("vault_agent_runtime.py", "clear_state"): "the pid only, to remove its own file",
                          ("vault_tray.py", "VaultTrayApp._start_broker"): "the pid only, to see its agent started"},
     "agent-connect": {("vault_broker_client.py", "broker_request"): "every request"},
